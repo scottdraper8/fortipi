@@ -9,6 +9,9 @@ Agents assigned architecture, security, integration or final QA must read the or
 Maintain a concise agent-resume.md before compaction. Link canonical plans and evidence; replace stale status rather than append a diary.
 Keep generated big-build material under .agent-docs/tmp/big-build/. Do not copy logs into prompts or grow duplicate scratchpads.
 
+Verified local build tools: /Users/scott/Documents/Repos/fortipi/.agent-docs/tmp/toolchain/bin (Node 26.13.0, pnpm 12.18.0).
+Before Node/pnpm worktree commands, prepend that canonical directory to PATH. Downloads remain ignored; pin CI/runtime tooling in the actual manifests.
+
 Goal: v0.1.0 is complete only after actual deployment and verification, including public-client interoperability.
 Use the real Pi Durable runtime with Cloudflare PiHarness; do not replace its durable loop with a hand-built chat loop.
 Separate application/client credentials, deployment credentials and executor credentials.
