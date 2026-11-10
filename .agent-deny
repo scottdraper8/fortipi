@@ -1,0 +1,11 @@
+# Credentials must only be consumed inside authorized secret-aware processes.
+.env
+.env.*
+.dev.vars*
+**/.npmrc
+**/*.pem
+**/*.key
+**/credentials*
+**/auth.json
+**/node_modules/**
+**/.wrangler/**

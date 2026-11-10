@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+dist/
+coverage/
+.wrangler/
+.env
+.env.*
+!.env.example
+.dev.vars*
+*.pem
+*.key
+.agent-docs/tmp/
+.unstale/
