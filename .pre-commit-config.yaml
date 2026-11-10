@@ -1,0 +1,25 @@
+minimum_pre_commit_version: '4.7.0'
+repos:
+  - repo: local
+    hooks:
+      - id: fortipi-source-integrity
+        name: Preserve the original FortiPi requirements
+        entry: python3 scripts/check-source-integrity.py
+        language: system
+        pass_filenames: false
+        always_run: true
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: check-symlinks
+      - id: check-case-conflict
+      - id: detect-private-key
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1
+    hooks:
+      - id: gitleaks
