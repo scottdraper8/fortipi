@@ -10,9 +10,11 @@ Release choice: independently installable npm packages + GitHub Releases; Cloudf
 Original prompt/proposals/LICENSE committed. GitHub secret scanning/push protection/security fixes enabled; environments restricted to main/v*; default Actions read-only.
 unstale init ran but no manifests yet and coverage service unavailable: rerun/configure automatic integration after deps exist.
 Runner repairs complete: .agent-docs/tmp/tools/big-build/REPAIR.md; 40 fixtures passed; parent fixed irrelevant Codex quota cache gating for xai.
-Use Homebrew Bash + AGENT_HARNESS=pi. Existing Pi configured defaults xai/grok-4.7/xhigh and OAuth readiness verified, without credential reads. Set all role model/provider defaults consistently.
-Compact build directive: .agent-docs/tmp/build-description.txt. Verified upstream package archives/types and metadata: .agent-docs/tmp/upstream/.
-RUNNING: exec session 31749, python3 .agent-docs/tmp/run-big-build.py --stop-after-phase 1. Phase 0 complete; Architect + QA active. Poll the actual handle; never restart on observation timeout. Artifacts: .agent-docs/tmp/big-build/fortipi-v0-1-0/.
-Next: review Phase 1 QA corrections and reconcile canonical master-plan/threads; then launcher --stop-after-phase 2. Source implementation can proceed after source/scope/DAG review; deployment/publication require secrets, namespace and masked preflight. No application/deployment yet.
+NATIVE CODEX HANDOFF: Pi script session 31749 is terminal after intentional Pi QA termination (exit 143), not a real quota failure. Do not restart the Pi launcher.
+Phase 0 complete and original architect draft/threads retained in .agent-docs/tmp/big-build/fortipi-v0-1-0/. Draft has 13 threads and needs corrections.
+Native Phase 1 QA running: Bacon 01a1c7b6-6040-7ac2-9218-388448e91514. Owns phase1/qa-review-native.md, master-plan-approved.md, threads-approved.json. Poll actual agent handle.
+Next: inspect approved-copy corrections + DAG/ownership locally, reconcile canonical plan/threads, then use native Planner->QA, isolated Builder->Enforcer, Broad QA + two Deep QAs. Keep artifacts in the same phase paths.
+Critical QA fixes: usable installed CLI deployment assets/no GitHub requirement; external model config; one-use browser WS tickets; bootstrap cannot read GitHub secret values or gh-secret-set with default GITHUB_TOKEN; published package imports/names must match; correct license metadata; meaningful deployed TUI/interop/fault proof; actual optional Linux adapter.
+Source implementation can proceed after plan review while external secrets are pending. Deployment/publication require named CF/npm secrets, namespace and masked preflight. No application/deployment yet.
 Local Node 26.13.0 and pnpm 12.18.0 verified: .agent-docs/tmp/toolchain/bin; prepend canonical PATH in worktrees. pnpm 12 uses a verified native binary, not the old CJS entry.
 Parent fidelity guards in copied architect/QA prompts preserve FortiPi eventSeq/replay, atomic staged workspace commits, browser tickets and correct non-SPDX license metadata despite narrower research recommendations.
