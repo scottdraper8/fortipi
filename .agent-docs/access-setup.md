@@ -30,12 +30,14 @@ https://developers.cloudflare.com/containers/
 ## npm
 Release environment: https://github.com/scottdraper8/fortipi/settings/environments
 Select npm-release:
-- Secret NPM_TOKEN: granular token scoped to publication under the chosen npm user/org namespace. Exact UI/first-publish instructions pending npm investigation.
+- Secret NPM_TOKEN: granular token with Packages/scopes Read and write (publish and stage), Only select packages and scopes, select the chosen scope, Bypass two-factor authentication checked, Organizations No access, expiration seven days. Select the namespace rather than only existing packages so new packages can be created. Complete npm token-creation authentication in the browser.
 - Variable NPM_SCOPE: npm username or owned organization, without @. Prefer existing owned scope; @fortipi only if controlled.
 
 Use npm for CLI, official TUI, client SDK, separate local executor, and shared public contracts as needed.
 Use GitHub Releases for versioned tarballs, checksums, notices and SBOM. Homebrew/curl installers add release surfaces without sufficient v0.1 benefit.
-Prefer GitHub OIDC for continuing npm publication. Initial publication and trust configuration requirements must be verified before launch.
+Use the scoped bootstrap token for the initial release, because npm requires an existing package and interactive 2FA to configure trusted publication. Future OIDC configuration must match scottdraper8/fortipi, release.yml, environment npm-release, and direct publish permission. Register trust only when a successful OIDC release will occur within 48 hours. Bypass tokens cannot modify trust settings; direct bypass-token publishing is scheduled to end January 2027. Do not claim OIDC configured until verified.
+
+References: https://docs.npmjs.com/creating-and-viewing-access-tokens/ ; https://docs.npmjs.com/cli/v12/commands/npm-trust/ ; https://github.blog/changelog/2026-07-31-restricting-npm-bypass-2fa-granular-access-tokens/
 
 ## Verification
 Run Access preflight after secret names are present. It checks account/Workers/R2/model-catalog access and npm authentication/scope membership.
