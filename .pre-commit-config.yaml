@@ -4,7 +4,7 @@ repos:
     hooks:
       - id: fortipi-source-integrity
         name: Preserve the original FortiPi requirements
-        entry: python3 scripts/check-source-integrity.py
+        entry: node scripts/check-source-integrity.ts
         language: system
         pass_filenames: false
         always_run: true

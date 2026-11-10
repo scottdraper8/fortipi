@@ -18,7 +18,7 @@ Restrict the token to the one target account. Account permissions:
 - Containers: Edit (optional native Linux executor deployment/testing)
 
 No zone permissions are needed for the initial workers.dev origin.
-The target account must have R2 activated; native Containers require Workers Paid. Use existing entitlements; do not change subscription plans without an explicit user decision.
+The initial Computer workspace uses Durable Object storage and does not require R2 activation. R2 permissions are optional for later large-artifact storage. Optional native Containers require Workers Paid. Use existing entitlements; do not change subscription plans without an explicit user decision.
 Workers AI uses a binding at runtime; no third-party model key is required for the first live smoke test.
 External model-provider credentials remain configurable server-side; request one only if the user chooses that provider.
 
@@ -40,6 +40,6 @@ Use the scoped bootstrap token for the initial release, because npm requires an 
 References: https://docs.npmjs.com/creating-and-viewing-access-tokens/ ; https://docs.npmjs.com/cli/v12/commands/npm-trust/ ; https://github.blog/changelog/2026-07-31-restricting-npm-bypass-2fa-granular-access-tokens/
 
 ## Verification
-Run Access preflight after secret names are present. It checks account/Workers/R2/model-catalog access and npm authentication with a syntactically valid scope.
+Run Access preflight after secret names are present. It checks account/Workers/model-catalog access and npm authentication with a syntactically valid scope.
 Read checks do not prove deploy or publish permission; deployment and publication are separate required evidence.
 No custom secret-input helper, local env file, credential values in logs or source-controlled secrets.

@@ -11,6 +11,7 @@ Keep generated big-build material under .agent-docs/tmp/big-build/. Do not copy 
 
 Verified local build tools: /Users/scott/Documents/Repos/fortipi/.agent-docs/tmp/toolchain/bin (Node 26.13.0, pnpm 12.18.0).
 Before Node/pnpm worktree commands, prepend that canonical directory to PATH. Downloads remain ignored; pin CI/runtime tooling in the actual manifests.
+Use TypeScript for the product and all repository-owned build/release/check tooling. Keep the deliberately independent non-TypeScript interoperability example isolated from the product/toolchain.
 
 Goal: v0.1.0 is complete only after actual deployment and verification, including public-client interoperability.
 Use the real Pi Durable runtime with Cloudflare PiHarness; do not replace its durable loop with a hand-built chat loop.
