@@ -40,6 +40,6 @@ Use the scoped bootstrap token for the initial release, because npm requires an 
 References: https://docs.npmjs.com/creating-and-viewing-access-tokens/ ; https://docs.npmjs.com/cli/v12/commands/npm-trust/ ; https://github.blog/changelog/2026-07-31-restricting-npm-bypass-2fa-granular-access-tokens/
 
 ## Verification
-Run Access preflight after secret names are present. It checks account/Workers/R2/model-catalog access and npm authentication/scope membership.
+Run Access preflight after secret names are present. It checks account/Workers/R2/model-catalog access and npm authentication with a syntactically valid scope.
 Read checks do not prove deploy or publish permission; deployment and publication are separate required evidence.
 No custom secret-input helper, local env file, credential values in logs or source-controlled secrets.

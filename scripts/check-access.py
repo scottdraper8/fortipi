@@ -60,15 +60,9 @@ def npm():
     username = result.get("username")
     if not isinstance(username, str) or not username:
         raise RuntimeError("npm did not authenticate the token")
-    if username != scope:
-        # Membership alone cannot prove that the token grants publication rights.
-        try:
-            members = request("https://registry.npmjs.org", "/-/org/" + scope + "/user", token)
-            if username not in members:
-                raise RuntimeError("account is not a member")
-        except RuntimeError as error:
-            raise RuntimeError("npm organization access: " + str(error)) from None
-    print("npm authentication and scope membership: verified")
+    # Publication-scoped tokens need no organization-management permission.
+    # Do not request membership APIs that such a token cannot necessarily read.
+    print("npm authentication: verified; publication scope configured")
     print("Publication rights and new-package creation remain unverified until publish.")
 
 
