@@ -981,16 +981,7 @@ export class ExecutorRuntime implements FrameHandler {
     }
     if (descriptor.purpose !== "output" || descriptor.content.kind !== "job-output")
       throw new Error("local reads require correlated workspace request");
-    const row = this.ledger.get(descriptor.jobId);
-    const reference = row?.result?.output.artifacts.find(
-      (a) => a.artifactId === descriptor.content.artifactId,
-    );
-    if (
-      !reference ||
-      reference.sha256 !== descriptor.fileSha256 ||
-      reference.size !== descriptor.size
-    )
-      throw new Error("output owner mismatch");
+    const reference = this.staging.outputReference(descriptor);
     const path = join(this.directory, "artifacts", descriptor.content.artifactId);
     const data = await privateBytes(
       path,

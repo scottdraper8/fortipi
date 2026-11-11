@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { LocalPrepare, TransferDescriptor } from "fortipi-contract/executor";
+import type { LocalPrepare, PreparedResult, TransferDescriptor } from "fortipi-contract/executor";
 import {
   canonicalJson,
   localStageDigest,
@@ -12,7 +12,7 @@ import {
 import type { Limits, Profile } from "../config.js";
 import { privateBytes, privateWrite, secureDirectory } from "../config.js";
 import type { Ledger } from "../ledger.js";
-import { hash } from "../policy.js";
+import { hash, immutableIdentity } from "../policy.js";
 import type { HttpTransport } from "../transport.js";
 import { validate } from "../transport.js";
 import type { Manifest, Mutation } from "./manifest.js";
@@ -72,7 +72,9 @@ export class Staging {
       descriptor.executorGeneration !== p.executorGeneration ||
       !p.resources.workspaceIds.includes(descriptor.workspaceId) ||
       descriptor.size >
-        (descriptor.purpose === "output" ? this.limits.artifactBytes : this.limits.fileBytes) ||
+        (descriptor.purpose === "output"
+          ? Math.min(this.limits.artifactBytes, this.http.limits.artifactBytes)
+          : this.limits.fileBytes) ||
       descriptor.chunkBytes > this.http.chunkBytes
     )
       throw new Error("transfer not authorized for this executor");
@@ -104,8 +106,9 @@ export class Staging {
         (job &&
           (job.assignment.identity.executionId !== descriptor.executionId ||
             job.assignment.identity.operationDigest !== descriptor.operationDigest ||
-            canonicalJson(job.assignment.identity.lease.credential) !==
-              canonicalJson(descriptor.credential) ||
+            (descriptor.purpose !== "output" &&
+              canonicalJson(job.assignment.identity.lease.credential) !==
+                canonicalJson(descriptor.credential)) ||
             job.assignment.identity.baseRevision !== descriptor.baseRevision ||
             (descriptor.lease &&
               job.assignment.identity.lease.leaseId !== descriptor.lease.leaseId)))
@@ -118,10 +121,73 @@ export class Staging {
       (local.request.operationDigest !== descriptor.operationDigest ||
         local.request.workspaceId !== descriptor.workspaceId ||
         local.request.bindingVersion !== descriptor.bindingVersion ||
-        canonicalJson(local.request.credential) !== canonicalJson(descriptor.credential) ||
+        (descriptor.purpose !== "output" &&
+          canonicalJson(local.request.credential) !== canonicalJson(descriptor.credential)) ||
         (descriptor.lease && descriptor.lease.leaseId !== local.request.lease.leaseId))
     )
       throw new Error("transfer local operation mismatch");
+    if (descriptor.purpose === "output") this.outputReference(descriptor);
+  }
+  outputReference(
+    descriptor: Extract<TransferDescriptor, { purpose: "output" }>,
+  ): PreparedResult["output"]["artifacts"][number] {
+    this.http.assertExecutorAuthority();
+    const job = this.ledger.get(descriptor.jobId),
+      assignment = job?.assignment,
+      identity = assignment?.identity,
+      binding = this.profile.bindings.find(
+        (b) =>
+          b.workspaceId === descriptor.workspaceId &&
+          b.bindingVersion === descriptor.bindingVersion &&
+          (assignment?.rootBindingId === undefined || b.rootBindingId === assignment.rootBindingId),
+      );
+    if (
+      !assignment ||
+      !identity ||
+      !job?.result ||
+      !binding ||
+      descriptor.lease !== undefined ||
+      assignment.workspaceId !== descriptor.workspaceId ||
+      assignment.bindingVersion !== descriptor.bindingVersion ||
+      assignment.operationContext.deploymentId !== descriptor.deploymentId ||
+      identity.jobId !== descriptor.jobId ||
+      identity.executionId !== descriptor.executionId ||
+      identity.operationDigest !== descriptor.operationDigest ||
+      identity.lease.operationId !== descriptor.operationId ||
+      identity.baseRevision !== descriptor.baseRevision ||
+      identity.target.kind !== "executor" ||
+      identity.target.executorId !== descriptor.executorId ||
+      identity.target.generation !== descriptor.executorGeneration ||
+      immutableIdentity(job.result.identity) !== immutableIdentity(identity) ||
+      !descriptor.consumer.actions.includes("artifacts.read") ||
+      !descriptor.consumer.workspaceIds.includes(descriptor.workspaceId) ||
+      !descriptor.consumer.executorIds.includes(descriptor.executorId) ||
+      !descriptor.consumer.agentIds.includes(assignment.operationContext.agentId) ||
+      !descriptor.consumer.conversationIds.includes(assignment.operationContext.conversationId) ||
+      descriptor.chunkBytes >
+        Math.min(this.http.chunkBytes, this.http.limits.chunkBytes, this.limits.chunkBytes)
+    )
+      throw new Error("native artifact execution/member scope mismatch");
+    const matches = job.result.output.artifacts.filter(
+      (a) => a.artifactId === descriptor.content.artifactId,
+    );
+    const reference = matches[0];
+    if (!reference || matches.length !== 1) throw new Error("native artifact member unavailable");
+    validate("common.schema.json", "ByteReference", reference);
+    if (
+      reference.workspaceId !== descriptor.workspaceId ||
+      reference.revision !== descriptor.baseRevision ||
+      reference.owner.kind !== "local" ||
+      reference.owner.executorId !== descriptor.executorId ||
+      reference.outputSource?.stream !== descriptor.content.stream ||
+      reference.sha256 !== descriptor.fileSha256 ||
+      reference.size !== descriptor.size ||
+      !reference.chunks ||
+      reference.chunks.chunkBytes !== descriptor.chunkBytes ||
+      canonicalJson(reference.chunks.chunkHashes) !== canonicalJson(descriptor.chunkHashes)
+    )
+      throw new Error("native artifact source/hash/grid mismatch");
+    return reference;
   }
   async receive(descriptor: TransferDescriptor): Promise<void> {
     this.check(descriptor);
