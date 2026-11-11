@@ -514,6 +514,48 @@ it does not add a field to public Configuration or replace request-time Origin c
 
 ## Evidence scope
 
+Native output artifact references carry `outputSource: { stream: "stdout" | "stderr" }`,
+the actual collector's stream. A local `artifactId` also requires `chunks` and
+`owner.executorId`. Ordinary workspace-file and cloud-artifact references retain
+their existing shape. No offset is added; output transfers still use the closed
+`{ kind: "job-output", artifactId, stream }` content variant.
+
+ControlPlane indexes each artifact by its opaque ID from a validated executor
+prepared result and the actual persisted dispatch/reservation, atomically before
+transport acknowledgment. Matching retries preserve the original metadata; changed
+metadata or reuse across jobs conflicts. The bounded index survives inbox acknowledgment.
+This stores metadata only and observes effective output/storage admission bounds.
+
+Workspace serves cloud artifacts as before. For an absent cloud record, it forwards
+the current validated, registered reader context through the existing private
+ControlPlane `fetch` port: `GET /internal/artifacts/{workspaceId}/{artifactId}` with
+the existing server-only `X-Fortipi-Context` JSON header. Preserve Range and explicitly
+forward the abort signal. No public endpoint, RPC method, namespace or metadata-write
+callback is added. Public routing must strip internal authority headers.
+
+ControlPlane authorizes `artifacts.read` for the actual workspace, job owner scopes
+and executor before lookup disclosure, and again during relay. It checks current
+reader/executor generations and limits. It builds the existing output descriptor
+from the indexed actual job/execution, original operation digest, binding/base,
+hash/grid and stream. The descriptor uses the **current reader's** credential and
+no historical lease. Native output reads therefore keep historical job identity
+separate from current reader authority; mutable staging retains its original
+credential/lease checks. The executor verifies the exact retained artifact member
+and stream. No component may infer streams from UUIDs/order or rewrite old hashes.
+
+Use the existing `transfer.status` reply after the executor verifies its actual
+private artifact bytes, size, hash/grid and output source. Correlate the original
+`transfer.open` request ID, transfer/attempt IDs and executor generation. A zero-byte
+output attempt waits for this producer acknowledgment; an index entry alone must
+not fabricate a successful empty response. Missing/corrupt bytes interrupt the
+attempt. For nonempty output, producer status cannot replace relay verification
+of actual chunks. Retain the bounded attempt timeout and restart interruption.
+
+Owners must prove a different authorized reader and an expired job lease can read
+retained output, while wrong stream/member/job, missing metadata, revoked authority,
+changed caps and corrupt bytes fail closed without starting a process. This is a
+contract handoff; schemas do not establish that behavior.
+
 Run from the repository with the pinned Node26.13/pnpm12.18 toolchain on PATH:
 
 ```sh

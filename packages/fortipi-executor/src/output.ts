@@ -145,6 +145,7 @@ export class Output {
           size: bytes,
           chunks: inventoryFor(data, this.limits.chunkBytes),
           artifactId,
+          outputSource: { stream },
           endpoint: `/v1/workspaces/${row.assignment.workspaceId}/artifacts/${artifactId}?revision=${encodeURIComponent(this.identity.baseRevision)}`,
           owner: { kind: "local", executorId: this.identity.lease.executorId },
         };

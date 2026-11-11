@@ -77,6 +77,9 @@ executable, no profile/interactive startup, UTF-16LE encoded commands and
 `taskkill /T` with force escalation. Cancellation uses only a live ChildProcess
 from this daemon incarnation. Descendants can escape a group/tree or outlive its
 leader; cancellation cannot roll back effects and may report unknown.
+Shutdown stops admissions, attempts cancellation and drains pending result and
+transfer work before closing SQLite. Unconfirmed live children retain unknown
+status and quarantined roots; a later exit cannot publish through a closed ledger.
 
 ## Workspace and transport boundaries
 
@@ -110,6 +113,23 @@ job correlation are independently checked. Infrastructure pressure pauses bounde
 retries while retaining operation identity. Effective limits are the minimum of
 local and discovered bounds. A paid account raises no limit or enables a backend
 automatically. There are no model-provider token/hour/week budgets.
+
+Native output references record the actual stdout/stderr collector stream and
+its complete hash/grid. Retained artifact reads use the current authorized
+reader's credential separately from the immutable original job identity. An
+expired job lease or later workspace revision does not invalidate those retained
+bytes; mutable local staging keeps its original credential and lease checks.
+The executor verifies the exact retained member, stream, owner, job/execution,
+binding/base and current caps, then reads the protected file with a strict bound.
+It verifies the actual whole-file hash and chunk inventory before producing bytes.
+
+Output transfer opens receive a correlated `transfer.status` using the original
+request/transfer/attempt. `verified` follows actual source verification and chunk
+acknowledgments; `interrupted` reports only acknowledged chunks/bytes. Even an
+empty reference needs its actual private empty file before acknowledgment. The
+collector omits empty streams. Range consumers still request the full native
+artifact descriptor and verify/drain it before slicing in the service. Producer
+status supplements actual relay byte verification; it is not a workspace receipt.
 
 Quota pressure, known retry/reset timestamps and Retry-After delays are retained
 in SQLite across restart. The latest known bound controls retries; long delays

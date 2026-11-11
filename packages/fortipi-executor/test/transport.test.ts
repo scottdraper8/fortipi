@@ -1,26 +1,38 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { ErrorBody, ExecutorFrame, TransferDescriptor } from "fortipi-contract/executor";
-import { validateTransfer } from "fortipi-contract/executor";
+import { commitDigest, validateTransfer } from "fortipi-contract/executor";
 import { adapter, privateWrite } from "../dist/config.js";
+import { ExecutorRuntime } from "../dist/daemon.js";
 import { Guard, Ledger } from "../dist/ledger.js";
 import { Output } from "../dist/output.js";
 import { hash } from "../dist/policy.js";
-import { frame, HttpFailure, HttpTransport, readBounded } from "../dist/transport.js";
+import {
+  frame,
+  HttpFailure,
+  HttpTransport,
+  readBounded,
+  SessionTransport,
+} from "../dist/transport.js";
 import { inventoryFor } from "../dist/workspace/manifest.js";
 import { Staging } from "../dist/workspace/staging.js";
 import {
   assignment,
+  authenticateFixture,
   credential,
+  eventually,
   fixture,
   fixtureChild,
+  importRoot,
   nodeCommand,
+  prepare,
+  receiptScope,
   resources,
 } from "./fixtures/daemon.ts";
 import { relayFixture } from "./fixtures/transport.ts";
@@ -68,6 +80,20 @@ test("real HTTP scoped relay validates length/hash/direction, blocks redirects a
       expiresAt: Date.now() + 20000,
       deadline: a.identity.deadline,
     };
+    const different = { credentialId: "different_reader", generation: 9, grantVersion: 3 };
+    await assert.rejects(
+      staging.receive({
+        ...descriptor,
+        credential: different,
+        lease: { ...descriptor.lease, credential: different },
+      }),
+      /transfer execution mismatch/,
+    );
+    assert.equal(
+      server.requests.length,
+      0,
+      "mutable staging must keep its original job credential",
+    );
     await staging.receive(descriptor);
     assert.deepEqual(await staging.bytes(hash(bytes)), bytes);
     const requestsBeforeLimit = server.requests.length;
@@ -580,6 +606,397 @@ test("real HTTP transfer slots bound concurrency and negotiated grid capacity re
     await read();
     assert.equal(server.requests.length, 2, "slot is released after the actual body completes");
   } finally {
+    await server.close();
+    await f.cleanup();
+  }
+});
+test("native artifact producer verifies retained bytes before correlated status and never replays the native command", async () => {
+  const f = await fixture(),
+    server = await relayFixture(Buffer.alloc(0));
+  let runtime: ExecutorRuntime | undefined;
+  let interruptAfterPut = false;
+  try {
+    f.profile.origin = server.origin;
+    f.profile.limits.chunkBytes = 3;
+    const http = new HttpTransport(
+      f.profile,
+      async (input, init) => {
+        const response = await fetch(input, init);
+        if (interruptAfterPut && init?.method === "PUT" && response.status === 204) {
+          interruptAfterPut = false;
+          server.setPressure(true);
+        }
+        return response;
+      },
+      true,
+    );
+    authenticateFixture(http);
+    runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http,
+    });
+    await runtime.initialize();
+    const local = runtime.locals.get("root");
+    if (!local) throw new Error("local provider absent");
+    await importRoot(local);
+    runtime.connected = true;
+    const marker = join(f.path, "artifact-original-effect"),
+      text = "retained native output",
+      a = await assignment(nodeCommand(fixtureChild, "append", marker, text));
+    a.identity.lease.expiresAt = Date.now() + 20000;
+    const preparation = prepare(a, f.initial.manifestHash);
+    await local.request(preparation);
+    await runtime.assignOnce(a);
+    const pending = runtime.approvals.list()[0];
+    if (!pending) throw new Error("approval absent");
+    runtime.approvals.decide(a.identity.jobId, pending.digest, "allow");
+    await runtime.tick();
+    await eventually(
+      () => !!f.ledger.get(a.identity.jobId)?.result,
+      "native output was not persisted",
+    );
+    const row = f.ledger.get(a.identity.jobId),
+      reference = row?.result?.output.artifacts[0];
+    if (!row || !reference?.artifactId || !reference.chunks)
+      throw new Error("actual native artifact absent");
+    assert.deepEqual(reference.outputSource, { stream: "stdout" });
+    assert.equal(reference.sha256, createHash("sha256").update(text).digest("hex"));
+    const nativeGrid = reference.chunks.chunkBytes;
+    assert.deepEqual(
+      reference.chunks.chunkHashes,
+      Array.from({ length: Math.ceil(Buffer.byteLength(text) / nativeGrid) }, (_, i) =>
+        createHash("sha256")
+          .update(Buffer.from(text).subarray(i * nativeGrid, (i + 1) * nativeGrid))
+          .digest("hex"),
+      ),
+    );
+    frame({
+      type: "job.prepared_result",
+      requestId: "actual_artifact_metadata",
+      payload: row.result,
+    });
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, Math.max(0, row.assignment.identity.lease.expiresAt - Date.now() + 20)),
+    );
+    assert.ok(
+      Date.now() >= row.assignment.identity.lease.expiresAt,
+      "historical job lease must actually expire",
+    );
+    const journal = f.ledger.local(a.identity.lease.operationId);
+    if (journal?.observation.state !== "applied")
+      throw new Error("actual local observation absent");
+    const observation = journal.observation,
+      digest = await commitDigest({
+        commitId: preparation.commitId,
+        operationId: preparation.operationId,
+        jobId: a.identity.jobId,
+        workspaceId: a.workspaceId,
+        baseRevision: a.identity.baseRevision,
+        manifestHash: observation.postManifestHash,
+        leaseIdentity: preparation.lease,
+        storage: {
+          kind: "local",
+          preparationId: observation.preparationId,
+          observationSeq: observation.observationSeq,
+          preManifestHash: observation.preManifestHash,
+          postManifestHash: observation.postManifestHash,
+        },
+      });
+    await local.request({
+      ...receiptScope(preparation),
+      kind: "receipt",
+      preparationId: observation.preparationId,
+      receipt: {
+        providerKind: "local",
+        commitId: preparation.commitId,
+        operationId: preparation.operationId,
+        jobId: a.identity.jobId,
+        workspaceId: a.workspaceId,
+        baseRevision: a.identity.baseRevision,
+        revision: "r1",
+        manifestHash: observation.postManifestHash,
+        sourceFactId: "artifact_revision_fact",
+        committedAt: Date.now(),
+        preparationId: observation.preparationId,
+        observationSeq: observation.observationSeq,
+        commitDigest: digest,
+      },
+    });
+    assert.equal(local.binding.revision, "r1");
+    const captured: ExecutorFrame[] = [],
+      session = new SessionTransport(http, runtime);
+    session.send = (value) => {
+      captured.push(frame(value));
+      return true;
+    };
+    runtime.session = session; // Synthetic channel only; file bytes use the actual HTTP relay.
+    const descriptor: Extract<TransferDescriptor, { purpose: "output" }> = {
+      transferId: "artifact_transfer",
+      attemptId: "artifact_attempt",
+      deploymentId: f.profile.deploymentId,
+      direction: "from-executor",
+      purpose: "output",
+      workspaceId: a.workspaceId,
+      bindingVersion: a.bindingVersion,
+      operationId: a.identity.lease.operationId,
+      operationDigest: a.identity.operationDigest,
+      jobId: a.identity.jobId,
+      executionId: a.identity.executionId,
+      executorId: f.profile.executorId,
+      executorGeneration: f.profile.executorGeneration,
+      credential: { credentialId: "current_artifact_reader", generation: 9, grantVersion: 2 },
+      consumer: { ...f.profile.resources, actions: ["artifacts.read"], tools: [] },
+      baseRevision: a.identity.baseRevision,
+      content: { kind: "job-output", artifactId: reference.artifactId, stream: "stdout" },
+      fileSha256: reference.sha256,
+      size: reference.size,
+      chunkBytes: reference.chunks.chunkBytes,
+      chunkHashes: reference.chunks.chunkHashes,
+      expiresAt: Date.now() + 20000,
+      deadline: Date.now() + 30000,
+    };
+    assert.notDeepEqual(descriptor.credential, row.assignment.identity.lease.credential);
+    const open = async (requestId: string, transfer: typeof descriptor) => {
+      await runtime?.receive({
+        type: "transfer.open",
+        requestId,
+        payload: { ...transfer, expiresAt: Date.now() + 10000, deadline: Date.now() + 30000 },
+      });
+      await eventually(
+        () => captured.some((f) => f.type === "transfer.status" && f.requestId === requestId),
+        "producer status absent",
+      );
+      const status = captured.find(
+        (f) => f.type === "transfer.status" && f.requestId === requestId,
+      );
+      if (status?.type !== "transfer.status") throw new Error("status absent");
+      return status.payload;
+    };
+    const status = await open("output_open", descriptor);
+    assert.equal(status.state, "verified");
+    assert.equal(status.transferId, descriptor.transferId);
+    assert.equal(status.attemptId, descriptor.attemptId);
+    assert.deepEqual(
+      status.verifiedChunks,
+      descriptor.chunkHashes.map((_, i) => i),
+    );
+    assert.equal(status.bytes, Buffer.byteLength(text));
+    assert.equal(Buffer.concat(server.requests.map((r) => r.bytes)).toString(), text);
+    const rangeStart = 2,
+      rangeEnd = 13,
+      beforeRange = server.requests.length;
+    const rangeStatus = await open("range_consumer_open", {
+      ...descriptor,
+      attemptId: "range_attempt",
+    });
+    const whole = Buffer.concat(server.requests.slice(beforeRange).map((r) => r.bytes));
+    assert.equal(rangeStatus.state, "verified");
+    assert.equal(whole.length, reference.size);
+    assert.equal(
+      createHash("sha256").update(whole).digest("hex"),
+      reference.sha256,
+      "range consumers still receive the full native descriptor",
+    );
+    assert.equal(
+      whole.subarray(rangeStart, rangeEnd + 1).toString(),
+      text.slice(rangeStart, rangeEnd + 1),
+    );
+    // This is the native full-source proof; CP4 owns actual HTTP Range parsing/drain/slicing.
+    const requests = server.requests.length;
+    const invalid: (typeof descriptor)[] = [
+      { ...descriptor, content: { ...descriptor.content, stream: "stderr" } },
+      { ...descriptor, content: { ...descriptor.content, artifactId: "not_an_artifact_member" } },
+      { ...descriptor, jobId: "other_job" },
+      { ...descriptor, executionId: "other_execution" },
+      { ...descriptor, operationId: "other_operation" },
+      { ...descriptor, operationDigest: "f".repeat(64) },
+      { ...descriptor, bindingVersion: descriptor.bindingVersion + 1 },
+      { ...descriptor, baseRevision: "r1" },
+      { ...descriptor, chunkHashes: ["f".repeat(64), ...descriptor.chunkHashes.slice(1)] },
+    ];
+    for (const [i, invalidDescriptor] of invalid.entries()) {
+      const rejected = await open(`invalid_artifact_${i}`, invalidDescriptor);
+      assert.equal(
+        rejected.state,
+        "interrupted",
+        "wrong retained artifact scope must stop before bytes",
+      );
+      assert.deepEqual(rejected.verifiedChunks, []);
+      assert.equal(rejected.bytes, 0);
+      assert.equal(
+        server.requests.length,
+        requests,
+        "wrong immutable member scope must fail before bytes",
+      );
+    }
+    const artifactCap = http.limits.artifactBytes;
+    http.limits.artifactBytes = reference.size - 1;
+    assert.equal((await open("lowered_artifact_cap", descriptor)).state, "interrupted");
+    assert.equal(server.requests.length, requests);
+    http.limits.artifactBytes = artifactCap;
+    const missingMetadata = f.ledger.get(a.identity.jobId);
+    if (!missingMetadata?.result?.output.artifacts[0]) throw new Error("artifact absent");
+    delete missingMetadata.result.output.artifacts[0].outputSource;
+    f.ledger.put(missingMetadata);
+    assert.equal((await open("missing_source_metadata", descriptor)).state, "interrupted");
+    assert.equal(server.requests.length, requests);
+    f.ledger.put(row);
+    await privateWrite(
+      join(f.directory, "artifacts", reference.artifactId),
+      Buffer.alloc(reference.size, 0x5a),
+    );
+    const corrupt = await open("corrupt_open", { ...descriptor, attemptId: "corrupt_attempt" });
+    assert.equal(corrupt.state, "interrupted");
+    assert.deepEqual(corrupt.verifiedChunks, []);
+    assert.equal(corrupt.bytes, 0);
+    assert.equal(server.requests.length, requests, "corrupt source must fail before network bytes");
+    await rm(join(f.directory, "artifacts", reference.artifactId));
+    assert.equal((await open("missing_artifact_file", descriptor)).state, "interrupted");
+    assert.equal(server.requests.length, requests);
+    await privateWrite(join(f.directory, "artifacts", reference.artifactId), text);
+    interruptAfterPut = true;
+    const partial = await open("partial_open", { ...descriptor, attemptId: "partial_attempt" });
+    assert.equal(partial.state, "interrupted");
+    assert.deepEqual(partial.verifiedChunks, [0], "only the actual acknowledged chunk is verified");
+    assert.equal(partial.bytes, descriptor.chunkBytes);
+    server.setPressure(false);
+    http.clearPressure();
+    server.setPressure(true, 403);
+    const denied = await open("reader_denied_by_authority", descriptor);
+    assert.equal(denied.state, "interrupted");
+    assert.deepEqual(denied.verifiedChunks, []);
+    assert.equal(denied.bytes, 0);
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+    assert.equal(runtime.children.size, 0);
+    assert.equal(f.ledger.get(a.identity.jobId)?.bodyHash, row.bodyHash);
+  } finally {
+    await runtime?.shutdown();
+    await server.close();
+    await f.cleanup();
+  }
+});
+test("zero artifact status requires a real private empty file and its whole hash, not only retained metadata", async () => {
+  const f = await fixture(),
+    server = await relayFixture(Buffer.alloc(0));
+  let runtime: ExecutorRuntime | undefined;
+  try {
+    f.profile.origin = server.origin;
+    const http = new HttpTransport(f.profile, fetch, true);
+    authenticateFixture(http);
+    runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http,
+    });
+    await runtime.initialize();
+    const a = await assignment("must never be started"),
+      row = f.ledger.admit(a, "approval"),
+      result = await new Output(f.ledger, a.identity, http.limits).result(
+        "failed",
+        join(f.directory, "artifacts"),
+        false,
+      ),
+      artifactId = "retained_empty_artifact",
+      path = join(f.directory, "artifacts", artifactId),
+      empty = Buffer.alloc(0),
+      emptyHash = createHash("sha256").update(empty).digest("hex");
+    // Valid retained metadata is a fixture here. The actual collector omits empty streams.
+    result.output.artifacts.push({
+      workspaceId: a.workspaceId,
+      revision: a.identity.baseRevision,
+      artifactId,
+      outputSource: { stream: "stdout" },
+      owner: { kind: "local", executorId: f.profile.executorId },
+      sha256: emptyHash,
+      size: 0,
+      chunks: inventoryFor(empty, http.chunkBytes),
+      endpoint: `/v1/workspaces/${a.workspaceId}/artifacts/${artifactId}?revision=${a.identity.baseRevision}`,
+    });
+    frame({ type: "job.prepared_result", requestId: "retained_zero_metadata", payload: result });
+    row.result = result;
+    row.state = "result";
+    row.sequence = result.sequence;
+    f.ledger.put(row);
+    const captured: ExecutorFrame[] = [],
+      session = new SessionTransport(http, runtime);
+    session.send = (value) => {
+      captured.push(frame(value));
+      return true;
+    };
+    runtime.session = session;
+    const descriptor: Extract<TransferDescriptor, { purpose: "output" }> = {
+      transferId: "zero_transfer",
+      attemptId: "zero_attempt",
+      deploymentId: f.profile.deploymentId,
+      direction: "from-executor",
+      purpose: "output",
+      workspaceId: a.workspaceId,
+      bindingVersion: a.bindingVersion,
+      operationId: a.identity.lease.operationId,
+      operationDigest: a.identity.operationDigest,
+      jobId: a.identity.jobId,
+      executionId: a.identity.executionId,
+      executorId: f.profile.executorId,
+      executorGeneration: f.profile.executorGeneration,
+      credential: { credentialId: "current_empty_reader", generation: 3, grantVersion: 1 },
+      consumer: { ...f.profile.resources, actions: ["artifacts.read"], tools: [] },
+      baseRevision: a.identity.baseRevision,
+      content: { kind: "job-output", artifactId, stream: "stdout" },
+      fileSha256: emptyHash,
+      size: 0,
+      chunkBytes: http.chunkBytes,
+      chunkHashes: [],
+      expiresAt: Date.now() + 10000,
+      deadline: Date.now() + 30000,
+    };
+    const open = async (requestId: string, value = descriptor) => {
+      await runtime?.receive({
+        type: "transfer.open",
+        requestId,
+        payload: { ...value, expiresAt: Date.now() + 10000, deadline: Date.now() + 30000 },
+      });
+      await eventually(
+        () => captured.some((f) => f.type === "transfer.status" && f.requestId === requestId),
+        "zero producer acknowledgment absent",
+      );
+      const reply = captured.find((f) => f.type === "transfer.status" && f.requestId === requestId);
+      if (reply?.type !== "transfer.status") throw new Error("zero status absent");
+      assert.deepEqual(reply.payload.verifiedChunks, []);
+      assert.equal(reply.payload.bytes, 0);
+      return reply.payload;
+    };
+    assert.equal(
+      (await open("missing_empty_file")).state,
+      "interrupted",
+      "zero metadata must not fabricate file presence",
+    );
+    await privateWrite(path, empty, undefined, true);
+    assert.equal((await open("actual_empty_file")).state, "verified");
+    const wrongHash = "f".repeat(64),
+      corruptMetadata = f.ledger.get(a.identity.jobId),
+      corruptReference = corruptMetadata?.result?.output.artifacts[0];
+    if (!corruptMetadata || !corruptReference) throw new Error("zero metadata absent");
+    corruptReference.sha256 = wrongHash;
+    f.ledger.put(corruptMetadata);
+    assert.equal(
+      (await open("wrong_whole_empty_hash", { ...descriptor, fileSha256: wrongHash })).state,
+      "interrupted",
+      "whole-file hash must bind an empty artifact too",
+    );
+    f.ledger.put(row);
+    await privateWrite(path, "nonempty");
+    assert.equal((await open("false_empty_file")).state, "interrupted");
+    assert.equal(server.requests.length, 0, "zero transfers must not PUT or fabricate relay bytes");
+    assert.equal(runtime.children.size, 0);
+    assert.equal(f.ledger.get(a.identity.jobId)?.bodyHash, row.bodyHash);
+  } finally {
+    await runtime?.shutdown();
     await server.close();
     await f.cleanup();
   }

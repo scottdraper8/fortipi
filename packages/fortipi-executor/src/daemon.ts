@@ -16,7 +16,7 @@ import type {
 import { canonicalJson, validateAssignment } from "fortipi-contract/executor";
 import { Approvals } from "./approval.js";
 import type { Binding, Profile } from "./config.js";
-import { adapter, effectiveLimits, secureDirectory, stateHome } from "./config.js";
+import { adapter, effectiveLimits, privateBytes, secureDirectory, stateHome } from "./config.js";
 import type { JobRow } from "./ledger.js";
 import { Guard, Ledger, ledgerRegistryIdentity, rootRegistry } from "./ledger.js";
 import { Output } from "./output.js";
@@ -26,6 +26,7 @@ import { allowedByRule, approvalKey, checkPolicy, hash, immutableIdentity } from
 import type { FrameHandler } from "./transport.js";
 import { frame, HttpTransport, SessionTransport } from "./transport.js";
 import { LocalWorkspace } from "./workspace/local.js";
+import { inventoryFor } from "./workspace/manifest.js";
 import { SafeRoot } from "./workspace/paths.js";
 import { Snapshots } from "./workspace/snapshot.js";
 import { Staging } from "./workspace/staging.js";
@@ -825,7 +826,7 @@ export class ExecutorRuntime implements FrameHandler {
       return;
     }
     if (value.type === "transfer.open") {
-      this.track(this.transfer(value.payload).catch(() => {}));
+      this.track(this.transfer(value.payload, value.requestId).catch(() => {}));
       return;
     }
     if (value.type === "executor.presence") {
@@ -927,20 +928,52 @@ export class ExecutorRuntime implements FrameHandler {
       payload: { requestId, correlationId, response: await work },
     };
   }
-  async transfer(descriptor: TransferDescriptor): Promise<void> {
-    await this.currentPolicy();
-    this.http.assertExecutorAuthority();
-    const key = `${descriptor.transferId}:${descriptor.attemptId}`;
-    if (this.transfers.has(key) || this.transfers.size >= this.http.limits.transferConcurrency)
-      throw new Error("local transfer concurrency exhausted");
-    this.transfers.add(key);
+  async transfer(descriptor: TransferDescriptor, requestId?: string): Promise<void> {
+    const key = `${descriptor.transferId}:${descriptor.attemptId}`,
+      verifiedChunks: number[] = [];
+    let active = false;
+    const reply = (state: "verified" | "interrupted") => {
+      if (requestId && descriptor.purpose === "output")
+        this.session?.send({
+          type: "transfer.status",
+          requestId,
+          payload: {
+            transferId: descriptor.transferId,
+            attemptId: descriptor.attemptId,
+            state,
+            verifiedChunks,
+            bytes: verifiedChunks.reduce(
+              (sum, index) =>
+                sum +
+                Math.min(descriptor.chunkBytes, descriptor.size - index * descriptor.chunkBytes),
+              0,
+            ),
+            ...(state === "interrupted"
+              ? { reason: "Native artifact source unavailable or transfer interrupted" }
+              : {}),
+          },
+        });
+    };
     try {
-      await this.transferOnce(descriptor);
+      await this.currentPolicy();
+      this.http.assertExecutorAuthority();
+      if (this.transfers.has(key) || this.transfers.size >= this.http.limits.transferConcurrency)
+        throw new Error("local transfer concurrency exhausted");
+      this.transfers.add(key);
+      active = true;
+      await this.transferOnce(descriptor, verifiedChunks);
+      reply("verified");
+    } catch (error) {
+      reply("interrupted");
+      throw error;
     } finally {
-      this.transfers.delete(key);
+      if (active) this.transfers.delete(key);
     }
   }
-  private async transferOnce(descriptor: TransferDescriptor): Promise<void> {
+  private async transferOnce(
+    descriptor: TransferDescriptor,
+    verifiedChunks: number[],
+  ): Promise<void> {
     this.staging.check(descriptor);
     if (descriptor.purpose === "local-stage") {
       await this.staging.receive(descriptor);
@@ -948,20 +981,23 @@ export class ExecutorRuntime implements FrameHandler {
     }
     if (descriptor.purpose !== "output" || descriptor.content.kind !== "job-output")
       throw new Error("local reads require correlated workspace request");
-    const row = this.ledger.get(descriptor.jobId);
-    const reference = row?.result?.output.artifacts.find(
-      (a) => a.artifactId === descriptor.content.artifactId,
+    const reference = this.staging.outputReference(descriptor);
+    const path = join(this.directory, "artifacts", descriptor.content.artifactId);
+    const data = await privateBytes(
+      path,
+      this.platform,
+      Math.min(descriptor.size, this.http.limits.artifactBytes),
     );
     if (
-      !reference ||
-      reference.sha256 !== descriptor.fileSha256 ||
-      reference.size !== descriptor.size
+      data.length !== descriptor.size ||
+      hash(data) !== descriptor.fileSha256 ||
+      !reference.chunks ||
+      reference.chunks.chunkBytes !== descriptor.chunkBytes ||
+      canonicalJson(reference.chunks.chunkHashes) !== canonicalJson(descriptor.chunkHashes) ||
+      canonicalJson(inventoryFor(data, descriptor.chunkBytes)) !== canonicalJson(reference.chunks)
     )
-      throw new Error("output owner mismatch");
-    const { readFile } = await import("node:fs/promises");
-    const path = join(this.directory, "artifacts", descriptor.content.artifactId);
-    await this.platform.verifyProtection(path, false);
-    const data = await readFile(path);
+      throw new Error("native artifact integrity or chunk grid mismatch");
+    this.staging.check(descriptor);
     for (let i = 0; i < descriptor.chunkHashes.length; i++) {
       this.staging.check(descriptor);
       await this.http.chunk(
@@ -969,7 +1005,9 @@ export class ExecutorRuntime implements FrameHandler {
         i,
         data.subarray(i * descriptor.chunkBytes, (i + 1) * descriptor.chunkBytes),
       );
+      verifiedChunks.push(i);
     }
+    this.staging.check(descriptor);
   }
   async tick(): Promise<void> {
     if (this.reloadProfile) {
