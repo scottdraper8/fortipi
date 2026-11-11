@@ -1,6 +1,6 @@
 # Compatibility maintenance
 
-The standalone **Compatibility review** workflow proposes a weekly public, read-only
+The standalone **Compatibility review** workflow runs a weekly public, read-only
 check plus `workflow_dispatch` and checks on pull requests changing this guard. Integration into the default branch activates the
 schedule. It uses Node builtins and `contents: read`; no Cloudflare account, npm or
 model credentials are needed. It writes an Actions summary and a small JSON report
@@ -34,7 +34,6 @@ Requests are GET-only to `api.github.com`, without redirects or retries: at most
 cannot turn green. GitHub rate limits/outages fail explicitly. The separate
 workflow retains existing Action/version pins and StepSecurity block egress;
 allowed hosts serve GitHub public reads/checkout, Node setup and StepSecurity.
-Actual hosted execution/egress remains to be verified after parent integration.
 
 | Outcome                                           | Meaning and action                                                                                                                                         |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
