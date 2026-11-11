@@ -164,8 +164,11 @@ export const sources: Source[] = [
   release(
     "libfuse",
     "libfuse/libfuse",
-    [],
-    "Review upstream FUSE API/ABI, mount/unmount, security and kernel compatibility changes against the exact packaged Debian source and patches. Computer's vendored addon is separate. Bind the final image's native pin during release integration; an upstream reference alone does not establish installed-version security.",
+    [
+      pin("tools/unstale/platform-tools.json", "fuse", "fuse3"),
+      pin("tools/unstale/platform-tools.json", "fuse", "libfuse3"),
+    ],
+    "Review upstream FUSE API/ABI, mount/unmount, security and kernel compatibility changes against the exact packaged Debian source and patches. Computer's vendored addon is separate. Verify canonical native pins match the final image; an upstream reference alone does not establish installed-version security.",
   ),
   release(
     "workerd",

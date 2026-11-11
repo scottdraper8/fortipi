@@ -69,9 +69,10 @@ flag irrelevant edits; published pages may lag their official source repository,
 and changes outside this small catalog remain possible.
 
 The upstream libfuse release watch is separate from Computer's vendored native addon.
-Before the first image release, bind its local pin to the integrated Debian freeze
-and review distro patches against relevant upstream fixes. The initial upstream
-reference does not establish security or compatibility of the packaged native library.
+It tracks the existing canonical FUSE 3 pins in `tools/unstale/platform-tools.json`.
+Before an image release, verify those pins match its exact Debian freeze and review
+distro patches against relevant upstream fixes. The initial upstream reference
+does not establish security or compatibility of the packaged native library.
 
 Release tooling (thread 9) must run this check at preflight on the candidate SHA
 and inspect relevant unreviewed drift before deployment/publication. Attach the
