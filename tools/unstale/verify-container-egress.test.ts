@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { test } from "node:test";
+import { promisify } from "node:util";
 import {
   isStepSecuritySinkhole,
   privateBridgeDns,
@@ -11,6 +13,39 @@ test("an allowed target on both sides is required to distinguish refusal from br
   verifyControls(0, 124, 0);
   assert.throws(() => verifyControls(1, 1, 1));
   assert.throws(() => verifyControls(0, 124, 1));
+});
+
+test("the diagnostic preload exits before the daemon and withholds request/error contents", async () => {
+  const { healthPreload } = await import("./container-runtime-diagnostics.ts");
+  for (const fail of [false, true]) {
+    const shim = `globalThis.fetch = async (input, init) => {
+      if (${fail} || input !== "http://127.0.0.1:8080/health" || init.method !== "HEAD" ||
+          init.redirect !== "error" || !(init.signal instanceof AbortSignal) ||
+          Object.keys(init).sort().join() !== "method,redirect,signal")
+        throw new Error("diagnostic-private-request-and-error");
+      return new Response(null, { status: 200 });
+    };`;
+    const { stdout, stderr } = await promisify(execFile)(
+      process.execPath,
+      ["--eval", 'console.log("UNEXPECTED_DAEMON_ENTRY")'],
+      {
+        env: {
+          HOME: process.env.HOME,
+          PATH: process.env.PATH,
+          NODE_OPTIONS: `--import=data:text/javascript;base64,${Buffer.from(shim).toString("base64")} ${healthPreload}`,
+        },
+        timeout: 2000,
+        maxBuffer: 1024,
+        encoding: "utf8",
+      },
+    );
+    assert.equal(stderr, "");
+    assert.deepEqual(JSON.parse(stdout), { httpStatus: fail ? null : 200 });
+    assert.doesNotMatch(
+      stdout,
+      /UNEXPECTED_DAEMON_ENTRY|diagnostic-private|http:|HEAD|NODE_OPTIONS/,
+    );
+  }
 });
 
 test("a reachable denied target and Docker setup failures cannot count as policy refusal", () => {

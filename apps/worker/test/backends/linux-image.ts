@@ -98,5 +98,19 @@ try {
     `${JSON.stringify({ imageId: metadata.imageId, localExecution: true, realFuse: body.fuse, cloudVerified: false })}\n`,
   );
 } finally {
-  await harness.close();
+  try {
+    const allowed = new Set(
+      ["before-status", "port-capability", "native-fetch", "after-status", "unclassified"].map(
+        (stage) => `fortipi-container-request-stage:${stage}`,
+      ),
+    );
+    let emitted = 0;
+    for (const { message } of harness.getLogs()) {
+      if (!allowed.has(message)) continue;
+      process.stdout.write(`${message}\n`);
+      if (++emitted === 5) break;
+    }
+  } finally {
+    await harness.close();
+  }
 }
