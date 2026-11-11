@@ -85,6 +85,16 @@ export function verifyGatewayEgress(
       return event;
     });
   assert.equal(events.length, 3, "Each application HTTPS leg must reach the gateway exactly once");
+  console.log(
+    JSON.stringify({
+      probe: "computer-gateway-receipts",
+      receipts: events.map((event) => ({
+        target: String(event.target),
+        outcome: String(event.outcome),
+        status: event.status,
+      })),
+    }),
+  );
   for (const [index, event] of events.entries()) {
     assert.equal(event.target, index === 1 ? "denied-example" : "allowed-registry");
     assert.equal(event.outcome, index === 1 ? "upstream-error" : "response");

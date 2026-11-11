@@ -77,6 +77,7 @@ async function image(
   layers: Buffer[],
   extras: Buffer[] = [],
   gzip = false,
+  namedExtras: [string, Uint8Array | string][] = [],
 ): Promise<{ path: string; id: string }> {
   await mkdir(resolve(directory, "blobs/sha256"), { recursive: true });
   const encoded = layers.map((bytes) => (gzip ? gzipSync(bytes) : bytes));
@@ -121,6 +122,7 @@ async function image(
       `blobs/sha256/${sha(bytes)}`,
       bytes,
     ]),
+    ...namedExtras,
   ]);
   for (const [name, bytes] of files) await writeFile(resolve(directory, name), bytes);
   const path = resolve(directory, "image.tar");
@@ -190,6 +192,62 @@ test("actual frozen base reproduces the independently reviewed removed-executabl
       /binary-bearing base blob/,
     );
   } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+test("rejected archive diagnostics cap members and hash tainted names without weakening rejection", async () => {
+  const work = await mkdtemp(resolve(tmpdir(), "fortipi-archive-diagnostic-"));
+  const originalError = console.error;
+  const logs: string[] = [];
+  console.error = (message: string) => logs.push(message);
+  try {
+    const layout = `${"e".repeat(64)}/VERSION`;
+    await mkdir(resolve(work, "e".repeat(64)), { recursive: true });
+    const tainted = "diagnostic-private-Authorization=not-a-credential";
+    const almostBlob = `blobs/sha256/${"f".repeat(64)}?${tainted}`;
+    const payload = "diagnostic-private-content";
+    const candidate = await image(
+      work,
+      [archive(record("retained", Buffer.from("safe")))],
+      [],
+      false,
+      [
+        [`blobs/sha256/${"f".repeat(64)}`, payload],
+        [layout, payload],
+        [tainted, payload],
+        [almostBlob, payload],
+        ["extra-fifth", payload],
+        ["extra-sixth", payload],
+      ],
+    );
+    await assert.rejects(
+      inspectImageArchive(candidate.path, candidate.id, {
+        pruning: { removed: [], executables: [], aliases: [], forbiddenLayers: [] },
+      }),
+      /Unexpected or unreferenced conveyed/,
+    );
+    assert.equal(logs.length, 1);
+    const diagnostic = JSON.parse(logs[0] ?? "");
+    assert.equal(diagnostic.probe, "image-unreferenced-members");
+    assert.equal(diagnostic.members.length, 4);
+    assert.deepEqual(diagnostic.members[0], {
+      class: "oci-blob",
+      declaredSha256: `sha256:${"f".repeat(64)}`,
+      actualSha256: `sha256:${sha(payload)}`,
+      size: Buffer.byteLength(payload),
+    });
+    for (const [index, name] of [layout, tainted, almostBlob].entries())
+      assert.deepEqual(diagnostic.members[index + 1], {
+        class: index === 0 ? "known-layout" : "other",
+        nameSha256: sha(name),
+      });
+    assert.doesNotMatch(
+      logs.join("\n"),
+      /diagnostic-private|Authorization|credential|VERSION|extra-fifth|extra-sixth/,
+    );
+  } finally {
+    console.error = originalError;
     await rm(work, { recursive: true, force: true });
   }
 });

@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import { promisify } from "node:util";
+import { type ApplicationNetworkEvidence, verifyGatewayEgress } from "./verify-app-network.ts";
 import {
   isStepSecuritySinkhole,
   privateBridgeDns,
@@ -71,6 +72,67 @@ test("a refused TCP connection alone cannot establish the provider's DNS policy 
   assert.equal(isStepSecuritySinkhole(["54.185.253.63"]), true);
   for (const addresses of [[], ["127.0.0.1"], ["8.8.8.8"], ["54.185.253.63", "8.8.8.8"]]) {
     assert.equal(isStepSecuritySinkhole(addresses), false);
+  }
+});
+
+test("bounded gateway status diagnostics keep generic responses red and omit tainted receipt data", () => {
+  const originalLog = console.log;
+  const logs: string[] = [];
+  console.log = (message: string) => logs.push(message);
+  const evidence: ApplicationNetworkEvidence = {
+    imageId: `sha256:${"a".repeat(64)}`,
+    appPid: 42,
+    authorityVerifiedBeforeAfter: true,
+    allowedBefore: 200,
+    deniedStatus: 502,
+    deniedTransportFailure: false,
+    allowedAfter: 200,
+    tlsAuthorized: true,
+    syntheticDns: true,
+    upstreamStepSecurityBeforeAfter: true,
+  };
+  const receipt = (target: string, outcome: string, status: number | null) => ({
+    message: `fortipi-gateway:${JSON.stringify({ target, outcome, status, forwarded: true })}`,
+  });
+  const registry = receipt("allowed-registry", "response", 200);
+  try {
+    for (const status of [200, 403, 502]) {
+      logs.length = 0;
+      assert.throws(() =>
+        verifyGatewayEgress(
+          [registry, receipt("denied-example", "response", status), registry],
+          evidence,
+        ),
+      );
+      assert.equal(logs.length, 1);
+      assert.deepEqual(JSON.parse(logs[0] ?? ""), {
+        probe: "computer-gateway-receipts",
+        receipts: [
+          { target: "allowed-registry", outcome: "response", status: 200 },
+          { target: "denied-example", outcome: "response", status },
+          { target: "allowed-registry", outcome: "response", status: 200 },
+        ],
+      });
+    }
+    const valid = [registry, receipt("denied-example", "upstream-error", null), registry];
+    verifyGatewayEgress(valid, evidence);
+    assert.throws(() =>
+      verifyGatewayEgress(valid, { ...evidence, upstreamStepSecurityBeforeAfter: false }),
+    );
+    logs.length = 0;
+    const tainted = {
+      message: `fortipi-gateway:${JSON.stringify({
+        target: "denied-example",
+        outcome: "response",
+        status: 403,
+        forwarded: true,
+        headers: "diagnostic-private-header",
+      })}`,
+    };
+    assert.throws(() => verifyGatewayEgress([registry, tainted, registry], evidence));
+    assert.deepEqual(logs, []);
+  } finally {
+    console.log = originalLog;
   }
 });
 

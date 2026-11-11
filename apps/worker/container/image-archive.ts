@@ -216,6 +216,32 @@ export async function inspectImageArchive(
       }
       allowed.add("repositories");
     }
+    const unexpected = [...members].filter(([path]) => !allowed.has(path));
+    if (unexpected.length)
+      console.error(
+        JSON.stringify({
+          probe: "image-unreferenced-members",
+          members: unexpected.slice(0, 4).map(([path, member]) => {
+            const blob = /^blobs\/sha256\/([a-f0-9]{64})$/.exec(path);
+            if (blob)
+              return {
+                class: "oci-blob",
+                declaredSha256: `sha256:${blob[1]}`,
+                actualSha256: member.digest,
+                size: member.size,
+              };
+            return {
+              class:
+                /^(?:[a-f0-9]{64}\/(?:json|VERSION|layer\.tar)|index\.json|oci-layout|manifest\.json|repositories)$/.test(
+                  path,
+                )
+                  ? "known-layout"
+                  : "other",
+              nameSha256: createHash("sha256").update(path).digest("hex"),
+            };
+          }),
+        }),
+      );
     for (const path of members.keys())
       assert.ok(allowed.has(path), "Unexpected or unreferenced conveyed image file/blob");
   }
