@@ -57,6 +57,7 @@ export class ExecutorRuntime implements FrameHandler {
   transfers = new Set<string>();
   stageRetryAt = new Map<string, number>();
   private stopping = false;
+  private preparationAbort = new AbortController();
   private activities = new Set<Promise<unknown>>();
   private workspaceRequests = new Map<string, Promise<LocalWorkspaceResponse | ErrorBody>>();
   connected = false;
@@ -114,6 +115,7 @@ export class ExecutorRuntime implements FrameHandler {
     this.connected = false;
     this.revoked = true;
     this.http.revoked = true;
+    this.preparationAbort.abort(new Error("executor stopping"));
     this.track(pendingTick);
     let cancellationFailed = false;
     for (const identity of this.ledger.identities())
@@ -320,7 +322,7 @@ export class ExecutorRuntime implements FrameHandler {
         : {}),
     };
   }
-  async start(row: JobRow): Promise<void> {
+  async start(row: JobRow, signal?: AbortSignal): Promise<void> {
     const assignment = row.assignment,
       id = assignment.identity;
     if (
@@ -348,9 +350,45 @@ export class ExecutorRuntime implements FrameHandler {
       if (!registeredRoot) throw new Error("root unavailable");
       if (approvalKey(assignment, this.profile.policy, registeredRoot.key) !== row.approvalKey)
         throw new Error("local approval expired by context change");
+      const preparationSignal = signal
+        ? AbortSignal.any([signal, this.preparationAbort.signal])
+        : this.preparationAbort.signal;
+      const checkPreparation = async () => {
+        preparationSignal.throwIfAborted();
+        await this.currentPolicy();
+        await registeredRoot.verify();
+        preparationSignal.throwIfAborted();
+        const current = this.ledger.existing(id);
+        if (
+          this.stopping ||
+          !this.connected ||
+          this.revoked ||
+          !current ||
+          current.state !== "pending" ||
+          current.decision !== "allow" ||
+          current.cancelled ||
+          current.incarnation !== this.ledger.incarnation ||
+          current.bodyHash !== row.bodyHash
+        )
+          throw new Error("preparation authority no longer current");
+        this.identityAllowed(current.assignment.identity);
+        this.http.assertExecutorAuthority();
+        checkPolicy(current.assignment, this.profile.policy, Date.now());
+        const bindingNow = this.binding(current.assignment);
+        if (
+          this.roots.get(bindingNow.rootBindingId)?.key !== registeredRoot.key ||
+          current.approvalKey !== row.approvalKey ||
+          approvalKey(current.assignment, this.profile.policy, registeredRoot.key) !==
+            current.approvalKey
+        )
+          throw new Error("local approval expired by context change");
+      };
       root =
         binding.providerKind === "computer"
-          ? await this.snapshots.materialize(assignment)
+          ? await this.snapshots.materialize(assignment, {
+              signal: preparationSignal,
+              check: checkPreparation,
+            })
           : registeredRoot;
       await root.verify();
       if (binding.providerKind === "local") {
@@ -392,6 +430,7 @@ export class ExecutorRuntime implements FrameHandler {
         local.authorize({ ...journal.request, lease: currentLease });
       }
       this.identityAllowed(id);
+      preparationSignal.throwIfAborted();
       checkPolicy(assignment, this.profile.policy, Date.now());
       if (
         !this.connected ||
@@ -461,7 +500,12 @@ export class ExecutorRuntime implements FrameHandler {
         current.decision = "deny";
         current.reason = error instanceof Error ? error.message : "start rejected";
         this.ledger.put(current);
-      } else if (current && !current.result && !this.children.has(id.jobId)) {
+      } else if (
+        current &&
+        current.state !== "closed" &&
+        !current.result &&
+        !this.children.has(id.jobId)
+      ) {
         current.state = "unknown";
         this.ledger.put(current);
         if (root) this.ledger.quarantine(root.key);

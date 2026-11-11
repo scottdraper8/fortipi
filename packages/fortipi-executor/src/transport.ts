@@ -49,11 +49,13 @@ export class HttpFailure extends Error {
   status: number;
   retryAt?: number;
   pressure?: Pressure;
-  constructor(status: number, retryAt?: number, pressure?: Pressure) {
+  readonly retryableRead: boolean;
+  constructor(status: number, retryAt?: number, pressure?: Pressure, retryableRead = false) {
     super(`executor HTTPS request failed (${status})`);
     this.status = status;
     if (retryAt !== undefined) this.retryAt = retryAt;
     if (pressure !== undefined) this.pressure = pressure;
+    this.retryableRead = retryableRead;
   }
 }
 export async function readBounded(response: Response, maximum: number): Promise<Uint8Array> {
@@ -88,6 +90,7 @@ export class HttpTransport {
   pressureHeld = false;
   pressure?: Pressure;
   private pressureStatus = 503;
+  private pressureRetryableRead = false;
   private ledger?: Ledger;
   authority?: TicketIdentity;
   private executorEpoch: number | undefined;
@@ -234,6 +237,7 @@ export class HttpTransport {
     authenticated = true,
     deadline = Date.now() + 30000,
   ): Promise<Response> {
+    init.signal?.throwIfAborted();
     if (
       !path.startsWith("/") ||
       path.startsWith("//") ||
@@ -249,6 +253,7 @@ export class HttpTransport {
         this.pressureStatus,
         this.pressureHeld ? undefined : this.pausedUntil,
         this.pressure,
+        this.pressureRetryableRead,
       );
     const headers = new Headers(init.headers);
     if (authenticated) headers.set("Authorization", `Bearer ${this.profile.token}`);
@@ -256,7 +261,9 @@ export class HttpTransport {
       ...init,
       headers,
       redirect: "error",
-      signal: AbortSignal.timeout(Math.min(30000, deadline - now)),
+      signal: init.signal
+        ? AbortSignal.any([init.signal, AbortSignal.timeout(Math.min(30000, deadline - now))])
+        : AbortSignal.timeout(Math.min(30000, deadline - now)),
     });
     if (!response.ok) {
       if (response.status !== 429 && response.status !== 503) {
@@ -271,20 +278,22 @@ export class HttpTransport {
           JSON.parse(Buffer.from(await readBounded(response, this.jsonBytes)).toString("utf8")),
         ).error;
       } catch {
+        init.signal?.throwIfAborted();
         // Unstructured provider errors still receive bounded backoff, without fabricated quota data.
       }
-      const times: number[] = [];
+      const observedAt = Date.now(),
+        times: number[] = [];
       const retry = response.headers.get("Retry-After");
       if (retry !== null) {
         const value = /^\d+(?:\.\d+)?$/.test(retry.trim())
-          ? now + Number(retry) * 1000
+          ? observedAt + Number(retry) * 1000
           : Date.parse(retry);
-        if (Number.isSafeInteger(value) && value > now) times.push(value);
+        if (Number.isSafeInteger(value) && value > observedAt) times.push(value);
       }
       let pressure: Pressure | undefined;
       if (error && "details" in error) {
         const details = error.details;
-        if (details.retryAfterMs !== undefined) times.push(now + details.retryAfterMs);
+        if (details.retryAfterMs !== undefined) times.push(observedAt + details.retryAfterMs);
         if (details.pressure) {
           pressure = details.pressure;
           if (details.pressure.retryAt !== undefined) times.push(details.pressure.retryAt);
@@ -295,11 +304,14 @@ export class HttpTransport {
           pressure?.resource === "storage" &&
           pressure.retryAt === undefined &&
           pressure.resetAt === undefined,
-        until = Math.max(now + 1000, ...times, times.length ? 0 : now + 5000);
+        until = Math.max(observedAt + 1000, ...times, times.length ? 0 : observedAt + 5000);
+      const retryableRead =
+        response.status === 429 && error?.retryable === true && times.length > 0 && !held;
       // Requests already in flight may finish in either order. A later, shorter response
       // cannot release a storage hold or shorten another response's known retry bound.
       if (!this.pressureHeld && (held || until >= this.pausedUntil)) {
         this.pressureStatus = response.status;
+        this.pressureRetryableRead = retryableRead;
         if (pressure) this.pressure = pressure;
         else delete this.pressure;
       }
@@ -310,6 +322,7 @@ export class HttpTransport {
         response.status,
         this.pressureHeld ? undefined : this.pausedUntil,
         this.pressure,
+        retryableRead,
       );
     }
     return response;
