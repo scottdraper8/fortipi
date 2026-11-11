@@ -63,13 +63,16 @@ export function windows(): PlatformAdapter {
       };
       if (
         result.owner !== result.me ||
-        !result.protected ||
+        (directory && !result.protected) ||
         !result.rules.some(
           (r) => r.sid === result.me && r.allow && (r.rights & 2032127) === 2032127,
         ) ||
         result.rules.some((r) => !r.allow || ![result.me, "S-1-5-18"].includes(r.sid))
       )
         throw new Error("unsafe executor DACL");
+      // SQLite creates sidecars with the directory's restrictive inheritable DACL.
+      // An unprotected file is allowed only under an independently verified protected parent.
+      if (!directory && !result.protected) await this.verifyProtection(win32.dirname(path), true);
     },
     async verifyEntry(path, stat) {
       if (

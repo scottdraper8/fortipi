@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { defaults } from "../dist/config.js";
 import { Guard, Ledger, rootRegistry } from "../dist/ledger.js";
@@ -10,13 +11,13 @@ import { Output } from "../dist/output.js";
 import { assignment, fixture } from "./fixtures/daemon.ts";
 
 const exec = promisify(execFile);
-const daemon = new URL("./fixtures/daemon.ts", import.meta.url);
+const daemon = fileURLToPath(new URL("./fixtures/daemon.ts", import.meta.url));
 test("FULL start intent survives abrupt process exit; reopen cannot win another start", async () => {
   const f = await fixture();
   try {
     const a = await assignment("this must never be spawned");
     await assert.rejects(
-      exec(process.execPath, [daemon.pathname, "claim-crash", f.directory, JSON.stringify(a)]),
+      exec(process.execPath, [daemon, "claim-crash", f.directory, JSON.stringify(a)]),
       { code: 71 },
     );
     f.ledger.recover();
@@ -56,22 +57,42 @@ test("actual SQLite page exhaustion rolls output back and retains the original u
     await f.cleanup();
   }
 });
+test("an actual interrupted SQLite write reopens with its protected hot journal and preserves committed bytes", async () => {
+  const f = await fixture();
+  let reopened: Ledger | undefined;
+  f.ledger.db.prepare("INSERT INTO meta VALUES ('durable_canary','before')").run();
+  f.ledger.close();
+  try {
+    await assert.rejects(exec(process.execPath, [daemon, "journal-crash", f.directory]), {
+      code: 74,
+    });
+    reopened = await Ledger.open(f.directory, "ledger", defaults);
+    assert.equal(
+      (
+        reopened.db.prepare("SELECT value FROM meta WHERE key='durable_canary'").get() as {
+          value: string;
+        }
+      ).value,
+      "before",
+    );
+  } finally {
+    reopened?.close();
+    await rm(f.path, { recursive: true, force: true });
+  }
+});
 test("SQLite guards exclude another process and alternate profile ledger for the same root", async () => {
   const f = await fixture();
   let guard: Guard | undefined;
   try {
     const path = join(f.directory, "guard.sqlite");
     guard = await Guard.acquire(path);
-    await assert.rejects(exec(process.execPath, [daemon.pathname, "guard", path]), (e: unknown) => {
+    await assert.rejects(exec(process.execPath, [daemon, "guard", path]), (e: unknown) => {
       assert.equal((e as { stdout: string }).stdout.trim(), "locked");
       return true;
     });
     guard.close();
     guard = undefined;
-    assert.equal(
-      (await exec(process.execPath, [daemon.pathname, "guard", path])).stdout.trim(),
-      "acquired",
-    );
+    assert.equal((await exec(process.execPath, [daemon, "guard", path])).stdout.trim(), "acquired");
     const registry = join(f.path, "registry");
     const g = await rootRegistry(registry, [
       { key: f.root.key, ledgerId: "a", ledgerPath: f.directory },

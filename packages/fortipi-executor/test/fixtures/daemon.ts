@@ -266,6 +266,14 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     throw new Error("claim failed");
   process.exit(71);
 }
+if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === "journal-crash") {
+  const ledger = await Ledger.open(process.argv[3] as string, "ledger", defaults);
+  ledger.db.exec("PRAGMA cache_size=5; BEGIN IMMEDIATE");
+  ledger.db
+    .prepare("UPDATE meta SET value=? WHERE key='durable_canary'")
+    .run("uncommitted".repeat(100000));
+  process.exit(74);
+}
 export const fixtureChild = join(dirname(self), "child.ts");
 if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === "start-crash") {
   const inputPath = process.argv[3] as string;

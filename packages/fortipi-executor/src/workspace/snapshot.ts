@@ -236,6 +236,9 @@ export class Snapshots {
     return result;
   }
   async cleanup(assignment: Assignment, manifestHash: string): Promise<void> {
+    const job = this.ledger.existing(assignment.identity);
+    if (!job?.committed || job.result?.manifestHash !== manifestHash)
+      throw new Error("scratch cleanup requires durable terminal evidence");
     const id = assignment.identity,
       scratch = this.ledger.record<Scratch>("stages", `scratch_${id.executionId}`),
       rootIdentity = this.ledger.record<{ key: string }>(
@@ -244,7 +247,12 @@ export class Snapshots {
       );
     if (!scratch || !rootIdentity) throw new Error("scratch cleanup identity unavailable");
     const intentKey = `cleanup_intent_${id.executionId}`,
-      intent = this.ledger.record<{ manifestHash: string }>("stages", intentKey);
+      intent = this.ledger.record<{ manifestHash: string; manifest: Manifest }>(
+        "stages",
+        intentKey,
+      );
+    if (intent && intent.manifestHash !== manifestHash)
+      throw new Error("scratch cleanup proof conflict");
     let absent = false;
     try {
       await lstat(scratch.path);
@@ -255,12 +263,15 @@ export class Snapshots {
     if (absent && !intent) throw new Error("missing scratch has no cleanup proof");
     if (!absent) {
       const root = await SafeRoot.open(scratch.path, this.platform);
-      if (
-        root.key !== rootIdentity.key ||
-        (await scan(root, this.limits)).manifestHash !== manifestHash
-      )
+      const actual = await scan(root, this.limits);
+      if (root.key !== rootIdentity.key || (!intent && actual.manifestHash !== manifestHash))
         throw new Error("scratch cleanup drift");
-      this.ledger.saveRecord("stages", intentKey, { manifestHash });
+      if (intent) {
+        const entries = new Map(intent.manifest.entries.map((e) => [e.path, JSON.stringify(e)]));
+        if (actual.manifest.entries.some((e) => entries.get(e.path) !== JSON.stringify(e)))
+          throw new Error("scratch cleanup found unjournaled bytes");
+      } else
+        this.ledger.saveRecord("stages", intentKey, { manifestHash, manifest: actual.manifest });
       for (const name of await root.entries())
         for (const path of await root.deletionPaths(name, this.limits.manifestEntries))
           await root.delete(path);
