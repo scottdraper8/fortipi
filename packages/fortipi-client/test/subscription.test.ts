@@ -72,6 +72,7 @@ void test("snapshot handler failure pauses without opening a socket or retrying 
     },
   });
   const sub = client.conversations.subscribe("conv_1", {
+    agentId: "agent_1",
     maxReconnects: 0,
     onSnapshot: () => {
       snapshots++;
@@ -111,6 +112,7 @@ void test("subscribe cannot report online before the complete high-water receipt
     },
   });
   const sub = client.conversations.subscribe("conv_1", {
+    agentId: "agent_1",
     maxReconnects: 0,
     onSnapshot: () => {},
     onEvent: () => assert.fail("incomplete barrier has no events"),
@@ -168,6 +170,7 @@ void test("asynchronous binary frames stay ordered and queue overflow preserves 
       webSocket: () => socket,
     });
     const sub = client.conversations.subscribe("conv_1", {
+      agentId: "agent_1",
       maxReconnects: 0,
       onSnapshot: () => {},
       onEvent: (event) => {
@@ -271,6 +274,7 @@ void test("live gap repairs stored history before resubscribe; each upgrade uses
     },
   });
   const subscription = client.conversations.subscribe("conv_1", {
+    agentId: "agent_1",
     onSnapshot: (value) => {
       assert.equal(value.lastEventSeq, 0);
     },
@@ -330,6 +334,7 @@ void test("handler failure pauses; cursor.expired replaces snapshot, cursor.inva
     },
   });
   const subscription = client.conversations.subscribe("conv_1", {
+    agentId: "agent_1",
     onSnapshot: () => {},
     onEvent: async () => {
       throw new Error("do not advance");
@@ -371,6 +376,7 @@ void test("handler failure pauses; cursor.expired replaces snapshot, cursor.inva
       },
     });
     const sub = expired.conversations.subscribe("conv_1", {
+      agentId: "agent_1",
       after: 0,
       scope: cursorScope,
       onSnapshot: () => {},
@@ -422,6 +428,7 @@ void test("storage pressure pauses ticket acquisition without polling; abort int
       },
     });
     const sub = client.conversations.subscribe("conv_1", {
+      agentId: "agent_1",
       signal: abort.signal,
       onSnapshot: () => {},
       onEvent: () => {},
@@ -481,6 +488,7 @@ void test("a paginated subscribe high-water barrier completes before queued live
     },
   });
   const sub = client.conversations.subscribe("conv_1", {
+    agentId: "agent_1",
     onSnapshot: () => {},
     onEvent: (e) => {
       if (e.durability === "durable") {
@@ -504,7 +512,7 @@ void test("a paginated subscribe high-water barrier completes before queued live
   }
 });
 
-void test("authenticated identity scopes retained cursors; changed principal/credential/generation/grants/role resnapshot, ticket TTL does not", async () => {
+void test("authenticated identity and agent scope retained cursors; changed authority resnapshots, ticket TTL does not", async () => {
   const changed = [
     identity,
     { ...identity, principalId: "different_principal" },
@@ -512,13 +520,12 @@ void test("authenticated identity scopes retained cursors; changed principal/cre
     { ...identity, credential: { ...identity.credential, grantVersion: 2 } },
     { ...identity, credential: { ...identity.credential, credentialId: "different_credential" } },
     { ...identity, role: "admin" as const },
+    identity,
   ];
   for (const [index, current] of changed.entries()) {
-    assert.equal(
-      cursorScopeKey({ ...cursorScope, identity: current }) === cursorScopeKey(cursorScope),
-      index === 0,
-    );
+    const agentId = index === changed.length - 1 ? "agent_2" : "agent_1";
     let snapshots = 0;
+    const requestedCursors: number[] = [];
     const after = index === 0 ? 5 : 0;
     const client = new FortiPiClient({
       endpoint: "https://example.test",
@@ -529,11 +536,12 @@ void test("authenticated identity scopes retained cursors; changed principal/cre
         if (parsed.pathname.endsWith("/tickets"))
           return json(ticketReceipt("fresh_ticket", current, Date.now() + 20000), 201);
         if (parsed.pathname.endsWith("/events")) {
-          assert.equal(Number(parsed.searchParams.get("after")), after);
-          return json(replay([], after));
+          const requested = Number(parsed.searchParams.get("after"));
+          requestedCursors.push(requested);
+          return json(replay([], requested));
         }
         snapshots++;
-        return json(snapshot);
+        return json({ ...snapshot, conversation: { ...snapshot.conversation, agentId } });
       },
       webSocket: () => {
         const socket = new FixtureSocket();
@@ -542,12 +550,13 @@ void test("authenticated identity scopes retained cursors; changed principal/cre
             type: "ack",
             requestId: (command as { requestId: string }).requestId,
             operationId: "replayEvents",
-            receipt: replay([], after),
+            receipt: replay([], requestedCursors.at(-1) ?? 0),
           });
         return socket;
       },
     });
     const sub = client.conversations.subscribe("conv_1", {
+      agentId,
       after: 5,
       scope: cursorScope,
       onSnapshot: () => {},
@@ -560,8 +569,15 @@ void test("authenticated identity scopes retained cursors; changed principal/cre
     try {
       await sub.ready;
       assert.equal(snapshots, index === 0 ? 0 : 1);
+      assert.deepEqual(requestedCursors, [after]);
       assert.equal(sub.cursor, after);
+      assert.equal(sub.scope?.agentId, agentId);
       assert.deepEqual(sub.scope?.identity, current);
+      assert.equal(
+        cursorScopeKey({ ...cursorScope, agentId, identity: current }) ===
+          cursorScopeKey(cursorScope),
+        index === 0,
+      );
     } finally {
       sub.close();
       await sub.done;
@@ -611,6 +627,7 @@ void test("deployment changes refresh discovery before resnapshot; unscoped curs
   assert.throws(
     () =>
       client.conversations.subscribe("conv_1", {
+        agentId: "agent_1",
         after: 4,
         onSnapshot: () => {},
         onEvent: () => {},
@@ -618,6 +635,7 @@ void test("deployment changes refresh discovery before resnapshot; unscoped curs
     { code: "cursor_scope_required" },
   );
   const sub = client.conversations.subscribe("conv_1", {
+    agentId: "agent_1",
     after: 4,
     scope: cursorScope,
     onSnapshot: () => {},
@@ -688,6 +706,7 @@ void test("duplicates older than the bounded recent window are checked against s
       },
     });
     const sub = client.conversations.subscribe("conv_1", {
+      agentId: "agent_1",
       after: 5,
       scope: cursorScope,
       onSnapshot: () => assert.fail("unneeded snapshot"),

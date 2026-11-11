@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { type CommitReceipt, type JobCommitted, manifestDigest } from "fortipi-contract";
+import {
+  type CommitReceipt,
+  type JobCommitted,
+  manifestDigest,
+  publicCommitReceipt,
+} from "fortipi-contract";
 import type * as D from "../../src/boundary/dto.js";
 import { harness } from "./harness.ts";
 
@@ -124,7 +129,32 @@ test("write-only publication and terminal proof retain original evidence under c
         body: commit,
       },
     };
+    const wrongJob = await rpc({
+      ...commitCall,
+      input: { ...commitCall.input, body: { ...commit, jobId: "other-job" } },
+    });
+    assert.equal(wrongJob.ok, false, "Different job published the reserved write");
     const receipt = (await call<{ status: 200; body: CommitReceipt }>(commitCall)).body;
+    const knownReceipt = {
+      kind: "receipt",
+      input: {
+        workspaceId: "workspace",
+        commitId: receipt.commitId,
+        commitDigest: receipt.commitDigest,
+      },
+    };
+    const factsCall = {
+      kind: "facts",
+      input: { recipient: { kind: "agent", id: "agent" }, limit: 100 },
+    };
+    const storage = await server
+      .getWorker()
+      .getDurableObjectStorage("WORKSPACES", { name: "workspace" });
+    const retainedRows = () =>
+      storage.exec(
+        "SELECT key,value FROM fp_ws_record WHERE key='authority' OR key LIKE 'receipt:%' OR key LIKE 'upload:%' OR key LIKE 'reservation:%' OR key LIKE 'lease-acquire:%' ORDER BY key",
+      );
+    const retainedBefore = await retainedRows();
     const data = await server.fetch(`/read?revision=${receipt.revision}&path=only-write.txt`);
     assert.equal(digest(new Uint8Array(await data.arrayBuffer())), sha256);
     assert.equal(
@@ -153,11 +183,11 @@ test("write-only publication and terminal proof retain original evidence under c
         },
       },
       {
-        kind: "receipt",
+        kind: "public-receipt",
         input: {
-          workspaceId: "workspace",
-          commitId: receipt.commitId,
-          commitDigest: receipt.commitDigest,
+          operationId: "getCommitReceipt",
+          path: { workspaceId: "workspace", commitId: receipt.commitId },
+          query: { commitDigest: receipt.commitDigest },
         },
       },
     ]) {
@@ -166,6 +196,150 @@ test("write-only publication and terminal proof retain original evidence under c
       if (!result.ok) assert.equal(result.code, "unauthorized");
     }
     await delay(Math.max(0, lease.expiresAt - Date.now() + 10));
+    const recoveredReceipt = await rpc<D.CommitReceipt>(knownReceipt);
+    assert.ok(recoveredReceipt.ok, "Write-only historical receipt lookup required public read");
+    assert.deepEqual(publicCommitReceipt(recoveredReceipt.value), receipt);
+    const expired = await rpc(knownReceipt, { ...write, "x-test-expired": "1" });
+    assert.equal(expired.ok, false, "Expired current receipt authority was accepted");
+    if (!expired.ok) assert.equal(expired.code, "unauthenticated");
+    const recovery = { ...write, "x-test-recovery": "1" };
+    const freshReceipt = await rpc<D.CommitReceipt>(knownReceipt, recovery);
+    assert.ok(freshReceipt.ok, "Current recovery actor could not observe the historical receipt");
+    assert.deepEqual(freshReceipt.value, recoveredReceipt.value);
+    for (const flag of [
+      "x-test-other-conversation",
+      "x-test-other-agent",
+      "x-test-other-target",
+      "x-test-unregistered",
+      "x-test-split-scope",
+    ]) {
+      const result = await rpc(knownReceipt, { ...recovery, [flag]: "1" });
+      assert.equal(result.ok, false, `Wrong receipt scope was accepted: ${flag}`);
+    }
+    for (const input of [
+      { ...knownReceipt.input, workspaceId: "other" },
+      { ...knownReceipt.input, commitDigest: "f".repeat(64) },
+    ])
+      assert.equal((await rpc({ ...knownReceipt, input }, recovery)).ok, false);
+    const page = await rpc<D.FactPage>(factsCall, recovery);
+    assert.ok(page.ok, "Write-only recovery could not discover its retained receipt fact");
+    assert.equal(page.value.items.length, 1);
+    const fact = page.value.items[0];
+    assert.ok(fact);
+    assert.equal(fact.event.type, "workspace.revision.committed");
+    assert.deepEqual(fact.event.payload, receipt);
+    assert.equal(fact.factId, receipt.sourceFactId);
+    const readPage = await rpc<D.FactPage>(factsCall, read);
+    assert.ok(readPage.ok);
+    assert.deepEqual(readPage.value.items, [fact]);
+    const mixedPage = await rpc<D.FactPage>(factsCall, { ...recovery, "x-test-mixed-read": "1" });
+    assert.ok(mixedPage.ok);
+    assert.deepEqual(
+      mixedPage.value.items,
+      [fact],
+      "Valid scoped write grant was masked by an unrelated read grant",
+    );
+    const publicRead = await rpc<{ status: 200; body: CommitReceipt }>(
+      {
+        kind: "public-receipt",
+        input: {
+          operationId: "getCommitReceipt",
+          path: { workspaceId: "workspace", commitId: receipt.commitId },
+          query: { commitDigest: receipt.commitDigest },
+        },
+      },
+      read,
+    );
+    assert.ok(publicRead.ok);
+    assert.deepEqual(publicRead.value.body, receipt);
+    for (const headers of [
+      { ...read, "x-test-other-conversation": "1" },
+      { ...read, "x-test-split-scope": "1" },
+      { ...recovery, "x-test-other-conversation": "1" },
+      { ...recovery, "x-test-other-target": "1" },
+    ]) {
+      const hidden = await rpc<D.FactPage>(factsCall, headers);
+      assert.ok(hidden.ok);
+      assert.deepEqual(hidden.value.items, [], "Unrelated conversation received a workspace fact");
+      assert.equal(
+        (
+          await rpc(
+            {
+              kind: "ack",
+              input: {
+                recipient: factsCall.input.recipient,
+                factId: fact.factId,
+                eventId: "scope-event",
+                eventSeq: 1,
+              },
+            },
+            headers,
+          )
+        ).ok,
+        false,
+      );
+    }
+    const unrelated: D.Fact = {
+      ...fact,
+      factId: "unrelated-fact",
+    };
+    const encoded = JSON.stringify({ fact: unrelated, acknowledgments: [] }).replaceAll("'", "''");
+    await storage.exec(
+      `INSERT INTO fp_ws_record(key,value) VALUES('fact:unrelated-fact','${encoded}')`,
+    );
+    const bounded = await rpc<D.FactPage>(factsCall, recovery);
+    assert.ok(bounded.ok);
+    assert.deepEqual(
+      bounded.value.items,
+      [fact],
+      "Write-only recovery gained arbitrary fact access",
+    );
+    assert.equal(
+      (
+        await rpc(
+          {
+            kind: "ack",
+            input: {
+              recipient: factsCall.input.recipient,
+              factId: unrelated.factId,
+              eventId: "scope-event",
+              eventSeq: 1,
+            },
+          },
+          recovery,
+        )
+      ).ok,
+      false,
+    );
+    await storage.exec("DELETE FROM fp_ws_record WHERE key='fact:unrelated-fact'");
+    assert.deepEqual(
+      await retainedRows(),
+      retainedBefore,
+      "Receipt recovery changed publication or historical authority",
+    );
+    const ackCall = {
+      kind: "ack",
+      input: {
+        recipient: factsCall.input.recipient,
+        factId: fact.factId,
+        eventId: "scope-event",
+        eventSeq: 1,
+      },
+    };
+    const acknowledged = await rpc<D.FactAck>(ackCall, recovery);
+    assert.ok(acknowledged.ok);
+    assert.deepEqual(await rpc(ackCall, recovery), acknowledged);
+    assert.equal(
+      (await rpc({ ...ackCall, input: { ...ackCall.input, eventSeq: 2 } }, recovery)).ok,
+      false,
+    );
+    const afterAck = await rpc<D.FactPage>(factsCall, recovery);
+    assert.ok(afterAck.ok);
+    assert.deepEqual(afterAck.value.items, []);
+    const unchangedBytes = await server.fetch(
+      `/read?revision=${receipt.revision}&path=only-write.txt`,
+    );
+    assert.equal(digest(new Uint8Array(await unchangedBytes.arrayBuffer())), sha256);
     assert.deepEqual(
       (await call<{ status: 200; body: CommitReceipt }>(commitCall)).body,
       receipt,
@@ -319,6 +493,10 @@ test("write-only publication and terminal proof retain original evidence under c
       },
     });
     assert.equal((await proof(committed)).status, 403);
+    assert.equal((await rpc(knownReceipt)).ok, false, "Revoked current actor recovered a receipt");
+    const freshAfterRevocation = await rpc<D.CommitReceipt>(knownReceipt, recovery);
+    assert.ok(freshAfterRevocation.ok);
+    assert.deepEqual(freshAfterRevocation.value, recoveredReceipt.value);
     const recovered = await proof(committed, { ...write, "x-test-recovery": "1" });
     assert.equal(
       recovered.status,
@@ -338,6 +516,14 @@ test("write-only publication and terminal proof retain original evidence under c
     );
     assert.equal(invalidated.ok, true);
     assert.equal((await proof(committed, { ...write, "x-test-recovery": "1" })).status, 403);
+    assert.equal(
+      (await rpc(knownReceipt, recovery)).ok,
+      false,
+      "Revoked target recovered a receipt",
+    );
+    const fencedFacts = await rpc<D.FactPage>(factsCall, recovery);
+    assert.ok(fencedFacts.ok);
+    assert.deepEqual(fencedFacts.value.items, [], "Revoked target recovered a publication fact");
   } finally {
     await server.close();
   }

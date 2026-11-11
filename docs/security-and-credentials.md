@@ -46,10 +46,78 @@ before supplying `CredentialProof.origin`. Preflight is unauthenticated and
 bounded; there is no wildcard credential CORS. Proxies must redact ticket query
 strings from access/error logs.
 
+Client-stream tickets require exactly one concrete `resources.agentIds` entry.
+The public URL still contains only its opaque ticket. ControlPlane derives the
+agent from retained ticket scope inside the consume/recipient-registration
+transaction, then forwards query-free `GET /v1/stream` to that named AgentSession.
+The known-destination redemption port also rejects a different agent. Missing,
+wildcard, duplicate or ambiguous agent scope fails closed at mint and redemption.
+Unknown query selectors, duplicate tickets and client subprotocol negotiation are
+rejected. Invalid upgrades and unavailable targets cannot restore spent tickets.
+
+Only WebSocket transport headers and the validated Origin survive forwarding.
+ControlPlane replaces caller authority with existing JSON `X-Fortipi-Socket`
+and `X-Fortipi-Context`: scoped SocketIdentity plus the unchanged canonical
+AuthContext built from current stored credential/grants/expiry during redemption.
+Their combined UTF-8 size is bounded to64KiB; excess authority is rejected rather
+than truncated. Bearers, cookies and caller internal/connection headers do not
+reach the agent. Agent5 must match the references, principal, deployment, role and
+registration, enforce current floors, and intersect every command with ticket
+resources even though the canonical grants may cover unrelated resources. The
+handshake deadline is not socket TTL. Per-command server request IDs/deadlines
+may be bounded afresh by current authority/socket expiry while canonical expiry
+and authenticatedAt stay unchanged. Full grants do not belong in the bounded
+2KiB socket attachment; Agent5 owns bounded nonsecret authority retention and its
+actual native JSON-only pre-upgrade guard. The namespace stream fixture proves
+the CP handoff, not the Agent/Pi implementation.
+
+After readiness, a registered Agent can resolve its selected model through
+existing CP `fetch`: query-free `GET /internal/agents/{agentId}/model`, with its
+current canonical `X-Fortipi-Context`. CP requires its exact own-Agent registration
+and one current covering model-using logical grant, then returns only the actual
+persisted `ModelConfig` as no-store JSON. `X-Fortipi-Agent-Config-Version` identifies
+the same retained Agent row's version. This includes configured secret references,
+never provider credentials or secret values. Raw application grants, another
+Agent, stale refs/floors, expired grants and read-only/ambiguous operations cannot
+use this private lane. Authority envelopes are bounded to64KiB UTF-8. Public
+`describeAgent`/HTTP reads still require `agents.read`. The outer Worker must
+reject public access to internal paths and caller authority headers; Agent5 owns
+that guard and invokes this handoff after readiness, with no CP startup network.
+
+Existing private `resolveExecutorGeneration` also accepts a current CP-registered
+operation under one current grant covering `jobs.dispatch` and `workspace.write`
+over its exact Agent/conversation/workspace/executor and trusted registration
+resources. For an Agent recipient this identifies the selected execution target,
+independently of Computer storage or another local storage owner. A Workspace
+recipient stays bound to its actual local storage owner. Both require the current
+authoritative binding version; stale refs, scope, grant expiry and credential or
+executor floors deny. Returned generation and five numeric transfer limits come
+from actual validated registration, with null limits when no valid observation
+exists. Legacy `workspace.read` stays a local storage-owner lookup, including its
+existing exact pending-import recovery. No public directory/read/list grant or
+permission to spawn follows from this metadata; target/action/capability/lease
+admission still follows separately.
+
+Job metadata capacity uses its trusted Agent registration's exact conversation
+owner and zero slots, with one current full dispatch scope over workspace, tool
+and selected target. The service retains the job/operation mapping; opaque job
+IDs alone do not establish CP owner authority. Dispatch metadata does not grant
+model resolution.
+
 An executor's application credential generation, execution generation and socket
 connection epoch are separate. Reconnect increments only the epoch. Restoring a
 lost execution ledger requires explicit new-generation authorization. The
-upgrade and registration transactions recheck current credential authority;
+private outbound lease/terminal delivery envelope may omit its epoch: CP captures
+the actual epoch once after current dispatch authorization, rechecks that same
+epoch after awaited proofs/hash/alarm scheduling and before persistence, and
+stores a concrete epoch with the command. Supplied epochs remain strict and
+executor ingress always requires its explicit current epoch. Deferred drain
+cannot send a retained command on a replacement connection; it retains the
+receipt without futile wakeups. A fresh authorized retry may capture the new
+epoch while retaining the same immutable payload/digest and receipt. Persisted
+transport acknowledgment still does not certify socket delivery.
+
+Upgrade and registration transactions recheck current credential authority;
 registration also rechecks the executor generation and connection epoch after
 asynchronous alarm scheduling, so a pending registration cannot restore a revoked
 generation or superseded connection. The platform owns WebSockets and hibernation;
@@ -292,6 +360,33 @@ durable reservation accounting survives process death. Health and usage expose
 actual outstanding slot/storage claims and overdue repair work, without a
 shared-account remaining-capacity assertion.
 Application admission preserves the configured fraction for repair attempts.
+Each external ControlPlane method invocation admits once. `handleApi` uses
+private implementations for its delegated methods, so one physical invocation
+does not spend two local admission units. Distinct RPCs still spend separately,
+including retries sharing a request ID; these local units are not account-wide
+Cloudflare billing telemetry.
+
+An existing current CP registration can authorize Agent storage reservations for
+its single logical operation under one current covering grant. Creation/fork
+reserves against that Agent with zero job slots; message/steer/resume reserves
+against its one registered conversation with one slot. Registration reference,
+Agent, action and sponsoring grant are retained privately with the immutable
+principal/owner/operation reservation. CP trusts the service-constructed
+registration's conversation binding; it does not own the Agent's conversation
+directory. Raw logical grants, opaque operation IDs and caller-chosen owners
+alone do not establish this authority. Explicit capacity grants and Workspace
+authority retain their existing paths; public agent reads remain `agents.read`.
+
+Measured settlement of a retained registered Agent or Workspace claim uses the
+existing repair/install request pool after current authority and original claim
+validation. The same validation runs again after alarm scheduling and before
+transactional settlement. Every retry consumes a pool slot, even if already
+settled. Unknown/mismatched claims cannot borrow headroom. Free bounds remain
+30/principal, 120/install, 90 application and 30 repair per minute; genuine repair
+or install exhaustion still denies completion. This bounded classification does
+not exempt lease renewal, execution queries or fact paging from their current
+application admission checks.
+
 The alarm has both a per-turn and per-minute repair bound; an exhausted local
 window persists its next eligible minute and rearms there, preserving pending
 work instead of repeatedly waking against an exhausted window.

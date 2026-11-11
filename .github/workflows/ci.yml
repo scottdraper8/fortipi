@@ -59,6 +59,11 @@ jobs:
             api.unstale.sh:443
             unstale.sh:443
             *.stepsecurity.io:443
+      - name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+        run: /usr/bin/systemctl is-active --quiet agent.service
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -150,6 +155,11 @@ jobs:
             api.unstale.sh:443
             unstale.sh:443
             *.stepsecurity.io:443
+      - name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+        run: /usr/bin/systemctl is-active --quiet agent.service
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -174,9 +184,18 @@ jobs:
           cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir tools/unstale install --frozen-lockfile
-      - run: node scripts/verify-foundation.ts --egress
       - run: node scripts/verify-foundation.ts --native
         timeout-minutes: 3
       - run: pnpm run build:executor
       - run: pnpm run typecheck:executor
+      - name: Probe Windows startup and state protection
+        if: runner.os == 'Windows'
+        timeout-minutes: 2
+        run: node packages/fortipi-executor/test/fixtures/daemon.ts windows-probe
+      - name: Probe native state denial across identities
+        timeout-minutes: 2
+        run: node packages/fortipi-executor/test/fixtures/cross-identity.ts
       - run: pnpm run test:executor
+      - name: Require runner egress enforcement
+        if: always()
+        run: node scripts/verify-foundation.ts --egress

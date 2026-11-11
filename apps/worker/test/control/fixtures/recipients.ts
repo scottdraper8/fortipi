@@ -10,9 +10,89 @@ import {
 import type * as D from "../../../src/boundary/dto.js";
 import type { Env } from "../../../src/boundary/env.js";
 import { check, hash, id, json, outcome, ref, same, success } from "../../../src/control/store.js";
+import type { FixtureControl } from "./worker.js";
+
+type RecipientEnv = Omit<Env, "CONTROL_PLANE"> & {
+  CONTROL_PLANE: DurableObjectNamespace<FixtureControl>;
+};
 
 /** Real SQLite authority floors with controlled lost acknowledgments; no product enforcement claim. */
-export class TestRecipient extends DurableObject<Env> {
+export class TestRecipient extends DurableObject<RecipientEnv> {
+  async streamAudit(): Promise<string> {
+    return json({
+      calls: (await this.ctx.storage.get<number>("streamCalls")) ?? 0,
+      last: (await this.ctx.storage.get("streamLast")) ?? null,
+      error: (await this.ctx.storage.get<string>("streamError")) ?? null,
+    });
+  }
+  async streamFailure(mode: "status" | "throw" | null): Promise<void> {
+    await this.ctx.storage.put("streamFailure", mode);
+  }
+  async fetch(request: Request): Promise<Response> {
+    try {
+      return await this.streamFetch(request);
+    } catch (error) {
+      await this.ctx.storage.put(
+        "streamError",
+        error instanceof Error
+          ? error.message.replace(/([?&]ticket=)[^\s"]+/g, "$1<redacted>").slice(0, 200)
+          : "unknown",
+      );
+      throw error;
+    }
+  }
+  private async streamFetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname !== "/v1/stream") return new Response(null, { status: 404 });
+    const envelope = request.headers.get("X-Fortipi-Socket") ?? "";
+    const registrationEnvelope = await this.env.CONTROL_PLANE.getByName("control")
+      .streamRegistration(envelope)
+      .catch(async (error: unknown) => {
+        await this.ctx.storage.put(
+          "streamError",
+          error instanceof Error ? error.message.slice(0, 200) : "unknown",
+        );
+        throw error;
+      });
+    const registration: unknown = JSON.parse(registrationEnvelope);
+    const calls = ((await this.ctx.storage.get<number>("streamCalls")) ?? 0) + 1;
+    const audit = {
+      actorId: this.ctx.id.toString(),
+      method: request.method,
+      path: url.pathname,
+      query: url.search ? "<query-present>" : "",
+      socket: envelope,
+      context: request.headers.get("X-Fortipi-Context"),
+      hasBearer: request.headers.has("Authorization"),
+      hasCookie: request.headers.has("Cookie"),
+      hasProtocol: request.headers.has("Sec-WebSocket-Protocol"),
+      hasConnectionId: request.headers.has("X-Fortipi-Connection-Id"),
+      registration,
+    };
+    await this.ctx.storage.put("streamCalls", calls);
+    await this.ctx.storage.put("streamLast", audit);
+    check(
+      registration &&
+        typeof registration === "object" &&
+        "recipient" in registration &&
+        registration.recipient &&
+        typeof registration.recipient === "object" &&
+        "kind" in registration.recipient &&
+        registration.recipient.kind === "agent" &&
+        "id" in registration.recipient &&
+        typeof registration.recipient.id === "string" &&
+        this.ctx.id.equals(this.env.AGENT_SESSIONS.idFromName(registration.recipient.id)),
+      "unauthorized",
+      "Fixture requires its actual registration before upgrade",
+    );
+    const failure = await this.ctx.storage.get<string>("streamFailure");
+    if (failure === "throw") throw new Error("Synthetic unavailable stream target");
+    if (failure === "status") return new Response(null, { status: 503 });
+    const pair = new WebSocketPair();
+    pair[1].accept();
+    pair[1].send(json({ type: "fixture.stream", ...audit }));
+    return new Response(null, { status: 101, webSocket: pair[0] });
+  }
   private outputs = 0;
   async outputCount(): Promise<number> {
     return this.outputs;

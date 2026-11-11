@@ -19,6 +19,7 @@ const conversation = await client.conversations.create(agents.items[0].agentId, 
   title: "Investigation",
 });
 const stream = client.conversations.subscribe(conversation.conversationId, {
+  agentId: conversation.agentId,
   signal,
   onSnapshot: async (snapshot) => replaceProjection(snapshot),
   onEvent: async (event) => applyInOrder(event),
@@ -95,10 +96,13 @@ storage pressure requires reclamation/configuration instead of repeated ticketin
 No account-wide headroom or model-provider usage budget is inferred.
 
 Ticket identity comes only from authenticated minting. `onIdentity` receives the
-redacted identity, and `subscription.scope` binds its origin/conversation/deployment/
+redacted identity, and `subscription.scope` binds its origin/agent/conversation/deployment/
 principal/role/credential ID/generation/grantVersion. Supplying `after` requires
 the matching `scope` retained from that subscription and its applied projection.
 A changed authority scope resnapshots; a fresh ticket TTL does not change scope.
+Pass the conversation's agent as `SubscriptionOptions.agentId`, or call
+`tickets.mint(agentId, conversationId)` directly. Ticket minting uses those known
+IDs without reading the conversation.
 After process restart, rebuild from an authoritative snapshot. Persisted
 projection and cursor must be saved together; optional `onCursor` is the matching
 persistence hook after application. Snapshot handlers must replace both together.

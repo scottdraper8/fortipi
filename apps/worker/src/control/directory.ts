@@ -3,10 +3,11 @@ import { freeInfrastructurePolicy, schemaRegistry } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
 import { audit } from "./audit.js";
-import { emptyScope, permits, requireGrant } from "./authorization.js";
+import { contains, emptyScope, permits, requireGrant, roleAllows } from "./authorization.js";
 import type { Identities } from "./identity.js";
 import { queueRepairResume } from "./repair.js";
-import { check, fail, hash, id, json, next, type Store } from "./store.js";
+import { check, fail, hash, id, json, next, ref, type Store, same } from "./store.js";
+import type { ExecutorState } from "./tickets.js";
 
 // Only fixed trusted schemas are compiled at module activation, never in request handlers.
 const ajv = new Ajv({ strict: true, allErrors: false, validateFormats: false });
@@ -17,6 +18,8 @@ const validators = new Map(
     ["agents", "AgentPatch"],
     ["configuration", "ConfigurationPatch"],
     ["administration", "TicketInput"],
+    ["administration", "TicketQuery"],
+    ["administration", "ExecutorTransferLimits"],
     ["administration", "CredentialMint"],
     ["executor-messages", "ExecutorFrame"],
     ["executor-messages", "Assignment"],
@@ -29,6 +32,7 @@ const validators = new Map(
     ["workspaces", "WorkspaceLeaseRelease"],
     ["workspaces", "Lease"],
     ["common", "ProtocolError"],
+    ["common", "Id"],
     ["conversations", "ReplayPage"],
     ["transfers", "TransferDescriptor"],
   ].map(([schema, name]) => {
@@ -43,6 +47,13 @@ const validators = new Map(
 export function valid(schema: string, name: string, value: unknown): boolean {
   return validators.get(`${schema}/${name}`)?.(value) === true;
 }
+const modelActions = new Set([
+  "conversations.create",
+  "conversations.fork",
+  "messages.submit",
+  "conversations.steer",
+  "tasks.resume",
+]);
 export class Directory {
   readonly store: Store;
   readonly identities: Identities;
@@ -57,6 +68,88 @@ export class Directory {
   }
   policy(): D.InfrastructurePolicy {
     return this.config().infrastructure ?? freeInfrastructurePolicy;
+  }
+  registeredAuthority(ctx: D.AuthContext) {
+    this.identities.current(ctx);
+    const registration = this.store.get<D.AuthorityRegistration>(
+      "recipient",
+      ctx.registrationId ?? "",
+    );
+    if (!registration || !same(registration.credential, ref(ctx))) return undefined;
+    if (registration.executor) {
+      const executor = this.store.get<ExecutorState>("executor", registration.executor.executorId);
+      if (
+        !executor ||
+        executor.status === "revoked" ||
+        executor.generation !== registration.executor.generation
+      )
+        return undefined;
+    }
+    return registration;
+  }
+  registeredOperation(ctx: D.AuthContext) {
+    const registration = this.registeredAuthority(ctx);
+    if (registration?.recipient.kind !== "agent") return undefined;
+    const resources = registration.resources;
+    const agentId = registration.recipient.id;
+    const action = resources.actions[0];
+    if (
+      resources.agentIds.length !== 1 ||
+      resources.agentIds[0] !== agentId ||
+      !valid("common", "Id", agentId) ||
+      !this.store.get("agent", agentId) ||
+      resources.actions.length !== 1 ||
+      !action ||
+      !roleAllows(ctx, action)
+    )
+      return undefined;
+    // These are the actual Agent operations that use models/storage. The registration
+    // is service-constructed; opaque operation IDs do not establish authority.
+    const creation = action === "conversations.create";
+    if (!modelActions.has(action) && action !== "jobs.dispatch") return undefined;
+    if (
+      creation
+        ? resources.conversationIds.length !== 0
+        : resources.conversationIds.length !== 1 ||
+          !valid("common", "Id", resources.conversationIds[0])
+    )
+      return undefined;
+    if (
+      action === "jobs.dispatch" &&
+      (resources.workspaceIds.length !== 1 ||
+        !valid("common", "Id", resources.workspaceIds[0]) ||
+        resources.tools.length !== 1 ||
+        resources.tools[0] === "*" ||
+        !resources.tools[0] ||
+        !(
+          (resources.executorIds.length === 1 &&
+            valid("common", "Id", resources.executorIds[0]) &&
+            resources.backendIds.length === 0) ||
+          (resources.backendIds.length === 1 &&
+            valid("common", "Id", resources.backendIds[0]) &&
+            resources.executorIds.length === 0)
+        ))
+    )
+      return undefined;
+    const grant = ctx.grants.find(
+      (g) =>
+        (g.expiresAt === undefined || Date.now() < g.expiresAt) && contains(g.resources, resources),
+    );
+    if (!grant) return undefined;
+    return { registration, action, grant };
+  }
+  registeredModel(ctx: D.AuthContext, agentId: string) {
+    const authority = this.registeredOperation(ctx);
+    check(
+      authority &&
+        modelActions.has(authority.action) &&
+        authority.registration.recipient.id === agentId,
+      "unauthorized",
+      "Model resolution requires its current registered Agent operation",
+    );
+    const row = this.store.get<{ agent: D.Agent; model: D.ModelConfig }>("agent", agentId);
+    check(row, "not_found", "Agent unavailable");
+    return row;
   }
   async once<T>(
     ctx: D.AuthContext,

@@ -1659,6 +1659,7 @@ export type LocalObservation =
       observationSeq: number;
       preManifestHash: Sha256;
       postManifestHash: Sha256;
+      postManifest?: Manifest;
       appliedAt: Timestamp;
       state: "applied";
       executionId?: Id;
