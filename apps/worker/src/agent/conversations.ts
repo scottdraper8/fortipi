@@ -48,7 +48,7 @@ export interface Admission {
   taskId: string;
   capacity: D.CapacityReservation;
   mode: "followUp" | "reject" | "steer";
-  state: "pending" | "accepted" | "settlement_pending" | "settled";
+  state: "pending" | "accepted" | "settlement_pending" | "settled" | "rejection_pending";
   receipt?: D.AdmissionReceipt;
   submission?: number;
   piTask?: number;
@@ -602,6 +602,10 @@ export class Conversations {
               actions: [admission.mode === "steer" ? "conversations.steer" : "messages.submit"],
             });
             await this.host.authority.current(auth, resources, tx);
+            // No model work was admitted. Cleanup/reopen must not require this
+            // provider's credentials merely to finish its unused settlement.
+            admission.state = "rejection_pending";
+            await store.put("admission", admission.key, admission, tx, Date.now());
             await store.put("admission-rejected", admission.key, rejected, tx);
             await this.host.authority.current(auth, resources, tx);
           });

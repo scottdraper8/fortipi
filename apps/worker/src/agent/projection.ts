@@ -37,7 +37,8 @@ export class Projection {
   }
   async admission(admission: Admission): Promise<boolean> {
     const { store, pi } = this.conversations.host;
-    if (admission.state === "pending") await this.conversations.finishAdmission(admission);
+    if (admission.state === "pending" || admission.state === "rejection_pending")
+      await this.conversations.finishAdmission(admission);
     admission = (await store.get<Admission>("admission", admission.key))!;
     const row = await store.get<ConversationRow>("conversation", admission.conversationId);
     check(row, "not_found", "Conversation unavailable");

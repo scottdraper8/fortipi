@@ -397,6 +397,7 @@ export class TestAgentSession extends AgentSession {
       }
       if (action === "tool-state")
         return Response.json(await this.toolState(url.searchParams.get("cid") ?? ""));
+      if (action === "growth") return Response.json(await this.growthReport());
       return new Response(null, { status: 404 });
     }
     return super.onRequest(request);
@@ -1063,14 +1064,14 @@ export class TestAgentSession extends AgentSession {
       ),
     );
   }
-  async physicalSample(auth: D.AuthContext, conversationId?: string) {
+  async physicalSample(auth: D.AuthContext, conversationId?: string, action?: string) {
     await this.lifecycle.start();
     await this.authority.physical.beforeGrowth(
       auth,
       scope({
         agentIds: [this.agentId],
         conversationIds: conversationId ? [conversationId] : [],
-        actions: [conversationId ? "messages.submit" : "conversations.create"],
+        actions: [action ?? (conversationId ? "messages.submit" : "conversations.create")],
       }),
     );
     return JSON.stringify(await this.store.get("meta", "storage-report"));
@@ -1094,7 +1095,14 @@ export class TestAgentSession extends AgentSession {
         await tx.all<{ data: string }>(
           "SELECT data FROM fp_records_v1 WHERE kind='admission-rejected' ORDER BY id LIMIT 100",
         )
-      ).map((row) => JSON.parse(row.data) as { acknowledged: boolean; reclaimed: boolean }),
+      ).map(
+        (row) =>
+          JSON.parse(row.data) as {
+            operationId: string;
+            acknowledged: boolean;
+            reclaimed: boolean;
+          },
+      ),
     }));
   }
   socketReport() {
@@ -1193,7 +1201,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/__test/ping") return new Response("ready");
     const match =
-      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|inspect|tool|tool-state)$/.exec(
+      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|inspect|tool|tool-state|growth)$/.exec(
         url.pathname,
       );
     if (match) {
