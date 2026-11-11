@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type * as D from "../../src/boundary/dto.js";
 import type { Env } from "../../src/boundary/env.js";
 import { outcome } from "../../src/workspace/errors.js";
+import { jobSnapshot } from "../../src/workspace/job-snapshot.js";
 import { admitLocalUpload } from "../../src/workspace/local-admission.js";
 import { hashInventory } from "../../src/workspace/streams.js";
 import {
@@ -12,6 +13,45 @@ import {
 
 /** Actual binding application plus a test-only post-transaction response barrier. */
 export class WorkspaceObject extends WorkspaceBase {
+  #releaseSnapshot: (() => void) | undefined;
+  override async readStored(
+    ctx: D.AuthContext,
+    revision: Parameters<WorkspaceBase["readStored"]>[1],
+    entry: Parameters<WorkspaceBase["readStored"]>[2],
+  ): Promise<ReadableStream<Uint8Array>> {
+    const stream = await super.readStored(ctx, revision, entry);
+    if (ctx.requestId !== "snapshot-block") return stream;
+    const reader = stream.getReader();
+    let first = true;
+    return new ReadableStream(
+      {
+        pull: async (controller) => {
+          const next = await reader.read();
+          if (first && !next.done) {
+            first = false;
+            const gate = new Promise<void>((resolve) => {
+              this.#releaseSnapshot = resolve;
+            });
+            this.state.put("test-snapshot-blocked", true);
+            await gate;
+          }
+          if (next.done) {
+            reader.releaseLock();
+            controller.close();
+          } else controller.enqueue(next.value);
+        },
+        cancel: async () => {
+          this.state.put("test-snapshot-cancelled", true);
+          this.#releaseSnapshot?.();
+          await reader.cancel().catch(() => {});
+          try {
+            reader.releaseLock();
+          } catch {}
+        },
+      },
+      { highWaterMark: 0 },
+    );
+  }
   override async exportData(
     ctx: D.AuthContext,
     input: D.ExportRequest,
@@ -169,13 +209,40 @@ export class WorkspaceObject extends WorkspaceBase {
   }
   override async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (path === "/__test/snapshot-cancelled")
+      return Response.json(this.state.get("test-snapshot-cancelled") ?? false);
+    if (path === "/__test/job-snapshot-stream") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      const plan = await jobSnapshot(this, auth, request, await request.json());
+      if (plan.kind !== "blob") throw new Error("Expected actual snapshot blob plan");
+      const reader = (await plan.open()).getReader();
+      let accepted = 0;
+      let rejected = false;
+      try {
+        const next = await reader.read();
+        if (!next.done) accepted = next.value.length;
+      } catch {
+        rejected = true;
+      }
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+      return Response.json({ accepted, rejected });
+    }
+    if (path === "/__test/snapshot-barrier")
+      return new Response(this.state.get("test-snapshot-blocked") ? "ready" : "waiting");
+    if (path === "/__test/snapshot-release") {
+      this.#releaseSnapshot?.();
+      return new Response(null, { status: 204 });
+    }
     if (path === "/__test/export-physical") return Response.json({ bytes: this.state.bytes });
     if (path === "/__test/seed") {
       return new Response(null, { status: 404 });
     }
     if (path === "/__test/barrier")
       return new Response(this.state.get("test-barrier") ? "ready" : "waiting");
-    if (path === "/__test/metadata-queued") {
+    if (path === "/__test/metadata-queued" || path === "/__test/job-snapshot-queued") {
       const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
         auth: D.AuthContext;
       };
@@ -211,7 +278,10 @@ export class WorkspaceObject extends WorkspaceBase {
         },
       );
       const target = new URL(request.url);
-      target.pathname = "/__fortipi/operational-metadata";
+      target.pathname =
+        path === "/__test/metadata-queued"
+          ? "/__fortipi/operational-metadata"
+          : "/__fortipi/job-snapshot";
       const pending = super.fetch(new Request(target, request));
       release();
       await hold;
@@ -506,6 +576,8 @@ export default {
     if (request.headers.get("x-test-short-deadline") === "1") ctx.deadline = Date.now() + 300;
     if (request.headers.get("x-test-other-agent") === "1")
       for (const grant of ctx.grants) grant.resources.agentIds = ["other"];
+    if (request.headers.get("x-test-other-tool") === "1")
+      for (const grant of ctx.grants) grant.resources.tools = ["other"];
     if (request.headers.get("x-test-other-target") === "1")
       for (const grant of ctx.grants) {
         grant.resources.executorIds = ["other"];
@@ -537,6 +609,31 @@ export default {
       });
     }
     const authority = env.WORKSPACES.getByName("workspace");
+    if (
+      url.pathname === "/snapshot-barrier" ||
+      url.pathname === "/snapshot-release" ||
+      url.pathname === "/snapshot-cancelled"
+    )
+      return authority.fetch(
+        new Request(`https://fixture.internal/__test/${url.pathname.slice(1)}`),
+      );
+    if (url.pathname === "/job-snapshot") {
+      const headers = new Headers();
+      if (request.headers.get("x-test-no-context") !== "1")
+        headers.set(internalHeader, JSON.stringify({ auth: ctx }));
+      if (request.headers.has("Range")) headers.set("Range", request.headers.get("Range") ?? "");
+      return authority.fetch(
+        new Request(
+          `https://workspace.internal/${request.headers.get("x-test-snapshot-direct") === "1" ? "__test/job-snapshot-stream" : request.headers.get("x-test-snapshot-queued") === "1" ? "__test/job-snapshot-queued" : "__fortipi/job-snapshot"}${url.search}`,
+          {
+            method: request.method,
+            headers,
+            ...(request.body ? { body: request.body } : {}),
+            signal: request.signal,
+          },
+        ),
+      );
+    }
     if (url.pathname === "/private-rpc") {
       const helpers = [
         { name: "page", args: [{ principalId: "no-authority" }, ["synthetic-only"], undefined, 1] },

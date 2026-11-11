@@ -32,6 +32,7 @@ import {
 import { ComputerStore } from "./computer.js";
 import { outcome, requireThat, unwrap, WorkspaceError } from "./errors.js";
 import { WorkspaceExports } from "./export.js";
+import { jobSnapshot } from "./job-snapshot.js";
 import { LocalProvider } from "./local.js";
 import { LocalReads } from "./local-read.js";
 import { LocalUploads } from "./local-upload.js";
@@ -2690,6 +2691,33 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const envelope = JSON.parse(raw) as InternalContext;
       const { auth } = envelope;
       const url = new URL(request.url);
+      if (url.pathname === "/__fortipi/job-snapshot") {
+        requireThat(
+          request.method === "POST" &&
+            !request.headers.has("Range") &&
+            [...url.searchParams.keys()].every((key) => key === "sha256") &&
+            url.searchParams.getAll("sha256").length <= 1 &&
+            (!url.searchParams.has("sha256") ||
+              /^[a-f0-9]{64}$/.test(url.searchParams.get("sha256") ?? "")),
+          "invalid_request",
+          "Exact assigned snapshot POST and optional member SHA required",
+        );
+        const snapshot = await jobSnapshot(
+          this,
+          auth,
+          request,
+          await boundedJson<unknown>(request, wireLimits.jsonBytes),
+        );
+        if (snapshot.kind === "manifest")
+          return Response.json(snapshot.body, { headers: { "Cache-Control": "no-store" } });
+        return byteResponse(
+          request,
+          snapshot.entry.size,
+          snapshot.entry.sha256,
+          snapshot.deadline,
+          snapshot.open,
+        );
+      }
       if (url.pathname.startsWith("/v1/admin/")) {
         const match = /^\/v1\/admin\/artifacts\/([A-Za-z0-9_-]{1,128})$/.exec(url.pathname);
         requireThat(
