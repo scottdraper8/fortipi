@@ -22,7 +22,13 @@ export async function eventually<T>(
   assert.fail("Expected runtime state did not commit");
 }
 export async function harness(
-  options: { events?: number; traffic?: "free"; origin?: string; main?: string } = {},
+  options: {
+    events?: number;
+    traffic?: "free";
+    origin?: string;
+    main?: string;
+    modelChunkBytes?: 256;
+  } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-agent-"));
   const configPath = join(directory, "wrangler.json");
@@ -45,6 +51,9 @@ export async function harness(
         FORTIPI_ADMIN_TOKEN: bootstrap,
         FORTIPI_CONFIG: { version: 1, infrastructure: policy },
         ...(options.origin ? { FORTIPI_ALLOWED_ORIGINS: [options.origin] } : {}),
+        ...(options.modelChunkBytes
+          ? { FORTIPI_TEST_MODEL_CHUNK_BYTES: options.modelChunkBytes }
+          : {}),
       },
       durable_objects: {
         bindings: [

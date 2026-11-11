@@ -204,14 +204,15 @@ export class TestAgentSession extends AgentSession {
   #replayHold:
     | { cid: string; entered: boolean; gate: ReturnType<typeof Promise.withResolvers<void>> }
     | undefined;
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: Env & { FORTIPI_TEST_MODEL_CHUNK_BYTES?: 256 }) {
     const completion = Promise.withResolvers<void>();
     const faux = fauxProvider({
       provider: "cloudflare",
       models: [{ id: defaultModel.modelId }, { id: "fixture-alternate" }],
       tokensPerSecond: 100000,
-      // Pi faux token sizes are four ASCII characters each:64 gives actual256B deltas.
-      tokenSize: { min: 64, max: 64 },
+      // Default remains the original pinned faux12–20B shape. A separate
+      // qualification explicitly requests64 faux tokens = actual256B deltas.
+      ...(env.FORTIPI_TEST_MODEL_CHUNK_BYTES === 256 ? { tokenSize: { min: 64, max: 64 } } : {}),
     });
     faux.setResponses(
       Array.from({ length: 100 }, () => async (context) => {
@@ -407,6 +408,13 @@ export class TestAgentSession extends AgentSession {
         kind: entry.kind,
         models: (entry.model ?? []).flatMap((message) =>
           message.role === "assistant" ? [message.model] : [],
+        ),
+        boundedModelFailure: (entry.model ?? []).some(
+          (message) =>
+            message.role === "assistant" &&
+            message.stopReason === "error" &&
+            message.errorMessage?.startsWith("Model response exceeded a bounded service limit") ===
+              true,
         ),
         text: (entry.model ?? [])
           .flatMap((message) =>
