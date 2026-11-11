@@ -537,6 +537,30 @@ export default {
       });
     }
     const authority = env.WORKSPACES.getByName("workspace");
+    if (url.pathname === "/private-rpc") {
+      const helpers = [
+        { name: "page", args: [{ principalId: "no-authority" }, ["synthetic-only"], undefined, 1] },
+        {
+          name: "closeUpload",
+          args: [{ request: { manifest: { version: 1, entries: [] }, mutations: [] } }],
+        },
+        { name: "exportRegistry", args: [{}] },
+      ];
+      const results = [];
+      for (const helper of helpers) {
+        try {
+          await Reflect.apply(Reflect.get(authority, helper.name), authority, helper.args);
+          results.push({ name: helper.name, rejected: false, message: "returned" });
+        } catch (error) {
+          results.push({
+            name: helper.name,
+            rejected: true,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      return Response.json(results);
+    }
     if (url.pathname === "/export-physical")
       return authority.fetch(new Request("https://fixture.internal/__test/export-physical"));
     if (url.pathname === "/export-stream-control") {

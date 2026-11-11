@@ -43,6 +43,11 @@ across a runtime wait. Only an active scratch backend accepts upstream transport
 callbacks, through Computer's authentication checks. No generic Computer proxy or
 raw Workspace stub is a public API.
 
+WorkspaceObject's implementation helpers and export/child backing fields use
+ECMAScript `#private`. TypeScript `private` alone erases at runtime and would leave
+helper methods callable through Durable Object RPC outside the declared port.
+The existing WorkspaceObjectRpc operations retain their signatures and guards.
+
 The service uses flat RPC ports where their platform types compile. For recursive
 execution DTOs it uses the existing authenticated private fetch lane:
 `POST /__fortipi/authority/{prepare,start,query,collect}` with the exact respective
@@ -94,7 +99,9 @@ and after transactional writes. This is an own-object physical limit, not eviden
 of remaining aggregate installation capacity. Existing capacity calls require
 other actions; global accounting remains a separate integration prerequisite.
 The existing bounded Workspace alarm deletes expired BLOBs and artifact indexes,
-releases retention accounting, and retains the intent tombstone. SQLite page
+releases retention accounting, and retains a discriminated compact intent/ID
+tombstone. Expired rows release captured manifests, member layouts and descriptor
+payloads; they cannot acquire a newer cut under the same export ID. SQLite page
 reuse is not a claim that allocated database pages shrink.
 
 Private `getReceipt` can also recover an exact known commit with the current

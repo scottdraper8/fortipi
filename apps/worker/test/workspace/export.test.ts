@@ -595,6 +595,17 @@ test("export retention expires in real time and physical SQLite headroom stops a
     const input = request("expiring", { deadline: Date.now() + 1000 });
     const refs = exported(await rpc({ kind: "export", input }, logical));
     assert.equal(refs.length, 3);
+    const captured = await storage.exec(
+      "SELECT value FROM fp_ws_record WHERE key='export:expiring'",
+    );
+    const original = JSON.parse(String(captured[0]?.value)) as {
+      intent: string;
+      principalId: string;
+      workspaceId: string;
+      expiresAt: number;
+      indexId: string;
+      request: D.ExportRequest;
+    };
     await delay(1200);
     assert.ok(
       [403, 404].includes(
@@ -623,11 +634,63 @@ test("export retention expires in real time and physical SQLite headroom stops a
       )[0]?.n,
       0,
     );
+    const expiredRows = await storage.exec(
+      "SELECT value FROM fp_ws_record WHERE key='export:expiring'",
+    );
+    const expired = JSON.parse(String(expiredRows[0]?.value)) as {
+      state: string;
+      intent: string;
+      principalId: string;
+      workspaceId: string;
+      expiresAt: number;
+      indexId: string;
+      request: D.ExportRequest;
+      artifactIds: string[];
+    };
+    assert.equal(expired.state, "expired");
+    assert.deepEqual(
+      Object.keys(expired).sort(),
+      [
+        "artifactIds",
+        "expiresAt",
+        "indexId",
+        "intent",
+        "principalId",
+        "request",
+        "state",
+        "workspaceId",
+      ],
+      "Expired export retained captured payload instead of a compact tombstone",
+    );
+    for (const key of [
+      "intent",
+      "principalId",
+      "workspaceId",
+      "expiresAt",
+      "indexId",
+      "request",
+    ] as const)
+      assert.deepEqual(expired[key], original[key]);
+    assert.deepEqual(
+      expired.artifactIds,
+      refs.map((reference) => reference.artifactId),
+    );
+    assert.ok(String(expiredRows[0]?.value).length < String(captured[0]?.value).length);
     await publish(
       rpc,
       first.revision,
       "physical-source",
       Uint8Array.from({ length: 180013 }, (_, i) => i % 173),
+    );
+    assert.equal(
+      (await rpc({ kind: "export", input: { ...input, deadline: Date.now() + 30_000 } }, logical))
+        .ok,
+      false,
+      "Expired tombstone was promoted into a newer live snapshot",
+    );
+    assert.deepEqual(
+      await storage.exec("SELECT value FROM fp_ws_record WHERE key='export:expiring'"),
+      expiredRows,
     );
     await storage.exec(
       "INSERT INTO fp_ws_record(key,value) VALUES('test-physical-padding',?)",

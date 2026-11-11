@@ -116,8 +116,8 @@ try {
       );
     if (mutant === "writer-receipt")
       changedWorkspace = workspace.replace(
-        'this.receipt(ctx, input, "workspace.write")',
-        "this.receipt(ctx, input)",
+        'this.#receipt(ctx, input, "workspace.write")',
+        "this.#receipt(ctx, input)",
       );
     if (mutant === "receipt-read")
       changedWorkspace = workspace.replace('return "workspace.write";', 'return "workspace.read";');
@@ -129,7 +129,7 @@ try {
         workspace.slice(0, start) +
         workspace
           .slice(start, end)
-          .replace('"workspace.read"', "this.receiptReadAction(ctx, input.path.workspaceId)") +
+          .replace('"workspace.read"', "this.#receiptReadAction(ctx, input.path.workspaceId)") +
         workspace.slice(end);
     }
     if (mutant === "fact-conversation")

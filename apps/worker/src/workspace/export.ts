@@ -19,19 +19,26 @@ interface Member {
   entry: FileEntry;
   parts: { artifactId: string; offset: number; size: number; sha256: string }[];
 }
-interface ExportRecord {
+interface ExportIdentity {
   intent: string;
   principalId: string;
   request: D.ExportRequest;
-  revision: RevisionRecord;
   workspaceId: string;
   expiresAt: number;
   indexId: string;
+}
+interface RetainedExportRecord extends ExportIdentity {
+  revision: RevisionRecord;
   members: Member[];
   reservedBytes: number;
-  state: "copying" | "ready" | "partial" | "unavailable" | "expired";
+  state: "copying" | "ready" | "partial" | "unavailable";
   descriptor: D.ExportDescriptor;
 }
+interface ExpiredExportRecord extends ExportIdentity {
+  state: "expired";
+  artifactIds: string[];
+}
+type ExportRecord = RetainedExportRecord | ExpiredExportRecord;
 const grid = 64 * 1024;
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
@@ -136,14 +143,15 @@ export class WorkspaceExports {
       principalId: ctx.principalId,
     });
     const row = await owner.mutex.run(async () => {
-      let row = owner.state.get<ExportRecord>(`export:${input.exportId}`);
-      if (row) {
-        this.authorize(ctx, row);
-        requireThat(row.intent === intent, "conflict", "Export intent changed");
-        return row;
+      const prior = owner.state.get<ExportRecord>(`export:${input.exportId}`);
+      if (prior) {
+        this.authorize(ctx, prior);
+        requireThat(prior.state !== "expired", "not_found", "Export expired");
+        requireThat(prior.intent === intent, "conflict", "Export intent changed");
+        return prior;
       }
       const revision = owner.revision(owner.current().binding.revision);
-      row = {
+      const row: RetainedExportRecord = {
         intent,
         principalId: ctx.principalId,
         request: input,
@@ -239,6 +247,7 @@ export class WorkspaceExports {
       return owner.mutex.run(() => {
         const current = this.row(input.exportId);
         this.authorize(ctx, current);
+        requireThat(current.state !== "expired", "not_found", "Export expired");
         return current.descriptor;
       });
     const prior = this.active.get(input.exportId);
@@ -253,7 +262,7 @@ export class WorkspaceExports {
     this.active.set(input.exportId, copying);
     return copying;
   }
-  private index(row: ExportRecord): Uint8Array {
+  private index(row: RetainedExportRecord): Uint8Array {
     return new TextEncoder().encode(
       canonicalJson({
         version: 1,
@@ -274,6 +283,7 @@ export class WorkspaceExports {
   ): D.StoreState {
     const row = this.row(exportId);
     this.authorize(ctx, row);
+    requireThat(row.state === "copying", "not_found", "Export copy unavailable");
     const stored = row.revision.store;
     const registry =
       stored && this.owner.state.get<AllocationRecord>(`allocation:${stored.allocationId}`);
@@ -292,7 +302,12 @@ export class WorkspaceExports {
     );
     return registry.state;
   }
-  private put(row: ExportRecord, artifactId: string, index: number, bytes: Uint8Array): void {
+  private put(
+    row: RetainedExportRecord,
+    artifactId: string,
+    index: number,
+    bytes: Uint8Array,
+  ): void {
     requireThat(
       bytes.length <= grid && bytes.length <= chunkBytes,
       "payload_too_large",
@@ -319,7 +334,7 @@ export class WorkspaceExports {
       "Export physical storage headroom exhausted",
     );
   }
-  private async copy(ctx: D.AuthContext, row: ExportRecord): Promise<D.ExportDescriptor> {
+  private async copy(ctx: D.AuthContext, row: RetainedExportRecord): Promise<D.ExportDescriptor> {
     const owner = this.owner;
     const check = () => {
       const current = this.row(row.request.exportId);
@@ -502,7 +517,7 @@ export class WorkspaceExports {
   }
   private stream(
     ctx: D.AuthContext,
-    row: ExportRecord,
+    row: RetainedExportRecord,
     reference: Reference,
     signal: AbortSignal,
   ): ReadableStream<Uint8Array> {
@@ -595,8 +610,20 @@ export class WorkspaceExports {
       count: usage.count - 1,
       bytes: usage.bytes - row.reservedBytes,
     });
-    row.state = "expired";
-    // Retain the immutable intent tombstone; an expired exportId is never a new snapshot.
-    this.owner.state.put(`export:${id}`, row);
+    const expired: ExpiredExportRecord = {
+      state: "expired",
+      intent: row.intent,
+      principalId: row.principalId,
+      request: row.request,
+      workspaceId: row.workspaceId,
+      expiresAt: row.expiresAt,
+      indexId: row.indexId,
+      artifactIds: [
+        row.indexId,
+        ...row.members.flatMap((member) => member.parts.map((part) => part.artifactId)),
+      ],
+    };
+    // Retain only immutable intent/IDs; released manifests/member layouts are not fake empty cuts.
+    this.owner.state.put(`export:${id}`, expired);
   }
 }
