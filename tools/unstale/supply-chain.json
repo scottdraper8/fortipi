@@ -7827,16 +7827,6 @@
       "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
       "expires": "2026-11-11T16:08:27.771Z",
       "integrity": "sha512-bg4rFUiut6gzpNZlF3sZIPFMjeCVLphy8hVVQ2XpiQxmlPhGDQkBOCargFV5ygdAGmo8mdNjYrkUwLRB8LWaFw=="
-    },
-    "miniflare@5.20261110.0-beta": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T10:58:00.738Z",
-      "integrity": "sha512-UiJRL6D4pNkHxgZ3QXDCaz/N27FFuuHRRgOmD/SucEZIwDOfWwX7s/n8ZrFemFlURRfnQpBfAdWy8ixsW0yJWA=="
-    },
-    "wrangler@4.160.0": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T11:03:23.517Z",
-      "integrity": "sha512-nwzmpu7Hd5Csax02twpCNRAloC+kduXKw9rjfq+oEuo8RnjWRaahSV+qk+p0w88EgafMcDE0XnZRSfOM3lKEKg=="
     }
   },
   "advisory": {

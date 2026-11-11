@@ -329,14 +329,23 @@ try {
       return $text
     } finally { $p.Dispose() }
   }
+  # SetAccessControl persists only modified sections, not an unchanged inspection object.
+  # https://learn.microsoft.com/en-us/dotnet/api/system.io.file.setaccesscontrol?view=netframework-4.8
+  function RestoreFileDacl([string]$path,[byte[]]$snapshot) {
+    $acl=[System.Security.AccessControl.FileSecurity]::new()
+    $acl.SetSecurityDescriptorBinaryForm($snapshot,[System.Security.AccessControl.AccessControlSections]::Access)
+    [System.IO.File]::SetAccessControl($path,$acl)
+    $actual=[System.IO.File]::GetAccessControl($path).GetSecurityDescriptorBinaryForm()
+    if([Convert]::ToBase64String($actual) -ne [Convert]::ToBase64String($snapshot)){throw 'DACL restore mismatch'}
+  }
   $stage='baseline';$baseline=Probe
-  $stage='permission-fault';$path=${literal(exported)};$saved=[System.IO.File]::GetAccessControl($path)
+  $stage='permission-fault';$path=${literal(exported)};$saved=[System.IO.File]::GetAccessControl($path).GetSecurityDescriptorBinaryForm()
   try {$wide=[System.IO.File]::GetAccessControl($path);$wide.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new([System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-545'),'Read','Allow'));[System.IO.File]::SetAccessControl($path,$wide);$weakened=Probe}
-  finally {[System.IO.File]::SetAccessControl($path,$saved);$saved=$null}
+  finally {$stage='restored';RestoreFileDacl $path $saved;$saved=$null}
   $stage='restored';$restored=Probe;$ok=$true
 } catch { $native=0;$failure=$_.Exception;$kind=$failure.GetType().Name;$hresult=$failure.HResult;while($null -ne $failure){if($failure -is [System.ComponentModel.Win32Exception]){$native=$failure.NativeErrorCode};$failure=$failure.InnerException};[Console]::Error.Write('cross-identity Windows stage='+$stage+' native='+$native+' detail='+$detail+' type='+$kind+' hresult='+$hresult) }
 finally {
-  if($null -ne $saved){try{[System.IO.File]::SetAccessControl(${literal(exported)},$saved)}catch{$cleanup=$false}}
+  if($null -ne $saved){try{RestoreFileDacl ${literal(exported)} $saved}catch{$cleanup=$false}}
   if($created){try{$account.Delete();$remaining=[System.DirectoryServices.AccountManagement.UserPrincipal]::FindByIdentity($ctx,$name);if($null -ne $remaining){$remaining.Dispose();$cleanup=$false}}catch{$cleanup=$false}}
   foreach($resource in @($secret,$account,$users,$admins,$ctx,$rng)){if($null -ne $resource){try{$resource.Dispose()}catch{$cleanup=$false}}}
 }

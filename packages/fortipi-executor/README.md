@@ -194,6 +194,9 @@ Windows PowerShell wraps stderr in CLIXML.
 Windows sends the fixed probe program through redirected stdin and closes it;
 the credentialed child command stays below CreateProcessWithLogonW's 1024-character
 limit. The account password remains in process memory and SecureString.
+Restoration loads the original binary DACL into a new FileSecurity Access section
+before persisting it, then compares the saved descriptor and repeats the actual
+other-user denial. An unchanged ACL inspection object does not persist a restore.
 Windows permission utilities use typed SID ACL operations from .NET Framework
 and direct filesystem attributes, without cmdlet module autoload or account-name
 translation. The native diagnostic emits bounded stage timings without identities
