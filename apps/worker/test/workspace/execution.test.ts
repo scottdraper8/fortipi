@@ -1,0 +1,334 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { assignmentDigest, operationDigest } from "fortipi-contract";
+import type * as D from "../../src/boundary/dto.js";
+import { harness } from "./harness.ts";
+
+async function runFixture(
+  source?: string,
+  denied = false,
+  cancelled = false,
+  writeOnly = false,
+): Promise<void> {
+  const server = harness(true);
+  async function call<T>(input: unknown): Promise<T> {
+    const response = await server.fetch("/rpc", {
+      method: "POST",
+      body: JSON.stringify(input),
+      ...(writeOnly ? { headers: { "x-test-write-only": "1" } } : {}),
+    });
+    const result = (await response.json()) as D.Outcome<T>;
+    if (!result.ok) assert.fail(JSON.stringify(result));
+    return result.value;
+  }
+  try {
+    await server.listen();
+    const seeded = (await (await server.fetch("/seed")).json()) as D.Outcome<D.WorkspaceBinding>;
+    if (!seeded.ok) assert.fail(JSON.stringify(seeded));
+    const operationContext: D.OperationContext = {
+      deploymentId: "test-deployment",
+      agentId: "agent",
+      conversationId: "conversation",
+      policyVersion: 1,
+    };
+    const args = {
+      source:
+        source ??
+        "import {readFile,writeFile} from 'node:fs/promises'; export default async function(){let count=0;try{count=Number(await readFile('/workspace/run-count.txt','utf8'));}catch{} await writeFile('/workspace/run-count.txt',String(count+1),{mode:420});let denials=0; for(const path of ['/.fortipi/output/stdout','/etc/passwd','/workspace/../escape'])try{await readFile(path);}catch{denials++;}try{await fetch('https://example.invalid/');}catch{denials++;} if(denials!==4)throw new Error('Confinement probe escaped'); await writeFile('/workspace/confinement.txt',String(denials));console.log('x'.repeat(40000));}",
+    };
+    const deadline = Date.now() + (denied ? 2000 : 30_000);
+    const operation: D.OperationDigestInput = {
+      ...operationContext,
+      tool: "javascript",
+      arguments: args,
+      workspaceId: "workspace",
+      baseRevision: seeded.value.revision,
+      target: { kind: "backend", backendId: "backend", generation: 1 },
+      grantVersion: 1,
+      deadline,
+    };
+    const digest = await operationDigest(operation);
+    const executionId = "cloud-execution";
+    const target: D.TargetRequest = {
+      ownerKind: "job",
+      operationId: "cloud-operation",
+      operationDigest: digest,
+      workspaceId: "workspace",
+      bindingVersion: 1,
+      target: operation.target,
+      actions: ["workspace.write"],
+      jobId: "cloud-job",
+      executionId,
+      agentId: "agent",
+      conversationId: "conversation",
+      deadline,
+      expiresAt: deadline,
+    };
+    const reservation = await call<D.TargetReservation>({ kind: "reservation", input: target });
+    const lease = await call<D.Lease>({ kind: "acquire", input: target });
+    const identity: D.ExecutionIdentity = {
+      jobId: "cloud-job",
+      executionId,
+      operationDigest: digest,
+      assignmentDigest: await assignmentDigest({
+        operation,
+        executionId,
+        reservationId: reservation.reservationId,
+        leaseId: lease.leaseId,
+        fence: lease.fence,
+        executorGeneration: lease.executorGeneration,
+      }),
+      target: operation.target,
+      lease,
+      baseRevision: lease.baseRevision,
+      deadline,
+    };
+    const prepared = await call<D.PreparedExecution>({
+      kind: "prepare-execution",
+      input: {
+        reservation,
+        operationContext,
+        identity,
+        tool: operation.tool,
+        arguments: args,
+        workspaceId: "workspace",
+        bindingVersion: 1,
+        capabilities: ["javascript", "workspace.write"],
+      },
+    });
+    const starts = await Promise.all([
+      call<D.ExecutionObservation>({ kind: "start-execution", input: prepared }),
+      call<D.ExecutionObservation>({ kind: "start-execution", input: prepared }),
+    ]);
+    assert.ok(starts.every((result) => result.identity.executionId === identity.executionId));
+    if (denied) {
+      assert.equal(
+        (await call<D.ExecutionObservation>({ kind: "query-execution", input: identity })).state,
+        "unknown",
+        "Rejected launch was reported as running",
+      );
+      assert.equal(
+        (await call<D.ExecutionObservation>({ kind: "start-execution", input: prepared })).state,
+        "unknown",
+        "Rejected launch was dispatched again",
+      );
+      const described = await call<{ status: 200; body: D.WorkspaceBinding }>({
+        kind: "describe",
+        input: { operationId: "describeWorkspace", path: { workspaceId: "workspace" }, query: {} },
+      });
+      assert.equal(described.body.revision, seeded.value.revision);
+      const storage = await server
+        .getWorker()
+        .getDurableObjectStorage("WORKSPACES", { name: "workspace" });
+      const rows = (await storage.exec(
+        "SELECT value FROM fp_ws_record WHERE key LIKE 'allocation:%'",
+      )) as { value: string }[];
+      const allocation = (JSON.parse(rows[0]?.value ?? "null") as { state: D.StoreState }).state
+        .allocation;
+      await delay(Math.max(0, allocation.deadline + 60_000 - Date.now() + 20));
+      const retired = (await (
+        await server.fetch("/rpc", {
+          method: "POST",
+          body: JSON.stringify({
+            kind: "retire",
+            input: {
+              authorityId: allocation.authorityId,
+              workspaceId: allocation.workspaceId,
+              allocationId: allocation.allocationId,
+              childId: allocation.childId,
+            },
+          }),
+        })
+      ).json()) as D.Outcome<D.StoreRetirement>;
+      assert.equal(
+        retired.ok,
+        false,
+        "Unknown dispatch scratch was retired without quiescence proof after actual GC grace",
+      );
+      return;
+    }
+    if (cancelled) {
+      await delay(1000);
+      const cancellation = await call<D.CancelDisposition>({
+        kind: "cancel-execution",
+        input: { identity, requestId: "cancel-existing", reason: "user" },
+      });
+      assert.equal(cancellation.state, "stopped");
+      assert.equal(cancellation.possibleExternalEffects, true);
+      const result = await call<D.PreparedResult>({ kind: "collect-execution", input: identity });
+      assert.equal(result.state, "failed");
+      assert.equal(result.uploadId, undefined, "Cancelled bytes became a successful staged result");
+      assert.equal(
+        (await call<D.ExecutionObservation>({ kind: "start-execution", input: prepared })).state,
+        "terminal",
+        "Cancellation reopened the execution for another start",
+      );
+      const described = await call<{ status: 200; body: D.WorkspaceBinding }>({
+        kind: "describe",
+        input: { operationId: "describeWorkspace", path: { workspaceId: "workspace" }, query: {} },
+      });
+      assert.equal(described.body.revision, seeded.value.revision);
+      const storage = await server
+        .getWorker()
+        .getDurableObjectStorage("WORKSPACES", { name: "workspace" });
+      const rows = (await storage.exec(
+        "SELECT value FROM fp_ws_record WHERE key='execution:cloud-execution'",
+      )) as { value: string }[];
+      const record = JSON.parse(rows[0]?.value ?? "null") as { manifest: D.Manifest };
+      const marker = record.manifest.entries.find((entry) => entry.path === "cancel-marker.txt");
+      assert.deepEqual(
+        marker,
+        {
+          path: "cancel-marker.txt",
+          type: "file",
+          mode: 420,
+          size: new TextEncoder().encode("before-cancel").length,
+          sha256: createHash("sha256").update("before-cancel").digest("hex"),
+        },
+        "Cancellation ran before the independently hashed scratch effect",
+      );
+      return;
+    }
+    let observation: D.ExecutionObservation | undefined;
+    for (let attempt = 0; attempt < 750; attempt++) {
+      observation = await call({ kind: "query-execution", input: identity });
+      if (observation?.state === "terminal") break;
+      await delay(20);
+    }
+    assert.equal(observation?.state, "terminal");
+    const identityErrors: string[] = [];
+    for (const changed of [
+      { ...identity, baseRevision: "unrelated-base" },
+      { ...identity, deadline: identity.deadline + 1 },
+      { ...identity, lease: { ...identity.lease, fence: "999" } },
+    ]) {
+      const reply = (await (
+        await server.fetch("/rpc", {
+          method: "POST",
+          body: JSON.stringify({ kind: "query-execution", input: changed }),
+        })
+      ).json()) as D.Outcome<D.ExecutionObservation>;
+      if (reply.ok || reply.code !== "conflict")
+        identityErrors.push("Changed execution identity was accepted");
+    }
+    assert.deepEqual(
+      await call<D.ExecutionObservation>({
+        kind: "query-execution",
+        input: { ...identity, lease: { ...identity.lease, expiresAt: 0, leaseVersion: 999 } },
+      }),
+      observation,
+      "Mutable lease observations changed the retained execution identity",
+    );
+    const result = await call<D.PreparedResult>({ kind: "collect-execution", input: identity });
+    assert.equal(result.state, "succeeded");
+    assert.ok(result.output.artifacts.length > 0);
+    const artifact = await server.fetch(result.output.artifacts[0]?.endpoint ?? "");
+    assert.equal(artifact.status, 200);
+    assert.equal(await artifact.text(), `${"x".repeat(40000)}\n`);
+    const outputReader = await server.fetch(result.output.artifacts[0]?.endpoint ?? "", {
+      headers: { "x-test-artifacts-only": "1" },
+    });
+    if (outputReader.status !== 200)
+      identityErrors.push(`Artifact-only reader rejected with ${outputReader.status}`);
+    else assert.equal(await outputReader.text(), `${"x".repeat(40000)}\n`);
+    await outputReader.body?.cancel().catch(() => {});
+    assert.equal(
+      (
+        await server.fetch(result.output.artifacts[0]?.endpoint ?? "", {
+          headers: { "x-test-artifacts-only": "1", "x-test-other-conversation": "1" },
+        })
+      ).status,
+      403,
+      "Output member escaped conversation scope",
+    );
+
+    assert.ok(result.uploadId && result.commitId);
+    const validation = await call<{ status: 200; body: D.UploadValidation }>({
+      kind: "validate",
+      input: {
+        operationId: "validateUpload",
+        path: { workspaceId: "workspace", uploadId: result.uploadId },
+        query: {},
+      },
+    });
+    const receipt = await call<{ status: 200; body: D.CommitReceipt }>({
+      kind: "commit",
+      input: {
+        operationId: "commitUpload",
+        path: { workspaceId: "workspace", uploadId: result.uploadId },
+        query: {},
+        body: {
+          requestId: "cloud-commit-request",
+          stageId: validation.body.stageId,
+          commitId: result.commitId,
+          uploadId: result.uploadId,
+          operationId: lease.operationId,
+          jobId: identity.jobId,
+          workspaceId: "workspace",
+          lease,
+          manifestHash: result.manifestHash,
+          baseRevision: lease.baseRevision,
+        },
+      },
+    });
+    const response = await server.fetch(
+      `/read?revision=${receipt.body.revision}&path=run-count.txt`,
+    );
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "1", "Duplicate dispatch reran user code");
+    assert.equal(
+      (
+        await server.fetch(`/read?revision=${receipt.body.revision}&path=run-count.txt`, {
+          headers: { "x-test-artifacts-only": "1" },
+        })
+      ).status,
+      403,
+      "Artifact-only reader gained workspace access",
+    );
+    assert.equal(
+      await (
+        await server.fetch(`/read?revision=${receipt.body.revision}&path=confinement.txt`)
+      ).text(),
+      "4",
+    );
+    assert.deepEqual(
+      await call({ kind: "collect-execution", input: identity }),
+      result,
+      "Collection retried a new stage",
+    );
+    assert.deepEqual(identityErrors, []);
+  } finally {
+    await server.close();
+  }
+}
+test(
+  "actual cloud-JS authority ledger starts once, enforces rooted/no-egress access and publishes verified bytes",
+  { timeout: 60_000 },
+  () => runFixture(),
+);
+test(
+  "unavailable host modules leave dispatch uncertain without a replacement start or unsafe GC",
+  { timeout: 90_000 },
+  () =>
+    runFixture(
+      "import value from 'fortipi-host-secret'; export default async function(){ return value; }",
+      true,
+    ),
+);
+test(
+  "actual Loader cancellation retains its scratch effect without publication or another start",
+  { timeout: 60_000 },
+  () =>
+    runFixture(
+      "import {writeFile} from 'node:fs/promises'; export default async function(){ await writeFile('/workspace/cancel-marker.txt','before-cancel'); await new Promise(()=>{}); }",
+      false,
+      true,
+    ),
+);
+test(
+  "actual cloud-JS private preparation, output collection and publication require no public read grant",
+  { timeout: 60_000 },
+  () => runFixture(undefined, false, false, true),
+);

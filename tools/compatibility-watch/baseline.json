@@ -245,11 +245,11 @@
         "paths": {}
       },
       "pins": {
-        "tools/unstale/platform-tools.json#fuse/fuse3": "3.17.2-3",
-        "tools/unstale/platform-tools.json#fuse/libfuse3": "3.17.2-3"
+        "tools/unstale/platform-tools.json#fuse/fuse3": "3.18.3-1",
+        "tools/unstale/platform-tools.json#fuse/libfuse3": "3.18.3-1"
       },
-      "reviewedAt": "2026-11-11T09:43:09.046Z",
-      "reviewNote": "Reviewed official 3.18.3 mount/unmount security and API/ABI fixes against existing canonical native pins 3.17.2-3, matching current frozen image. Enforcer3 confirmed missing backports: secure replacement and actual image verification are release blockers. This reference acknowledgment does not clear installed-version safety."
+      "reviewedAt": "2026-11-11T11:53:00.000Z",
+      "reviewNote": "Reviewed official 3.18.3 mount/unmount security and API/ABI fixes; independent source/security review approved frozen image candidate731fc9b with signed Debian fuse3/libfuse3-4 3.18.3-1 and actual ELF resolution. Local pins now match that candidate. Actual native runtime, FUSE, replacement/relink and distribution verification remain release gates."
     }
   }
 }

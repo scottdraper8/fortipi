@@ -120,27 +120,79 @@ export async function nativeChecks(): Promise<void> {
   );
 }
 
+/** A stale installer status file does not establish that macOS enabled the network filter. */
+export function macosNetworkExtensionActive(output: string): boolean {
+  return output.split("\n").some((line) => {
+    const fields = line.trim().split(/\s+/);
+    return (
+      fields[0] === "*" &&
+      fields[1] === "*" &&
+      fields[2] === "D63S9HLM4L" &&
+      fields[3] === "io.stepsecurity.harden-runner.ext" &&
+      line.trimEnd().endsWith("[activated enabled]")
+    );
+  });
+}
+
 export async function egressChecks(): Promise<void> {
-  assert.equal(
-    (
-      await fetch("https://registry.npmjs.org/pnpm/12.18.0", {
-        signal: AbortSignal.timeout(15_000),
-      })
-    ).status,
-    200,
-  );
-  let blocked = false;
-  try {
-    await fetch("https://example.com", { signal: AbortSignal.timeout(10_000) });
-  } catch {
-    blocked = true;
+  if (process.platform === "darwin") {
+    let status: string;
+    try {
+      status = (
+        await exec("/usr/bin/systemextensionsctl", ["list"], {
+          timeout: 5000,
+          maxBuffer: 65536,
+          env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" },
+        })
+      ).stdout;
+    } catch {
+      throw new Error("Unable to verify the macOS StepSecurity network extension");
+    }
+    assert.ok(
+      macosNetworkExtensionActive(status),
+      "macOS StepSecurity network extension is not activated and enabled",
+    );
+    console.log("macOS StepSecurity network extension: activated and enabled");
   }
+  const allowedRegistry = async () => {
+    const response = await fetch("https://registry.npmjs.org/pnpm/12.18.0", {
+      signal: AbortSignal.timeout(15_000),
+    });
+    try {
+      assert.equal(response.status, 200);
+    } finally {
+      await response.body?.cancel();
+    }
+  };
+  await allowedRegistry();
+  let blocked = false;
+  let deniedResponseStatus: number | null = null;
+  let rejectionCode: string | null = null;
+  try {
+    const response = await fetch("https://example.com", { signal: AbortSignal.timeout(10_000) });
+    deniedResponseStatus = response.status;
+    // Cleanup failure must not turn a received HTTP response into evidence of blocking.
+    await response.body?.cancel().catch(() => {});
+  } catch (error) {
+    blocked = true;
+    const cause = (error as { cause?: { code?: unknown } }).cause?.code;
+    if (typeof cause === "string" && /^[A-Z0-9_]{1,64}$/.test(cause)) rejectionCode = cause;
+  }
+  console.log(
+    JSON.stringify({
+      phase: "runner-egress",
+      platform: process.platform,
+      deniedResponseStatus,
+      rejectionCode,
+    }),
+  );
+  await allowedRegistry();
   assert.ok(
     blocked,
     "Runner reached deliberately unallowed destination; block enforcement is required",
   );
   console.log(
-    `Allowed registry request and rejected example.com probe observed on ${process.platform}/${process.arch}; retain harden-runner log for attribution`,
+    `Allowed registry requests before and after rejected example.com observed on ${process.platform}/${process.arch}; retain harden-runner log for attribution`,
   );
 }
 

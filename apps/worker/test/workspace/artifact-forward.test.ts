@@ -1,0 +1,131 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { test } from "node:test";
+import type * as D from "../../src/boundary/dto.js";
+import { harness } from "./harness.ts";
+
+test("native artifact misses use the registered reader private lane and bound streamed responses", async () => {
+  const server = harness();
+  const bytes = Uint8Array.from({ length: 393217 }, (_, i) => i % 251);
+  const hash = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
+  const endpoint = "/v1/workspaces/workspace/artifacts/retained-native?revision=original-base";
+  try {
+    await server.listen();
+    assert.equal((await server.fetch("/seed")).status, 200);
+    const full = await server.fetch(endpoint, {
+      headers: { "X-Fortipi-Context": "forged", "x-untrusted": "do-not-forward" },
+    });
+    assert.equal(full.status, 200);
+    assert.equal(
+      full.headers.get("Content-Length"),
+      String(bytes.length),
+      "Native artifact lost declared Content-Length",
+    );
+    assert.equal(full.headers.get("x-fortipi-context"), null);
+    assert.equal(full.headers.get("Cache-Control"), "no-store");
+    assert.equal(full.headers.get("X-Content-SHA256"), hash(bytes));
+    assert.equal(hash(new Uint8Array(await full.arrayBuffer())), hash(bytes));
+    const ranged = await server.fetch(`${endpoint}&range[start]=17&range[end]=200000`, {
+      headers: { Range: "bytes=17-200000" },
+    });
+    assert.equal(ranged.status, 206);
+    assert.equal(ranged.headers.get("Content-Length"), String(200001 - 17));
+    assert.equal(ranged.headers.get("Content-Range"), "bytes 17-200000/393217");
+    assert.equal(ranged.headers.get("X-Content-SHA256"), hash(bytes.slice(17, 200001)));
+    assert.equal(hash(new Uint8Array(await ranged.arrayBuffer())), hash(bytes.slice(17, 200001)));
+    assert.deepEqual(await (await server.fetch("/artifact-observation")).json(), {
+      count: 2,
+      credentialId: "credential",
+      registrationId: "registration",
+      method: "GET",
+      search: "?revision=original-base&range%5Bstart%5D=17&range%5Bend%5D=200000",
+      range: "bytes=17-200000",
+      rawAuthority: false,
+      untrustedHeader: false,
+    });
+    assert.equal(
+      (await server.fetch(endpoint, { headers: { "x-test-no-grants": "1" } })).status,
+      403,
+    );
+    assert.equal(
+      ((await (await server.fetch("/artifact-observation")).json()) as { count: number }).count,
+      2,
+      "Missing reader grant reached the private index",
+    );
+    const empty = await server.fetch(
+      "/v1/workspaces/workspace/artifacts/empty?revision=original-base",
+    );
+    assert.equal(empty.status, 200);
+    assert.equal(empty.headers.get("Content-Length"), "0");
+    assert.equal(empty.headers.get("X-Content-SHA256"), hash(new Uint8Array()));
+    assert.equal((await empty.arrayBuffer()).byteLength, 0);
+    assert.equal(
+      (await server.fetch("/v1/workspaces/workspace/artifacts/absent?revision=original-base"))
+        .status,
+      404,
+    );
+    const oversized = await server.fetch(
+      "/v1/workspaces/workspace/artifacts/oversized?revision=original-base",
+    );
+    assert.equal(oversized.status, 413, "Announced artifact size escaped the reader limit");
+    const truncated = await server.fetch(
+      "/v1/workspaces/workspace/artifacts/truncated?revision=original-base",
+    );
+    // Binary streaming commits headers before a later integrity error; the body must fail.
+    assert.equal(truncated.status, 200);
+    assert.equal(truncated.headers.get("Content-Length"), String(bytes.length));
+    await assert.rejects(truncated.arrayBuffer(), "Truncated artifact body was accepted");
+    const beforeRevocation = (await (await server.fetch("/artifact-observation")).json()) as {
+      count: number;
+    };
+    const invalidated = (await (
+      await server.fetch("/rpc", {
+        method: "POST",
+        body: JSON.stringify({
+          kind: "invalidate",
+          input: {
+            revocationId: "artifact-reader-revoked",
+            subject: { kind: "credential", credentialId: "credential", minimumGeneration: 2 },
+          },
+        }),
+      })
+    ).json()) as D.Outcome<unknown>;
+    assert.equal(invalidated.ok, true);
+    assert.equal((await server.fetch(endpoint)).status, 403);
+    const observation = (await (await server.fetch("/artifact-observation")).json()) as {
+      count: number;
+    };
+    assert.equal(
+      observation.count,
+      beforeRevocation.count,
+      "Denied reader reached the private artifact index",
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test("known-length artifact forwarding cancels upstream and rechecks the real floor after a blocked read", {
+  timeout: 30000,
+}, async () => {
+  for (const mode of ["cancel", "revoke"]) {
+    const server = harness();
+    try {
+      await server.listen();
+      await server.fetch("/seed");
+      const response = await server.fetch(`/artifact-stream-control?mode=${mode}`, {
+        headers: { "x-test-artifacts-only": "1" },
+      });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        length: "393217",
+        firstBytes: 65536,
+        afterFloorBytes: 0,
+        rejected: mode === "revoke",
+        cancelled: true,
+      });
+    } finally {
+      await server.close();
+    }
+  }
+});
