@@ -15,6 +15,7 @@ interface ControlIntent {
   receipt: D.ControlReceipt;
   after: string;
   capacity?: D.CapacityReservation;
+  growthBytes?: number;
 }
 /** Persisted control intent; Lifecycle/Pi retain sole ownership of wake/execution. */
 export class Controls {
@@ -56,10 +57,32 @@ export class Controls {
           possibleExternalEffects: input.operationId === "cancelTask",
         },
       };
+      const growthBytes = input.operationId === "resumeTask" ? store.modelGrowth() : undefined;
+      if (growthBytes !== undefined) {
+        const admission = await store.get<Admission>("admission", mapped.key, tx);
+        check(admission, "not_found", "Task admission unavailable");
+        await this.conversations.host.authority.current(
+          auth,
+          scope({
+            agentIds: [agentId],
+            conversationIds: [admission.conversationId],
+            actions: ["tasks.resume"],
+          }),
+          tx,
+        );
+        await store.claimGrowth(receipt.operationId, growthBytes, tx);
+      }
       await store.put(
         "control",
         receipt.operationId,
-        { auth, input, admission: mapped.key, receipt, after: "" } satisfies ControlIntent,
+        {
+          auth,
+          input,
+          admission: mapped.key,
+          receipt,
+          after: "",
+          ...(growthBytes === undefined ? {} : { growthBytes }),
+        } satisfies ControlIntent,
         tx,
         Date.now(),
       );
@@ -141,11 +164,23 @@ export class Controls {
               operationId: id,
               ownerId: admission.conversationId,
               policyVersion: 1,
-              bytes: 8192,
+              bytes: intent.growthBytes ?? 8192,
               admissionSlots: 1,
             }),
           );
-          await store.put("control", id, intent, undefined, Date.now());
+          await store.transaction(async (tx) => {
+            await authority.current(
+              auth,
+              scope({
+                agentIds: [authority.agentId],
+                conversationIds: [admission.conversationId],
+                actions: [action],
+              }),
+              tx,
+            );
+            await store.bindGrowth(id, intent.capacity!.reservationId, tx);
+            await store.put("control", id, intent, tx, Date.now());
+          });
         }
         const harness = await pi.pi();
         const submission = await harness.commit(

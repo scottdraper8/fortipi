@@ -204,11 +204,20 @@ export class TestAgentSession extends AgentSession {
   #replayHold:
     | { cid: string; entered: boolean; gate: ReturnType<typeof Promise.withResolvers<void>> }
     | undefined;
-  constructor(ctx: DurableObjectState, env: Env & { FORTIPI_TEST_MODEL_CHUNK_BYTES?: 256 }) {
+  constructor(
+    ctx: DurableObjectState,
+    env: Env & { FORTIPI_TEST_MODEL_CHUNK_BYTES?: 256; FORTIPI_TEST_LARGE_MODEL_CONTEXT?: true },
+  ) {
     const completion = Promise.withResolvers<void>();
     const faux = fauxProvider({
       provider: "cloudflare",
-      models: [{ id: defaultModel.modelId }, { id: "fixture-alternate" }],
+      models: [
+        {
+          id: defaultModel.modelId,
+          ...(env.FORTIPI_TEST_LARGE_MODEL_CONTEXT ? { contextWindow: 2000000 } : {}),
+        },
+        { id: "fixture-alternate" },
+      ],
       tokensPerSecond: 100000,
       // Default remains the original pinned faux12–20B shape. A separate
       // qualification explicitly requests64 faux tokens = actual256B deltas.
@@ -416,6 +425,24 @@ export class TestAgentSession extends AgentSession {
             message.errorMessage?.startsWith("Model response exceeded a bounded service limit") ===
               true,
         ),
+        assistantBytes: Math.max(
+          0,
+          ...(entry.model ?? [])
+            .filter((message) => message.role === "assistant")
+            .map((message) => new TextEncoder().encode(JSON.stringify(message)).byteLength),
+        ),
+        toolArgumentBytes: Math.max(
+          0,
+          ...(entry.model ?? []).flatMap((message) =>
+            message.role === "assistant"
+              ? message.content
+                  .filter((block) => block.type === "toolCall")
+                  .map(
+                    (block) => new TextEncoder().encode(JSON.stringify(block.arguments)).byteLength,
+                  )
+              : [],
+          ),
+        ),
         text: (entry.model ?? [])
           .flatMap((message) =>
             typeof message.content === "string"
@@ -470,6 +497,31 @@ export class TestAgentSession extends AgentSession {
       Array.from({ length: 8 }, () =>
         fauxAssistantMessage(fauxToolCall("fortipi_dispatch", {}), { stopReason: "toolUse" }),
       ),
+    );
+  }
+  async queueNearLimitRounds() {
+    await this.lifecycle.start();
+    await this.pi.pi();
+    if (!this.faux) throw new Error("Faux provider unavailable");
+    this.faux.setResponses(
+      Array.from({ length: 4 }, () => async () => {
+        await this.completion.promise;
+        const message = fauxAssistantMessage(
+          [
+            { type: "text", text: "" },
+            fauxToolCall("fortipi_dispatch", { padding: "a".repeat(65000) }),
+          ],
+          { stopReason: "toolUse" },
+        );
+        const text = message.content[0];
+        if (text?.type !== "text") throw new Error("Expected synthetic text block");
+        // toolcall_end includes both the partial message and authoritative
+        // arguments. Keep that complete EVENT within the approved256KiB bound.
+        text.text = "x".repeat(
+          262144 - 65000 - 1024 - new TextEncoder().encode(JSON.stringify(message)).byteLength,
+        );
+        return message;
+      }),
     );
   }
   async runPolicy(cid: string) {
@@ -1025,6 +1077,25 @@ export class TestAgentSession extends AgentSession {
   }
   async lastPhysicalSample() {
     return JSON.stringify(await this.store.get("meta", "storage-report"));
+  }
+  async growthReport() {
+    await this.lifecycle.start();
+    return this.store.transaction(async (tx) => ({
+      pending: await this.store.pendingGrowth(tx),
+      claims: (
+        await tx.all<{ data: string }>(
+          "SELECT data FROM fp_records_v1 WHERE kind='growth-claim' ORDER BY id LIMIT 100",
+        )
+      ).map(
+        (row) =>
+          JSON.parse(row.data) as { operationId: string; bytes: number; reservationId?: string },
+      ),
+      rejections: (
+        await tx.all<{ data: string }>(
+          "SELECT data FROM fp_records_v1 WHERE kind='admission-rejected' ORDER BY id LIMIT 100",
+        )
+      ).map((row) => JSON.parse(row.data) as { acknowledged: boolean; reclaimed: boolean }),
+    }));
   }
   socketReport() {
     return JSON.stringify(

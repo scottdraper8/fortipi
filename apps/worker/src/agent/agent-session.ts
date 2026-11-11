@@ -43,6 +43,7 @@ import { Authority } from "./authority.js";
 import { Controls } from "./controls.js";
 import { type Admission, Conversations, CreationDoc } from "./conversations.js";
 import { AgentExports } from "./exports.js";
+import { piStorageWatermark } from "./pi-storage.js";
 import { Projection } from "./projection.js";
 import { Recovery } from "./recovery.js";
 import { type ConversationRow, Store } from "./store.js";
@@ -120,7 +121,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
           },
         });
         const harness = await Harness.open(
-          storage,
+          piStorageWatermark(storage, this.store),
           {
             models: () => {
               check(this.#modelRegistry, "interrupted", "Model registry unavailable");

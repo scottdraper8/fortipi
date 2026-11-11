@@ -23,8 +23,12 @@ test("public Models complete methods use the bounded final handoff while the pro
         { once: true },
       );
       // Public result deliberately remains unsettled despite the abort signal.
-      for (let i = 0; i < 80; i++)
-        source.push({ type: "text_delta", contentIndex: 0, delta: "", partial });
+      // Start/end boundaries must pass through batching. Empty contiguous deltas
+      // legitimately coalesce and no longer create a stalled final queue.
+      for (let i = 0; i < 40; i++) {
+        source.push({ type: "text_start", contentIndex: 0, partial });
+        source.push({ type: "text_end", contentIndex: 0, content: "x".repeat(128), partial });
+      }
       return source;
     };
     provider.provider.streamSimple = provider.provider.stream;

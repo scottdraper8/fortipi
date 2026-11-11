@@ -148,6 +148,7 @@ export class Projection {
           await this.conversations.host.authority.physical.completed(
             (admission.continuation?.capacity ?? admission.capacity).reservationId,
             tx,
+            admission.continuation?.operationId ?? admission.operationId,
           );
         });
       } else {

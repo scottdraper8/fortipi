@@ -153,6 +153,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     throw error;
   }
   return {
+    origin,
     api,
     crash: () => stop("SIGKILL"),
     start,

@@ -53,6 +53,7 @@ export interface Admission {
   submission?: number;
   piTask?: number;
   model: D.ModelConfig;
+  growthBytes?: number;
   continuation?: { operationId: string; auth: D.AuthContext; capacity: D.CapacityReservation };
 }
 export type AdmissionIntent = Omit<
@@ -63,6 +64,13 @@ export type AdmissionIntent = Omit<
   policyVersion: number;
   model?: D.ModelConfig;
 };
+interface RejectedAdmission {
+  digest: string;
+  operationId: string;
+  reason: "busy" | "idle";
+  acknowledged: boolean;
+  reclaimed: boolean;
+}
 export interface ConversationHost {
   store: Store;
   authority: Authority;
@@ -389,6 +397,9 @@ export class Conversations {
       );
       const key = `${auth.principalId}:${cid}:${body.clientRequestId}`;
       const fingerprint = await digest({ body, steer });
+      const rejected = await store.get<RejectedAdmission>("admission-rejected", key);
+      if (rejected)
+        check(rejected.digest === fingerprint, "conflict", "Idempotency payload changed");
       const existing = await store.get<Admission>("admission", key);
       if (existing) {
         check(existing.digest === fingerprint, "conflict", "Idempotency payload changed");
@@ -409,6 +420,16 @@ export class Conversations {
         "conflict",
         "Conversation revision changed",
       );
+      const growthBytes = store.modelGrowth(new TextEncoder().encode(body.content).byteLength);
+      await this.host.authority.physical.makeRoom(
+        auth,
+        scope({
+          agentIds: [this.host.agentId],
+          conversationIds: [cid],
+          actions: [steer ? "conversations.steer" : "messages.submit"],
+        }),
+        growthBytes,
+      );
       const candidate: AdmissionIntent = {
         key,
         digest: fingerprint,
@@ -421,6 +442,7 @@ export class Conversations {
         mode: steer ? "steer" : "busyBehavior" in body ? body.busyBehavior : "followUp",
         state: "pending",
         policyVersion: store.policy.version,
+        growthBytes,
       };
       const intent = await store.transaction(async (tx) => {
         const old = await store.get<AdmissionIntent>("admission-intent", key, tx);
@@ -445,7 +467,7 @@ export class Conversations {
           "conflict",
           "Conversation revision changed",
         );
-        store.admissionHeadroom(new TextEncoder().encode(body.content).length + 8192);
+        await store.claimGrowth(candidate.operationId, growthBytes, tx);
         await store.put("admission-intent", key, candidate, tx, Date.now());
         await this.host.authority.current(
           auth,
@@ -495,7 +517,7 @@ export class Conversations {
         operationId: intent.operationId,
         ownerId: intent.conversationId,
         policyVersion: intent.policyVersion,
-        bytes: new TextEncoder().encode(intent.content).length + 8192,
+        bytes: intent.growthBytes ?? new TextEncoder().encode(intent.content).length + 8192,
         admissionSlots: 1,
       }),
     );
@@ -514,6 +536,7 @@ export class Conversations {
         cid = intent.conversationId,
         operationId = intent.operationId;
       await store.put("admission", key, admission, tx, Date.now());
+      await store.bindGrowth(operationId, capacity.reservationId, tx);
       await store.put("task-admission", admission.taskId, { key }, tx);
       await store.put("operation-admission", operationId, { key }, tx);
       await store.put("input-pending", `${cid}:${operationId}`, { key }, tx);
@@ -526,6 +549,9 @@ export class Conversations {
   }
   async finishAdmission(admission: Admission): Promise<D.AdmissionReceipt> {
     const { store, pi } = this.host;
+    const rejected = await store.get<RejectedAdmission>("admission-rejected", admission.key);
+    if (rejected?.operationId === admission.operationId && !rejected.reclaimed)
+      return this.finishRejection(admission, rejected);
     const row = await store.get<ConversationRow>("conversation", admission.conversationId);
     check(row, "not_found", "Conversation unavailable");
     const harness = await pi.pi();
@@ -561,28 +587,25 @@ export class Conversations {
         });
       } catch (error) {
         if (error instanceof ConversationBusy || error instanceof ConversationIdle) {
-          await store.remove("admission", admission.key);
-          await store.remove("task-admission", admission.taskId);
-          await store.remove("operation-admission", admission.operationId);
-          await store.remove(
-            "input-pending",
-            `${admission.conversationId}:${admission.operationId}`,
-          );
-          unwrap(
-            await this.host.authority.control.settleCapacity(
-              { ...admission.auth, deadline: Date.now() + 30000 },
-              {
-                reservationId: admission.capacity.reservationId,
-                disposition: "unused",
-                observedBytes: 0,
-              },
-            ),
-          );
-          check(
-            false,
-            "conflict",
-            error instanceof ConversationIdle ? "Conversation is idle" : "Conversation is busy",
-          );
+          const rejected: RejectedAdmission = {
+            digest: admission.digest,
+            operationId: admission.operationId,
+            reason: error instanceof ConversationIdle ? "idle" : "busy",
+            acknowledged: false,
+            reclaimed: false,
+          };
+          await store.transaction(async (tx) => {
+            const auth = { ...admission.auth, deadline: Date.now() + 30000 };
+            const resources = scope({
+              agentIds: [this.host.agentId],
+              conversationIds: [admission.conversationId],
+              actions: [admission.mode === "steer" ? "conversations.steer" : "messages.submit"],
+            });
+            await this.host.authority.current(auth, resources, tx);
+            await store.put("admission-rejected", admission.key, rejected, tx);
+            await this.host.authority.current(auth, resources, tx);
+          });
+          return this.finishRejection(admission, rejected);
         }
         throw error;
       }
@@ -657,6 +680,74 @@ export class Conversations {
     });
     await this.host.notify(admission.conversationId);
     return receipt;
+  }
+  async finishRejection(admission: Admission, rejection: RejectedAdmission): Promise<never> {
+    const { store, authority } = this.host,
+      auth = { ...admission.auth, deadline: Date.now() + 30000 },
+      resources = scope({
+        agentIds: [this.host.agentId],
+        conversationIds: [admission.conversationId],
+        actions: [admission.mode === "steer" ? "conversations.steer" : "messages.submit"],
+      });
+    await authority.current(auth, resources);
+    if (!rejection.acknowledged) {
+      const receipt = unwrap(
+        await authority.control.settleCapacity(auth, {
+          reservationId: admission.capacity.reservationId,
+          disposition: "unused",
+          observedBytes: 0,
+        }),
+      );
+      check(
+        receipt.reservationId === admission.capacity.reservationId && receipt.state === "settled",
+        "conflict",
+        "Unused settlement receipt changed",
+      );
+      await store.transaction(async (tx) => {
+        await authority.current(auth, resources, tx);
+        rejection.acknowledged = true;
+        await store.put("admission-rejected", admission.key, rejection, tx);
+        await authority.physical.completed(
+          receipt.reservationId,
+          tx,
+          admission.operationId,
+          "unused",
+        );
+      });
+    }
+    // A lost older report may be acknowledged first; only a new queued barrier
+    // containing this exact unused proof can reclaim its local estimate.
+    for (
+      let i = 0;
+      i < 2 && (await store.get("storage-completed", admission.capacity.reservationId));
+      i++
+    )
+      await authority.physical.beforeGrowth(auth, resources);
+    await store.transaction(async (tx) => {
+      await authority.current(auth, resources, tx);
+      check(
+        !(await store.get("storage-completed", admission.capacity.reservationId, tx)) &&
+          !(await store.get("growth-claim", admission.operationId, tx)),
+        "interrupted",
+        "Unused growth observation remains pending",
+      );
+      rejection.reclaimed = true;
+      await store.put("admission-rejected", admission.key, rejection, tx);
+      await store.remove("admission", admission.key, tx);
+      await store.remove("task-admission", admission.taskId, tx);
+      await store.remove("operation-admission", admission.operationId, tx);
+      await store.remove(
+        "input-pending",
+        `${admission.conversationId}:${admission.operationId}`,
+        tx,
+      );
+      await authority.current(auth, resources, tx);
+    });
+    check(
+      false,
+      "conflict",
+      rejection.reason === "idle" ? "Conversation is idle" : "Conversation is busy",
+    );
   }
   async projectEntry(
     row: ConversationRow,

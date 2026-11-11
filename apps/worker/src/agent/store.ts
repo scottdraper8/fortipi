@@ -14,6 +14,11 @@ export interface ConversationRow {
   bookmark?: string;
   published: boolean;
 }
+export interface GrowthClaim {
+  operationId: string;
+  bytes: number;
+  reservationId?: string;
+}
 export class Store {
   readonly db: DurableObjectSqliteDatabase;
   readonly policy: D.InfrastructurePolicy;
@@ -25,6 +30,68 @@ export class Store {
   }
   physicalBytes(): number {
     return this.storage.sql.databaseSize;
+  }
+  mutationWatermark(): void {
+    const bytes = this.physicalBytes(),
+      limit = this.policy.bounds.objectBytes;
+    check(bytes < limit, "quota_paused", "Object storage operational watermark reached", {
+      retryAfterMs: 0,
+      pressure: {
+        resource: "storage",
+        scope: { kind: "object" },
+        source: "policy",
+        measurement: "observed",
+        limit,
+        remaining: Math.max(0, limit - bytes),
+        reason: "Object storage operational watermark reached",
+        action: "reclaim-storage",
+      },
+    });
+  }
+  modelGrowth(inputBytes = 0): number {
+    return (
+      Math.floor(this.policy.bounds.objectBytes * this.policy.bounds.headroomFraction) +
+      inputBytes +
+      8192
+    );
+  }
+  async pendingGrowth(tx: Sql): Promise<number> {
+    const total = await tx.get<{ bytes: number }>(
+      "SELECT coalesce(sum(json_extract(data,'$.bytes')),0) bytes FROM fp_records_v1 WHERE kind='growth-claim'",
+    );
+    const bytes = total?.bytes ?? 0;
+    check(
+      Number.isSafeInteger(bytes) && bytes >= 0,
+      "interrupted",
+      "Growth accounting unavailable",
+    );
+    return bytes;
+  }
+  async growthFits(bytes: number): Promise<boolean> {
+    return this.transaction(
+      async (tx) =>
+        this.physicalBytes() + (await this.pendingGrowth(tx)) + bytes <=
+        Math.floor(this.policy.bounds.objectBytes * (1 - this.policy.bounds.headroomFraction)),
+    );
+  }
+  async claimGrowth(operationId: string, bytes: number, tx: Sql): Promise<void> {
+    const old = await this.get<GrowthClaim>("growth-claim", operationId, tx);
+    if (old) {
+      check(old.bytes === bytes, "conflict", "Growth identity changed");
+      return;
+    }
+    this.admissionHeadroom((await this.pendingGrowth(tx)) + bytes);
+    await this.put("growth-claim", operationId, { operationId, bytes } satisfies GrowthClaim, tx);
+  }
+  async bindGrowth(operationId: string, reservationId: string, tx: Sql): Promise<void> {
+    const claim = await this.get<GrowthClaim>("growth-claim", operationId, tx);
+    if (!claim) return; // Legacy admitted operations retain their original CP reservation.
+    check(
+      !claim.reservationId || claim.reservationId === reservationId,
+      "conflict",
+      "Growth reservation changed",
+    );
+    await this.put("growth-claim", operationId, { ...claim, reservationId }, tx);
   }
   admissionHeadroom(reservedBytes: number): void {
     const observed = this.physicalBytes();
@@ -87,6 +154,7 @@ export class Store {
   ): Promise<void> {
     if (tx === this.db)
       return this.transaction((current) => this.put(kind, key, value, current, due));
+    this.mutationWatermark();
     await tx.run(
       "INSERT INTO fp_records_v1(kind,id,data,due) VALUES(?,?,?,?) ON CONFLICT(kind,id) DO UPDATE SET data=excluded.data,due=excluded.due",
       kind,
@@ -97,6 +165,7 @@ export class Store {
   }
   async remove(kind: string, key: string, tx: Sql = this.db): Promise<void> {
     if (tx === this.db) return this.transaction((current) => this.remove(kind, key, current));
+    this.mutationWatermark();
     await tx.run("DELETE FROM fp_records_v1 WHERE kind=? AND id=?", kind, key);
   }
   async page<T>(
@@ -139,6 +208,7 @@ export class Store {
       persisted: true,
     });
     if (existing) return ack(existing.seq, existing.event_id);
+    this.mutationWatermark();
     const row = await this.get<ConversationRow>("conversation", cid, tx);
     check(row, "not_found", "Conversation unavailable");
     check(
@@ -261,6 +331,7 @@ export class Store {
         row.floor = entry.seq;
         row.bytes -= entry.bytes;
       }
+      this.mutationWatermark();
       await tx.run("DELETE FROM fp_events_v1 WHERE conversation=? AND seq<=?", cid, row.floor);
       await this.put("conversation", cid, row, tx);
       return (

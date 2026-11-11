@@ -1,13 +1,20 @@
-import { check, id, Lanes, ServiceError } from "../api/common.js";
+import { check, id, Lanes, ServiceError, same } from "../api/common.js";
 import { boundedJson, validate } from "../api/validation.js";
 import type * as D from "../boundary/dto.js";
 import type { StorageSampleInput, StorageSampleReceipt } from "../boundary/infrastructure.js";
 import type { Authority } from "./authority.js";
-import type { Sql, Store } from "./store.js";
+import type { GrowthClaim, Sql, Store } from "./store.js";
+
+interface CompletedGrowth {
+  reservationId: string;
+  operationId?: string;
+  disposition?: "consumed" | "unused";
+}
 
 interface Report {
   input: StorageSampleInput;
   receipt?: StorageSampleReceipt;
+  completed?: CompletedGrowth[];
 }
 
 /** Public SQLite observations, independent of per-operation settlement estimates. */
@@ -26,9 +33,31 @@ export class PhysicalStorage {
     this.control = control;
   }
 
-  /** Call only AFTER the matching consumed settlement has been acknowledged by CP. */
-  async completed(reservationId: string, tx?: Sql): Promise<void> {
-    await this.store.put("storage-completed", reservationId, { reservationId }, tx);
+  /** Call only after CP's matching settlement ACK; unused means definitively unadmitted work. */
+  async completed(
+    reservationId: string,
+    tx?: Sql,
+    operationId?: string,
+    disposition: "consumed" | "unused" = "consumed",
+  ): Promise<void> {
+    await this.store.put(
+      "storage-completed",
+      reservationId,
+      {
+        reservationId,
+        ...(operationId ? { operationId } : {}),
+        disposition,
+      } satisfies CompletedGrowth,
+      tx,
+    );
+  }
+  /** Existing acknowledged maintenance only; this starts no new model operation. */
+  async makeRoom(auth: D.AuthContext, resources: D.ResourceScope, bytes: number): Promise<void> {
+    if (
+      !(await this.store.growthFits(bytes)) &&
+      (await this.store.page("storage-completed", 1)).length
+    )
+      await this.beforeGrowth(auth, resources);
   }
 
   async beforeGrowth(auth: D.AuthContext, resources: D.ResourceScope): Promise<void> {
@@ -42,9 +71,10 @@ export class PhysicalStorage {
         // its uncertain CP outcome never becomes a local coverage acknowledgement.
         if (pending && !pending.receipt && Date.now() - pending.input.observedAt < 10000)
           return pending;
-        const completed = await tx.all<{ id: string }>(
-          "SELECT id FROM fp_records_v1 WHERE kind='storage-completed' ORDER BY id LIMIT 100",
+        const completed = await tx.all<{ data: string }>(
+          "SELECT data FROM fp_records_v1 WHERE kind='storage-completed' ORDER BY id LIMIT 100",
         );
+        const acknowledged = completed.map((row) => JSON.parse(row.data) as CompletedGrowth);
         const sequence = (await this.store.get<number>("meta", "storage-sequence", tx)) ?? 0;
         check(sequence < Number.MAX_SAFE_INTEGER, "interrupted", "Storage sequence exhausted");
         const input: StorageSampleInput = {
@@ -53,9 +83,11 @@ export class PhysicalStorage {
           sampleSeq: sequence + 1,
           observedAt: Date.now(),
           coverage: { kind: "agent", bytes: this.store.physicalBytes() },
-          coveredReservationIds: completed.map((row) => row.id),
+          coveredReservationIds: acknowledged
+            .filter((row) => row.disposition !== "unused")
+            .map((row) => row.reservationId),
         };
-        const next: Report = { input };
+        const next: Report = { input, completed: acknowledged };
         await this.store.put("meta", "storage-sequence", input.sampleSeq, tx);
         await this.store.put("meta", "storage-report", next, tx);
         await this.authority.current(auth, resources, tx);
@@ -118,9 +150,30 @@ export class PhysicalStorage {
           "conflict",
           "Storage sample superseded",
         );
-        await this.store.put("meta", "storage-report", { input: report.input, receipt }, tx);
-        for (const reservationId of report.input.coveredReservationIds)
-          await this.store.remove("storage-completed", reservationId, tx);
+        await this.store.put("meta", "storage-report", { ...report, receipt }, tx);
+        for (const completed of report.completed ??
+          report.input.coveredReservationIds.map((reservationId) => ({ reservationId }))) {
+          const retained = await this.store.get<CompletedGrowth>(
+            "storage-completed",
+            completed.reservationId,
+            tx,
+          );
+          if (!retained || !same(retained, completed)) continue;
+          if (retained.operationId) {
+            const claim = await this.store.get<GrowthClaim>(
+              "growth-claim",
+              retained.operationId,
+              tx,
+            );
+            check(
+              !claim || claim.reservationId === completed.reservationId,
+              "conflict",
+              "Completed growth mapping changed",
+            );
+            await this.store.remove("growth-claim", retained.operationId, tx);
+          }
+          await this.store.remove("storage-completed", completed.reservationId, tx);
+        }
         await this.authority.current(auth, resources, tx);
       });
       await this.authority.current(auth, resources);

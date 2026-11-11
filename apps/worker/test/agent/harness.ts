@@ -28,6 +28,7 @@ export async function harness(
     origin?: string;
     main?: string;
     modelChunkBytes?: 256;
+    largeModelContext?: true;
   } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-agent-"));
@@ -54,6 +55,7 @@ export async function harness(
         ...(options.modelChunkBytes
           ? { FORTIPI_TEST_MODEL_CHUNK_BYTES: options.modelChunkBytes }
           : {}),
+        ...(options.largeModelContext ? { FORTIPI_TEST_LARGE_MODEL_CONTEXT: true } : {}),
       },
       durable_objects: {
         bindings: [
