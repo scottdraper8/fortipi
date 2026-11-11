@@ -3,6 +3,7 @@ import { errorStatuses, routeCatalog, validateBrowserOrigin } from "fortipi-cont
 import type { ControlPlaneRpc } from "../boundary/control-plane.js";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
+import { AdminCoordinator } from "./admin.js";
 import { Artifacts } from "./artifacts.js";
 import { emptyScope, permits, requireGrant, roleAllows } from "./authorization.js";
 import { Bindings } from "./bindings.js";
@@ -40,6 +41,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
   readonly artifacts: Artifacts;
   readonly bindings: Bindings;
   readonly leases: WorkspaceLeases;
+  readonly #admin: AdminCoordinator;
   private readonly initialized: Promise<void>;
   private readonly origins = new Map<string, { value: string; deadline: number }>();
   constructor(ctx: DurableObjectState, env: Env, providerTransport: typeof fetch = fetch) {
@@ -89,6 +91,14 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       env,
       () => this.directory.config(),
       providerTransport,
+    );
+    this.#admin = new AdminCoordinator(
+      this.store,
+      this.identities,
+      this.directory,
+      this.tickets,
+      this.capacity,
+      env,
     );
     this.initialized = ctx.blockConcurrencyWhile(async () => {
       await this.identities.bootstrap(env.FORTIPI_ADMIN_TOKEN);
@@ -570,6 +580,10 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       );
       // Individual methods perform resource checks; management reads are installation scoped.
       switch (request.operationId) {
+        case "createExport":
+          return { status: 202, body: await this.#admin.create(ctx, "export", request.body) };
+        case "createBackup":
+          return { status: 202, body: await this.#admin.create(ctx, "backup", request.body) };
         case "listAgents":
           return this.#listAgentsValue(ctx, request);
         case "createAgent":
@@ -728,6 +742,8 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
           };
         }
         case "getAdminOperation": {
+          const retained = this.#admin.operation(ctx, request.path.id);
+          if (retained) return { status: 200, body: retained };
           requireGrant(ctx, route.action);
           const rev = this.store.get<{ revocationId: string }>("admin_operation", request.path.id);
           check(rev, "not_found", "Operation unavailable");
@@ -790,6 +806,8 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
         else if (task.kind === "presence_check") this.executors.expire();
         else if (task.kind === "transfer") this.relay.expire(task.key);
         else if (task.kind === "repair_resume") drainRepairResume(this.store);
+        else if (task.kind === "admin_job") await this.#admin.drain(task.key);
+        else if (task.kind === "admin_request") this.#admin.expire(task.key);
       } catch (error) {
         postponeRepair(this.store, task.kind, task.key, error, Date.now() + 60000);
         break;
@@ -958,13 +976,14 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
         url.pathname,
       );
       const modelMatch = /^\/internal\/agents\/([a-zA-Z0-9_-]+)\/model$/.exec(url.pathname);
+      const adminMatch = /^\/v1\/admin\/artifacts\/([a-zA-Z0-9_-]+)$/.exec(url.pathname);
       check(
-        match || statusMatch || artifactMatch || modelMatch,
+        match || statusMatch || artifactMatch || modelMatch || adminMatch,
         "not_found",
         "Control route unavailable",
       );
       let auth: D.AuthContext;
-      if (url.pathname.startsWith("/internal/")) {
+      if (url.pathname.startsWith("/internal/") || adminMatch) {
         const envelope = request.headers.get("X-Fortipi-Context");
         check(
           envelope && new TextEncoder().encode(envelope).length <= 65536,
@@ -992,6 +1011,16 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
           deadline: Date.now() + 30000,
         });
         check(auth.role === "executor", "unauthorized", "Executor credential required");
+      }
+      if (adminMatch) {
+        const result = await this.#call(auth, () =>
+          this.#admin.fetch(auth, request, adminMatch[1] ?? ""),
+        );
+        if (!result.ok) {
+          const { ok: _ok, ...error } = result;
+          return Response.json({ error }, { status: errorStatuses[result.code], headers });
+        }
+        return result.value;
       }
       if (modelMatch) {
         this.capacity.admitRequest(auth.principalId);
