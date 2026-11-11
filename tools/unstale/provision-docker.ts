@@ -9,6 +9,7 @@ import {
   mkdtemp,
   open,
   readFile,
+  readlink,
   realpath,
   writeFile,
 } from "node:fs/promises";
@@ -696,21 +697,37 @@ async function main(): Promise<void> {
         ),
       ) as string[];
       assert.ok(options.includes("name=rootless"), "Daemon is not actually rootless");
-      assert.equal(
-        pid,
-        (await readFile(resolve(session, "state/child_pid"), "utf8")).trim(),
-        "Daemon PID must be RootlessKit's actual child",
-      );
-      for (const processId of [String(daemon.pid), pid]) {
+      // RootlessKit's child is a supervisor which starts and waits for dockerd.
+      const child = (await readFile(resolve(session, "state/child_pid"), "utf8")).trim();
+      assert.match(child, /^[1-9]\d*$/);
+      for (const processId of [String(daemon.pid), child, pid]) {
         const status = await readFile(`/proc/${processId}/status`, "utf8");
         const uids = /^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/m.exec(status);
         assert.ok(
           uids?.slice(1).every((uid) => Number(uid) === process.getuid?.()),
           "RootlessKit and dockerd must run as the nonroot job user on the host",
         );
+        if (processId === child)
+          assert.equal(
+            /^PPid:\s+(\d+)$/m.exec(status)?.[1],
+            String(daemon.pid),
+            "RootlessKit supervisor ancestry changed",
+          );
+        if (processId === pid)
+          assert.equal(
+            /^PPid:\s+(\d+)$/m.exec(status)?.[1],
+            child,
+            "Daemon must be the actual RootlessKit supervisor's child",
+          );
       }
       assert.equal(await realpath(`/proc/${daemon.pid}/exe`), resolve(directory, "rootlesskit"));
+      assert.equal(await realpath(`/proc/${child}/exe`), resolve(directory, "rootlesskit"));
       assert.equal(await realpath(`/proc/${pid}/exe`), resolve(directory, "dockerd"));
+      assert.equal(
+        await readlink(`/proc/${child}/ns/user`),
+        await readlink(`/proc/${pid}/ns/user`),
+        "Daemon must share its supervisor's user namespace",
+      );
       assert.ok(allocated[0] && allocated[1]);
       verifyIdMap(await readFile(`/proc/${pid}/uid_map`, "utf8"), userInfo().uid, allocated[0]);
       verifyIdMap(await readFile(`/proc/${pid}/gid_map`, "utf8"), userInfo().gid, allocated[1]);

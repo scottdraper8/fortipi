@@ -9,6 +9,7 @@ on:
       - tools/unstale/platform-tools.json
       - tools/unstale/verify-container-egress.ts
       - tools/unstale/verify-container-egress.test.ts
+      - tools/unstale/image-network-diagnostics.ts
   push:
     branches: [main]
     paths:
@@ -19,6 +20,7 @@ on:
       - tools/unstale/platform-tools.json
       - tools/unstale/verify-container-egress.ts
       - tools/unstale/verify-container-egress.test.ts
+      - tools/unstale/image-network-diagnostics.ts
   workflow_dispatch:
 permissions:
   contents: read
@@ -118,7 +120,7 @@ jobs:
         run: node tools/unstale/provision-docker.ts ${{ matrix.provision_args }}
       - name: Build the pinned image and collect its actual inventory
         id: build
-        run: node apps/worker/container/build.ts
+        run: node --import ./tools/unstale/image-network-diagnostics.ts apps/worker/container/build.ts
       - name: Verify ContainerHost transport (${{ matrix.mode }})
         run: node apps/worker/test/backends/linux-image.ts ${{ matrix.fuse_args }}
       - name: Observe actual bridge and host container egress
