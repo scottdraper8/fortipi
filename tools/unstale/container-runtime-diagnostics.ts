@@ -8,20 +8,13 @@ import { repository } from "../../scripts/build-workspaces.ts";
 const execute = promisify(execFile);
 const format =
   '{"id":{{json .Id}},"imageId":{{json .Image}},"imageRef":{{json .Config.Image}},"status":{{json .State.Status}},"exitCode":{{.State.ExitCode}},"errorPresent":{{if .State.Error}}true{{else}}false{{end}},"networkMode":{{json .HostConfig.NetworkMode}}}';
-// The pinned SEA supports NODE_OPTIONS preloads. Exit before its daemon entry point.
-export const healthPreload = `--import=data:text/javascript;base64,${Buffer.from(`
-let httpStatus = null;
-try {
-  const response = await fetch("http://127.0.0.1:8080/health", {
-    method: "HEAD", redirect: "error", signal: AbortSignal.timeout(1000)
-  });
-  httpStatus = response.status;
-  await response.body?.cancel();
-} catch {} finally {
-  process.stdout.write(JSON.stringify({ httpStatus }));
-  process.exit(0);
-}
-`).toString("base64")}`;
+export const healthCommand = `set -eu
+exec 3<>/dev/tcp/127.0.0.1/8080
+printf 'HEAD /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3
+IFS=' ' read -r protocol status remainder <&3
+[[ "$protocol" = HTTP/1.1 || "$protocol" = HTTP/1.0 ]] || exit 1
+[[ "$status" =~ ^[1-5][0-9]{2}$ ]] || exit 1
+printf '%s' "$status"`;
 
 if (
   process.platform === "linux" &&
@@ -53,26 +46,10 @@ if (
     try {
       const { stdout } = await execute(
         "docker",
-        [
-          "exec",
-          "--env",
-          `NODE_OPTIONS=${healthPreload}`,
-          id,
-          "/usr/bin/timeout",
-          "--signal=KILL",
-          "1.5",
-          "/usr/local/bin/computerd",
-        ],
+        ["exec", id, "/usr/bin/timeout", "--signal=KILL", "1", "/bin/bash", "-c", healthCommand],
         { env, timeout: 2000, killSignal: "SIGKILL", maxBuffer: 1024, encoding: "utf8" },
       );
-      const result = JSON.parse(stdout) as { httpStatus: unknown };
-      if (
-        Object.keys(result).length === 1 &&
-        Number.isInteger(result.httpStatus) &&
-        Number(result.httpStatus) >= 100 &&
-        Number(result.httpStatus) <= 599
-      )
-        httpStatus = Number(result.httpStatus);
+      if (stdout.length === 3 && /^[1-5][0-9]{2}$/.test(stdout)) httpStatus = Number(stdout);
     } catch {}
     console.error(
       JSON.stringify({

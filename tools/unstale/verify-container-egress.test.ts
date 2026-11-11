@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createServer } from "node:http";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import {
@@ -15,35 +16,37 @@ test("an allowed target on both sides is required to distinguish refusal from br
   assert.throws(() => verifyControls(0, 124, 1));
 });
 
-test("the diagnostic preload exits before the daemon and withholds request/error contents", async () => {
-  const { healthPreload } = await import("./container-runtime-diagnostics.ts");
-  for (const fail of [false, true]) {
-    const shim = `globalThis.fetch = async (input, init) => {
-      if (${fail} || input !== "http://127.0.0.1:8080/health" || init.method !== "HEAD" ||
-          init.redirect !== "error" || !(init.signal instanceof AbortSignal) ||
-          Object.keys(init).sort().join() !== "method,redirect,signal")
-        throw new Error("diagnostic-private-request-and-error");
-      return new Response(null, { status: 200 });
-    };`;
+test("the existing Bash client issues only HEAD and exposes no HTTP header or body contents", async () => {
+  const { healthCommand } = await import("./container-runtime-diagnostics.ts");
+  const requests: string[] = [];
+  const server = createServer((request, response) => {
+    requests.push(`${request.method} ${request.url}`);
+    assert.equal(request.headers.authorization, undefined);
+    response.writeHead(200, { "x-diagnostic-private": "hidden-header" });
+    response.end("hidden-body");
+  });
+  await new Promise<void>((accept) => server.listen(0, "127.0.0.1", accept));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
     const { stdout, stderr } = await promisify(execFile)(
-      process.execPath,
-      ["--eval", 'console.log("UNEXPECTED_DAEMON_ENTRY")'],
+      "/bin/bash",
+      ["-c", healthCommand.replace("/8080", `/${address.port}`)],
       {
-        env: {
-          HOME: process.env.HOME,
-          PATH: process.env.PATH,
-          NODE_OPTIONS: `--import=data:text/javascript;base64,${Buffer.from(shim).toString("base64")} ${healthPreload}`,
-        },
-        timeout: 2000,
+        env: { HOME: process.env.HOME, PATH: process.env.PATH },
+        timeout: 1000,
+        killSignal: "SIGKILL",
         maxBuffer: 1024,
         encoding: "utf8",
       },
     );
+    assert.deepEqual(requests, ["HEAD /health"]);
+    assert.equal(stdout, "200");
     assert.equal(stderr, "");
-    assert.deepEqual(JSON.parse(stdout), { httpStatus: fail ? null : 200 });
-    assert.doesNotMatch(
-      stdout,
-      /UNEXPECTED_DAEMON_ENTRY|diagnostic-private|http:|HEAD|NODE_OPTIONS/,
+    assert.doesNotMatch(stdout, /hidden-|HTTP|HEAD|health/);
+  } finally {
+    await new Promise<void>((accept, reject) =>
+      server.close((error) => (error ? reject(error) : accept())),
     );
   }
 });
