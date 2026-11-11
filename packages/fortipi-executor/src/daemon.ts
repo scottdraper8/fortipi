@@ -593,9 +593,11 @@ export class ExecutorRuntime implements FrameHandler {
         throw new Error("conflicting terminal acknowledgment");
       return;
     }
+    const binding = this.binding(row.assignment, false);
     if (value.evidence.kind === "committed") {
       const receipt = value.evidence.receipt;
       if (
+        receipt.providerKind !== binding.providerKind ||
         receipt.jobId !== value.identity.jobId ||
         receipt.workspaceId !== row.assignment.workspaceId ||
         receipt.operationId !== value.identity.lease.operationId ||
@@ -604,6 +606,20 @@ export class ExecutorRuntime implements FrameHandler {
         receipt.commitId !== row.result.commitId
       )
         throw new Error("terminal receipt mismatch");
+      if (receipt.providerKind === "computer") {
+        const stage = this.ledger.record<{
+          stageId: string;
+          uploadId: string;
+          manifestHash: string;
+        }>("stages", `upload_ready_${value.identity.executionId}`);
+        if (
+          !stage ||
+          stage.stageId !== receipt.storeRef.stageId ||
+          stage.uploadId !== row.result.uploadId ||
+          stage.manifestHash !== receipt.manifestHash
+        )
+          throw new Error("terminal public stage mismatch");
+      }
       if (receipt.providerKind === "local") {
         const local = this.ledger.local(value.identity.lease.operationId);
         if (
@@ -620,8 +636,7 @@ export class ExecutorRuntime implements FrameHandler {
       row.result.uploadId
     )
       throw new Error("unchanged evidence mismatch");
-    const binding = this.binding(row.assignment, false),
-      root = this.roots.get(binding.rootBindingId);
+    const root = this.roots.get(binding.rootBindingId);
     if (value.evidence.kind === "verified-unchanged" && binding.providerKind === "local") {
       const local = this.ledger.local(value.identity.lease.operationId),
         provider = this.locals.get(binding.rootBindingId);

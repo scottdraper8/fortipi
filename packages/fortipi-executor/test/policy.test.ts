@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { commitDigest } from "fortipi-contract/executor";
 import { privateWrite } from "../dist/config.js";
 import { ExecutorRuntime } from "../dist/daemon.js";
 import { Guard } from "../dist/ledger.js";
@@ -67,6 +68,53 @@ test("remote allow, disabled host, confinement and altered context cannot start;
       undefined,
       "child exit is not terminal committed",
     );
+    const local = f.ledger.local(a.identity.lease.operationId),
+      result = f.ledger.get(a.identity.jobId)?.result;
+    if (local?.observation.state !== "applied" || !result?.commitId || !result.manifestHash)
+      throw new Error("actual local result missing");
+    const digest = await commitDigest({
+      commitId: result.commitId,
+      operationId: a.identity.lease.operationId,
+      jobId: a.identity.jobId,
+      workspaceId: a.workspaceId,
+      baseRevision: a.identity.baseRevision,
+      manifestHash: result.manifestHash,
+      leaseIdentity: a.identity.lease,
+      storage: {
+        kind: "local",
+        preparationId: local.prepared.preparationId,
+        observationSeq: local.observation.observationSeq,
+        preManifestHash: local.observation.preManifestHash,
+        postManifestHash: local.observation.postManifestHash,
+      },
+    });
+    // Negative authority fixture: changing the provider cannot turn the actual local result into a cloud commit.
+    await assert.rejects(
+      r.committed({
+        identity: a.identity,
+        terminalVersion: 1,
+        eventSeq: 1,
+        evidence: {
+          kind: "committed",
+          receipt: {
+            providerKind: "computer",
+            storeRef: { stageId: "unrelated_public_stage" },
+            commitId: result.commitId,
+            jobId: a.identity.jobId,
+            operationId: a.identity.lease.operationId,
+            workspaceId: a.workspaceId,
+            baseRevision: a.identity.baseRevision,
+            manifestHash: result.manifestHash,
+            revision: "r1",
+            commitDigest: digest,
+            sourceFactId: "negative_fixture",
+            committedAt: Date.now(),
+          },
+        },
+      }),
+      /terminal receipt mismatch/,
+    );
+    assert.equal(f.ledger.get(a.identity.jobId)?.committed, undefined);
     await r.assignOnce(a);
     assert.equal(await readFile(marker, "utf8"), "effect\n");
     const missing = await assignment("never");
