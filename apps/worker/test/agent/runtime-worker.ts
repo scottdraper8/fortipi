@@ -30,9 +30,11 @@ export class ControlPlane extends RealControlPlane {
   private count(name: string) {
     this.calls[name] = (this.calls[name] ?? 0) + 1;
   }
-  override authenticate(input: D.CredentialProof) {
+  override async authenticate(input: D.CredentialProof) {
     this.count("authenticate");
-    return super.authenticate(input);
+    const result = await super.authenticate(input);
+    this.count(result.ok ? `authenticate.${result.value.role}` : "authenticate.denied");
+    return result;
   }
   override authorize(input: D.AuthorizationRequest) {
     this.count("authorize");
@@ -47,6 +49,7 @@ export class ControlPlane extends RealControlPlane {
     input: D.OperationRequest<K>,
   ) {
     this.count("handleApi");
+    this.count(`handleApi.${ctx.role}`);
     return super.handleApi(ctx, input);
   }
   override createAgent(ctx: D.AuthContext, input: D.OperationRequest<"createAgent">) {
@@ -74,8 +77,13 @@ export class ControlPlane extends RealControlPlane {
     return super.settleCapacity(ctx, input);
   }
   override fetch(request: Request) {
-    if (new URL(request.url).pathname.match(/^\/internal\/agents\/[^/]+\/model$/))
-      this.count("configuredModel.fetch");
+    const path = new URL(request.url).pathname;
+    if (path.match(/^\/internal\/agents\/[^/]+\/model$/)) this.count("configuredModel.fetch");
+    if (path.startsWith("/v1/executor/jobs/")) {
+      this.count("executorJob.fetch");
+      if (path.endsWith("/manifest")) this.count("executorJob.manifest");
+      if (/\/blobs\/[a-f0-9]{64}$/.test(path)) this.count("executorJob.blob");
+    }
     return super.fetch(request);
   }
   ingressCounts() {

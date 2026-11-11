@@ -3,7 +3,7 @@ import openapi from "../../../../packages/fortipi-contract/openapi.yaml" with { 
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
 import { check, errorResponse, id, resourceAgent, scope, unwrap } from "./common.js";
-import { boundedJson, valid, validate } from "./validation.js";
+import { boundedBody, boundedJson, valid, validate } from "./validation.js";
 
 export const implementedOperations = new Set(routeCatalog.map((r) => r.operationId));
 const executorJobFetch = new Set<D.OperationId>([
@@ -304,6 +304,38 @@ export async function routeRequest(request: Request, env: Env): Promise<Response
       );
       auth = { ...auth, registrationId: registration.registrationId };
     }
+    if (route.operationId === "putUploadChunk") {
+      validate<D.ChunkQuery>("ChunkQuery", query);
+      const body = await boundedBody(
+        request,
+        Math.min(route.bodyBytes, query.length),
+        auth.deadline,
+      );
+      check(
+        body.byteLength === query.length,
+        "invalid_request",
+        "Chunk length differs from declared length",
+      );
+      const response = unwrap(
+        await env.WORKSPACES.getByName(String(path.workspaceId)).putChunk(auth, {
+          operationId: "putUploadChunk",
+          path: {
+            workspaceId: String(path.workspaceId),
+            uploadId: String(path.uploadId),
+            sha256: String(path.sha256),
+            chunkIndex: Number(path.chunkIndex),
+          },
+          query,
+          body,
+        }),
+      );
+      return merge(
+        response.status === 204
+          ? new Response(null, { status: 204 })
+          : Response.json(response.body, { status: response.status }),
+        exposed,
+      );
+    }
     if (
       executorJobFetch.has(route.operationId) ||
       ("transport" in route && route.transport === "bytes") ||
@@ -319,21 +351,10 @@ export async function routeRequest(request: Request, env: Env): Promise<Response
       else headers.set("Authorization", bearer);
       const authorityUrl = new URL(url);
       if (route.owner === "control") authorityUrl.protocol = "https:";
-      let body = request.body;
-      if (executorJobFetch.has(route.operationId) && route.body) {
-        const input = await boundedJson(
-          request,
-          "bodyBytes" in route ? route.bodyBytes : wireLimits.jsonBytes,
-        );
-        validate(route.body, input);
-        body = new Blob([JSON.stringify(input)], { type: "application/json" }).stream();
-        headers.set("Content-Type", "application/json");
-        headers.delete("Content-Length");
-      }
       const forwarded = new Request(authorityUrl, {
         method: request.method,
         headers,
-        body,
+        body: request.body,
         signal: request.signal,
       });
       const response = await (route.owner === "workspace"
@@ -342,7 +363,11 @@ export async function routeRequest(request: Request, env: Env): Promise<Response
       return merge(response, exposed);
     }
     const body = route.body
-      ? await boundedJson(request, "bodyBytes" in route ? route.bodyBytes : wireLimits.jsonBytes)
+      ? await boundedJson(
+          request,
+          "bodyBytes" in route ? route.bodyBytes : wireLimits.jsonBytes,
+          auth.deadline,
+        )
       : undefined;
     if (route.body) validate(route.body, body);
     const input = {

@@ -1,6 +1,6 @@
 import Ajv from "ajv/dist/2020.js";
 import { schemaRegistry } from "fortipi-contract";
-import { check } from "./common.js";
+import { check, ServiceError } from "./common.js";
 
 // Only pinned, local schemas. Compilation is confined to module activation.
 const ajv = new Ajv({ strict: true, allErrors: false, validateFormats: false });
@@ -18,27 +18,41 @@ export function valid<T>(name: string, value: unknown): value is T {
 export function validate<T>(name: string, value: unknown): asserts value is T {
   check(valid<T>(name, value), "invalid_request", "Invalid request shape");
 }
-export async function boundedJson(
+export async function boundedBody(
   request: Pick<Request, "body" | "signal">,
   limit = 262144,
-): Promise<unknown> {
+  deadline = Date.now() + 30000,
+): Promise<Uint8Array> {
   const reader = request.body?.getReader();
-  check(reader, "invalid_request", "JSON body required");
+  check(reader, "invalid_request", "Request body required");
   let size = 0;
   const parts: Uint8Array[] = [];
+  let onAbort: (() => void) | undefined;
+  const timer = new AbortController();
+  const signal = AbortSignal.any([request.signal, timer.signal]);
+  const timeout = setTimeout(() => timer.abort(), Math.max(1, deadline - Date.now()));
   try {
+    signal.throwIfAborted();
+    const interrupted = new Promise<never>((_resolve, reject) => {
+      onAbort = () =>
+        reject(new ServiceError("interrupted", "Request body cancelled or its deadline expired"));
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
     while (true) {
-      request.signal.throwIfAborted();
-      const part = await reader.read();
+      signal.throwIfAborted();
+      check(Date.now() < deadline, "interrupted", "Request body deadline expired");
+      const part = await Promise.race([reader.read(), interrupted]);
       if (part.done) break;
       size += part.value.byteLength;
       check(size <= limit, "payload_too_large", "Body exceeds limit");
       parts.push(part.value);
     }
   } catch (error) {
-    await reader.cancel().catch(() => {});
+    void reader.cancel().catch(() => {});
     throw error;
   } finally {
+    clearTimeout(timeout);
+    if (onAbort) signal.removeEventListener("abort", onAbort);
     reader.releaseLock();
   }
   const bytes = new Uint8Array(size);
@@ -47,6 +61,14 @@ export async function boundedJson(
     bytes.set(part, offset);
     offset += part.byteLength;
   }
+  return bytes;
+}
+export async function boundedJson(
+  request: Pick<Request, "body" | "signal">,
+  limit = 262144,
+  deadline = Date.now() + 30000,
+): Promise<unknown> {
+  const bytes = await boundedBody(request, limit, deadline);
   try {
     return JSON.parse(
       new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes),

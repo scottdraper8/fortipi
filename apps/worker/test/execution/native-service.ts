@@ -15,6 +15,7 @@ import {
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, harness, setup } from "../agent/harness.ts";
 import type { TestAgentSession } from "../agent/runtime-worker.js";
+import { computerBase } from "./computer-base.ts";
 
 /** Real public service + native executor; only the provider is synthetic. */
 export async function nativeService(
@@ -23,9 +24,18 @@ export async function nativeService(
     changed?: boolean;
     holdCommit?: boolean;
     computer?: boolean;
+    computerFiles?: number;
     localConsent?: boolean;
     approve?: boolean;
-    observeHttp?: (value: { path: string; method: string; status: number }) => void;
+    observeHttp?: (value: {
+      path: string;
+      method: string;
+      status: number;
+      code?: string;
+      retryAfterMs?: number;
+      message?: string;
+      pressure?: D.InfrastructurePressure;
+    }) => void;
   } = {},
 ) {
   const h = await harness(options.free ? { traffic: "free" } : {}),
@@ -82,7 +92,7 @@ export async function nativeService(
       bootstrap.token,
     );
     assert.equal(seeded.status, 201);
-    const created = await h.api<D.WorkspaceBinding>("/v1/workspaces", {
+    let created = await h.api<D.WorkspaceBinding>("/v1/workspaces", {
       requestId: crypto.randomUUID(),
       config: options.computer
         ? { kind: "computer" }
@@ -90,6 +100,22 @@ export async function nativeService(
     });
     assert.equal(created.status, 201);
     const workspaceId = created.body.workspaceId;
+    if (options.computerFiles) {
+      assert.equal(options.computer, true);
+      const writer = await issue("client", {
+        agentIds: [],
+        conversationIds: [],
+        workspaceIds: [workspaceId],
+        tools: [],
+        executorIds: [],
+        backendIds: [workspaceId],
+        actions: ["workspace.write"],
+      });
+      created = {
+        ...created,
+        body: await computerBase(h, created.body, writer.token, options.computerFiles),
+      };
+    }
     const resources: D.ResourceScope = {
       agentIds: [agent.agentId],
       conversationIds: [conversation.conversationId],
@@ -133,7 +159,7 @@ export async function nativeService(
       },
     ];
     const script = options.changed
-      ? `import{appendFileSync,writeFileSync}from'node:fs';appendFileSync(${JSON.stringify(marker)},'start\\n');writeFileSync(${JSON.stringify(join(f.rootPath, "native-result.txt"))},'actual native change');process.stdout.write('changed');`
+      ? `import{appendFileSync,writeFileSync}from'node:fs';appendFileSync(${JSON.stringify(marker)},'start\\n');writeFileSync('native-result.txt','actual native change');process.stdout.write('changed');`
       : `import{appendFileSync,existsSync}from'node:fs';appendFileSync(${JSON.stringify(marker)},'start\\n');const timer=setInterval(()=>{if(existsSync(${JSON.stringify(gate)})){clearInterval(timer);process.stdout.write('done');}},50);`;
     const command = nodeCommand("--input-type=module", "-e", script);
     f.profile.policy.rules =
@@ -157,10 +183,25 @@ export async function nativeService(
         options.observeHttp
           ? async (input, init) => {
               const response = await fetch(input, init);
+              const failure =
+                response.status >= 400
+                  ? ((await response
+                      .clone()
+                      .json()
+                      .catch(() => undefined)) as D.ErrorBody | undefined)
+                  : undefined;
               options.observeHttp?.({
                 path: new URL(input instanceof Request ? input.url : String(input)).pathname,
                 method: init?.method ?? (input instanceof Request ? input.method : "GET"),
                 status: response.status,
+                ...(failure?.error?.code ? { code: failure.error.code } : {}),
+                ...(failure?.error?.message ? { message: failure.error.message } : {}),
+                ...(failure?.error?.details?.retryAfterMs !== undefined
+                  ? { retryAfterMs: failure.error.details.retryAfterMs }
+                  : {}),
+                ...(failure?.error?.details?.pressure
+                  ? { pressure: failure.error.details.pressure }
+                  : {}),
               });
               return response;
             }
