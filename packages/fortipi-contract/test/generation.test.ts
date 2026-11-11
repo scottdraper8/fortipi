@@ -80,3 +80,62 @@ test("reversible known-type exclusion mutation is caught by malformed-known orac
     await rm(temp, { recursive: true, force: true });
   }
 });
+test("renewal identity and private child disclosure regressions fail their consumer oracles", async () => {
+  const temp = await mkdtemp(resolve(tmpdir(), "fortipi-enforcer-regression-"));
+  try {
+    const target = resolve(temp, "packages/fortipi-contract");
+    await mkdir(target, { recursive: true });
+    for (const dir of ["schemas", "test", "dist"])
+      await cp(resolve(packageRoot, dir), resolve(target, dir), { recursive: true });
+    await symlink(resolve(repo, "node_modules"), resolve(temp, "node_modules"), "dir");
+    await writeFile(resolve(temp, "package.json"), '{"type":"module"}\n');
+    const cases = [
+      {
+        path: "dist/compatibility.js",
+        test: "compatibility",
+        pattern: "commit identity survives",
+        failure: /AssertionError|strictEqual/,
+        mutate: (source: string): string => {
+          const start = source.indexOf("leaseIdentity: {");
+          const end = source.indexOf("storage: input.storage", start);
+          assert.ok(start > 0 && end > start);
+          return `${source.slice(0, start)}leaseIdentity: input.leaseIdentity,\n${source.slice(end)}`;
+        },
+      },
+      {
+        path: "schemas/workspaces.schema.json",
+        test: "schema",
+        pattern: "public commits use only",
+        failure: /CommitReceipt/,
+        mutate: (source: string): string => {
+          const schema = JSON.parse(source);
+          schema.$defs.CommitReceipt.oneOf[0].properties.storeRef = {
+            $ref: `${schema.$id}#/$defs/SealedStore`,
+          };
+          return JSON.stringify(schema);
+        },
+      },
+    ];
+    for (const challenge of cases) {
+      const args = [
+        "--test",
+        `--test-name-pattern=${challenge.pattern}`,
+        `packages/fortipi-contract/test/${challenge.test}.test.ts`,
+      ];
+      const baseline = run(temp, ...args);
+      assert.equal(baseline.status, 0, baseline.stdout + baseline.stderr);
+      const path = resolve(target, challenge.path),
+        original = await readFile(path, "utf8");
+      await writeFile(path, challenge.mutate(original));
+      const mutant = run(temp, ...args);
+      assert.notEqual(mutant.status, 0, `Undetected mutation: ${challenge.path}`);
+      assert.match(mutant.stdout + mutant.stderr, challenge.failure);
+      console.log(`Sensitivity observed: ${challenge.path} -> ${challenge.pattern} failed`);
+      await writeFile(path, original);
+      const restored = run(temp, ...args);
+      assert.equal(restored.status, 0, restored.stdout + restored.stderr);
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});

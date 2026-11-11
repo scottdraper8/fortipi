@@ -21,9 +21,13 @@ export interface WorkspaceObjectRpc extends RevisionStoreRpc, InfrastructureRese
     input: D.Invalidation,
   ): Promise<D.Outcome<D.InvalidationAck>>;
   beginUpload: D.ApiMethod<"beginUpload">;
+  getUpload: D.ApiMethod<"getUpload">;
   putChunk: D.ApiMethod<"putUploadChunk">;
   validateUpload: D.ApiMethod<"validateUpload">;
   abortUpload: D.ApiMethod<"abortUpload">;
+  commitUpload: D.ApiMethod<"commitUpload">;
+  getCommitReceipt: D.ApiMethod<"getCommitReceipt">;
+  transactWorkspace: D.ApiMethod<"transactWorkspace">;
   commit(ctx: D.AuthContext, input: D.CommitInput): Promise<D.Outcome<D.CommitReceipt>>;
   getReceipt(ctx: D.AuthContext, input: D.CommitLookup): Promise<D.Outcome<D.CommitReceipt>>;
   transact(ctx: D.AuthContext, input: D.WorkspaceTransaction): Promise<D.Outcome<D.CommitReceipt>>;

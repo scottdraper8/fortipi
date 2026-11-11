@@ -73,6 +73,7 @@ export type FortiPiValue =
   | KnownDurableEvent
   | KnownVolatileEvent
   | Lease
+  | LeaseIdentity
   | LeaseUpdate
   | LocalApply
   | LocalCommitIntent
@@ -117,10 +118,13 @@ export type FortiPiValue =
   | ResyncRequired
   | Revision
   | RevisionQuery
+  | RevocationComplete
   | RevocationInput
+  | RevocationPending
   | RevocationReceipt
   | RotationReceipt
   | SealedStore
+  | SealedStoreReference
   | Sequence
   | Sha256
   | SnapshotInput
@@ -148,6 +152,7 @@ export type FortiPiValue =
   | UnknownDurableEvent
   | UnknownVolatileEvent
   | UploadBegin
+  | UploadCommit
   | UploadStatus
   | UploadValidation
   | Usage
@@ -860,7 +865,7 @@ export type CommitReceipt =
       sourceFactId: Id;
       committedAt: Timestamp;
       providerKind: "computer";
-      storeRef: SealedStore;
+      storeRef: SealedStoreReference;
     }
   | {
       commitId: Id;
@@ -1075,6 +1080,67 @@ export type KnownVolatileEvent =
       payload: {
         serverTime: Timestamp;
       };
+    };
+/**
+ * Native local commits have preparation/observation identity and may have no upload. Computer commits require an upload seal.
+ */
+export type CommitDigestInput =
+  | {
+      commitId: Id;
+      uploadId: Id;
+      operationId: Id;
+      jobId?: Id;
+      workspaceId: Id;
+      baseRevision: Revision;
+      manifestHash: Sha256;
+      leaseIdentity: LeaseIdentity;
+      storage: {
+        kind: "computer";
+        storeRef: SealedStore;
+      };
+    }
+  | {
+      commitId: Id;
+      uploadId?: Id;
+      operationId: Id;
+      jobId?: Id;
+      workspaceId: Id;
+      baseRevision: Revision;
+      manifestHash: Sha256;
+      leaseIdentity: LeaseIdentity;
+      storage: {
+        kind: "local";
+        preparationId: Id;
+        observationSeq: number;
+        preManifestHash: Sha256;
+        postManifestHash: Sha256;
+      };
+    };
+export type LeaseIdentity =
+  | {
+      leaseId: Id;
+      operationId: Id;
+      credential: CredentialRef;
+      registrationId: Id;
+      workspaceId: Id;
+      executorId: Id;
+      executorGeneration: number;
+      fence: Fence;
+      baseRevision: Revision;
+      ownerKind: "job";
+      jobId: Id;
+    }
+  | {
+      leaseId: Id;
+      operationId: Id;
+      credential: CredentialRef;
+      registrationId: Id;
+      workspaceId: Id;
+      executorId: Id;
+      executorGeneration: number;
+      fence: Fence;
+      baseRevision: Revision;
+      ownerKind: "workspace-operation";
     };
 export type CommitInput =
   | {
@@ -1655,7 +1721,66 @@ export type OriginMode =
   | {
       kind: "native";
     };
+export type RevocationReceipt = RevocationComplete | RevocationPending;
 export type Sequence = number;
+export type StoreAllocation =
+  | {
+      allocationId: Id;
+      childId: Id;
+      authorityId: Id;
+      workspaceId: Id;
+      role: "revision-store";
+      uploadId: Id;
+      baseRevision: Revision;
+      generation: number;
+      operationDigest: Sha256;
+      capacityReservationId: Id;
+      reservedBytes: number;
+      deadline: Timestamp;
+    }
+  | {
+      allocationId: Id;
+      childId: Id;
+      authorityId: Id;
+      workspaceId: Id;
+      role: "scratch";
+      jobId: Id;
+      executionId: Id;
+      baseRevision: Revision;
+      generation: number;
+      operationDigest: Sha256;
+      capacityReservationId: Id;
+      reservedBytes: number;
+      deadline: Timestamp;
+    };
+export type StoreState =
+  | {
+      allocation: StoreAllocation;
+      source: "registry" | "child";
+      version: number;
+      state: "allocated" | "writable";
+      measuredBytes?: number;
+      manifestHash?: Sha256;
+      tombstoneId?: Id;
+    }
+  | {
+      allocation: StoreAllocation;
+      source: "registry" | "child";
+      version: number;
+      state: "sealed";
+      measuredBytes?: number;
+      manifestHash: Sha256;
+      tombstoneId?: Id;
+    }
+  | {
+      allocation: StoreAllocation;
+      source: "registry" | "child";
+      version: number;
+      state: "retiring" | "deleted";
+      measuredBytes?: number;
+      manifestHash?: Sha256;
+      tombstoneId: Id;
+    };
 export type TicketInput =
   | {
       requestId: Id;
@@ -1960,14 +2085,11 @@ export interface PreparedResult {
   };
   possibleExternalEffects: boolean;
 }
-export interface SealedStore {
-  allocationId: Id;
-  childId: Id;
-  authorityId: Id;
-  workspaceId: Id;
-  uploadId: Id;
-  manifestHash: Sha256;
-  sealedAt: Timestamp;
+/**
+ * Opaque authority-issued stage identity; never a child Durable Object ID or routing capability.
+ */
+export interface SealedStoreReference {
+  stageId: Id;
 }
 export interface ExecutorDescription {
   executorId: Id;
@@ -2072,39 +2194,15 @@ export interface UnknownVolatileEvent {
   type: string;
   payload: JsonValue;
 }
-export interface CommitDigestInput {
-  commitId: Id;
-  uploadId: Id;
-  operationId: Id;
-  jobId?: Id;
+export interface SealedStore {
+  allocationId: Id;
+  childId: Id;
+  authorityId: Id;
   workspaceId: Id;
-  baseRevision: Revision;
+  uploadId: Id;
   manifestHash: Sha256;
-  leaseIdentity: {
-    leaseId: Id;
-    operationId: Id;
-    ownerKind: "job" | "workspace-operation";
-    jobId?: Id;
-    credential: CredentialRef;
-    registrationId: Id;
-    workspaceId: Id;
-    executorId: Id;
-    executorGeneration: number;
-    fence: Fence;
-    baseRevision: Revision;
-  };
-  storage:
-    | {
-        kind: "local";
-        preparationId: Id;
-        observationSeq: number;
-        preManifestHash: Sha256;
-        postManifestHash: Sha256;
-      }
-    | {
-        kind: "computer";
-        storeRef: SealedStore;
-      };
+  sealedAt: Timestamp;
+  stageId: Id;
 }
 export interface CommitLookup {
   workspaceId: Id;
@@ -2562,15 +2660,25 @@ export interface ResyncRequired {
 export interface RevisionQuery {
   revision: Revision;
 }
+export interface RevocationComplete {
+  operationId: Id;
+  revocationId: Id;
+  state: "complete";
+  /**
+   * @maxItems 0
+   */
+  pendingRecipients: Recipient[];
+}
 export interface RevocationInput {
   requestId: Id;
   expectedGeneration: number;
 }
-export interface RevocationReceipt {
+export interface RevocationPending {
   operationId: Id;
   revocationId: Id;
-  state: "complete" | "pending";
+  state: "pending";
   /**
+   * @minItems 1
    * @maxItems 100
    */
   pendingRecipients: Recipient[];
@@ -2590,22 +2698,6 @@ export interface SnapshotReceipt {
   workspaceId: Id;
   revision: Revision;
   manifestHash: Sha256;
-}
-export interface StoreAllocation {
-  allocationId: Id;
-  childId: Id;
-  authorityId: Id;
-  workspaceId: Id;
-  role: "revision-store" | "scratch";
-  uploadId?: Id;
-  jobId?: Id;
-  executionId?: Id;
-  baseRevision: Revision;
-  generation: number;
-  operationDigest: Sha256;
-  capacityReservationId: Id;
-  reservedBytes: number;
-  deadline: Timestamp;
 }
 export interface StoreLookup {
   allocationId: Id;
@@ -2629,15 +2721,6 @@ export interface StoreSeal {
   uploadId: Id;
   manifestHash: Sha256;
   expectedVersion: number;
-}
-export interface StoreState {
-  allocation: StoreAllocation;
-  source: "registry" | "child";
-  version: number;
-  state: "allocated" | "writable" | "sealed" | "retiring" | "deleted";
-  measuredBytes?: number;
-  manifestHash?: Sha256;
-  tombstoneId?: Id;
 }
 export interface TicketQuery {
   ticket: string;
@@ -2667,6 +2750,21 @@ export interface UploadBegin {
    * @maxItems 4096
    */
   mutations: Mutation[];
+}
+/**
+ * Public commit of a validated upload. Authority resolves stageId, validates its private seal/local observation and computes commitDigest. Exact request retries recover the original receipt; callers never supply child IDs.
+ */
+export interface UploadCommit {
+  requestId: Id;
+  stageId: Id;
+  commitId: Id;
+  uploadId: Id;
+  operationId: Id;
+  jobId?: Id;
+  workspaceId: Id;
+  lease: Lease;
+  manifestHash: Sha256;
+  baseRevision: Revision;
 }
 export interface UploadStatus {
   uploadId: Id;
@@ -2747,7 +2845,7 @@ export interface WorkspaceReadQuery {
 }
 export interface WorkspaceTransaction {
   requestId: Id;
-  commit: CommitInput;
+  commit: UploadCommit;
   /**
    * @maxItems 4096
    */

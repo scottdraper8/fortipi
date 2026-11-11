@@ -356,7 +356,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 2048,
-              "pattern": "^https?://[^/]+$"
+              "pattern": "^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\\[[A-Fa-f0-9:.]+\\])(?::[0-9]{1,5})?$"
             }
           },
           "required": ["kind", "value"],
@@ -673,85 +673,88 @@
     },
     "CommitDigestInput": {
       "title": "CommitDigestInput",
-      "type": "object",
-      "properties": {
-        "commitId": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-        },
-        "uploadId": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-        },
-        "operationId": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-        },
-        "jobId": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-        },
-        "workspaceId": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-        },
-        "baseRevision": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
-        },
-        "manifestHash": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
-        },
-        "leaseIdentity": {
+      "oneOf": [
+        {
           "type": "object",
           "properties": {
-            "leaseId": {
+            "commitId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "uploadId": {
               "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
             },
             "operationId": {
               "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
             },
-            "ownerKind": {
-              "enum": ["job", "workspace-operation"]
-            },
             "jobId": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-            },
-            "credential": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
-            },
-            "registrationId": {
               "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
             },
             "workspaceId": {
               "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
             },
-            "executorId": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-            },
-            "executorGeneration": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
-            },
-            "fence": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence"
-            },
             "baseRevision": {
               "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+            },
+            "manifestHash": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "leaseIdentity": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LeaseIdentity"
+            },
+            "storage": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "computer"
+                },
+                "storeRef": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStore"
+                }
+              },
+              "required": ["kind", "storeRef"],
+              "additionalProperties": false
             }
           },
           "required": [
-            "leaseId",
+            "commitId",
+            "uploadId",
             "operationId",
-            "ownerKind",
-            "credential",
-            "registrationId",
             "workspaceId",
-            "executorId",
-            "executorGeneration",
-            "fence",
-            "baseRevision"
+            "baseRevision",
+            "manifestHash",
+            "leaseIdentity",
+            "storage"
           ],
           "additionalProperties": false
         },
-        "storage": {
-          "oneOf": [
-            {
+        {
+          "type": "object",
+          "properties": {
+            "commitId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "uploadId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "workspaceId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "baseRevision": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+            },
+            "manifestHash": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "leaseIdentity": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LeaseIdentity"
+            },
+            "storage": {
               "type": "object",
               "properties": {
                 "kind": {
@@ -780,34 +783,21 @@
                 "postManifestHash"
               ],
               "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "const": "computer"
-                },
-                "storeRef": {
-                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStore"
-                }
-              },
-              "required": ["kind", "storeRef"],
-              "additionalProperties": false
             }
-          ]
+          },
+          "required": [
+            "commitId",
+            "operationId",
+            "workspaceId",
+            "baseRevision",
+            "manifestHash",
+            "leaseIdentity",
+            "storage"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "commitId",
-        "uploadId",
-        "operationId",
-        "workspaceId",
-        "baseRevision",
-        "manifestHash",
-        "leaseIdentity",
-        "storage"
       ],
-      "additionalProperties": false
+      "description": "Native local commits have preparation/observation identity and may have no upload. Computer commits require an upload seal."
     },
     "ProtocolError": {
       "title": "ProtocolError",

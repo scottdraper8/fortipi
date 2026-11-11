@@ -171,19 +171,14 @@ export const administrationSchema = {
     },
     RevocationReceipt: {
       title: "RevocationReceipt",
-      type: "object",
-      properties: {
-        operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        revocationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        state: { enum: ["complete", "pending"] },
-        pendingRecipients: {
-          type: "array",
-          items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Recipient" },
-          maxItems: 100,
+      oneOf: [
+        {
+          $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationComplete",
         },
-      },
-      required: ["operationId", "revocationId", "state", "pendingRecipients"],
-      additionalProperties: false,
+        {
+          $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationPending",
+        },
+      ],
     },
     RotationReceipt: {
       title: "RotationReceipt",
@@ -419,6 +414,39 @@ export const administrationSchema = {
       type: "object",
       properties: { ticket: { type: "string", minLength: 1, maxLength: 256 } },
       required: ["ticket"],
+      additionalProperties: false,
+    },
+    RevocationComplete: {
+      title: "RevocationComplete",
+      type: "object",
+      properties: {
+        operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        revocationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        state: { const: "complete" },
+        pendingRecipients: {
+          type: "array",
+          items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Recipient" },
+          maxItems: 0,
+        },
+      },
+      required: ["operationId", "revocationId", "state", "pendingRecipients"],
+      additionalProperties: false,
+    },
+    RevocationPending: {
+      title: "RevocationPending",
+      type: "object",
+      properties: {
+        operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        revocationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        state: { const: "pending" },
+        pendingRecipients: {
+          type: "array",
+          items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Recipient" },
+          maxItems: 100,
+          minItems: 1,
+        },
+      },
+      required: ["operationId", "revocationId", "state", "pendingRecipients"],
       additionalProperties: false,
     },
   },
@@ -2623,7 +2651,13 @@ export const commonSchema = {
           type: "object",
           properties: {
             kind: { const: "browser" },
-            value: { type: "string", minLength: 1, maxLength: 2048, pattern: "^https?://[^/]+$" },
+            value: {
+              type: "string",
+              minLength: 1,
+              maxLength: 2048,
+              pattern:
+                "^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\\[[A-Fa-f0-9:.]+\\])(?::[0-9]{1,5})?$",
+            },
           },
           required: ["kind", "value"],
           additionalProperties: false,
@@ -2840,57 +2874,66 @@ export const commonSchema = {
     },
     CommitDigestInput: {
       title: "CommitDigestInput",
-      type: "object",
-      properties: {
-        commitId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        uploadId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        jobId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        baseRevision: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
-        },
-        manifestHash: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
-        },
-        leaseIdentity: {
+      oneOf: [
+        {
           type: "object",
           properties: {
-            leaseId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            commitId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            uploadId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
             operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-            ownerKind: { enum: ["job", "workspace-operation"] },
             jobId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-            credential: {
-              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
-            },
-            registrationId: {
-              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
-            },
             workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-            executorId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-            executorGeneration: { type: "integer", minimum: 0, maximum: 9007199254740991 },
-            fence: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence" },
             baseRevision: {
               $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
             },
+            manifestHash: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+            },
+            leaseIdentity: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LeaseIdentity",
+            },
+            storage: {
+              type: "object",
+              properties: {
+                kind: { const: "computer" },
+                storeRef: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStore",
+                },
+              },
+              required: ["kind", "storeRef"],
+              additionalProperties: false,
+            },
           },
           required: [
-            "leaseId",
+            "commitId",
+            "uploadId",
             "operationId",
-            "ownerKind",
-            "credential",
-            "registrationId",
             "workspaceId",
-            "executorId",
-            "executorGeneration",
-            "fence",
             "baseRevision",
+            "manifestHash",
+            "leaseIdentity",
+            "storage",
           ],
           additionalProperties: false,
         },
-        storage: {
-          oneOf: [
-            {
+        {
+          type: "object",
+          properties: {
+            commitId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            uploadId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            jobId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            baseRevision: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+            },
+            manifestHash: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+            },
+            leaseIdentity: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LeaseIdentity",
+            },
+            storage: {
               type: "object",
               properties: {
                 kind: { const: "local" },
@@ -2914,31 +2957,21 @@ export const commonSchema = {
               ],
               additionalProperties: false,
             },
-            {
-              type: "object",
-              properties: {
-                kind: { const: "computer" },
-                storeRef: {
-                  $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStore",
-                },
-              },
-              required: ["kind", "storeRef"],
-              additionalProperties: false,
-            },
+          },
+          required: [
+            "commitId",
+            "operationId",
+            "workspaceId",
+            "baseRevision",
+            "manifestHash",
+            "leaseIdentity",
+            "storage",
           ],
+          additionalProperties: false,
         },
-      },
-      required: [
-        "commitId",
-        "uploadId",
-        "operationId",
-        "workspaceId",
-        "baseRevision",
-        "manifestHash",
-        "leaseIdentity",
-        "storage",
       ],
-      additionalProperties: false,
+      description:
+        "Native local commits have preparation/observation identity and may have no upload. Computer commits require an upload seal.",
     },
     ProtocolError: {
       title: "ProtocolError",
@@ -5024,7 +5057,7 @@ export const workspacesSchema = {
       minLength: 1,
       maxLength: 1024,
       pattern:
-        "^(?!/)(?!.*(?:^|/)(?:\\.|\\.\\.|\\.[fF][oO][rR][tT][iI][pP][iI]|\\.[gG][iI][tT]|[nN][oO][dD][eE]_[mM][oO][dD][uU][lL][eE][sS]|\\.[cC][aA][cC][hH][eE]|\\.[nN][eE][xX][tT]|[dD][iI][sS][tT]|[bB][uU][iI][lL][dD]|[cC][oO][vV][eE][rR][aA][gG][eE]|\\.[sS][sS][hH]|\\.[aA][wW][sS]|\\.[nN][pP][mM][rR][cC]|\\.[pP][nN][pP][mM][rR][cC]|[aA][uU][tT][hH]\\.[jJ][sS][oO][nN]|[.][eE][nN][vV][^/]*|[cC][oO][nN](?:\\.[^/]*)?|[pP][rR][nN](?:\\.[^/]*)?|[aA][uU][xX](?:\\.[^/]*)?|[nN][uU][lL](?:\\.[^/]*)?|[cC][oO][mM][1-9](?:\\.[^/]*)?|[lL][pP][tT][1-9](?:\\.[^/]*)?|[^/]*\\.[kK][eE][yY]|[^/]*\\.[pP][eE][mM]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS][^/]*\\.[jJ][sS][oO][nN])(?:/|$))(?!.*[. ](?:/|$))(?!.*[\\\\\\u0000-\\u001f\\u007f:])[^/]+(?:/[^/]+)*$",
+        '^(?!/)(?!.*(?:^|/)(?:\\.|\\.\\.|\\.[fF][oO][rR][tT][iI][pP][iI]|\\.[gG][iI][tT]|[nN][oO][dD][eE]_[mM][oO][dD][uU][lL][eE][sS]|\\.[cC][aA][cC][hH][eE]|\\.[nN][eE][xX][tT]|[dD][iI][sS][tT]|[bB][uU][iI][lL][dD]|[cC][oO][vV][eE][rR][aA][gG][eE]|\\.[sS][sS][hH]|\\.[aA][wW][sS]|\\.[nN][pP][mM][rR][cC]|\\.[pP][nN][pP][mM][rR][cC]|[aA][uU][tT][hH]\\.[jJ][sS][oO][nN]|[.][eE][nN][vV][^/]*|[cC][oO][nN](?:\\.[^/]*)?|[pP][rR][nN](?:\\.[^/]*)?|[aA][uU][xX](?:\\.[^/]*)?|[nN][uU][lL](?:\\.[^/]*)?|[cC][oO][mM][1-9¹²³](?:\\.[^/]*)?|[lL][pP][tT][1-9¹²³](?:\\.[^/]*)?|[^/]*\\.[kK][eE][yY]|[^/]*\\.[pP][eE][mM]|[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS][^/]*\\.[jJ][sS][oO][nN])(?:/|$))(?!.*[. ](?:/|$))(?!.*[\\\\\\u0000-\\u001f\\u007f:<>"|?*])[^/]+(?:/[^/]+)*$',
       description:
         "NFC normalized valid UTF-8 relative POSIX path, at most1024 UTF-8 bytes. validateRelativePath additionally enforces byte length and normalization; filesystem adapters must enforce no-follow/race checks.",
     },
@@ -5642,7 +5675,7 @@ export const workspacesSchema = {
             },
             providerKind: { const: "computer" },
             storeRef: {
-              $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStore",
+              $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStoreReference",
             },
           },
           required: [
@@ -5728,7 +5761,7 @@ export const workspacesSchema = {
       properties: {
         requestId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
         commit: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/CommitInput",
+          $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/UploadCommit",
         },
         mutations: {
           type: "array",
@@ -5755,62 +5788,153 @@ export const workspacesSchema = {
     },
     StoreAllocation: {
       title: "StoreAllocation",
-      type: "object",
-      properties: {
-        allocationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        childId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        authorityId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        role: { enum: ["revision-store", "scratch"] },
-        uploadId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        jobId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        executionId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        baseRevision: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            allocationId: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+            },
+            childId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            authorityId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            role: { const: "revision-store" },
+            uploadId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            baseRevision: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+            },
+            generation: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            operationDigest: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+            },
+            capacityReservationId: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+            },
+            reservedBytes: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            deadline: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
+            },
+          },
+          required: [
+            "allocationId",
+            "childId",
+            "authorityId",
+            "workspaceId",
+            "role",
+            "baseRevision",
+            "generation",
+            "operationDigest",
+            "capacityReservationId",
+            "reservedBytes",
+            "deadline",
+            "uploadId",
+          ],
+          additionalProperties: false,
         },
-        generation: { type: "integer", minimum: 0, maximum: 9007199254740991 },
-        operationDigest: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+        {
+          type: "object",
+          properties: {
+            allocationId: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+            },
+            childId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            authorityId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            role: { const: "scratch" },
+            jobId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            executionId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            baseRevision: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+            },
+            generation: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            operationDigest: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+            },
+            capacityReservationId: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+            },
+            reservedBytes: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            deadline: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
+            },
+          },
+          required: [
+            "allocationId",
+            "childId",
+            "authorityId",
+            "workspaceId",
+            "role",
+            "baseRevision",
+            "generation",
+            "operationDigest",
+            "capacityReservationId",
+            "reservedBytes",
+            "deadline",
+            "jobId",
+            "executionId",
+          ],
+          additionalProperties: false,
         },
-        capacityReservationId: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
-        },
-        reservedBytes: { type: "integer", minimum: 0, maximum: 9007199254740991 },
-        deadline: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp" },
-      },
-      required: [
-        "allocationId",
-        "childId",
-        "authorityId",
-        "workspaceId",
-        "role",
-        "baseRevision",
-        "generation",
-        "operationDigest",
-        "capacityReservationId",
-        "reservedBytes",
-        "deadline",
       ],
-      additionalProperties: false,
     },
     StoreState: {
       title: "StoreState",
-      type: "object",
-      properties: {
-        allocation: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/StoreAllocation",
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            allocation: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/StoreAllocation",
+            },
+            source: { enum: ["registry", "child"] },
+            version: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            state: { enum: ["allocated", "writable"] },
+            measuredBytes: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            manifestHash: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+            },
+            tombstoneId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+          },
+          required: ["allocation", "source", "version", "state"],
+          additionalProperties: false,
         },
-        source: { enum: ["registry", "child"] },
-        version: { type: "integer", minimum: 0, maximum: 9007199254740991 },
-        state: { enum: ["allocated", "writable", "sealed", "retiring", "deleted"] },
-        measuredBytes: { type: "integer", minimum: 0, maximum: 9007199254740991 },
-        manifestHash: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+        {
+          type: "object",
+          properties: {
+            allocation: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/StoreAllocation",
+            },
+            source: { enum: ["registry", "child"] },
+            version: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            state: { enum: ["sealed"] },
+            measuredBytes: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            manifestHash: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+            },
+            tombstoneId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+          },
+          required: ["allocation", "source", "version", "state", "manifestHash"],
+          additionalProperties: false,
         },
-        tombstoneId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-      },
-      required: ["allocation", "source", "version", "state"],
-      additionalProperties: false,
+        {
+          type: "object",
+          properties: {
+            allocation: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/StoreAllocation",
+            },
+            source: { enum: ["registry", "child"] },
+            version: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            state: { enum: ["retiring", "deleted"] },
+            measuredBytes: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            manifestHash: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+            },
+            tombstoneId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+          },
+          required: ["allocation", "source", "version", "state", "tombstoneId"],
+          additionalProperties: false,
+        },
+      ],
     },
     StoreSeal: {
       title: "StoreSeal",
@@ -5850,6 +5974,7 @@ export const workspacesSchema = {
           $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
         },
         sealedAt: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp" },
+        stageId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
       },
       required: [
         "allocationId",
@@ -5859,6 +5984,7 @@ export const workspacesSchema = {
         "uploadId",
         "manifestHash",
         "sealedAt",
+        "stageId",
       ],
       additionalProperties: false,
     },
@@ -6640,6 +6766,126 @@ export const workspacesSchema = {
       required: ["commitDigest"],
       additionalProperties: false,
     },
+    UploadCommit: {
+      title: "UploadCommit",
+      type: "object",
+      properties: {
+        requestId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        stageId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        commitId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        uploadId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        jobId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        lease: { $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Lease" },
+        manifestHash: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+        },
+        baseRevision: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+        },
+      },
+      required: [
+        "requestId",
+        "stageId",
+        "commitId",
+        "uploadId",
+        "operationId",
+        "workspaceId",
+        "lease",
+        "manifestHash",
+        "baseRevision",
+      ],
+      additionalProperties: false,
+      description:
+        "Public commit of a validated upload. Authority resolves stageId, validates its private seal/local observation and computes commitDigest. Exact request retries recover the original receipt; callers never supply child IDs.",
+    },
+    SealedStoreReference: {
+      title: "SealedStoreReference",
+      type: "object",
+      properties: {
+        stageId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+      },
+      required: ["stageId"],
+      additionalProperties: false,
+      description:
+        "Opaque authority-issued stage identity; never a child Durable Object ID or routing capability.",
+    },
+    LeaseIdentity: {
+      title: "LeaseIdentity",
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            leaseId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            credential: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
+            },
+            registrationId: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+            },
+            workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            executorId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            executorGeneration: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            fence: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence" },
+            baseRevision: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+            },
+            ownerKind: { const: "job" },
+            jobId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+          },
+          required: [
+            "leaseId",
+            "operationId",
+            "credential",
+            "registrationId",
+            "workspaceId",
+            "executorId",
+            "executorGeneration",
+            "fence",
+            "baseRevision",
+            "ownerKind",
+            "jobId",
+          ],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: {
+            leaseId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            credential: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
+            },
+            registrationId: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+            },
+            workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            executorId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            executorGeneration: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+            fence: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence" },
+            baseRevision: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+            },
+            ownerKind: { const: "workspace-operation" },
+          },
+          required: [
+            "leaseId",
+            "operationId",
+            "credential",
+            "registrationId",
+            "workspaceId",
+            "executorId",
+            "executorGeneration",
+            "fence",
+            "baseRevision",
+            "ownerKind",
+          ],
+          additionalProperties: false,
+        },
+      ],
+    },
   },
 } as const;
 export const schemaRegistry = {
@@ -6697,6 +6943,10 @@ export const schemaRefs = {
   ModelPage: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ModelPage",
   AuditPage: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/AuditPage",
   TicketQuery: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/TicketQuery",
+  RevocationComplete:
+    "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationComplete",
+  RevocationPending:
+    "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationPending",
   Agent: "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/Agent",
   AgentCreate: "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/AgentCreate",
   AgentPatch: "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/AgentPatch",
@@ -6888,6 +7138,10 @@ export const schemaRefs = {
   WorkspacePage: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspacePage",
   CommitReceiptQuery:
     "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/CommitReceiptQuery",
+  UploadCommit: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/UploadCommit",
+  SealedStoreReference:
+    "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStoreReference",
+  LeaseIdentity: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LeaseIdentity",
 } as const;
 export const knownEventTypes = [
   "conversation.created",

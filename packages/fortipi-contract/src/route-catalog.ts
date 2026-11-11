@@ -55,6 +55,7 @@ export interface RouteDefinition {
   body: string | null;
   response: string | null;
   success: readonly number[];
+  successSchemas?: Readonly<Record<number, string>>;
   errors: readonly ErrorCode[];
   transport?: "bytes" | "upgrade";
   noStore?: boolean;
@@ -654,7 +655,7 @@ export const routeCatalog = [
     audience: "application",
     action: "workspace.write",
     query: "Empty",
-    body: "CommitInput",
+    body: "UploadCommit",
     response: "CommitReceipt",
     success: [200],
     errors: workspaceErrors,
@@ -819,6 +820,7 @@ export const routeCatalog = [
     body: "RevocationInput",
     response: "RevocationReceipt",
     success: [200, 202],
+    successSchemas: { 200: "RevocationComplete", 202: "RevocationPending" },
     errors: writeErrors,
     noStore: true,
     description:
@@ -850,6 +852,7 @@ export const routeCatalog = [
     body: "RevocationInput",
     response: "RevocationReceipt",
     success: [200, 202],
+    successSchemas: { 200: "RevocationComplete", 202: "RevocationPending" },
     errors: writeErrors,
     noStore: true,
     description:

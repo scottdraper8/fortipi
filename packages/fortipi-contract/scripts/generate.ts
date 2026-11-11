@@ -4,7 +4,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compile, type JSONSchema } from "json-schema-to-typescript";
-import { errorStatuses, routeCatalog } from "../src/route-catalog.ts";
+import { errorStatuses, type RouteDefinition, routeCatalog } from "../src/route-catalog.ts";
 
 type Schema = { [key: string]: unknown };
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -121,9 +121,18 @@ const schemaRef = (name: string) => {
 for (const route of routeCatalog) {
   assert.ok(!ids.has(route.operationId));
   ids.add(route.operationId);
+  const successSchemas: RouteDefinition["successSchemas"] =
+    "successSchemas" in route ? route.successSchemas : undefined;
+  for (const status of Object.keys(successSchemas ?? {}))
+    assert.ok(
+      (route.success as readonly number[]).includes(Number(status)),
+      `Unexpected success schema status ${status}`,
+    );
   const pathNames = [...route.path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1] as string);
-  const pathType = `{${pathNames.map((n) => `${JSON.stringify(n)}: ${n === "chunkIndex" ? "number" : "string"}`).join(";")}}`;
-  const request = `{operationId:${JSON.stringify(route.operationId)};path:${pathNames.length ? pathType : "T.Empty"};query:T.${route.query};body:${route.body ? `T.${route.body}` : "undefined"}}`;
+  const pathType = `{${pathNames.map((n) => `${JSON.stringify(n)}: ${n === "chunkIndex" ? "number" : n === "name" ? files.map((file) => JSON.stringify(file)).join("|") : "string"}`).join(";")}}`;
+  const bytesPut = "transport" in route && route.transport === "bytes" && route.method === "PUT";
+  const requestBody = bytesPut ? "Uint8Array" : route.body ? `T.${route.body}` : "undefined";
+  const request = `{operationId:${JSON.stringify(route.operationId)};path:${pathNames.length ? pathType : "T.Empty"};query:T.${route.query};body:${requestBody}}`;
   const successBody =
     "transport" in route && route.transport === "bytes" && route.method === "GET"
       ? "Uint8Array"
@@ -131,7 +140,11 @@ for (const route of routeCatalog) {
         ? `T.${route.response}`
         : "undefined";
   const response = route.success
-    .map((status) => `{status:${status};body:${successBody}}`)
+    .map((status) => {
+      const schema = successSchemas?.[status];
+      if (schema) schemaRef(schema);
+      return `{status:${status};body:${schema ? `T.${schema}` : successBody}}`;
+    })
     .concat(
       route.errors.map(
         (code) => `{status:${errorStatuses[code]};body:OperationError<${JSON.stringify(code)}>}`,
@@ -162,9 +175,19 @@ for (const route of routeCatalog) {
       in: "query",
       required: (queryDef.required as string[]).includes(name),
       schema,
+      ...(schema.type === "object" ||
+      (typeof schema.$ref === "string" &&
+        definitions[schema.$ref.split("/").at(-1) ?? ""]?.type === "object")
+        ? { style: "deepObject", explode: true }
+        : {}),
     });
   parameters.push({ name: "X-Request-Id", in: "header", required: false, schema: schemaRef("Id") });
-  if ("transport" in route && route.transport === "bytes" && route.method === "GET")
+  if (
+    "transport" in route &&
+    route.transport === "bytes" &&
+    route.method === "GET" &&
+    (route.success as readonly number[]).includes(206)
+  )
     parameters.push({
       name: "Range",
       in: "header",
@@ -175,10 +198,30 @@ for (const route of routeCatalog) {
   const headers: Record<string, unknown> = { "X-Request-Id": { schema: schemaRef("Id") } };
   if ("noStore" in route && route.noStore)
     headers["Cache-Control"] = { schema: { const: "no-store" } };
-  for (const status of route.success)
+  for (const status of route.success) {
+    const responseSchema = successSchemas?.[status] ?? route.response;
     responses[status] = {
       description: status === 101 ? "One-use ticket consumed; upgraded" : route.description,
-      headers,
+      headers: {
+        ...headers,
+        ...("transport" in route && route.transport === "bytes" && route.method === "GET"
+          ? {
+              "Content-Length": { schema: { type: "integer", minimum: 0 } },
+              "X-Content-SHA256": {
+                schema: schemaRef("Sha256"),
+                description:
+                  "SHA-256 of the exact response body, including a selected range. Verify with declared length before accepting bytes.",
+              },
+              ...(status === 206
+                ? {
+                    "Content-Range": {
+                      schema: { type: "string", pattern: "^bytes [0-9]+-[0-9]+/[0-9]+$" },
+                    },
+                  }
+                : {}),
+            }
+          : {}),
+      },
       ...(status === 101 || status === 204
         ? {}
         : {
@@ -189,11 +232,12 @@ for (const route of routeCatalog) {
                 schema:
                   "transport" in route && route.transport === "bytes"
                     ? { type: "string", contentMediaType: "application/octet-stream" }
-                    : schemaRef(route.response as string),
+                    : schemaRef(responseSchema as string),
               },
             },
           }),
     };
+  }
   for (const code of route.errors) {
     const status = errorStatuses[code];
     const existing = responses[status] as { "x-error-codes"?: string[] } | undefined;
@@ -226,7 +270,6 @@ for (const route of routeCatalog) {
       },
     };
   }
-  const bytesPut = "transport" in route && route.transport === "bytes" && route.method === "PUT";
   const body = route.body
     ? { required: true, content: { "application/json": { schema: schemaRef(route.body) } } }
     : bytesPut
@@ -263,7 +306,7 @@ for (const route of routeCatalog) {
     "x-max-body-bytes": "bodyBytes" in route ? route.bodyBytes : 1048576,
   };
 }
-const operationSource = `${banner}import type * as T from "./types.js";\n\ntype ErrorVariant<C, E=T.ErrorBody["error"]> = E extends {code:infer Codes} ? C extends Codes ? Omit<E,"code"> & {code:C} : never : never;\nexport type OperationError<C extends T.ErrorCode> = {error:ErrorVariant<C>};\nexport interface OperationMap {${operations.join(";\n")}}\nexport type OperationId = keyof OperationMap;\nexport type OperationRequest<K extends OperationId> = OperationMap[K]["request"];\nexport type OperationResponse<K extends OperationId> = OperationMap[K]["response"];\nexport type OperationSuccess<K extends OperationId> = Exclude<OperationResponse<K>,{body: {error:unknown}}> ;\nexport type OperationValue<K extends OperationId> = OperationSuccess<K>["body"];\n`;
+const operationSource = `${banner}import type * as T from "./types.js";\n\ntype ErrorVariant<C, E=T.ErrorBody["error"]> = E extends {code:infer Codes} ? C extends Codes ? Omit<E,"code"> & {code:C} : never : never;\nexport type OperationError<C extends T.ErrorCode> = {error:ErrorVariant<C>};\nexport interface OperationMap {${operations.join(";\n")}}\nexport type OperationId = keyof OperationMap;\nexport type OperationRequest<K extends OperationId> = {operationId:K} & OperationMap[K]["request"];\nexport type OperationResponse<K extends OperationId> = OperationMap[K]["response"];\nexport type OperationSuccess<K extends OperationId> = Exclude<OperationResponse<K>,{body: {error:unknown}}> ;\nexport type OperationValue<K extends OperationId> = OperationSuccess<K>["body"];\n`;
 const openapi = {
   openapi: "3.1.0",
   jsonSchemaDialect: "https://json-schema.org/draft/2020-12/schema",

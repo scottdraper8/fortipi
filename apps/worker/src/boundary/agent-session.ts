@@ -17,7 +17,7 @@ export interface AgentSessionRpc {
     ctx: D.RecoveryContext,
     input: D.Invalidation,
   ): Promise<D.Outcome<D.InvalidationAck>>;
-  ingestFacts(ctx: D.FactDeliveryContext, input: D.FactBatch): Promise<D.Outcome<D.FactAck>>;
+  ingestFacts(ctx: D.FactDeliveryContext, input: D.FactBatch): Promise<D.Outcome<D.FactBatchAck>>;
   describeJob: D.ApiMethod<"describeJob">;
   describeTask: D.ApiMethod<"describeTask">;
   describeApproval: D.ApiMethod<"describeApproval">;

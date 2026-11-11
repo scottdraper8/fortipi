@@ -245,27 +245,14 @@
     },
     "RevocationReceipt": {
       "title": "RevocationReceipt",
-      "type": "object",
-      "properties": {
-        "operationId": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+      "oneOf": [
+        {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationComplete"
         },
-        "revocationId": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-        },
-        "state": {
-          "enum": ["complete", "pending"]
-        },
-        "pendingRecipients": {
-          "type": "array",
-          "items": {
-            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Recipient"
-          },
-          "maxItems": 100
+        {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationPending"
         }
-      },
-      "required": ["operationId", "revocationId", "state", "pendingRecipients"],
-      "additionalProperties": false
+      ]
     },
     "RotationReceipt": {
       "title": "RotationReceipt",
@@ -617,6 +604,55 @@
         }
       },
       "required": ["ticket"],
+      "additionalProperties": false
+    },
+    "RevocationComplete": {
+      "title": "RevocationComplete",
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "revocationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "state": {
+          "const": "complete"
+        },
+        "pendingRecipients": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Recipient"
+          },
+          "maxItems": 0
+        }
+      },
+      "required": ["operationId", "revocationId", "state", "pendingRecipients"],
+      "additionalProperties": false
+    },
+    "RevocationPending": {
+      "title": "RevocationPending",
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "revocationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "state": {
+          "const": "pending"
+        },
+        "pendingRecipients": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Recipient"
+          },
+          "maxItems": 100,
+          "minItems": 1
+        }
+      },
+      "required": ["operationId", "revocationId", "state", "pendingRecipients"],
       "additionalProperties": false
     }
   }

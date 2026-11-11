@@ -1,6 +1,7 @@
 /** Compile-only consumers. No fake implementation or claim of runtime persistence. */
 
 import type { Models } from "@earendil-works/pi-ai/models";
+import { incrementSafe, manifestDigest, publicCommitReceipt } from "fortipi-contract";
 import type { AgentSessionRpc } from "../agent-session.js";
 import type { ControlPlaneRpc } from "../control-plane.js";
 import type * as D from "../dto.js";
@@ -96,6 +97,8 @@ export async function executionFlow(
   const registered = { ...ctx, registrationId: registration.registrationId };
   const reservation = value(
     await cp.reserveTarget(registered, {
+      ownerKind: "job",
+      operationId: "operation_1",
       jobId: "job_1",
       operationDigest: hash,
       agentId: "agent_1",
@@ -108,6 +111,7 @@ export async function executionFlow(
       expiresAt: 30000,
     }),
   );
+  if (reservation.ownerKind !== "job") throw new Error("Expected job reservation");
   const acquired = value(await workspace.acquireLease(registered, reservation));
   const actualIdentity = { ...identity, lease: acquired };
   const assignment: D.Assignment = {
@@ -123,65 +127,57 @@ export async function executionFlow(
   await cp.assignOnce(registered, assignment);
   await cp.queryExecution(registered, actualIdentity);
   const result = value(await workspace.collectResult(registered, actualIdentity));
-  await jobs.savePreparedResult(registered, {
-    identity: actualIdentity,
-    sequence: 1,
-    result,
-    deliveryId: "delivery_1",
-  });
-  const upload = await workspace.beginUpload(registered, {
-    operationId: "beginUpload",
-    path: { workspaceId: "workspace_1" },
-    query: {},
-    body: {
-      requestId: "request_1",
-      baseRevision: "revision_1",
-      lease: acquired,
-      operationId: "operation_1",
-      commitId: "commit_1",
-      manifestHash: hash,
-      manifest: { version: 1, entries: [] },
-      mutations: [],
-    },
-  });
-  void upload;
-  await workspace.validateUpload(registered, {
-    operationId: "validateUpload",
-    path: { workspaceId: "workspace_1", uploadId: "upload_1" },
-    query: {},
-    body: undefined,
-  });
-  const store = value(
-    await workspace.sealStore(registered, {
-      allocationId: "allocation_1",
-      childId: "child_1",
-      authorityId: "authority_1",
-      workspaceId: "workspace_1",
-      uploadId: "upload_1",
-      manifestHash: hash,
-      expectedVersion: 1,
+  const pending = value(
+    await jobs.savePreparedResult(registered, {
+      identity: actualIdentity,
+      sequence: result.sequence,
+      result,
+      deliveryId: "delivery_1",
     }),
   );
-  const receipt = value(
-    await workspace.commit(registered, {
-      commitId: "commit_1",
-      uploadId: "upload_1",
-      operationId: "operation_1",
-      jobId: "job_1",
-      workspaceId: "workspace_1",
-      commitDigest: hash,
-      lease: acquired,
-      manifestHash: hash,
-      baseRevision: "revision_1",
-      providerKind: "computer",
-      storeRef: store,
+  if (
+    pending.state !== "result_pending_commit" ||
+    result.state !== "succeeded" ||
+    !result.uploadId ||
+    !result.commitId ||
+    !result.manifestHash
+  )
+    throw new Error("Result requires observation/reconciliation or unchanged-base verification");
+  // Collect returns stage references, never a fabricated seal or canonical success.
+  const validation = value(
+    await workspace.validateUpload(registered, {
+      operationId: "validateUpload",
+      path: { workspaceId: reservation.workspaceId, uploadId: result.uploadId },
+      query: {},
+      body: undefined,
     }),
   );
+  if (validation.status !== 200) throw new Error("Stage validation failed");
+  const committed = value(
+    await workspace.commitUpload(registered, {
+      operationId: "commitUpload",
+      path: { workspaceId: reservation.workspaceId, uploadId: result.uploadId },
+      query: {},
+      body: {
+        requestId: "request_1",
+        stageId: validation.body.stageId,
+        commitId: result.commitId,
+        uploadId: result.uploadId,
+        operationId: acquired.operationId,
+        jobId: actualIdentity.jobId,
+        workspaceId: reservation.workspaceId,
+        lease: acquired,
+        baseRevision: acquired.baseRevision,
+        manifestHash: validation.body.manifestHash,
+      },
+    }),
+  );
+  if (committed.status !== 200) throw new Error("Commit requires recovery/reconciliation");
   const recovered = value(
     await workspace.getReceipt(registered, {
-      workspaceId: "workspace_1",
-      commitId: receipt.commitId,
-      commitDigest: receipt.commitDigest,
+      workspaceId: committed.body.workspaceId,
+      commitId: committed.body.commitId,
+      commitDigest: committed.body.commitDigest,
     }),
   );
   const facts = value(
@@ -192,7 +188,7 @@ export async function executionFlow(
   );
   const fact = facts.items[0];
   if (fact) {
-    const ack = value(
+    const batch = value(
       await agent.ingestFacts(
         {
           kind: "fact-delivery",
@@ -205,20 +201,24 @@ export async function executionFlow(
         { facts: [fact], recipient: { kind: "agent", id: "agent_1" } },
       ),
     );
-    await workspace.ackFacts(registered, {
-      factId: ack.factId,
-      recipient: ack.recipient,
-      eventId: "event_1",
-      eventSeq: 1,
-    });
+    for (const ack of batch.acks) await workspace.ackFacts(registered, ack);
   }
   await jobs.finalize(registered, {
-    jobId: "job_1",
-    expectedVersion: 5,
-    expectedState: "result_pending_commit",
+    jobId: pending.jobId,
+    expectedVersion: pending.version,
+    expectedState: pending.state,
     state: "completed",
     evidence: { kind: "committed", receipt: recovered },
-    event,
+    event: {
+      ...event,
+      type: "job.state.changed",
+      payload: {
+        ...pending,
+        state: "completed",
+        version: incrementSafe(pending.version),
+        evidence: { kind: "committed", receipt: publicCommitReceipt(recovered) },
+      },
+    },
   });
   // @ts-expect-error Final success requires receipt or unchanged-base evidence.
   await jobs.finalize(registered, {
@@ -243,6 +243,8 @@ export async function executionFlow(
     deadline: 50000,
   });
   await cp.reserveTarget(registered, {
+    ownerKind: "job",
+    operationId: "operation_1",
     jobId: "job_1",
     operationDigest: hash,
     agentId: "agent_1",
@@ -304,7 +306,9 @@ export async function localFlow(
   cp: ControlPlaneRpc,
   workspace: WorkspaceObjectRpc,
   ctx: D.AuthContext,
+  postManifest: D.Manifest,
 ) {
+  const postManifestHash = await manifestDigest(postManifest);
   const scope: D.LocalScope = {
     operationId: "operation_1",
     operationDigest: hash,
@@ -318,32 +322,27 @@ export async function localFlow(
     lease,
     deadline: 50000,
   };
-  const preparation: D.LocalPrepared = {
-    preparationId: "preparation_1",
-    operationId: "operation_1",
-    operationDigest: hash,
-    preManifestHash: hash,
-    expiresAt: 30000,
-    state: "prepared",
-  };
-  await cp.requestLocalWorkspace(ctx, {
-    ...scope,
-    kind: "prepare",
-    commitId: "commit_1",
-    expectedManifestHash: hash,
-    mode: {
-      kind: "staged-change",
-      uploadId: "upload_1",
-      stagedDigest: hash,
-      postManifestHash: hash,
-    },
-  });
+  const preparation = value(
+    await cp.requestLocalWorkspace(ctx, {
+      ...scope,
+      kind: "prepare",
+      commitId: "commit_1",
+      expectedManifestHash: hash,
+      mode: {
+        kind: "staged-change",
+        uploadId: "upload_1",
+        stagedDigest: hash,
+        postManifestHash,
+      },
+    }),
+  );
+  if (!("expiresAt" in preparation)) throw new Error("Expected durable local preparation");
   const intent = value(
     await workspace.prepareLocalCommit(ctx, {
       scope,
       commitId: "commit_1",
       preparation,
-      expectedPostManifestHash: hash,
+      expectedPostManifestHash: postManifestHash,
     }),
   );
   await cp.requestLocalWorkspace(ctx, {
@@ -352,40 +351,35 @@ export async function localFlow(
     preparationId: preparation.preparationId,
     commitId: intent.commitId,
   });
-  await cp.requestLocalWorkspace(ctx, {
-    ...scope,
-    kind: "observe",
-    preparationId: preparation.preparationId,
-    commitId: intent.commitId,
-  });
-  const observation: D.LocalObservation = {
-    operationId: "operation_1",
-    operationDigest: hash,
-    preparationId: preparation.preparationId,
-    commitId: intent.commitId,
-    observationSeq: 1,
-    preManifestHash: hash,
-    postManifestHash: hash,
-    appliedAt: 15000,
-    state: "applied",
-  };
+  const observation = value(
+    await cp.requestLocalWorkspace(ctx, {
+      ...scope,
+      kind: "observe",
+      preparationId: preparation.preparationId,
+      commitId: intent.commitId,
+    }),
+  );
+  if (!("observationSeq" in observation) || observation.state !== "applied")
+    throw new Error("Local application is uncertain; no metadata commit");
   const receipt = value(
     await workspace.commitLocal(ctx, {
       intent,
       observation,
-      manifest: { version: 1, entries: [] },
+      manifest: postManifest,
     }),
   );
-  await workspace.getReceipt(ctx, {
-    workspaceId: "workspace_1",
-    commitId: receipt.commitId,
-    commitDigest: receipt.commitDigest,
-  });
+  const recovered = value(
+    await workspace.getReceipt(ctx, {
+      workspaceId: "workspace_1",
+      commitId: receipt.commitId,
+      commitDigest: receipt.commitDigest,
+    }),
+  );
   await cp.requestLocalWorkspace(ctx, {
     ...scope,
     kind: "receipt",
     preparationId: preparation.preparationId,
-    receipt,
+    receipt: recovered,
   });
   const descriptor = value(
     await cp.openTransfer(ctx, {
@@ -400,8 +394,12 @@ export async function localFlow(
       executorGeneration: 4,
       credential,
       consumer: resources,
-      baseRevision: "revision_1",
-      content: { kind: "workspace-file", path: "src/main.ts", manifestHash: hash },
+      baseRevision: recovered.revision,
+      content: {
+        kind: "workspace-file",
+        path: "src/main.ts",
+        manifestHash: recovered.manifestHash,
+      },
       fileSha256: hash,
       size: 3,
       chunkBytes: 3,
@@ -423,7 +421,7 @@ export async function localFlow(
     executorId: "executor_1",
     executorGeneration: 4,
     credential,
-    revision: "revision_2",
+    revision: descriptor.baseRevision,
     deadline: 50000,
     path: "src/main.ts",
     transfers: [descriptor],
@@ -510,12 +508,26 @@ export async function factories(
   const contractVersion: "1.0" = await control.contractVersion;
   void contractVersion;
   await workspace.queryExecution(ctx, identity);
-  await agent.describeJob(ctx, {
+  const described = await agent.describeJob(ctx, {
     operationId: "describeJob",
     path: { id: "job_1" },
     query: {},
     body: undefined,
   });
+  if (described.ok && described.value.status === 200) {
+    const job: D.Job = described.value.body;
+    void job;
+  }
+  const staged = await workspace.validateUpload(ctx, {
+    operationId: "validateUpload",
+    path: { workspaceId: "workspace_1", uploadId: "upload_1" },
+    query: {},
+    body: undefined,
+  });
+  if (staged.ok && staged.value.status === 200) {
+    const validation: D.UploadValidation = staged.value.body;
+    void validation.stageId;
+  }
   const models: Models = value(
     await modelsFactory(
       [
@@ -558,4 +570,67 @@ export async function factories(
   // @ts-expect-error Public credential authority cannot resolve provider secrets.
   await cp.resolveProviderAuth(ctx, { providerId: "openai", modelId: "selected", deadline: 30000 });
   return { models, control, workspace, agent };
+}
+
+/** A direct workspace operation has no Pi job, task, agent or conversation requirement. */
+export async function directWorkspaceAuthority(
+  cp: ControlPlaneRpc,
+  workspace: WorkspaceObjectRpc,
+  ctx: D.AuthContext,
+) {
+  const registration = value(
+    await cp.registerAuthorityRecipient(ctx, {
+      credential,
+      recipient: { kind: "workspace", id: "workspace_1" },
+      resources,
+      executor: { executorId: "executor_1", generation: 4 },
+    }),
+  );
+  const registered = { ...ctx, registrationId: registration.registrationId };
+  const reservation = value(
+    await cp.reserveTarget(registered, {
+      ownerKind: "workspace-operation",
+      operationId: "workspace_operation_1",
+      operationDigest: hash,
+      workspaceId: "workspace_1",
+      bindingVersion: 1,
+      target,
+      actions: ["workspace.write"],
+      deadline: 50000,
+      expiresAt: 30000,
+    }),
+  );
+  const acquired = value(await workspace.acquireLease(registered, reservation));
+  if (acquired.ownerKind !== "workspace-operation") throw new Error("Wrong lease ownership");
+  const local: D.LocalScope = {
+    operationId: acquired.operationId,
+    operationDigest: reservation.operationDigest,
+    workspaceId: acquired.workspaceId,
+    bindingVersion: reservation.bindingVersion,
+    rootBindingId: "root_1",
+    executorId: acquired.executorId,
+    executorGeneration: acquired.executorGeneration,
+    credential: acquired.credential,
+    baseRevision: acquired.baseRevision,
+    lease: acquired,
+    deadline: reservation.deadline,
+  };
+  await cp.requestLocalWorkspace(registered, { ...local, kind: "observe", commitId: "commit_1" });
+  const executorIdentity: D.ExecutorIdentity = {
+    ...credential,
+    executorId: "executor_1",
+    executorGeneration: 4,
+    resources,
+    deploymentId: ctx.deploymentId,
+  };
+  // @ts-expect-error Credential generation alone cannot stand for executor execution generation.
+  const ambiguous: D.ExecutorIdentity = {
+    ...credential,
+    executorId: "executor_1",
+    resources,
+    deploymentId: ctx.deploymentId,
+  };
+  // @ts-expect-error Workspace-only reservation cannot authorize a job dispatch.
+  const jobReservation: Extract<D.TargetReservation, { ownerKind: "job" }> = reservation;
+  void [executorIdentity, ambiguous, jobReservation];
 }

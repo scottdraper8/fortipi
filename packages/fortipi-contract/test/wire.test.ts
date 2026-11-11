@@ -77,6 +77,15 @@ test("full independently enumerated route surface and resolvable schema/OpenAPI 
     get(route.query);
     if (route.body) get(route.body);
     if (route.response) get(route.response);
+    const schemas = "successSchemas" in route ? route.successSchemas : undefined;
+    for (const status of route.success) {
+      const name = schemas?.[status as 200 | 202] ?? route.response;
+      if (name)
+        assert.equal(
+          op.responses[status].content["application/json"].schema.$ref,
+          schemaRefs[name as keyof typeof schemaRefs],
+        );
+    }
     assert.deepEqual(
       Object.keys(op.responses).map(Number).sort(),
       [...new Set([...route.success, ...route.errors.map((e) => errorStatuses[e])])].sort(),
@@ -129,6 +138,33 @@ test("full independently enumerated route surface and resolvable schema/OpenAPI 
     false,
   );
   assert.equal(Object.keys(schemaRegistry).length, 15);
+  // Follow only definitions actually used by HTTP and executor messages, not unused private schema definitions.
+  const forbidden = new Set(["childId", "authorityId", "allocationId"]);
+  const visited = new Set<string>();
+  function publicShape(value: unknown): void {
+    if (Array.isArray(value)) {
+      value.forEach(publicShape);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const object = value as Record<string, unknown>;
+    if (typeof object.$ref === "string") {
+      if (visited.has(object.$ref)) return;
+      visited.add(object.$ref);
+      const [id, name] = object.$ref.split("#/$defs/");
+      const schema = Object.values(schemaRegistry).find((s) => s.$id === id);
+      assert.ok(schema && name);
+      publicShape((schema.$defs as Record<string, unknown>)[name]);
+    }
+    if (object.properties)
+      for (const key of Object.keys(object.properties))
+        assert.equal(forbidden.has(key), false, `Public schema exposes internal ${key}`);
+    Object.values(object).forEach(publicShape);
+  }
+  for (const route of routeCatalog)
+    for (const name of [route.body, route.response])
+      if (name) publicShape({ $ref: schemaRefs[name as keyof typeof schemaRefs] });
+  publicShape({ $ref: schemaRefs.ExecutorFrame });
 });
 test("semantic status matrix keeps cursor/range/quota errors at their actual routes", () => {
   const get = (id: string) => {
@@ -161,11 +197,42 @@ test("semantic status matrix keeps cursor/range/quota errors at their actual rou
     assert.equal(get(id).audience, "executor");
   assert.equal(get("putProviderAuth").body, "ProviderAuthPut");
   assert.equal(get("getProviderAuthStatus").response, "ProviderAuthStatus");
+  const spec = JSON.parse(readFileSync(new URL("../openapi.yaml", import.meta.url), "utf8"));
+  for (const id of ["putUploadChunk", "putExecutorTransferOutputChunk"]) {
+    const r = get(id);
+    assert.ok(spec.paths[r.path].put.requestBody.content["application/octet-stream"]);
+  }
+  for (const id of [
+    "readWorkspaceFile",
+    "getWorkspaceBlob",
+    "getWorkspaceArtifact",
+    "getAdminArtifact",
+    "getExecutorTransferInputChunk",
+  ]) {
+    const r = get(id),
+      op = spec.paths[r.path].get;
+    assert.ok(op.responses[200].headers["Content-Length"]);
+    assert.ok(op.responses[200].headers["X-Content-SHA256"]);
+    if (op.responses[206]) assert.ok(op.responses[206].headers["Content-Range"]);
+  }
+  const relay = get("getExecutorTransferInputChunk");
+  assert.equal(
+    spec.paths[relay.path].get.parameters.some((p: { name: string }) => p.name === "Range"),
+    false,
+  );
+  const read = get("readWorkspaceFile");
+  assert.equal(
+    spec.paths[read.path].get.parameters.find((p: { name: string }) => p.name === "range").style,
+    "deepObject",
+  );
 });
 test("browser bundles are portable and executor exports have no client commands", async () => {
   for (const name of ["index", "client", "executor"]) {
     const result = await build({
-      entryPoints: [new URL(`../src/${name}.ts`, import.meta.url).pathname],
+      stdin: {
+        contents: `export * from "fortipi-contract${name === "index" ? "" : `/${name}`}";`,
+        resolveDir: new URL("..", import.meta.url).pathname,
+      },
       bundle: true,
       platform: "browser",
       format: "esm",

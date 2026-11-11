@@ -1,7 +1,7 @@
-import type { AdmissionReceipt, ClientCommand, ClientEvent } from "../../src/client.js";
-import type { ExecutionIdentity, ExecutorFrame } from "../../src/executor.js";
+import type { AdmissionReceipt, ClientCommand, ClientEvent } from "fortipi-contract/client";
+import type { ExecutionIdentity, ExecutorFrame } from "fortipi-contract/executor";
 // @ts-expect-error Executor publication has no client authority commands.
-export type ExecutorClientAuthority = import("../../src/executor.js").ClientCommand;
+export type ExecutorClientAuthority = import("fortipi-contract/executor").ClientCommand;
 
 import type {
   CommitReceipt,
@@ -9,7 +9,7 @@ import type {
   OperationResponse,
   ProviderAuthPut,
   ProviderAuthStatus,
-} from "../../src/index.js";
+} from "fortipi-contract";
 export function publicFlows(
   identity: ExecutionIdentity,
   receipt: CommitReceipt,
@@ -54,7 +54,30 @@ export function publicFlows(
     // @ts-expect-error Redacted status cannot expose credentials.
     credential: oauth.credential,
   };
-  void [unknown, get, wrongStatus, status];
+  const chunk: OperationRequest<"putUploadChunk"> = {
+    operationId: "putUploadChunk",
+    path: {
+      workspaceId: "workspace_1",
+      uploadId: "upload_1",
+      sha256: "a".repeat(64),
+      chunkIndex: 0,
+    },
+    query: { length: 1, sha256: "a".repeat(64) },
+    body: new Uint8Array([0]),
+  };
+  // @ts-expect-error A binary PUT has bytes, rather than an absent HTTP body.
+  const missingBytes: OperationRequest<"putUploadChunk"> = { ...chunk, body: undefined };
+  // @ts-expect-error 200 revocation is complete, never a pending fanout.
+  const premature: OperationResponse<"revokeCredential"> = {
+    status: 200,
+    body: {
+      operationId: "operation_1",
+      revocationId: "revoke_1",
+      state: "pending",
+      pendingRecipients: [{ kind: "agent", id: "agent_1" }],
+    },
+  };
+  void [unknown, get, wrongStatus, status, missingBytes, premature];
   return { command, frame, response, oauth, receipt };
 }
 export function consumeEvent(event: ClientEvent): number | undefined {

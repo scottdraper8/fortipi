@@ -3,10 +3,12 @@ import type {
   AssignmentDigestInput,
   ClientEvent,
   CommitDigestInput,
+  CommitReceipt,
   InfrastructurePolicy,
   LocalScope,
   Manifest,
   OperationDigestInput,
+  ProviderAuthPut,
   TransferDescriptor,
 } from "./generated/types.js";
 export const protocolVersion = "1.0" as const;
@@ -103,6 +105,18 @@ export function assertUtf8Bytes(value: string, maximum: number): void {
   )
     throw new Error("payload_too_large");
 }
+/** Required in addition to structural schema validation: OAuth limits are encoded bytes. */
+export function validateProviderAuthPut(input: ProviderAuthPut): void {
+  assertUtf8Bytes(input.credential.access, 16384);
+  assertUtf8Bytes(input.credential.refresh, 16384);
+  assertUtf8Bytes(canonicalJson(input), 65536);
+}
+/** Browser Origin syntax/canonicalization; the authority separately checks its exact allowlist. */
+export function validateBrowserOrigin(origin: string): void {
+  const parsed = new URL(origin);
+  if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || parsed.origin !== origin)
+    throw new Error("invalid origin");
+}
 /** Protocol canonical JSON: UTF-16 key order, JSON encoding, -0 normalization; never accepts non-JSON values. */
 export function canonicalJson(value: unknown): string {
   const active = new Set<object>();
@@ -160,12 +174,97 @@ export async function digestJson(domain: DigestDomain, value: unknown): Promise<
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, "0")).join("");
 }
+function operationPreimage(input: OperationDigestInput): OperationDigestInput {
+  return {
+    deploymentId: input.deploymentId,
+    agentId: input.agentId,
+    conversationId: input.conversationId,
+    tool: input.tool,
+    arguments: input.arguments,
+    workspaceId: input.workspaceId,
+    baseRevision: input.baseRevision,
+    target:
+      input.target.kind === "executor"
+        ? {
+            kind: "executor",
+            executorId: input.target.executorId,
+            generation: input.target.generation,
+          }
+        : {
+            kind: "backend",
+            backendId: input.target.backendId,
+            generation: input.target.generation,
+          },
+    policyVersion: input.policyVersion,
+    grantVersion: input.grantVersion,
+    deadline: input.deadline,
+  };
+}
+/** Project the named preimage: structural TypeScript inputs can also carry mutable observations. */
 export const operationDigest = (input: OperationDigestInput): Promise<string> =>
-  digestJson("operation", input);
+  digestJson("operation", operationPreimage(input));
 export const assignmentDigest = (input: AssignmentDigestInput): Promise<string> =>
-  digestJson("assignment", input);
-export const commitDigest = (input: CommitDigestInput): Promise<string> =>
-  digestJson("commit", input);
+  digestJson("assignment", {
+    operation: operationPreimage(input.operation),
+    executionId: input.executionId,
+    reservationId: input.reservationId,
+    leaseId: input.leaseId,
+    fence: input.fence,
+    executorGeneration: input.executorGeneration,
+  });
+export function commitDigest(input: CommitDigestInput): Promise<string> {
+  const lease = input.leaseIdentity;
+  return digestJson("commit", {
+    commitId: input.commitId,
+    ...(input.uploadId === undefined ? {} : { uploadId: input.uploadId }),
+    operationId: input.operationId,
+    ...(input.jobId === undefined ? {} : { jobId: input.jobId }),
+    workspaceId: input.workspaceId,
+    baseRevision: input.baseRevision,
+    manifestHash: input.manifestHash,
+    leaseIdentity: {
+      leaseId: lease.leaseId,
+      operationId: lease.operationId,
+      ownerKind: lease.ownerKind,
+      ...(lease.ownerKind === "job" ? { jobId: lease.jobId } : {}),
+      credential: {
+        credentialId: lease.credential.credentialId,
+        generation: lease.credential.generation,
+        grantVersion: lease.credential.grantVersion,
+      },
+      registrationId: lease.registrationId,
+      workspaceId: lease.workspaceId,
+      executorId: lease.executorId,
+      executorGeneration: lease.executorGeneration,
+      fence: lease.fence,
+      baseRevision: lease.baseRevision,
+    },
+    storage: input.storage,
+  });
+}
+/** Explicit projection for all public HTTP, event and executor receipt delivery. */
+export function publicCommitReceipt(receipt: CommitReceipt): CommitReceipt {
+  const common = {
+    commitId: receipt.commitId,
+    ...(receipt.jobId === undefined ? {} : { jobId: receipt.jobId }),
+    operationId: receipt.operationId,
+    workspaceId: receipt.workspaceId,
+    commitDigest: receipt.commitDigest,
+    baseRevision: receipt.baseRevision,
+    revision: receipt.revision,
+    manifestHash: receipt.manifestHash,
+    sourceFactId: receipt.sourceFactId,
+    committedAt: receipt.committedAt,
+  };
+  return receipt.providerKind === "computer"
+    ? { ...common, providerKind: "computer", storeRef: { stageId: receipt.storeRef.stageId } }
+    : {
+        ...common,
+        providerKind: "local",
+        preparationId: receipt.preparationId,
+        observationSeq: receipt.observationSeq,
+      };
+}
 export function decodeWorkspacePath(encoded: string): string {
   const path = decodeURIComponent(encoded);
   validateRelativePath(path);
@@ -176,7 +275,7 @@ export function validateRelativePath(path: string): void {
   if (
     path !== path.normalize("NFC") ||
     new TextEncoder().encode(path).length > 1024 ||
-    /[\\:]/u.test(path) ||
+    /[\\:<>"|?*]/u.test(path) ||
     Array.from(path).some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)
   )
     throw new Error("invalid path");
@@ -188,7 +287,7 @@ export function validateRelativePath(path: string): void {
       s === "." ||
       s === ".." ||
       /[. ]$/.test(s) ||
-      /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/.test(s)
+      /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/.test(s)
     )
       throw new Error("path alias");
     if (
@@ -219,6 +318,7 @@ export function validateManifest(
   caseBehavior: "sensitive" | "insensitive" = "sensitive",
 ): void {
   const paths = new Map<string, string>();
+  const spellings = new Map<string, string>();
   if (manifest.version !== 1 || manifest.entries.length > 4096) throw new Error("manifest limit");
   if (new TextEncoder().encode(canonicalJson(manifest)).length > 524288)
     throw new Error("manifest bytes");
@@ -228,6 +328,16 @@ export function validateManifest(
     const key = caseBehavior === "insensitive" ? entry.path.toLowerCase() : entry.path;
     if (paths.has(key)) throw new Error("path collision");
     paths.set(key, entry.type);
+    if (caseBehavior === "insensitive") {
+      const segments = entry.path.split("/");
+      for (let i = 1; i <= segments.length; i++) {
+        const prefix = segments.slice(0, i).join("/");
+        const folded = prefix.toLowerCase();
+        if (spellings.has(folded) && spellings.get(folded) !== prefix)
+          throw new Error("path collision");
+        spellings.set(folded, prefix);
+      }
+    }
     if (entry.type === "file") {
       if (
         !Number.isSafeInteger(entry.size) ||
@@ -300,6 +410,24 @@ export function validateTransfer(descriptor: TransferDescriptor, now: number): v
     throw new Error("expired transfer");
   if (descriptor.lease && descriptor.expiresAt > descriptor.lease.expiresAt)
     throw new Error("transfer lease");
+  if (descriptor.content.kind === "workspace-file") validateRelativePath(descriptor.content.path);
+  if (descriptor.lease) {
+    const lease = descriptor.lease;
+    if (
+      lease.workspaceId !== descriptor.workspaceId ||
+      lease.operationId !== descriptor.operationId ||
+      lease.baseRevision !== descriptor.baseRevision ||
+      lease.executorId !== descriptor.executorId ||
+      lease.executorGeneration !== descriptor.executorGeneration ||
+      lease.credential.credentialId !== descriptor.credential.credentialId ||
+      lease.credential.generation !== descriptor.credential.generation ||
+      lease.credential.grantVersion !== descriptor.credential.grantVersion ||
+      (lease.ownerKind === "job"
+        ? lease.jobId !== descriptor.jobId
+        : descriptor.jobId !== undefined)
+    )
+      throw new Error("transfer lease identity");
+  }
   if (
     descriptor.chunkBytes < 1 ||
     descriptor.chunkBytes > 262144 ||
@@ -331,7 +459,10 @@ export function validateTransfer(descriptor: TransferDescriptor, now: number): v
       !descriptor.jobId)
   )
     throw new Error("output scope");
-  if (!descriptor.consumer.workspaceIds.includes(descriptor.workspaceId))
+  if (
+    !descriptor.consumer.workspaceIds.includes(descriptor.workspaceId) ||
+    !descriptor.consumer.executorIds.includes(descriptor.executorId)
+  )
     throw new Error("consumer scope");
 }
 /** Only immutable lease correlation and temporal eligibility. Owners still check current grants/floors/ledger/CAS. */

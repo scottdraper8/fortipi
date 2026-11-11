@@ -64,6 +64,11 @@ Lease expiry/renewal version and socket epoch are excluded. Reusing an ID with a
 changed immutable digest conflicts. A stable job mapping is persisted once from
 Pi task identity and operation digest.
 
+Digest helpers project their named preimages even when a structurally typed input
+contains a complete renewed lease. Native local commits may omit uploadId: their
+preparation and observation identify the effect without inventing an upload.
+Computer commit digests require the actual upload and immutable seal.
+
 Job transitions are created → awaiting_approval/authorized → queued or
 waiting_for_executor → leased → dispatch_attempted → running →
 result_pending_commit → completed. Waiting for local policy, workspace conflict,
@@ -88,6 +93,11 @@ excluding late start. Query never contains start arguments. After a lost commit
 ack, recover `getReceipt({workspaceId,commitId,commitDigest})` under current grants,
 even if the historical lease expired; never rerun the side effect.
 
+Fact ingestion returns `FactBatchAck.acks`, one persisted acknowledgment with the
+recipient-assigned eventId/eventSeq per fact. Forward these actual coordinates to
+the source outbox; callers cannot invent a cursor. Revoke responses discriminate
+200/complete from 202/pending, and complete has no pending recipients.
+
 ## Authorization, events and tickets
 
 Authenticate and authorize before existence, provider status or cursor disclosure.
@@ -102,6 +112,13 @@ durable; only then is it 200 complete. Floors fence delayed attach/acquire, rene
 result, apply and commit. Internal recovery/fact/model contexts are narrowly scoped
 and cannot be constructed from public headers. Entry strips internal headers.
 
+Target requests name operationId and ownerKind. Job reservations require job,
+agent and conversation identities and both recipient registrations; direct
+workspace-operation reservations require workspace authority without a fabricated
+Pi task. Only job reservations authorize execution preparation/dispatch. In private
+ExecutorIdentity, generation is the credential generation; executorGeneration is
+the separate execution generation.
+
 Mint tickets with an authenticated HTTPS POST. Default TTL 30s, maximum60s.
 Browser mode binds an exact allowlisted scheme/host/port and matching Origin;
 native mode requires no Origin. Reject null/unlisted Origins. Explicit preflight
@@ -112,6 +129,9 @@ generations/scope/Origin and registers the destination before upgrade. Exactly o
 redemption wins; failed upgrade consumes it. Forward the resulting nonsecret
 SocketIdentity once, then recheck local floors before attach and every command.
 Redact ticket queries in all proxy/request logs; never use reusable URL bearers.
+
+Validate OriginMode structurally and use `validateBrowserOrigin` for canonical
+HTTP(S) origin syntax, then check the exact configured allowlist and HTTP Origin.
 
 Durable envelopes include deployment, protocol/schema versions, conversation,
 event ID, contiguous eventSeq, timestamp, durability and typed payload. Snapshot
@@ -143,6 +163,25 @@ complete stream. Streaming failure errors/truncates after headers; final status 
 in descriptors, not trailers. Invalid range416; offline local owner503; missing
 historic local content409/revision_unavailable.
 
+Binary PUT operation bodies are Uint8Array. Byte GET responses declare
+Content-Length and X-Content-SHA256 for the exact response body; range responses
+also declare Content-Range. A relay chunk GET has no Range support. The optional
+read query object uses deepObject encoding (`range[start]`, `range[end]`); when a
+Range header is also present it must describe the same range or return400.
+Private bulk transport remains authenticated fetch, rather than JSON RPC.
+
+The public upload flow is begin → chunk PUT → validate → commit. Validation
+returns an opaque stageId; `UploadCommit` names that stage plus the original
+operation/commit/upload, lease/base and manifest. The authority resolves the stage
+to its own seal or local observation, computes commitDigest and checks all original
+eligibility conditions. Exact retries return the original receipt. Public
+WorkspaceTransaction uses the same UploadCommit plus explicit mutations. No caller
+needs or supplies a child allocation. Private CommitInput and WorkspaceTransaction
+retain full seal evidence. Private CommitReceipt carries that proof; wire
+CommitReceipt carries only opaque storeRef.stageId for computer revisions. Use
+`publicCommitReceipt` for HTTP, event and executor delivery, including nested job
+evidence; schema validation rejects leaked child/allocation/authority fields.
+
 Decode URL input exactly once (`decodeWorkspacePath`), then validate valid UTF-8,
 NFC relative POSIX paths, ≤1024 encoded bytes. Reject empty/dot/dot-dot segments,
 NUL/control/backslash/absolute/drive/UNC/ADS inputs, device names, trailing dot/space
@@ -156,6 +195,11 @@ and repeat validation at snapshot/read/stage/materialization. Filtered omissions
 never imply deletion: transactions use explicit put/delete/mkdir with staged data.
 Native root checks do not establish OS confinement or eliminate host-writer races.
 
+Reject Windows reserved characters and superscript COM/LPT device names as well
+as ASCII device names, following [Microsoft's naming rules](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file).
+Case-insensitive manifests reject inconsistent parent spelling too (`A/one` with
+`a/two`); native adapters must still check their actual filesystem's alias rules.
+
 Cloud upload seals immutable revision bytes. Authority atomically checks lease,
 expiry, credential/executor floor, fence, holder and base, then publishes pointer,
 receipt and recipient outbox; rejected staging/CAS preserves old pointer and bytes.
@@ -167,6 +211,11 @@ tombstones an unreferenced/unpinned child before deletion, mutually exclusive wi
 publication. Child checks the authority registry outside its mutex, never self-RPC.
 Deletion confirms deallocation, clears cached Computer handles, and forbids reuse
 or resurrection after deleteAll. Count unchanged copied bytes and scratch.
+
+Revision-store allocations require uploadId; scratch allocations require jobId
+and executionId. Sealed state requires manifestHash, and retiring/deleted states
+retain tombstoneId. A private SealedStore also carries the opaque stageId used for
+public receipt projection; this does not disclose the child lookup identity.
 
 One FIFO covers child Computer I/O, metadata and lazy pulls. Do not await cross-object
 calls while holding it, nest/self-acquire it, or hold it across long runtime waits.
@@ -239,6 +288,11 @@ models.auth.status/write/delete grants. Status returns only provider/version/
 generation/state/updatedAt. PUT is write-only OAuth (≤64KiB body, access/refresh
 ≤16KiB each, explicit bounded providerFields validated by registry), expectedVersion:
 null for first version; DELETE is versioned logout with retained tombstone.
+
+After schema validation, `validateProviderAuthPut` enforces UTF-8 access/refresh
+limits and the complete 64KiB canonical JSON body bound. The HTTP reader also caps
+the actual encoded request body before parsing; the provider registry validates
+extension fields. JSON Schema maxLength alone counts code points, not bytes.
 Principal/provider/requestId+digest idempotency returns receipt only. All auth,
 credential and transfer responses are no-store. No public credential retrieval or
 credential-bearing backup/fact/log exists. Config uses secretRef or OAuth providerId;
@@ -286,6 +340,7 @@ Public package declarations retain full checks.
 | Deterministic generation | Real generator and --check compare all outputs without writes | Disposable declaration and OpenAPI drift each fail; regenerated/restored check passes |
 | Portable identity | Independent Node SHA-256 bytes match canonical digest; sorted manifest relation holds | Pure JSON/path checks do not prove filesystem or durable ledger behavior |
 | Private signatures | Complete reserve/acquire/intent/query/stage/commit/receipt/fact/finalize, revoke/local/store/model flows compile; negative missing identity/authority/evidence calls rejected | No fake backend, process, database, OAuth transport or runtime persistence substituted as proof |
+| Enforced regressions | Exact commit preimage SHA-256 oracle; renewal stays identical while fence/generation/observation changes differ; public commit uses only validation stage and projects private receipts | Disposable emitted-helper mutation hashes renewal again and fails the digest oracle; disposable receipt schema exposes private seal again and fails the public receipt oracle; both restore/pass |
 
 The canonical phase3 thread-2 build report records exact source commit, commands,
 hook failures/skips and observed limitations. Downstream owners must prove actual

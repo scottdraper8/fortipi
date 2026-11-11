@@ -2,6 +2,18 @@ import type { CreateModelsOptions, Models } from "@earendil-works/pi-ai/models";
 import type * as T from "fortipi-contract";
 
 export type * from "fortipi-contract";
+/** Internal seal evidence stays at the authority; project it before returning a wire receipt. */
+export type CommitReceipt =
+  | (Omit<Extract<T.CommitReceipt, { providerKind: "computer" }>, "storeRef"> & {
+      storeRef: T.SealedStore;
+    })
+  | Extract<T.CommitReceipt, { providerKind: "local" }>;
+export type WorkspaceTransaction = Omit<T.WorkspaceTransaction, "commit"> & {
+  commit: T.CommitInput;
+};
+export type StoreAllocationRequest =
+  | Omit<Extract<T.StoreAllocation, { role: "revision-store" }>, "allocationId" | "childId">
+  | Omit<Extract<T.StoreAllocation, { role: "scratch" }>, "allocationId" | "childId">;
 export type Outcome<TValue> = { ok: true; value: TValue } | ({ ok: false } & T.ProtocolError);
 export type ApiMethod<K extends T.OperationId> = (
   ctx: AuthContext,
@@ -87,11 +99,9 @@ export interface SocketIdentity extends T.CredentialRef {
   expiresAt: number;
   executor?: { executorId: string; generation: number };
 }
-export interface TargetRequest {
-  jobId: string;
+interface TargetScope {
+  operationId: string;
   operationDigest: string;
-  agentId: string;
-  conversationId: string;
   workspaceId: string;
   bindingVersion: number;
   target: T.BackendRef;
@@ -99,13 +109,26 @@ export interface TargetRequest {
   deadline: number;
   expiresAt: number;
 }
-export interface TargetReservation extends TargetRequest {
+export type TargetRequest = TargetScope &
+  (
+    | { ownerKind: "job"; jobId: string; agentId: string; conversationId: string }
+    | { ownerKind: "workspace-operation"; agentId?: string; conversationId?: string }
+  );
+interface ReservationAuthority {
   reservationId: string;
   credential: T.CredentialRef;
-  registrationIds: { agent: string; workspace: string };
 }
+export type TargetReservation = ReservationAuthority &
+  (
+    | (Extract<TargetRequest, { ownerKind: "job" }> & {
+        registrationIds: { agent: string; workspace: string };
+      })
+    | (Extract<TargetRequest, { ownerKind: "workspace-operation" }> & {
+        registrationIds: { agent?: string; workspace: string };
+      })
+  );
 export interface DispatchIntent {
-  reservation: TargetReservation;
+  reservation: Extract<TargetReservation, { ownerKind: "job" }>;
   assignment: T.Assignment;
   expectedJobVersion: number;
 }
@@ -162,7 +185,7 @@ export interface ReleaseReceipt {
   tombstoneId: string;
 }
 export interface ExecutionRequest {
-  reservation: TargetReservation;
+  reservation: Extract<TargetReservation, { ownerKind: "job" }>;
   identity: T.ExecutionIdentity;
   tool: string;
   arguments: T.JsonObject;
@@ -226,10 +249,11 @@ export interface FactAckRequest {
   eventId: string;
   eventSeq: number;
 }
-export interface FactAck {
-  factId: string;
-  recipient: T.Recipient;
+export interface FactAck extends FactAckRequest {
   persisted: true;
+}
+export interface FactBatchAck {
+  acks: FactAck[];
 }
 export interface FactBatch {
   facts: Fact[];
@@ -270,7 +294,7 @@ export type FinalizeJob = {
 } & (
   | {
       state: "completed";
-      evidence: { kind: "committed"; receipt: T.CommitReceipt } | T.UnchangedBase;
+      evidence: { kind: "committed"; receipt: CommitReceipt } | T.UnchangedBase;
     }
   | {
       state: "failed" | "cancelled" | "interrupted" | "expired" | "requires_reconciliation";
@@ -351,7 +375,7 @@ export interface ExecutorProof {
 }
 export interface ExecutorIdentity extends T.CredentialRef {
   executorId: string;
-  generation: number;
+  executorGeneration: number;
   resources: T.ResourceScope;
   deploymentId: string;
 }

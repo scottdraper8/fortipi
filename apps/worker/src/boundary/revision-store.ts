@@ -3,7 +3,7 @@ import type * as D from "./dto.js";
 export interface RevisionStoreRpc {
   allocateStore(
     ctx: D.AuthContext,
-    input: Omit<D.StoreAllocation, "allocationId" | "childId">,
+    input: D.StoreAllocationRequest,
   ): Promise<D.Outcome<D.StoreAllocation>>;
   describeStore(ctx: D.AuthContext, input: D.StoreLookup): Promise<D.Outcome<D.StoreState>>;
   initializeStore(ctx: D.AuthContext, input: D.StoreAllocation): Promise<D.Outcome<D.StoreState>>;

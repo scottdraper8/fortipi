@@ -3,9 +3,12 @@ import test from "node:test";
 import {
   freeInfrastructurePolicy,
   incrementSafe,
+  publicCommitReceipt,
   requireCapability,
+  validateBrowserOrigin,
   validateLocalLease,
   validateManifest,
+  validateProviderAuthPut,
   validateRelativePath,
   validateTransfer,
 } from "../dist/index.js";
@@ -116,6 +119,16 @@ test("tickets, generic floors and OAuth redaction/CAS", () => {
   });
   rejected("OriginMode", { kind: "browser", value: "null" });
   rejected("OriginMode", { kind: "browser", value: "https://example.test/path" });
+  for (const origin of [
+    "https://user:pass@example.test",
+    "https://example.test?query",
+    "https://example.test#fragment",
+    "https://example.test:99999",
+  ]) {
+    assert.throws(() => validateBrowserOrigin(origin));
+    if (!origin.endsWith(":99999")) rejected("OriginMode", { kind: "browser", value: origin });
+  }
+  assert.doesNotThrow(() => validateBrowserOrigin("https://example.test:8443"));
   for (const subject of [
     { kind: "credential", credentialId: "credential_1", minimumGeneration: 3 },
     { kind: "executor", executorId: "executor_1", minimumGeneration: 5 },
@@ -157,6 +170,34 @@ test("tickets, generic floors and OAuth redaction/CAS", () => {
     access: "synthetic",
   });
   accepted("ProviderAuthDelete", { requestId: "request_1", expectedVersion: 1 });
+  const oauth = {
+    requestId: "request_1",
+    expectedVersion: null,
+    credential: {
+      type: "oauth" as const,
+      access: "é".repeat(8192),
+      refresh: "synthetic",
+      expires: 1,
+    },
+  };
+  accepted("ProviderAuthPut", oauth);
+  assert.doesNotThrow(() => validateProviderAuthPut(oauth));
+  assert.throws(
+    () =>
+      validateProviderAuthPut({
+        ...oauth,
+        credential: { ...oauth.credential, access: "é".repeat(8193) },
+      }),
+    /payload_too_large/,
+  );
+  assert.throws(
+    () =>
+      validateProviderAuthPut({
+        ...oauth,
+        credential: { ...oauth.credential, providerFields: { extension: "x".repeat(65536) } },
+      }),
+    /payload_too_large/,
+  );
   for (const state of ["configured", "absent", "reauth_required"])
     accepted("ProviderAuthReceipt", { providerId: "openai", version: 2, generation: 2, state });
 });
@@ -299,7 +340,16 @@ test("permanent store lifecycle and exact bounded relay descriptors", () => {
   };
   accepted("StoreAllocation", allocation);
   for (const state of ["allocated", "writable", "sealed", "retiring", "deleted"])
-    accepted("StoreState", { allocation, source: "registry", version: 1, state });
+    accepted("StoreState", {
+      allocation,
+      source: "registry",
+      version: 1,
+      state,
+      ...(state === "sealed" ? { manifestHash: hash } : {}),
+      ...(["retiring", "deleted"].includes(state) ? { tombstoneId: "tombstone_1" } : {}),
+    });
+  rejected("StoreAllocation", { ...allocation, role: "scratch" });
+  rejected("StoreState", { allocation, source: "registry", version: 1, state: "deleted" });
   rejected("StoreAllocation", { ...allocation, role: "authority" });
   rejected("StoreRetirement", {
     allocationId: "allocation_1",
@@ -317,10 +367,86 @@ test("permanent store lifecycle and exact bounded relay descriptors", () => {
   ])
     assert.throws(() => validateTransfer(d, 100));
   assert.throws(() => validateTransfer(transfer, transfer.expiresAt));
+  const stage = {
+    ...transfer,
+    direction: "to-executor" as const,
+    purpose: "local-stage" as const,
+    jobId: identity.jobId,
+    executionId: identity.executionId,
+    lease,
+    content: { ...transfer.content, uploadId: "upload_1" },
+  };
+  accepted("TransferDescriptor", stage);
+  assert.doesNotThrow(() => validateTransfer(stage, 100));
+  for (const changed of [
+    { ...stage, lease: { ...lease, workspaceId: "different_workspace" } },
+    { ...stage, lease: { ...lease, executorGeneration: 5 } },
+    { ...stage, lease: { ...lease, jobId: "different_job" } },
+    { ...stage, consumer: { ...resources, executorIds: [] } },
+  ])
+    assert.throws(() => validateTransfer(changed, 100));
   rejected("TransferChunkQuery", { attemptId: "attempt_1", length: 262145, sha256: hash });
   accepted("TransferChunkQuery", { attemptId: "attempt_1", length: 262144, sha256: hash });
   rejected("TransferQuery", {});
   rejected("TransferChunkQuery", { attemptId: "attempt_1", length: 3, sha256: "bad" });
+});
+test("public commits use only authority-issued opaque stages", () => {
+  const commit = {
+    requestId: "request_1",
+    stageId: "stage_1",
+    commitId: "commit_1",
+    uploadId: "upload_1",
+    operationId: lease.operationId,
+    jobId: lease.jobId,
+    workspaceId: lease.workspaceId,
+    lease,
+    manifestHash: hash,
+    baseRevision: lease.baseRevision,
+  };
+  accepted("UploadCommit", commit);
+  rejected("UploadCommit", { ...commit, storeRef: { childId: "caller_chosen_child" } });
+  rejected("UploadCommit", { ...commit, stageId: undefined });
+  accepted("WorkspaceTransaction", { requestId: "request_1", commit, mutations: [] });
+  const seal = {
+    stageId: "stage_1",
+    allocationId: "allocation_1",
+    childId: "child_1",
+    authorityId: "authority_1",
+    workspaceId: lease.workspaceId,
+    uploadId: "upload_1",
+    manifestHash: hash,
+    sealedAt: 15000,
+  };
+  accepted("SealedStore", seal);
+  const { preparationId: _preparation, observationSeq: _observation, ...common } = receipt;
+  const privateReceipt = { ...common, providerKind: "computer" as const, storeRef: seal };
+  rejected("CommitReceipt", privateReceipt);
+  const publicReceipt = publicCommitReceipt(privateReceipt);
+  accepted("CommitReceipt", publicReceipt);
+  assert.deepEqual(publicReceipt, {
+    ...common,
+    providerKind: "computer",
+    storeRef: { stageId: "stage_1" },
+  });
+  assert.equal(JSON.stringify(publicReceipt).includes("child_1"), false);
+  accepted("RevocationComplete", {
+    operationId: "operation_1",
+    revocationId: "revocation_1",
+    state: "complete",
+    pendingRecipients: [],
+  });
+  rejected("RevocationComplete", {
+    operationId: "operation_1",
+    revocationId: "revocation_1",
+    state: "pending",
+    pendingRecipients: [],
+  });
+  rejected("RevocationReceipt", {
+    operationId: "operation_1",
+    revocationId: "revocation_1",
+    state: "complete",
+    pendingRecipients: [{ kind: "agent", id: "agent_1" }],
+  });
 });
 test("path aliases, exclusions and overflow fail closed", () => {
   for (const path of [
@@ -333,11 +459,20 @@ test("path aliases, exclusions and overflow fail closed", () => {
     "a/AUTH.json",
     "a/id.PEM",
     "a/CON.txt",
+    "a/COM¹.txt",
+    "a/LPT²",
+    "a/with?wildcard",
+    "a/with*wildcard",
+    "a/with|pipe",
+    "a/with<angle",
+    'a/with"quote',
     "trailing.",
     "a//b",
     "e\u0301.txt",
-  ])
+  ]) {
     assert.throws(() => validateRelativePath(path), path);
+    if (path !== "e\u0301.txt") rejected("RelativePath", path);
+  }
   assert.doesNotThrow(() => validateRelativePath("src/main.ts"));
   assert.throws(() =>
     validateManifest(
@@ -351,6 +486,17 @@ test("path aliases, exclusions and overflow fail closed", () => {
       "insensitive",
     ),
   );
+  for (const entries of [
+    [
+      { path: "A", type: "directory" as const, mode: 493 as const },
+      { path: "a/child", type: "directory" as const, mode: 493 as const },
+    ],
+    [
+      { path: "A/one", type: "directory" as const, mode: 493 as const },
+      { path: "a/two", type: "directory" as const, mode: 493 as const },
+    ],
+  ])
+    assert.throws(() => validateManifest({ version: 1, entries }, "insensitive"), /collision/);
   accepted("Sequence", Number.MAX_SAFE_INTEGER);
   rejected("Sequence", Number.MAX_SAFE_INTEGER + 1);
   assert.throws(() => incrementSafe(Number.MAX_SAFE_INTEGER));

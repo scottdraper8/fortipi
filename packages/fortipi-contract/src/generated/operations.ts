@@ -23,7 +23,29 @@ export interface OperationMap {
       | { status: 500; body: OperationError<"internal"> };
   };
   getSchema: {
-    request: { operationId: "getSchema"; path: { name: string }; query: T.Empty; body: undefined };
+    request: {
+      operationId: "getSchema";
+      path: {
+        name:
+          | "administration.schema.json"
+          | "agents.schema.json"
+          | "approvals.schema.json"
+          | "client-commands.schema.json"
+          | "client-events.schema.json"
+          | "common.schema.json"
+          | "configuration.schema.json"
+          | "conversations.schema.json"
+          | "discovery.schema.json"
+          | "executor-messages.schema.json"
+          | "infrastructure.schema.json"
+          | "jobs.schema.json"
+          | "tasks.schema.json"
+          | "transfers.schema.json"
+          | "workspaces.schema.json";
+      };
+      query: T.Empty;
+      body: undefined;
+    };
     response:
       | { status: 200; body: T.JsonObject }
       | { status: 400; body: OperationError<"invalid_request"> }
@@ -752,7 +774,7 @@ export interface OperationMap {
       operationId: "putUploadChunk";
       path: { workspaceId: string; uploadId: string; sha256: string; chunkIndex: number };
       query: T.ChunkQuery;
-      body: undefined;
+      body: Uint8Array;
     };
     response:
       | { status: 204; body: undefined }
@@ -802,7 +824,7 @@ export interface OperationMap {
       operationId: "commitUpload";
       path: { workspaceId: string; uploadId: string };
       query: T.Empty;
-      body: T.CommitInput;
+      body: T.UploadCommit;
     };
     response:
       | { status: 200; body: T.CommitReceipt }
@@ -958,7 +980,7 @@ export interface OperationMap {
       operationId: "putExecutorTransferOutputChunk";
       path: { transferId: string; chunkIndex: number };
       query: T.TransferChunkQuery;
-      body: undefined;
+      body: Uint8Array;
     };
     response:
       | { status: 204; body: undefined }
@@ -1027,8 +1049,8 @@ export interface OperationMap {
       body: T.RevocationInput;
     };
     response:
-      | { status: 200; body: T.RevocationReceipt }
-      | { status: 202; body: T.RevocationReceipt }
+      | { status: 200; body: T.RevocationComplete }
+      | { status: 202; body: T.RevocationPending }
       | { status: 400; body: OperationError<"invalid_request"> }
       | { status: 401; body: OperationError<"unauthenticated"> }
       | { status: 403; body: OperationError<"unauthorized"> }
@@ -1072,8 +1094,8 @@ export interface OperationMap {
       body: T.RevocationInput;
     };
     response:
-      | { status: 200; body: T.RevocationReceipt }
-      | { status: 202; body: T.RevocationReceipt }
+      | { status: 200; body: T.RevocationComplete }
+      | { status: 202; body: T.RevocationPending }
       | { status: 400; body: OperationError<"invalid_request"> }
       | { status: 401; body: OperationError<"unauthenticated"> }
       | { status: 403; body: OperationError<"unauthorized"> }
@@ -1320,7 +1342,9 @@ export interface OperationMap {
   };
 }
 export type OperationId = keyof OperationMap;
-export type OperationRequest<K extends OperationId> = OperationMap[K]["request"];
+export type OperationRequest<K extends OperationId> = {
+  operationId: K;
+} & OperationMap[K]["request"];
 export type OperationResponse<K extends OperationId> = OperationMap[K]["response"];
 export type OperationSuccess<K extends OperationId> = Exclude<
   OperationResponse<K>,

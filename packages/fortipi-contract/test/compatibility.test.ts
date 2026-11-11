@@ -4,11 +4,20 @@ import test from "node:test";
 import {
   assertUtf8Bytes,
   canonicalJson,
+  commitDigest,
   digestJson,
+  knownEventTypes,
   manifestDigest,
   nextEventCursor,
 } from "../dist/index.js";
-import { eventBase, messageEvent, unknownDurable, validators } from "./fixtures/wire.ts";
+import {
+  eventBase,
+  hash,
+  lease,
+  messageEvent,
+  unknownDurable,
+  validators,
+} from "./fixtures/wire.ts";
 
 const { get } = validators();
 test("malformed known event cannot become an unknown extension", () => {
@@ -16,10 +25,72 @@ test("malformed known event cannot become an unknown extension", () => {
   assert.equal(validate({ ...messageEvent, payload: {} }), false, "malformed-known exclusion");
   assert.equal(validate(messageEvent), true, JSON.stringify(validate.errors));
   assert.equal(validate({ ...messageEvent, eventSeq: 0 }), false);
+  for (const type of knownEventTypes) {
+    assert.equal(
+      validate({ ...unknownDurable, type, payload: {} }),
+      false,
+      `malformed durable ${type}`,
+    );
+    assert.equal(
+      validate({ ...eventBase, durability: "volatile", type, payload: {} }),
+      false,
+      `malformed volatile ${type}`,
+    );
+  }
   assert.equal(validate(unknownDurable), true);
   assert.equal(nextEventCursor(0, unknownDurable), 1);
   assert.equal(nextEventCursor(1, unknownDurable), 1);
   assert.throws(() => nextEventCursor(0, { ...unknownDurable, eventSeq: 2 }), /resync/);
+});
+test("commit identity survives lease renewal and changes with immutable authority", async () => {
+  const input = {
+    commitId: "commit_1",
+    uploadId: "upload_1",
+    operationId: lease.operationId,
+    jobId: lease.jobId,
+    workspaceId: lease.workspaceId,
+    baseRevision: lease.baseRevision,
+    manifestHash: hash,
+    leaseIdentity: lease,
+    storage: {
+      kind: "local" as const,
+      preparationId: "preparation_1",
+      observationSeq: 1,
+      preManifestHash: hash,
+      postManifestHash: hash,
+    },
+  };
+  const expected =
+    '{"baseRevision":"revision_1","commitId":"commit_1","jobId":"job_1","leaseIdentity":{"baseRevision":"revision_1","credential":{"credentialId":"credential_1","generation":2,"grantVersion":3},"executorGeneration":4,"executorId":"executor_1","fence":"7","jobId":"job_1","leaseId":"lease_1","operationId":"operation_1","ownerKind":"job","registrationId":"registration_1","workspaceId":"workspace_1"},"manifestHash":"' +
+    hash +
+    '","operationId":"operation_1","storage":{"kind":"local","observationSeq":1,"postManifestHash":"' +
+    hash +
+    '","preManifestHash":"' +
+    hash +
+    '","preparationId":"preparation_1"},"uploadId":"upload_1","workspaceId":"workspace_1"}';
+  const digest = await commitDigest(input);
+  const { uploadId: _upload, ...nativeCommit } = input;
+  assert.notEqual(
+    await commitDigest(nativeCommit),
+    digest,
+    "Native local evidence needs no fictitious upload",
+  );
+  const renewedLease = { ...lease, expiresAt: 40000, leaseVersion: 2 };
+  assert.equal(digest, createHash("sha256").update(`fortipi:commit:v1\n${expected}`).digest("hex"));
+  assert.equal(
+    digest,
+    await commitDigest({
+      ...input,
+      leaseIdentity: renewedLease,
+    }),
+    "renewal is excluded from immutable identity",
+  );
+  for (const changed of [
+    { ...input, leaseIdentity: { ...lease, fence: "8" } },
+    { ...input, leaseIdentity: { ...lease, credential: { ...lease.credential, generation: 3 } } },
+    { ...input, storage: { ...input.storage, observationSeq: 2 } },
+  ])
+    assert.notEqual(digest, await commitDigest(changed));
 });
 test("volatile deltas omit sequence and never advance durable cursor", () => {
   const delta = {
