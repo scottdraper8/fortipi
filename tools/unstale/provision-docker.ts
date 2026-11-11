@@ -321,24 +321,111 @@ async function startPrivateContainerd(
   throw new Error("Private bundled containerd startup failed or timed out");
 }
 
+// Reuse provenance is local to one Actions job and one frozen source revision.
+export interface RootlesskitJob {
+  runId: string;
+  attempt: string;
+  job: string;
+  sourceCommit: string;
+  mode: "rootless";
+}
+export interface RootlesskitBuild {
+  source: string;
+  sourceArchiveSha256: string;
+  compiler: string;
+  binarySha256: string;
+  modules: string;
+  packages: string;
+  build: string;
+  buildDirectory: string;
+  job?: RootlesskitJob;
+}
+type RootlesskitPin = typeof policy.rootless.rootlesskit;
+export function assertRootlesskitReuse(
+  record: RootlesskitBuild,
+  job: RootlesskitJob,
+  observed: {
+    directory: string;
+    binarySha256: string;
+    goModSha256: string;
+    goSumSha256: string;
+    build: string;
+  },
+  pin: RootlesskitPin,
+): void {
+  try {
+    assert.deepEqual(
+      Object.keys(record).sort(),
+      [
+        "source",
+        "sourceArchiveSha256",
+        "compiler",
+        "binarySha256",
+        "modules",
+        "packages",
+        "build",
+        "buildDirectory",
+        "job",
+      ].sort(),
+    );
+    assert.deepEqual(record.job, job);
+    assert.equal(record.buildDirectory, observed.directory);
+    assert.equal(record.source, pin.source);
+    assert.equal(record.sourceArchiveSha256, pin.sourceArchiveSha256);
+    assert.equal(record.compiler, pin.go);
+    assert.equal(record.binarySha256, pin.binarySha256);
+    assert.equal(observed.binarySha256, pin.binarySha256);
+    assert.equal(observed.goModSha256, pin.goModSha256);
+    assert.equal(observed.goSumSha256, pin.goSumSha256);
+    assert.equal(hash(Buffer.from(record.modules)), pin.moduleGraphSha256);
+    assert.equal(hash(Buffer.from(record.packages)), pin.packageGraphSha256);
+    assert.equal(record.build, observed.build);
+    assert.ok(
+      pin.go === "go1.27.4" &&
+        observed.build.includes(": go1.27.4\n") &&
+        observed.build.includes("GOOS=linux") &&
+        observed.build.includes("GOARCH=amd64") &&
+        observed.build.includes("CGO_ENABLED=0"),
+    );
+  } catch {
+    throw new Error("Prior same-job RootlessKit source build rejected");
+  }
+}
+
+async function rootlesskitJob(): Promise<RootlesskitJob | undefined> {
+  if (process.platform !== "linux" || process.env.GITHUB_ACTIONS !== "true") return undefined;
+  const { GITHUB_RUN_ID: runId, GITHUB_RUN_ATTEMPT: attempt, GITHUB_JOB: job } = process.env;
+  assert.ok(runId && /^[1-9][0-9]*$/.test(runId));
+  assert.ok(attempt && /^[1-9][0-9]*$/.test(attempt));
+  assert.ok(job && /^[A-Za-z0-9_-]+$/.test(job));
+  const sourceCommit = (
+    await exec("git", ["rev-parse", "HEAD"], {
+      cwd: repository,
+      env: { HOME: process.env.HOME, PATH: process.env.PATH },
+      timeout: 5000,
+      maxBuffer: 4096,
+    })
+  ).stdout.trim();
+  assert.ok(/^[a-f0-9]{40}$/.test(sourceCommit));
+  return { runId, attempt, job, sourceCommit, mode: "rootless" };
+}
+
+export async function rootlesskitBuildDirectory(path: string): Promise<void> {
+  assert.ok(
+    path.startsWith(resolve(repository, "dist/toolchain/docker-rootless-")) &&
+      /^\/[A-Za-z0-9_./-]+$/.test(path),
+  );
+  assert.equal(await realpath(path), path);
+  const stat = await lstat(path);
+  assert.ok(stat.isDirectory() && stat.uid === process.getuid?.() && (stat.mode & 0o777) === 0o700);
+}
+
 // Same supported upstream target on CI and in independent cross-build verification.
 export async function prepareRootlesskit(directory: string, compiler = "go"): Promise<void> {
   const pin = policy.rootless.rootlesskit;
   assert.equal(pin.go, "go1.27.4");
   const source = resolve(directory, "rootlesskit-source");
   await mkdir(source, { mode: 0o700 });
-  const raw = await download(
-    `https://codeload.github.com/rootless-containers/rootlesskit/tar.gz/${pin.source}`,
-    pin.sourceArchiveSha256,
-    "rootlesskit-source.tgz",
-  );
-  const prefix = `rootlesskit-${pin.source}/`;
-  for (const [name, bytes] of archiveEntries(raw)) {
-    assert.ok(name.startsWith(prefix), "Unexpected RootlessKit source root");
-    const target = resolve(source, name.slice(prefix.length));
-    await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, bytes);
-  }
   const env = {
     HOME: process.env.HOME,
     CODEX_HOME: process.env.CODEX_HOME,
@@ -376,6 +463,70 @@ export async function prepareRootlesskit(directory: string, compiler = "go"): Pr
     }
   };
   assert.match(await go(["version"]), /^go version go1\.27\.4 /);
+  const job = await rootlesskitJob();
+  if (job) await rootlesskitBuildDirectory(directory);
+  const prior = job ? process.env.FORTIPI_ROOTLESSKIT_BUILD_DIR : undefined;
+  if (prior !== undefined) {
+    try {
+      assert.notEqual(prior, directory);
+      await rootlesskitBuildDirectory(prior);
+      await rootlesskitBuildDirectory(resolve(prior, "rootlesskit-source"));
+      const recordPath = resolve(prior, "rootlesskit-build.json");
+      for (const path of [
+        recordPath,
+        resolve(prior, "rootlesskit"),
+        resolve(prior, "rootlesskit-source/go.mod"),
+        resolve(prior, "rootlesskit-source/go.sum"),
+      ]) {
+        assert.equal(await realpath(path), path);
+        const stat = await lstat(path);
+        assert.ok(stat.isFile() && stat.uid === process.getuid?.() && (stat.mode & 0o022) === 0);
+        if (path === recordPath)
+          assert.ok(stat.size < 1024 * 1024 && (stat.mode & 0o777) === 0o600);
+      }
+      const record = JSON.parse(await readFile(recordPath, "utf8")) as RootlesskitBuild;
+      const bytes = await readFile(resolve(prior, "rootlesskit"));
+      assert.ok(job);
+      assertRootlesskitReuse(
+        record,
+        job,
+        {
+          directory: prior,
+          binarySha256: hash(bytes),
+          goModSha256: hash(await readFile(resolve(prior, "rootlesskit-source/go.mod"))),
+          goSumSha256: hash(await readFile(resolve(prior, "rootlesskit-source/go.sum"))),
+          build: await go(["version", "-m", resolve(prior, "rootlesskit")]),
+        },
+        pin,
+      );
+      const binary = resolve(directory, "rootlesskit");
+      await writeFile(binary, bytes, { flag: "wx", mode: 0o755 });
+      assert.equal(hash(await readFile(binary)), pin.binarySha256);
+      await writeFile(
+        resolve(directory, "rootlesskit-build.json"),
+        `${JSON.stringify(record, null, 2)}\n`,
+        { flag: "wx", mode: 0o600 },
+      );
+      console.log(
+        "RootlessKit same-job source-built binary/provenance reverified; fresh runtime prerequisites still required",
+      );
+      return;
+    } catch {
+      throw new Error("Prior same-job RootlessKit source build rejected");
+    }
+  }
+  const raw = await download(
+    `https://codeload.github.com/rootless-containers/rootlesskit/tar.gz/${pin.source}`,
+    pin.sourceArchiveSha256,
+    "rootlesskit-source.tgz",
+  );
+  const prefix = `rootlesskit-${pin.source}/`;
+  for (const [name, bytes] of archiveEntries(raw)) {
+    assert.ok(name.startsWith(prefix), "Unexpected RootlessKit source root");
+    const target = resolve(source, name.slice(prefix.length));
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, bytes);
+  }
   const checkInputs = async () => {
     assert.equal(hash(await readFile(resolve(source, "go.mod"))), pin.goModSha256);
     assert.equal(hash(await readFile(resolve(source, "go.sum"))), pin.goSumSha256);
@@ -444,8 +595,15 @@ export async function prepareRootlesskit(directory: string, compiler = "go"): Pr
   );
   await writeFile(
     resolve(directory, "rootlesskit-build.json"),
-    `${JSON.stringify({ source: pin.source, sourceArchiveSha256: pin.sourceArchiveSha256, compiler: pin.go, binarySha256: pin.binarySha256, modules, packages, build }, null, 2)}\n`,
+    `${JSON.stringify({ source: pin.source, sourceArchiveSha256: pin.sourceArchiveSha256, compiler: pin.go, binarySha256: pin.binarySha256, modules, packages, build, buildDirectory: directory, ...(job ? { job } : {}) }, null, 2)}\n`,
+    { flag: "wx", mode: 0o600 },
   );
+  if (job) {
+    assert.ok(process.env.GITHUB_ENV && /^\/[A-Za-z0-9_./-]+$/.test(directory));
+    await writeFile(process.env.GITHUB_ENV, `FORTIPI_ROOTLESSKIT_BUILD_DIR=${directory}\n`, {
+      flag: "a",
+    });
+  }
 }
 
 type IdRange = { first: number; count: number };

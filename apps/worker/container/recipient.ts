@@ -350,6 +350,10 @@ export function singleImportedImage(ids: string[]): string {
 // Docker inspect can expose inert API defaults absent from OCI Config.
 function configuration(config: ImageConfig, side: ConfigDiagnostic["side"]): unknown {
   checked("runtime-config", () => assertRuntimeConfig(config));
+  // Called only after linux/amd64, selected identity and ordered DiffIDs pass.
+  // Moby 70efc0e: container.go:124-144 -> oci_linux.go:684. Preserve the canonical bool
+  // in equality rather than treating Windows command-line escaping as executable data.
+  let argsEscaped = false;
   const keys = [
     "Env",
     "User",
@@ -364,6 +368,15 @@ function configuration(config: ImageConfig, side: ConfigDiagnostic["side"]): unk
   ];
   for (const [key, value] of Object.entries(config)) {
     if (keys.includes(key)) continue;
+    if (key === "ArgsEscaped") {
+      checked(
+        "config-fields",
+        () => assert.equal(typeof value, "boolean"),
+        configDiagnostic(key, value, side),
+      );
+      argsEscaped = value as boolean;
+      continue;
+    }
     checked(
       "config-fields",
       () =>
@@ -376,7 +389,6 @@ function configuration(config: ImageConfig, side: ConfigDiagnostic["side"]): unk
               "Tty",
               "OpenStdin",
               "StdinOnce",
-              "ArgsEscaped",
               "NetworkDisabled",
             ].includes(key) &&
               value === false) ||
@@ -399,6 +411,7 @@ function configuration(config: ImageConfig, side: ConfigDiagnostic["side"]): unk
     Shell: config.Shell ?? ["/bin/sh", "-c"],
     Volumes: config.Volumes ?? {},
     Labels: config.Labels ?? {},
+    ArgsEscaped: argsEscaped,
   };
 }
 export function assertImportedImage(

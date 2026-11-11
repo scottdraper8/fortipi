@@ -1,16 +1,19 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
 import { c as tar } from "tar";
+import { repository } from "../../../scripts/build-workspaces.ts";
 import {
   assertPrivateContainerdApi,
+  assertRootlesskitReuse,
   privateContainerdConfig,
+  rootlesskitBuildDirectory,
 } from "../../../tools/unstale/provision-docker.ts";
 import { inspectImageArchive } from "./image-archive.ts";
 import {
@@ -603,5 +606,146 @@ test("Config diagnostics disclose only whitelisted field, side and finite shape 
     const result = recipientFailure("imported-identity", genuine);
     assert.equal(Object.hasOwn(result, "config"), false);
     assert.equal(JSON.stringify(result).includes(canary), false);
+  }
+});
+
+test("Linux ArgsEscaped is boolean-only and must match the selected canonical config without changing command semantics", () => {
+  const withFlag = (value: unknown) => ({ ...config, ArgsEscaped: value });
+  for (const flag of [false, true])
+    assert.equal(
+      assertImportedImage(
+        { ...image, Config: withFlag(flag) },
+        { ...graph, configuration: withFlag(flag) },
+      ),
+      image.Id,
+    );
+  assertImportedImage({ ...image, Config: withFlag(false) }, graph);
+  assertImportedImage(image, { ...graph, configuration: withFlag(false) });
+  for (const value of [null, "true", "false", 0, [], {}, undefined]) {
+    assert.throws(() => assertImportedImage({ ...image, Config: withFlag(value) }, graph));
+    assert.throws(() => assertImportedImage(image, { ...graph, configuration: withFlag(value) }));
+  }
+  assert.throws(() => assertImportedImage({ ...image, Config: withFlag(true) }, graph));
+  assert.throws(() => assertImportedImage(image, { ...graph, configuration: withFlag(true) }));
+  const canonical = { ...graph, configuration: withFlag(true) };
+  for (const changed of [
+    { ...image, Os: "windows", Config: withFlag(true) },
+    { ...image, Architecture: "arm64", Config: withFlag(true) },
+    { ...image, Id: digest("f"), Config: withFlag(true) },
+    { ...image, RootFS: { ...image.RootFS, Layers: [digest("f")] }, Config: withFlag(true) },
+    { ...image, Config: { ...withFlag(true), Entrypoint: [canary] } },
+    { ...image, Config: { ...withFlag(true), Cmd: [canary] } },
+    { ...image, Config: { ...withFlag(true), Env: [...config.Env, canary] } },
+    { ...image, Config: { ...withFlag(true), User: canary } },
+    { ...image, Config: { ...withFlag(true), NetworkDisabled: true } },
+  ])
+    assert.throws(() => assertImportedImage(changed, canonical));
+});
+
+test("same-job RootlessKit reuse requires actual pinned bytes, compiler, graph and closed prior-build provenance", () => {
+  const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+  const modules = "example.invalid/public v1.0.0 h1:public h1:module\n";
+  const packages = "example.invalid/public/cmd/rootlesskit\n";
+  const pin = {
+    version: "3.3.0",
+    source: "a".repeat(40),
+    go: "go1.27.4",
+    sourceArchiveSha256: sha("source"),
+    goModSha256: sha("go.mod"),
+    goSumSha256: sha("go.sum"),
+    moduleGraphSha256: sha(modules),
+    packageGraphSha256: sha(packages),
+    binarySha256: sha("built public binary"),
+  };
+  const job = {
+    runId: "123",
+    attempt: "1",
+    job: "image",
+    sourceCommit: "b".repeat(40),
+    mode: "rootless" as const,
+  };
+  const directory = "/private/prior-source-build";
+  const build = `${directory}/rootlesskit: go1.27.4\n\tbuild\tGOOS=linux\n\tbuild\tGOARCH=amd64\n\tbuild\tCGO_ENABLED=0\n`;
+  const record = {
+    source: pin.source,
+    sourceArchiveSha256: pin.sourceArchiveSha256,
+    compiler: pin.go,
+    binarySha256: pin.binarySha256,
+    modules,
+    packages,
+    build,
+    buildDirectory: directory,
+    job,
+  };
+  const observed = {
+    directory,
+    binarySha256: pin.binarySha256,
+    goModSha256: pin.goModSha256,
+    goSumSha256: pin.goSumSha256,
+    build,
+  };
+  assertRootlesskitReuse(record, job, observed, pin);
+  const reject = (action: () => void) =>
+    assert.throws(action, (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, "Prior same-job RootlessKit source build rejected");
+      assert.equal(JSON.stringify(error).includes(canary), false);
+      return true;
+    });
+  for (const changed of [
+    { ...record, source: canary },
+    { ...record, sourceArchiveSha256: canary },
+    { ...record, compiler: "go1.26.10" },
+    { ...record, binarySha256: canary },
+    { ...record, modules: `${modules}${canary}` },
+    { ...record, packages: `${packages}${canary}` },
+    { ...record, build: canary },
+    { ...record, buildDirectory: canary },
+    { ...record, job: { ...job, runId: "456" } },
+    { ...record, job: { ...job, attempt: "2" } },
+    { ...record, job: { ...job, job: canary } },
+    { ...record, job: { ...job, sourceCommit: "c".repeat(40) } },
+    { ...record, [canary]: canary },
+  ])
+    reject(() => assertRootlesskitReuse(changed, job, observed, pin));
+  const { job: _job, ...withoutJob } = record;
+  reject(() => assertRootlesskitReuse(withoutJob, job, observed, pin));
+  for (const changed of [
+    { ...observed, directory: canary },
+    { ...observed, binarySha256: sha("tampered binary") },
+    { ...observed, goModSha256: sha("tampered go.mod") },
+    { ...observed, goSumSha256: sha("tampered go.sum") },
+    { ...observed, build: build.replace("go1.27.4", "go1.26.10") },
+  ])
+    reject(() => assertRootlesskitReuse(record, job, changed, pin));
+  for (const badBuild of [
+    build.replace("GOOS=linux", "GOOS=windows"),
+    build.replace("GOARCH=amd64", "GOARCH=arm64"),
+    build.replace("CGO_ENABLED=0", "CGO_ENABLED=1"),
+  ])
+    reject(() =>
+      assertRootlesskitReuse(
+        { ...record, build: badBuild },
+        job,
+        { ...observed, build: badBuild },
+        pin,
+      ),
+    );
+});
+
+test("same-job build directory must be canonical, owned and private without following a symlink", async () => {
+  const base = resolve(repository, "dist/toolchain");
+  await mkdir(base, { recursive: true });
+  const directory = await mkdtemp(resolve(base, "docker-rootless-reuse-test-"));
+  try {
+    await rootlesskitBuildDirectory(directory);
+    await chmod(directory, 0o755);
+    await assert.rejects(rootlesskitBuildDirectory(directory));
+    await chmod(directory, 0o700);
+    await symlink(directory, resolve(directory, "alias"));
+    await assert.rejects(rootlesskitBuildDirectory(resolve(directory, "alias")));
+    await assert.rejects(rootlesskitBuildDirectory(base));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
