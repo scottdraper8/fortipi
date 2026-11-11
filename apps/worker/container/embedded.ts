@@ -210,7 +210,7 @@ export async function prepareEmbedded(download: Download): Promise<void> {
   const frozen = JSON.parse(
     await readFile(resolve(here, "embedded-freeze.json"), "utf8"),
   ) as Inventory;
-  const { binary, extracted } = await inputs(download);
+  const { archive: sourceArchive, top, binary, extracted } = await inputs(download);
   check(
     hash(binary) === frozen.binarySha256 && hash(extracted.bootstrap) === frozen.bootstrapSha256,
     "Embedded executable drift",
@@ -222,21 +222,39 @@ export async function prepareEmbedded(download: Download): Promise<void> {
     );
   const notices = resolve(output, "context/notices/embedded");
   await mkdir(notices, { recursive: true });
-  for (const pin of frozen.components) {
-    const bytes = await download(pin.url, pin.sha256);
-    check(
-      createHash("sha512").update(bytes).digest("base64") === pin.integrity.slice(7),
-      "Embedded SRI drift",
-    );
-    const archive = resolve(output, `embedded-${pin.name.replaceAll("/", "_")}-${pin.version}.tgz`);
-    await writeFile(archive, bytes);
-    const directory = resolve(notices, `${pin.name.replaceAll("/", "_")}-${pin.version}`);
-    await mkdir(directory, { recursive: true });
-    for (const [path, expected] of Object.entries(pin.notices)) {
-      const bytes = tar(archive, path);
-      check(hash(bytes) === expected, "Embedded license drift");
-      await writeFile(resolve(directory, path.replaceAll("/", "_")), bytes);
-    }
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, frozen.components.length) }, async () => {
+      for (;;) {
+        const pin = frozen.components[next++];
+        if (!pin) return;
+        const bytes = await download(pin.url, pin.sha256);
+        check(
+          createHash("sha512").update(bytes).digest("base64") === pin.integrity.slice(7),
+          "Embedded SRI drift",
+        );
+        const archive = resolve(
+          output,
+          `embedded-${pin.name.replaceAll("/", "_")}-${pin.version}.tgz`,
+        );
+        await writeFile(archive, bytes);
+        const directory = resolve(notices, `${pin.name.replaceAll("/", "_")}-${pin.version}`);
+        await mkdir(directory, { recursive: true });
+        for (const [path, expected] of Object.entries(pin.notices)) {
+          const bytes = tar(archive, path);
+          check(hash(bytes) === expected, "Embedded license drift");
+          await writeFile(resolve(directory, path.replaceAll("/", "_")), bytes);
+        }
+      }
+    }),
+  );
+  const vendorNotices = resolve(notices, "modified-fuse-napi");
+  await mkdir(vendorNotices, { recursive: true });
+  for (const [path, expected] of Object.entries(frozen.vendorSourceFiles)) {
+    const bytes = tar(sourceArchive, `${top}${path}`);
+    check(hash(bytes) === expected, "Modified native source drift");
+    if (/(?:LICENSE|PATCHES.md|UPSTREAM.md)$/.test(path))
+      await writeFile(resolve(vendorNotices, posix.basename(path)), bytes);
   }
   await writeFile(resolve(notices, "embedded-inventory.json"), JSON.stringify(frozen, null, 2));
 }

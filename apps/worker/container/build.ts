@@ -4,7 +4,7 @@ import { createReadStream } from "node:fs";
 import { copyFile, lstat, mkdir, readdir, readFile, readlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { x as extractTar } from "tar";
+import { c as createTar, x as extractTar } from "tar";
 import { freezeEmbedded, prepareEmbedded } from "./embedded.ts";
 import { imageInputs } from "./inputs.ts";
 
@@ -13,6 +13,11 @@ const output = resolve(root, "apps/worker/dist/container");
 const context = resolve(output, "context");
 const here = dirname(fileURLToPath(import.meta.url));
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
+async function fileDigest(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const bytes of createReadStream(path)) hash.update(bytes);
+  return hash.digest("hex");
+}
 interface PackagePin {
   name: string;
   version: string;
@@ -533,6 +538,53 @@ async function build(pin: Freeze): Promise<void> {
   const licenses = resolve(output, "licenses");
   await mkdir(licenses, { recursive: true });
   try {
+    const status = resolve(output, "installed-status");
+    command("docker", ["cp", `${container}:/var/lib/dpkg/status`, status]);
+    const actual = paragraphs(await readFile(status, "utf8")).filter(
+      (row) => row.get("Status") === "install ok installed",
+    );
+    const normalized = actual
+      .map((row) => {
+        const pin = toPin(row);
+        return {
+          name: pin.name,
+          version: pin.version,
+          source: pin.source,
+          sourceVersion: pin.sourceVersion,
+          builtUsing: pin.builtUsing,
+          staticBuiltUsing: pin.staticBuiltUsing,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    check(
+      JSON.stringify(normalized) ===
+        JSON.stringify(
+          pin.installed
+            .map(({ name, version, source, sourceVersion, builtUsing, staticBuiltUsing }) => ({
+              name,
+              version,
+              source,
+              sourceVersion,
+              builtUsing,
+              staticBuiltUsing,
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        ),
+      "Installed source/static dependency inventory drift",
+    );
+    await writeFile(
+      resolve(output, "installed-source-inventory.json"),
+      `${JSON.stringify(normalized, null, 2)}\n`,
+    );
+    const finalBinary = resolve(output, "computerd-final");
+    command("docker", ["cp", `${container}:/usr/local/bin/computerd`, finalBinary]);
+    const embedded = JSON.parse(await readFile(resolve(here, "embedded-freeze.json"), "utf8")) as {
+      binarySha256: string;
+    };
+    check(
+      (await fileDigest(finalBinary)) === embedded.binarySha256,
+      "Final embedded executable drift",
+    );
     command("docker", ["cp", `${container}:/usr/share/doc/.`, licenses]);
     await mkdir(resolve(licenses, "common"), { recursive: true });
     command("docker", [
@@ -552,7 +604,7 @@ async function build(pin: Freeze): Promise<void> {
   await writeFile(resolve(output, "installed-packages.txt"), inventory);
   await writeFile(
     resolve(output, "image-metadata.json"),
-    `${JSON.stringify({ schemaVersion: 1, sourceCommit, computerSource: imageInputs.source, computerSourceArchiveSha256: imageInputs.sourceArchiveSha256, embeddedNodeVersion: imageInputs.embeddedNodeVersion, licenseInventorySha256: digest(JSON.stringify(licenseInventory)), computerVersion: imageInputs.computerVersion, platform: "linux/amd64", inputDigests: [imageInputs.computerd, imageInputs.debian], imageId, archiveSha256: digest(await readFile(archive)), inventorySha256: digest(inventory), freezeSha256: digest(await readFile(resolve(here, "debian-freeze.json"))), registryDigest: null, runtimeVerified: false, licenseReviewRequired: true }, null, 2)}\n`,
+    `${JSON.stringify({ schemaVersion: 1, sourceCommit, computerSource: imageInputs.source, computerSourceArchiveSha256: imageInputs.sourceArchiveSha256, embeddedNodeVersion: imageInputs.embeddedNodeVersion, embeddedInventorySha256: await fileDigest(resolve(here, "embedded-freeze.json")), licenseInventorySha256: await fileDigest(resolve(output, "license-inventory.json")), sourceKitSha256: await fileDigest(resolve(output, "sources-and-notices.tar")), installedSourceInventorySha256: await fileDigest(resolve(output, "installed-source-inventory.json")), computerVersion: imageInputs.computerVersion, platform: "linux/amd64", inputDigests: [imageInputs.computerd, imageInputs.debian], imageId, archiveSha256: await fileDigest(archive), inventorySha256: digest(inventory), freezeSha256: digest(await readFile(resolve(here, "debian-freeze.json"))), registryDigest: null, runtimeVerified: false, licenseReviewRequired: true }, null, 2)}\n`,
   );
 }
 async function main(): Promise<void> {
@@ -573,12 +625,61 @@ async function main(): Promise<void> {
   await verifyOCI();
   await prepare(pin);
   await prepareEmbedded(download);
+  await sourceKit(pin);
   if (process.argv.includes("--prepare") || process.argv.includes("--freeze-licenses")) return;
   await build(pin);
   if (process.argv.includes("--verify")) {
     const fixture = resolve(root, "apps/worker/test/backends/linux-image.ts");
     command(process.execPath, [fixture, "--image", "fortipi-computerd:verified"]);
   }
+}
+async function sourceKit(pin: Freeze): Promise<void> {
+  const recipe = resolve(output, "source-kit-recipe");
+  await mkdir(recipe, { recursive: true });
+  const recipeFiles = [
+    "Dockerfile",
+    "build.ts",
+    "embedded.ts",
+    "inputs.ts",
+    "debian-freeze.json",
+    "debian-licenses.json",
+    "embedded-freeze.json",
+    "SOURCE-DISTRIBUTION.md",
+  ];
+  for (const name of recipeFiles) await copyFile(resolve(here, name), resolve(recipe, name));
+  const embedded = JSON.parse(await readFile(resolve(here, "embedded-freeze.json"), "utf8")) as {
+    components: { name: string; version: string }[];
+  };
+  const files = [
+    ...pin.sources.flatMap((source) =>
+      source.files.map((entry) => `sources/${entry.filename.split("/").at(-1)}`),
+    ),
+    "computer-source.tgz",
+    ...embedded.components.map(
+      (pin) => `embedded-${pin.name.replaceAll("/", "_")}-${pin.version}.tgz`,
+    ),
+    ...recipeFiles.map((name) => `source-kit-recipe/${name}`),
+  ].sort();
+  const inventory: Record<string, string> = {};
+  await parallel(files, async (path) => {
+    inventory[path] = await fileDigest(resolve(output, path));
+  });
+  inventory["context/notices"] = digest(
+    JSON.stringify(await fileHashes(resolve(context, "notices"))),
+  );
+  await writeFile(
+    resolve(output, "source-kit-inventory.json"),
+    `${JSON.stringify(Object.fromEntries(Object.entries(inventory).sort(([a], [b]) => a.localeCompare(b))), null, 2)}\n`,
+  );
+  await createTar(
+    {
+      cwd: output,
+      file: resolve(output, "sources-and-notices.tar"),
+      portable: true,
+      mtime: new Date("2026-11-10T00:00:00Z"),
+    },
+    [...files, "context/notices", "source-kit-inventory.json"],
+  );
 }
 function dpkgField(name: string): string {
   return `${String.fromCharCode(36)}{${name}}`;
