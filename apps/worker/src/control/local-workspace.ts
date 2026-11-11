@@ -180,7 +180,15 @@ export class LocalWorkspace {
         registration.recipient.id === reservation.agentId &&
         registration.registrationId === ctx.registrationId &&
         same(registration.credential, ref(ctx)) &&
-        contains(registration.resources, { ...resources, actions: ["jobs.dispatch"] }) &&
+        contains(registration.resources, {
+          ...resources,
+          actions: ["jobs.dispatch"],
+          // Only this operation's original reservation predates the retained tool assignment.
+          ...(registration.registrationId === reservation.registrationIds.agent &&
+          registration.resources.tools.length === 0
+            ? { tools: [] }
+            : {}),
+        }) &&
         ctx.grants.some(
           (grant) =>
             (grant.expiresAt === undefined || Date.now() < grant.expiresAt) &&

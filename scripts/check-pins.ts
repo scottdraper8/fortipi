@@ -388,7 +388,19 @@ export async function checkPins(root = repository): Promise<void> {
     }
   for (const path of await filesBelow(resolve(root, ".github/workflows"))) {
     const workflow = await yaml<{
-      jobs: Record<string, { steps: { uses?: string; with?: Record<string, unknown> }[] }>;
+      jobs: Record<
+        string,
+        {
+          steps: {
+            uses?: string;
+            with?: Record<string, unknown>;
+            run?: string;
+            if?: string;
+            shell?: string;
+            "timeout-minutes"?: number;
+          }[];
+        }
+      >;
     }>(root, relative(root, path));
     for (const [job, config] of Object.entries(workflow.jobs)) {
       const hardening = config.steps[0];
@@ -398,6 +410,14 @@ export async function checkPins(root = repository): Promise<void> {
         `${job}: harden-runner must be first`,
       );
       assert.equal(hardening.with?.["egress-policy"], "block", `${job}: block egress is required`);
+      const health = config.steps[1];
+      assert.ok(
+        health?.run === "/usr/bin/systemctl is-active --quiet agent.service" &&
+          health.if === "runner.os == 'Linux'" &&
+          health.shell === "bash" &&
+          health["timeout-minutes"] === 1,
+        `${job}: Linux hardener health gate must precede checkout and network steps`,
+      );
       const endpoints = hardening.with?.["allowed-endpoints"];
       assert.equal(typeof endpoints, "string", `${job}: explicit endpoints are required`);
       assert.ok(

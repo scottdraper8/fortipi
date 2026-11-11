@@ -59,6 +59,11 @@ jobs:
             api.unstale.sh:443
             unstale.sh:443
             *.stepsecurity.io:443
+      - name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+        run: /usr/bin/systemctl is-active --quiet agent.service
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -150,6 +155,11 @@ jobs:
             api.unstale.sh:443
             unstale.sh:443
             *.stepsecurity.io:443
+      - name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+        run: /usr/bin/systemctl is-active --quiet agent.service
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

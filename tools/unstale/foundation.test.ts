@@ -237,6 +237,21 @@ test("reject literal harden-runner endpoints that reproduced blocked bootstrap",
   }, /allowed-endpoints contains an internal newline/);
 });
 
+test("reject an action-success job that omits its early Linux service check", async () => {
+  await fixture(async (root) => {
+    const path = resolve(root, ".github/workflows/ci.yml");
+    const workflow = await yaml<{ jobs: Record<string, { steps: { run?: string }[] }> }>(
+      root,
+      ".github/workflows/ci.yml",
+    );
+    const job = workflow.jobs["policy-and-integration"];
+    assert.ok(job);
+    assert.equal(job.steps[1]?.run, "/usr/bin/systemctl is-active --quiet agent.service");
+    job.steps.splice(1, 1);
+    await writeFile(path, stringify(workflow));
+  }, /Linux hardener health gate must precede checkout and network steps/);
+});
+
 test("keep ordinary YAML single-document when relaxing only pnpm lock validation", async () => {
   await fixture(async (root) => {
     const path = resolve(root, ".pre-commit-config.yaml");
