@@ -1,0 +1,108 @@
+{
+  "binarySha256": "7c4c7ef6c6b5bd6434c4cd706de522807e544a866d2f1488ce4226d3ca61e3d1",
+  "bootstrapSha256": "8d30ca8e6d27bc8d959aa1f5fc3736fe73da526d731f10b080f3b71753a453e6",
+  "assets": {
+    "fuse.node": {
+      "size": 184136,
+      "sha256": "a5fd00b6405de13b6a9da07f390d507865ffe2c9dd4081e2c61024032437d9ef"
+    },
+    "bundle.mjs": {
+      "size": 764021,
+      "sha256": "dde78972b703f99b8376994ba8b41639975184099c903c6b9e5cd28a4727d575"
+    }
+  },
+  "components": [
+    {
+      "name": "fuse-napi",
+      "version": "2.3.1",
+      "lockPath": "modified-vendor-source",
+      "url": "https://registry.npmjs.org/fuse-napi/-/fuse-napi-2.3.1.tgz",
+      "integrity": "sha512-s39WjtQV30CaBqLGegHHVZoIdJmAuaAuUb2lmCRYK/uTxMOJtb2SEtk9DRJp/z/Et2AG2GQz7e2kroTVUYZDNA==",
+      "sha256": "353e1508f3dff57c98da5e36f6b8bcab209ff192303911883451c9d150b26289",
+      "notices": {
+        "package/LICENSE": "eb42665a25a740acacb0c5761a059d805e57efbb27f7f9170a45b7080cacaaa4"
+      }
+    },
+    {
+      "name": "@platformatic/vfs",
+      "version": "0.4.0",
+      "lockPath": "node_modules/@platformatic/vfs",
+      "url": "https://registry.npmjs.org/@platformatic/vfs/-/vfs-0.4.0.tgz",
+      "integrity": "sha512-JwRxSIG63e/VaDSkYXkSBajySt5MJzxYIKuknYda28fhhmJMqyUGf5rbKrGW+vO9L83nIjQH3+YI12fp7EKICQ==",
+      "sha256": "61c37cc7e3205e13a717cb497fd0e489b5a21f7000a59014077c2858d2d9eac1",
+      "notices": {
+        "package/LICENSE": "68b08065c2a785085326e8d761f197674d438f872c1b72619bb458439f16f9b2"
+      }
+    },
+    {
+      "name": "nanoresource",
+      "version": "1.3.0",
+      "lockPath": "node_modules/nanoresource",
+      "url": "https://registry.npmjs.org/nanoresource/-/nanoresource-1.3.0.tgz",
+      "integrity": "sha512-OI5dswqipmlYfyL3k/YMm7mbERlh4Bd1KuKdMHpeoVD1iVxqxaTMKleB4qaA2mbQZ6/zMNSxCXv9M9P/YbqTuQ==",
+      "sha256": "f345b94daab29dff38a28abff1a2688dd618fee3e64d0a7996076a1d0189254f",
+      "notices": {
+        "package/LICENSE": "2281f2db407bdbb54f069eec38128b2dee2c0c952f52b786ef1faecb81767b3c"
+      }
+    },
+    {
+      "name": "napi-macros",
+      "version": "2.2.2",
+      "lockPath": "node_modules/napi-macros",
+      "url": "https://registry.npmjs.org/napi-macros/-/napi-macros-2.2.2.tgz",
+      "integrity": "sha512-hmEVtAGYzVQpCKdbQea4skABsdXW4RUh5t5mJ2zzqowJS2OyXZTU1KhDVFhx+NlWZ4ap9mqR9TcDO3LTTttd+g==",
+      "sha256": "38d89034a07786f39b0d4ddc505ae8aaeb1b1c319e14fcff8f5bd116c63d631a",
+      "notices": {
+        "package/LICENSE": "2281f2db407bdbb54f069eec38128b2dee2c0c952f52b786ef1faecb81767b3c"
+      }
+    },
+    {
+      "name": "ws",
+      "version": "8.21.1",
+      "lockPath": "node_modules/ws",
+      "url": "https://registry.npmjs.org/ws/-/ws-8.21.1.tgz",
+      "integrity": "sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==",
+      "sha256": "bb0f7e58ba1f64746672734d36175fe185f226491e336abc0743e2a8f4472ec1",
+      "notices": {
+        "package/LICENSE": "2b29dcfe0d6471f7e8c92c5fb38c9f93edee10330937055440192f1832b1ecef"
+      }
+    },
+    {
+      "name": "capnweb",
+      "version": "0.12.0",
+      "lockPath": "packages/rpc/node_modules/capnweb",
+      "url": "https://registry.npmjs.org/capnweb/-/capnweb-0.12.0.tgz",
+      "integrity": "sha512-jgZ/LMtMVTi+RVlooIslH78Gg23XbDTdvcLghWx3oz17D6u5GuJARt+uhZk/wcTo+f81eeabfnow4d3zLBj+JQ==",
+      "sha256": "60a689b1597482d8face8e8bdcdf347d49f367768f2afe1356da60fe0bc5b217",
+      "notices": {
+        "package/LICENSE.txt": "5514f48637fa1d8fed2256d12d322009a75962e6111370755fc5b20773db67ad"
+      }
+    }
+  ],
+  "vendorSourceFiles": {
+    "packages/computerd/vendor/fuse-napi/CHANGELOG.md": "27569a7540cc58e0b8142d30e2beda0b5289d94a38ab256d266a0f0b874e69b1",
+    "packages/computerd/vendor/fuse-napi/COMPATIBILITY.md": "68f2f6427ae4a40b970d14803ef37cd521e3b7203b4f73ba96e0761aab76e1bd",
+    "packages/computerd/vendor/fuse-napi/CONTRIBUTING.md": "ab71702f768bae982de6ea8e8ff09c86d133ca914945d53f79666acfa3590ee3",
+    "packages/computerd/vendor/fuse-napi/LICENSE": "eb42665a25a740acacb0c5761a059d805e57efbb27f7f9170a45b7080cacaaa4",
+    "packages/computerd/vendor/fuse-napi/PATCHES.md": "24e6705c544c94a09fadf9b182462cdc2e84291cfa1aaad6f4db0e368184552c",
+    "packages/computerd/vendor/fuse-napi/README.md": "cc7d15a78c0d0ad242c5f85d640fa7e9d34912a6b815fbea0698535a04bb7f0f",
+    "packages/computerd/vendor/fuse-napi/RELEASING.md": "e6b6eaca5d49fc1b3d95db53fd518fe796fa036bd18e6c6fbeb00b6fddd7097e",
+    "packages/computerd/vendor/fuse-napi/SECURITY.md": "066fb11c5340f499c1abc1b1e13449c4e19a1cb14442c146241716022b3921bf",
+    "packages/computerd/vendor/fuse-napi/UPSTREAM.md": "7dc03767ba723de299e11583a6a3064ec9163a18f7990bb8d6d95f6527a0e8b1",
+    "packages/computerd/vendor/fuse-napi/binding.gyp": "ffafc9f04ccc19f283651cdc600008753975973ee6c974b3826857abc1ca5f97",
+    "packages/computerd/vendor/fuse-napi/confined-bind.c": "17912b3aef3e4633b063e99251b1d4b2c71f85d476eeb0f5ed626d5a9785745d",
+    "packages/computerd/vendor/fuse-napi/fuse-native.c": "3fb5fb145abb30e1075228886566d811f95ee7ab80133fc4c838cba37bee0c1e",
+    "packages/computerd/vendor/fuse-napi/index.d.ts": "7b57a4f3a0c3e08e763c636ba46c029de131439648b4e408c105b08d9b719271",
+    "packages/computerd/vendor/fuse-napi/index.js": "8e0d41f2e84e0e3c639aa50dbcba1e6869cc4511ba7b6d6f76352361edf45479",
+    "packages/computerd/vendor/fuse-napi/lib/environment.js": "56f7a310794e7c67a12b734d4e7fdb51c7b21cc95bf13c0098216dceeb7de56f",
+    "packages/computerd/vendor/fuse-napi/lib/fuse3-options.js": "90d1206d6c2f36facca059e34203fa3de2fb81529b13162652159b16cd3c82ac",
+    "packages/computerd/vendor/fuse-napi/lib/macfuse.js": "38d83b9e6f952a0b6e15bb74ea1564390e869db3328ea3c36fe661a5a0b889e7",
+    "packages/computerd/vendor/fuse-napi/lib/native-binding.js": "fd394b1f22543c2f2afae23068a8db06f395daf22015a445bd5cf32b947455ea",
+    "packages/computerd/vendor/fuse-napi/package-lock.json": "2bd0b6f958c8577afb19bfde4ded2a04b1160eb9b002b30c6b5475cc0a31093e",
+    "packages/computerd/vendor/fuse-napi/package.json": "777a91b112fcf9aeed6ddb78bfb3758fbd078553e9e8f51cdf3d418628b92ba6",
+    "packages/computerd/vendor/fuse-napi/removal-guard.c": "da06d1d648e3e8154ed02e20c88f83e137c0bde5a73789525384f867724664f1",
+    "packages/computerd/vendor/fuse-napi/removal-guard.h": "a3e2d81178ba0915b64eba6cef3fe27612dcccce1e29b5419dfe48321be145da",
+    "packages/computerd/vendor/fuse-napi/scripts/fuse-config.js": "654dbc5d4231e643f062311577a2b59b115a15f84aae97ac2dccba748f6741f7",
+    "packages/computerd/vendor/fuse-napi/scripts/verify-release.js": "714f7b3dd4f8e166537a3e4de26d9cb2dfe3036aa369608a5d40f9b7ec80818b"
+  }
+}

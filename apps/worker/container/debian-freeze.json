@@ -1,0 +1,3787 @@
+{
+  "snapshot": "20261110T000000Z",
+  "releaseSha256": "ed56aac47e7911e65ee63aae8d67e29f20e023f840e49f8ed037043a33de138a",
+  "packagesIndexSha256": "7778d3e3f303b7ddb8ce0fe7c8d57473a076c6bf2e8f241f75421d2396352498",
+  "sourcesIndexSha256": "6002f81f463a2d976d84b34170367cc16da2d60bd0ba9ab9d868d6e1c1a935d9",
+  "packages": [
+    {
+      "name": "fuse3",
+      "version": "3.17.2-3",
+      "filename": "pool/main/f/fuse3/fuse3_3.17.2-3_amd64.deb",
+      "sha256": "4866550a235224b538a66fcaf95c8a796b6968d21c6f231086e142350b302eea",
+      "source": "fuse3",
+      "sourceVersion": "3.17.2-3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libfuse3-4",
+      "version": "3.17.2-3",
+      "filename": "pool/main/f/fuse3/libfuse3-4_3.17.2-3_amd64.deb",
+      "sha256": "92e2d521ff872755a13aa69dba7b24025a7dc0f0f5aa708c9a86cd3565f570da",
+      "source": "fuse3",
+      "sourceVersion": "3.17.2-3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libfuse2t64",
+      "version": "2.9.9-9",
+      "filename": "pool/main/f/fuse/libfuse2t64_2.9.9-9_amd64.deb",
+      "sha256": "e60474070e983693ac461af291b876c2304340f75a6b8379a3ba017e4848341e",
+      "source": "fuse",
+      "sourceVersion": "2.9.9-9",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    }
+  ],
+  "installed": [
+    {
+      "name": "apt",
+      "version": "3.0.4",
+      "filename": "https://snapshot.debian.org/file/36cf89438b23e8e573f051c1d1b75bb1e60930a1",
+      "sha256": "15c2030e0fb46580af4f1b4cc303f4bd26da781b004e99763bc9eff7cf8e19b8",
+      "source": "apt",
+      "sourceVersion": "3.0.4",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "base-files",
+      "version": "13.8+deb13u7",
+      "filename": "pool/main/b/base-files/base-files_13.8+deb13u7_amd64.deb",
+      "sha256": "fcd42bb5cb63f7bfc4326a92541247872206d60a192fdff65ca14eb83ed408b9",
+      "source": "base-files",
+      "sourceVersion": "13.8+deb13u7",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "base-passwd",
+      "version": "3.6.7",
+      "filename": "pool/main/b/base-passwd/base-passwd_3.6.7_amd64.deb",
+      "sha256": "cf31c6956ab5f65815d9d9ea1615c4f78ecd2893c31119658248a4756cee83e7",
+      "source": "base-passwd",
+      "sourceVersion": "3.6.7",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "bash",
+      "version": "5.2.37-2+b10",
+      "filename": "pool/main/b/bash/bash_5.2.37-2+b10_amd64.deb",
+      "sha256": "2fd7b04f1b7caa29c4e683f5216e6af354a41e3cdcf6e75394d7cda680f9ab82",
+      "source": "bash",
+      "sourceVersion": "5.2.37-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "bsdutils",
+      "version": "1:2.41.5-0+deb13u1",
+      "filename": "pool/main/u/util-linux/bsdutils_2.41.5-0+deb13u1_amd64.deb",
+      "sha256": "d935a5102752a1108bdf1e815c89a84ac88d1949bf049a784178f946a09b14da",
+      "source": "util-linux",
+      "sourceVersion": "2.41.5-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "coreutils",
+      "version": "9.7-3",
+      "filename": "pool/main/c/coreutils/coreutils_9.7-3_amd64.deb",
+      "sha256": "1299ab6f9389a288eb2f5f3dd222c26cc777b9a2d5ecb6ee4cbd340cebcdada2",
+      "source": "coreutils",
+      "sourceVersion": "9.7-3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "dash",
+      "version": "0.5.12-12",
+      "filename": "pool/main/d/dash/dash_0.5.12-12_amd64.deb",
+      "sha256": "a8902cb6d8650134764a25fb80aec8589d858ef71ece1680a62e84816c37bb04",
+      "source": "dash",
+      "sourceVersion": "0.5.12-12",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "debconf",
+      "version": "1.5.91",
+      "filename": "pool/main/d/debconf/debconf_1.5.91_all.deb",
+      "sha256": "1ddc7e6c5925f748eefb7ca811d98e049f18c158bb21fbc7e122262ce6011e49",
+      "source": "debconf",
+      "sourceVersion": "1.5.91",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "debian-archive-keyring",
+      "version": "2025.1",
+      "filename": "pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1_all.deb",
+      "sha256": "9ea7778e443144ca490668737a8ab22dd3e748bb99e805e22ec055abeb3c7fac",
+      "source": "debian-archive-keyring",
+      "sourceVersion": "2025.1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "debianutils",
+      "version": "5.23.2",
+      "filename": "pool/main/d/debianutils/debianutils_5.23.2_amd64.deb",
+      "sha256": "720e43fda316676076498b4224ad3318049deafe60cc7c601011048de03ee97d",
+      "source": "debianutils",
+      "sourceVersion": "5.23.2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "diffutils",
+      "version": "1:3.10-4",
+      "filename": "pool/main/d/diffutils/diffutils_3.10-4_amd64.deb",
+      "sha256": "d3412669f7ae53ba895c3a509620ea7494ec1a36faa204c5215442ced381a479",
+      "source": "diffutils",
+      "sourceVersion": "1:3.10-4",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "dpkg",
+      "version": "1.22.22",
+      "filename": "pool/main/d/dpkg/dpkg_1.22.22_amd64.deb",
+      "sha256": "3e800c6d75e8e709007ed1c356e5fa8509a75c1694fb0a1183709abc9cfdc1f3",
+      "source": "dpkg",
+      "sourceVersion": "1.22.22",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "findutils",
+      "version": "4.10.0-3",
+      "filename": "pool/main/f/findutils/findutils_4.10.0-3_amd64.deb",
+      "sha256": "3edf02b016456b6a98cefdbab99c5ce6f829b786f63affe970badea221aecfc7",
+      "source": "findutils",
+      "sourceVersion": "4.10.0-3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "fuse3",
+      "version": "3.17.2-3",
+      "filename": "pool/main/f/fuse3/fuse3_3.17.2-3_amd64.deb",
+      "sha256": "4866550a235224b538a66fcaf95c8a796b6968d21c6f231086e142350b302eea",
+      "source": "fuse3",
+      "sourceVersion": "3.17.2-3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "gcc-14-base",
+      "version": "14.2.0-19",
+      "filename": "pool/main/g/gcc-14/gcc-14-base_14.2.0-19_amd64.deb",
+      "sha256": "5b6825de4263824b78c4c51f6476414f3b4e89c2ab63e81dc8b9b5501e867cf6",
+      "source": "gcc-14",
+      "sourceVersion": "14.2.0-19",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "grep",
+      "version": "3.11-4",
+      "filename": "pool/main/g/grep/grep_3.11-4_amd64.deb",
+      "sha256": "2d78ed07d86a530ebf538f05cb2415f37c8daf908596bc32fc2563cc7e88c55a",
+      "source": "grep",
+      "sourceVersion": "3.11-4",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "gzip",
+      "version": "1.13-1+deb13u1",
+      "filename": "pool/main/g/gzip/gzip_1.13-1+deb13u1_amd64.deb",
+      "sha256": "74cf12212beee4ab8d473bdc0107abf9e8cef737492198e2f4944a19f142b0ac",
+      "source": "gzip",
+      "sourceVersion": "1.13-1+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "hostname",
+      "version": "3.25",
+      "filename": "pool/main/h/hostname/hostname_3.25_amd64.deb",
+      "sha256": "9c2a27e5d4d87137211fe46631b05b2ee8892ec76aae926304e4485ba02e1015",
+      "source": "hostname",
+      "sourceVersion": "3.25",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "init-system-helpers",
+      "version": "1.69~deb13u1",
+      "filename": "pool/main/i/init-system-helpers/init-system-helpers_1.69~deb13u1_all.deb",
+      "sha256": "addf78073e1cbc5a5508937e11d2571055e29835e00ee8fab52a66775649378f",
+      "source": "init-system-helpers",
+      "sourceVersion": "1.69~deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libacl1",
+      "version": "2.3.2-2+b1",
+      "filename": "pool/main/a/acl/libacl1_2.3.2-2+b1_amd64.deb",
+      "sha256": "08074f01e384bc07c0c2d79a58cf4a6523f71cf75d1808101c79617656c9a39d",
+      "source": "acl",
+      "sourceVersion": "2.3.2-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libapt-pkg7.0",
+      "version": "3.0.4",
+      "filename": "https://snapshot.debian.org/file/f10f9c5f6525bb96bec57dbc3cdc6987af0832ac",
+      "sha256": "577eb8f489de419290102364892dbd13ca256297b61f96d61b114fd4ac18be41",
+      "source": "apt",
+      "sourceVersion": "3.0.4",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libattr1",
+      "version": "1:2.5.2-3",
+      "filename": "pool/main/a/attr/libattr1_2.5.2-3_amd64.deb",
+      "sha256": "606b5ee12ea2786be607a17f40c1fb5e65c76ceaff66665bdf8f8c6c1b71d1fb",
+      "source": "attr",
+      "sourceVersion": "1:2.5.2-3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libaudit-common",
+      "version": "1:4.0.2-2+deb13u1",
+      "filename": "pool/main/a/audit/libaudit-common_4.0.2-2+deb13u1_all.deb",
+      "sha256": "b9d32e5ff04fd747aacb7d6b3ebbbbf734ddefb2f1695f0b1b2a4b5e51b1052e",
+      "source": "audit",
+      "sourceVersion": "1:4.0.2-2+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libaudit1",
+      "version": "1:4.0.2-2+deb13u1",
+      "filename": "pool/main/a/audit/libaudit1_4.0.2-2+deb13u1_amd64.deb",
+      "sha256": "3d1dd3f031a56f01b747e2acc0e14575212580e6fa63d800c44cb0a31f1edfd7",
+      "source": "audit",
+      "sourceVersion": "1:4.0.2-2+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libblkid1",
+      "version": "2.41.5-0+deb13u1",
+      "filename": "pool/main/u/util-linux/libblkid1_2.41.5-0+deb13u1_amd64.deb",
+      "sha256": "81535f3c2c0efc732965907c8749103a0a26377c761622c9ce39b4c92dcde52f",
+      "source": "util-linux",
+      "sourceVersion": "2.41.5-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libbsd0",
+      "version": "0.12.2-2",
+      "filename": "pool/main/libb/libbsd/libbsd0_0.12.2-2_amd64.deb",
+      "sha256": "e5a85986fa6bec3307ab1bc860736b478b331882bc45e17675a7bdf88eecb43a",
+      "source": "libbsd",
+      "sourceVersion": "0.12.2-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libbz2-1.0",
+      "version": "1.0.8-6",
+      "filename": "pool/main/b/bzip2/libbz2-1.0_1.0.8-6_amd64.deb",
+      "sha256": "cba4cda04244b5e481bb15524bc3c983a7d1b6f330013b9b381706a2fcb65310",
+      "source": "bzip2",
+      "sourceVersion": "1.0.8-6",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libc-bin",
+      "version": "2.41-12+deb13u4",
+      "filename": "pool/main/g/glibc/libc-bin_2.41-12+deb13u4_amd64.deb",
+      "sha256": "dc8c79647fe3a5f37f72a400414f70263d0212f010ff2c09f990e30d91e38d1c",
+      "source": "glibc",
+      "sourceVersion": "2.41-12+deb13u4",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libc6",
+      "version": "2.41-12+deb13u4",
+      "filename": "pool/main/g/glibc/libc6_2.41-12+deb13u4_amd64.deb",
+      "sha256": "967aa62605721081c3eb2a17650611a792aa802d76a6511d1840242623d204c9",
+      "source": "glibc",
+      "sourceVersion": "2.41-12+deb13u4",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libcap-ng0",
+      "version": "0.8.5-4+b1",
+      "filename": "pool/main/libc/libcap-ng/libcap-ng0_0.8.5-4+b1_amd64.deb",
+      "sha256": "20a9e4b0619a3eb2566338223bed135dde5a601eaa2f8fdd5f20b94506addcac",
+      "source": "libcap-ng",
+      "sourceVersion": "0.8.5-4",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libcap2",
+      "version": "1:2.75-10+deb13u1+b3",
+      "filename": "pool/main/libc/libcap2/libcap2_2.75-10+deb13u1+b3_amd64.deb",
+      "sha256": "89fc4d34fc7a28ad6f0fcd0c561ab253b9dedf6f77f5a000b47c276c8295bf67",
+      "source": "libcap2",
+      "sourceVersion": "1:2.75-10+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libcrypt1",
+      "version": "1:4.4.38-1",
+      "filename": "pool/main/libx/libxcrypt/libcrypt1_4.4.38-1_amd64.deb",
+      "sha256": "0ebc144d662e3197982d1bf3a7b8b35ca845e54c68811de0328b1f0d7c67585c",
+      "source": "libxcrypt",
+      "sourceVersion": "1:4.4.38-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libdb5.3t64",
+      "version": "5.3.28+dfsg2-9",
+      "filename": "pool/main/d/db5.3/libdb5.3t64_5.3.28+dfsg2-9_amd64.deb",
+      "sha256": "18d02510ee78b67e4504ba050176797a200ff24214a7cd318082ab60ad7bf3fc",
+      "source": "db5.3",
+      "sourceVersion": "5.3.28+dfsg2-9",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libdebconfclient0",
+      "version": "0.280",
+      "filename": "pool/main/c/cdebconf/libdebconfclient0_0.280_amd64.deb",
+      "sha256": "25acadc8b394bc86d05df16e70975e523f8f839a7d8d6d5e22c1cafdcef741aa",
+      "source": "cdebconf",
+      "sourceVersion": "0.280",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libfuse2t64",
+      "version": "2.9.9-9",
+      "filename": "pool/main/f/fuse/libfuse2t64_2.9.9-9_amd64.deb",
+      "sha256": "e60474070e983693ac461af291b876c2304340f75a6b8379a3ba017e4848341e",
+      "source": "fuse",
+      "sourceVersion": "2.9.9-9",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libfuse3-4",
+      "version": "3.17.2-3",
+      "filename": "pool/main/f/fuse3/libfuse3-4_3.17.2-3_amd64.deb",
+      "sha256": "92e2d521ff872755a13aa69dba7b24025a7dc0f0f5aa708c9a86cd3565f570da",
+      "source": "fuse3",
+      "sourceVersion": "3.17.2-3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libgcc-s1",
+      "version": "14.2.0-19",
+      "filename": "pool/main/g/gcc-14/libgcc-s1_14.2.0-19_amd64.deb",
+      "sha256": "3c71917b490d1a17aed43196a2787a256ecf060526cdb20216a74bedc061b150",
+      "source": "gcc-14",
+      "sourceVersion": "14.2.0-19",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libgmp10",
+      "version": "2:6.3.0+dfsg-3",
+      "filename": "pool/main/g/gmp/libgmp10_6.3.0+dfsg-3_amd64.deb",
+      "sha256": "d0d0265eb01770f17afd0f7c8c0622f80479dcfbbe13653a0debeec61464e622",
+      "source": "gmp",
+      "sourceVersion": "2:6.3.0+dfsg-3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libhogweed6t64",
+      "version": "3.10.1-1",
+      "filename": "pool/main/n/nettle/libhogweed6t64_3.10.1-1_amd64.deb",
+      "sha256": "b059ed155115ac09da295322de48ee1ed58ef5fa45edcc9e12ff0e94636ef25f",
+      "source": "nettle",
+      "sourceVersion": "3.10.1-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "liblastlog2-2",
+      "version": "2.41.5-0+deb13u1",
+      "filename": "pool/main/u/util-linux/liblastlog2-2_2.41.5-0+deb13u1_amd64.deb",
+      "sha256": "abb76aecbf51479e6e193873dfddaa1b88667dc0b1db82a11286a67550ba1557",
+      "source": "util-linux",
+      "sourceVersion": "2.41.5-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "liblz4-1",
+      "version": "1.10.0-4",
+      "filename": "pool/main/l/lz4/liblz4-1_1.10.0-4_amd64.deb",
+      "sha256": "c31ec4c7c82755a38b2f3fe066fc0c5518cc91a601a268fbcd19bdacb1f22e1e",
+      "source": "lz4",
+      "sourceVersion": "1.10.0-4",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "liblzma5",
+      "version": "5.8.1-1+deb13u2",
+      "filename": "https://snapshot.debian.org/file/fa5f4801d2d63f6bb60f8d2a3b74a7730f6f782e",
+      "sha256": "b38acab30f295bf1066a6632e31cbd0a1980f2924b38040cda131d5dea5384ec",
+      "source": "xz-utils",
+      "sourceVersion": "5.8.1-1+deb13u2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libmd0",
+      "version": "1.1.0-2+b1",
+      "filename": "pool/main/libm/libmd/libmd0_1.1.0-2+b1_amd64.deb",
+      "sha256": "7244ec3839b61fac0c1884fe08aaa040f26e8f1f35f1f5d3482eacefd30d1b44",
+      "source": "libmd",
+      "sourceVersion": "1.1.0-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libmount1",
+      "version": "2.41.5-0+deb13u1",
+      "filename": "pool/main/u/util-linux/libmount1_2.41.5-0+deb13u1_amd64.deb",
+      "sha256": "6d00f45f2e80e078e906e3eedecd3ba6913e39fef49bff361ee583f17f00ec05",
+      "source": "util-linux",
+      "sourceVersion": "2.41.5-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libnettle8t64",
+      "version": "3.10.1-1",
+      "filename": "pool/main/n/nettle/libnettle8t64_3.10.1-1_amd64.deb",
+      "sha256": "1b03d4a9cd9c8143ba50fe6396f36937e901a317d492d179f4596862c1731cfe",
+      "source": "nettle",
+      "sourceVersion": "3.10.1-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libpam-modules",
+      "version": "1.7.0-5",
+      "filename": "pool/main/p/pam/libpam-modules_1.7.0-5_amd64.deb",
+      "sha256": "9679ade117f8775ac0471f48a92652ab8e8dcda4e2ff06de75158cded9cfd83c",
+      "source": "pam",
+      "sourceVersion": "1.7.0-5",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libpam-modules-bin",
+      "version": "1.7.0-5",
+      "filename": "pool/main/p/pam/libpam-modules-bin_1.7.0-5_amd64.deb",
+      "sha256": "cc72066d008444317738e8e931d6131b301466b4e2dd5ef5baa75fb1a45d61a7",
+      "source": "pam",
+      "sourceVersion": "1.7.0-5",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libpam-runtime",
+      "version": "1.7.0-5",
+      "filename": "pool/main/p/pam/libpam-runtime_1.7.0-5_all.deb",
+      "sha256": "b02792c9ed6174db695a653b95ef3629fdac3a73ba1eff1754ab161b5711bfbf",
+      "source": "pam",
+      "sourceVersion": "1.7.0-5",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libpam0g",
+      "version": "1.7.0-5",
+      "filename": "pool/main/p/pam/libpam0g_1.7.0-5_amd64.deb",
+      "sha256": "4f5bde27d8df2de6ea8990319b42d9974f56a3ba9907ce7296fd0f8964fc9fb1",
+      "source": "pam",
+      "sourceVersion": "1.7.0-5",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libpcre2-8-0",
+      "version": "10.46-1~deb13u3",
+      "filename": "https://snapshot.debian.org/file/6a9d878c304ba14d6fa2542217fee0559a47b5a9",
+      "sha256": "e226f661d918f04daf38cdbc4806b7ed7d6ef95c7eb0ade692fc350e31970040",
+      "source": "pcre2",
+      "sourceVersion": "10.46-1~deb13u3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libseccomp2",
+      "version": "2.6.0-2",
+      "filename": "pool/main/libs/libseccomp/libseccomp2_2.6.0-2_amd64.deb",
+      "sha256": "89d5138e05fb6a86b9afd8b54dc0fb4b14f4c27c05e6c5f767c2132bdf808531",
+      "source": "libseccomp",
+      "sourceVersion": "2.6.0-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libselinux1",
+      "version": "3.8.1-1",
+      "filename": "pool/main/libs/libselinux/libselinux1_3.8.1-1_amd64.deb",
+      "sha256": "68bb8d32bd8d6d7d2f5952a169db03d1484b46ae1e52abccdec42a19dccea5d5",
+      "source": "libselinux",
+      "sourceVersion": "3.8.1-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libsemanage-common",
+      "version": "3.8.1-1",
+      "filename": "pool/main/libs/libsemanage/libsemanage-common_3.8.1-1_all.deb",
+      "sha256": "65375d886749c236bd1da4d9990b7c2469d2fe66019a28e5614f6814376d3dcb",
+      "source": "libsemanage",
+      "sourceVersion": "3.8.1-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libsemanage2",
+      "version": "3.8.1-1",
+      "filename": "pool/main/libs/libsemanage/libsemanage2_3.8.1-1_amd64.deb",
+      "sha256": "f97da7505d17ad3bdd8fc56302256df7e158e5e0d8b02cb766654199cbc406a9",
+      "source": "libsemanage",
+      "sourceVersion": "3.8.1-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libsepol2",
+      "version": "3.8.1-1",
+      "filename": "pool/main/libs/libsepol/libsepol2_3.8.1-1_amd64.deb",
+      "sha256": "3595d2d3a6d24695e7953f4f00cdfe6974c9242d9a8dfee8998e77fbf7b2ba09",
+      "source": "libsepol",
+      "sourceVersion": "3.8.1-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libsmartcols1",
+      "version": "2.41.5-0+deb13u1",
+      "filename": "pool/main/u/util-linux/libsmartcols1_2.41.5-0+deb13u1_amd64.deb",
+      "sha256": "d96bac9c8805685f2734885098a214b82950da6ebb182c27a6b7a124a0323392",
+      "source": "util-linux",
+      "sourceVersion": "2.41.5-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libsqlite3-0",
+      "version": "3.46.1-7+deb13u2",
+      "filename": "pool/main/s/sqlite3/libsqlite3-0_3.46.1-7+deb13u2_amd64.deb",
+      "sha256": "0a459adaffd901109f7811ab65f58e7a957b4907d05539cf3d1184efdcde0468",
+      "source": "sqlite3",
+      "sourceVersion": "3.46.1-7+deb13u2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libssl3t64",
+      "version": "3.5.7-1~deb13u3",
+      "filename": "https://snapshot.debian.org/file/037457764b8a864be9be883a989f95b6b2a13c11",
+      "sha256": "ff16bc048bcd7d1b256094450b79c77947d8e76fe2a24bd99b91021d591fa074",
+      "source": "openssl",
+      "sourceVersion": "3.5.7-1~deb13u3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libstdc++6",
+      "version": "14.2.0-19",
+      "filename": "pool/main/g/gcc-14/libstdc++6_14.2.0-19_amd64.deb",
+      "sha256": "ab1fa05837aa7a92aae748fd07a18a35f7d18bb4a71c4724fe2bbf0e32089de0",
+      "source": "gcc-14",
+      "sourceVersion": "14.2.0-19",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libsystemd0",
+      "version": "257.13-1~deb13u1",
+      "filename": "pool/main/s/systemd/libsystemd0_257.13-1~deb13u1_amd64.deb",
+      "sha256": "ab0d4127b5e46e6f8c015a1db15a62ba9ae274cdefa150083adf90ada0600ea1",
+      "source": "systemd",
+      "sourceVersion": "257.13-1~deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libtinfo6",
+      "version": "6.5+20250216-2",
+      "filename": "pool/main/n/ncurses/libtinfo6_6.5+20250216-2_amd64.deb",
+      "sha256": "8b9f6a7983e9418564e48a627518de4c03917b56efe68d7f3e93bd8fffa1cc10",
+      "source": "ncurses",
+      "sourceVersion": "6.5+20250216-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libudev1",
+      "version": "257.13-1~deb13u1",
+      "filename": "pool/main/s/systemd/libudev1_257.13-1~deb13u1_amd64.deb",
+      "sha256": "5d41c284f5a93b05bc7d648b61a02dd2bb9ff05b2261ad1a8b7d96044a0cfa88",
+      "source": "systemd",
+      "sourceVersion": "257.13-1~deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libuuid1",
+      "version": "2.41.5-0+deb13u1",
+      "filename": "pool/main/u/util-linux/libuuid1_2.41.5-0+deb13u1_amd64.deb",
+      "sha256": "c1bf4c4c3ff48c57fabf93307dfb56996b60cfa33927afc4158b5db36fb2721e",
+      "source": "util-linux",
+      "sourceVersion": "2.41.5-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libxxhash0",
+      "version": "0.8.3-2",
+      "filename": "pool/main/x/xxhash/libxxhash0_0.8.3-2_amd64.deb",
+      "sha256": "81da7064d56fc044f5db4bb3c1e80ff50a4986dcbbf80d958eeca565b44c157f",
+      "source": "xxhash",
+      "sourceVersion": "0.8.3-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "libzstd1",
+      "version": "1.5.7+dfsg-1",
+      "filename": "pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-1_amd64.deb",
+      "sha256": "2f6a2aeacfc925eba8b00ac9139bc4bfccf8cacb09eb93de067074b26948eef9",
+      "source": "libzstd",
+      "sourceVersion": "1.5.7+dfsg-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "login",
+      "version": "1:4.16.0-2+really2.41.5-0+deb13u1",
+      "filename": "pool/main/u/util-linux/login_4.16.0-2+really2.41.5-0+deb13u1_amd64.deb",
+      "sha256": "8fc5869532a73d577c4abb5ed917e048bbd72148702ea1dcadd3817064f3e887",
+      "source": "util-linux",
+      "sourceVersion": "2.41.5-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "login.defs",
+      "version": "1:4.17.4-2",
+      "filename": "pool/main/s/shadow/login.defs_4.17.4-2_all.deb",
+      "sha256": "b4bbb8242cbf5588de7aafeb9d578a3dee1db2891f444ab454fd30bd80ccf2b4",
+      "source": "shadow",
+      "sourceVersion": "1:4.17.4-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "mawk",
+      "version": "1.3.4.20250131-1",
+      "filename": "pool/main/m/mawk/mawk_1.3.4.20250131-1_amd64.deb",
+      "sha256": "ade14470c4dff8921bca6ca8b1ea20eadc0f2178b48caff3c74534b17a633292",
+      "source": "mawk",
+      "sourceVersion": "1.3.4.20250131-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "mount",
+      "version": "2.41.5-0+deb13u1",
+      "filename": "pool/main/u/util-linux/mount_2.41.5-0+deb13u1_amd64.deb",
+      "sha256": "eb70a615114ac40123768beb20e302554d5cb7edb33290be7e418ebe1075c878",
+      "source": "util-linux",
+      "sourceVersion": "2.41.5-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "ncurses-base",
+      "version": "6.5+20250216-2",
+      "filename": "pool/main/n/ncurses/ncurses-base_6.5+20250216-2_all.deb",
+      "sha256": "190e775260a38973c415a36ae99f33ad1b37ea6ca99929d7c5d53843fc23e914",
+      "source": "ncurses",
+      "sourceVersion": "6.5+20250216-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "ncurses-bin",
+      "version": "6.5+20250216-2",
+      "filename": "pool/main/n/ncurses/ncurses-bin_6.5+20250216-2_amd64.deb",
+      "sha256": "40a525f4761e9ed4b8adcd1783cb9a6467ff8008215ae99b3597825bdefc61e4",
+      "source": "ncurses",
+      "sourceVersion": "6.5+20250216-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "openssl-provider-legacy",
+      "version": "3.5.7-1~deb13u3",
+      "filename": "https://snapshot.debian.org/file/9db06300efefb40f80b65d7cae64543c3428d24c",
+      "sha256": "c12e0266c4780749a4702b8959ac979689f4182e18eed85a8a5eb90ed0e16eab",
+      "source": "openssl",
+      "sourceVersion": "3.5.7-1~deb13u3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "passwd",
+      "version": "1:4.17.4-2",
+      "filename": "pool/main/s/shadow/passwd_4.17.4-2_amd64.deb",
+      "sha256": "c5eaef41c6947d2888fa3462f787a7e02158b997bd0119154283f425ba57b8b8",
+      "source": "shadow",
+      "sourceVersion": "1:4.17.4-2",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "perl-base",
+      "version": "5.40.1-6+deb13u1",
+      "filename": "pool/main/p/perl/perl-base_5.40.1-6+deb13u1_amd64.deb",
+      "sha256": "b795464137a0f4d443fc9284f4b93e883fb83883cb533adf300ac660807a352a",
+      "source": "perl",
+      "sourceVersion": "5.40.1-6+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "sed",
+      "version": "4.9-2+deb13u1",
+      "filename": "pool/main/s/sed/sed_4.9-2+deb13u1_amd64.deb",
+      "sha256": "7071270ed4f6adda55bc4f926347fb847bacaffbdee3dff917bc6006ed7e3775",
+      "source": "sed",
+      "sourceVersion": "4.9-2+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "sqv",
+      "version": "1.3.0-3+b2",
+      "filename": "pool/main/r/rust-sequoia-sqv/sqv_1.3.0-3+b2_amd64.deb",
+      "sha256": "97760aa17acceee0cace13d9edbed781d891b43e0dec0d6ddc4bd5e4c3ac65aa",
+      "source": "rust-sequoia-sqv",
+      "sourceVersion": "1.3.0-3",
+      "builtUsing": [
+        {
+          "name": "rust-buffered-reader",
+          "version": "1.3.1-2"
+        },
+        {
+          "name": "rust-nettle",
+          "version": "7.3.0-1"
+        },
+        {
+          "name": "rust-nettle-sys",
+          "version": "2.3.1-1"
+        },
+        {
+          "name": "rust-sequoia-openpgp",
+          "version": "2.0.0-2+deb13u1"
+        },
+        {
+          "name": "rust-sequoia-policy-config",
+          "version": "0.8.0-1"
+        },
+        {
+          "name": "rustc",
+          "version": "1.85.0+dfsg3-1"
+        }
+      ],
+      "staticBuiltUsing": [
+        {
+          "name": "rust-aho-corasick",
+          "version": "1.1.3-1"
+        },
+        {
+          "name": "rust-anstream",
+          "version": "0.6.15-1"
+        },
+        {
+          "name": "rust-anstyle",
+          "version": "1.0.8-1"
+        },
+        {
+          "name": "rust-anstyle-parse",
+          "version": "0.2.1-1"
+        },
+        {
+          "name": "rust-anstyle-query",
+          "version": "1.0.0-1"
+        },
+        {
+          "name": "rust-anyhow",
+          "version": "1.0.95-1"
+        },
+        {
+          "name": "rust-argon2",
+          "version": "0.5.3-1"
+        },
+        {
+          "name": "rust-base64",
+          "version": "0.22.1-1"
+        },
+        {
+          "name": "rust-base64ct",
+          "version": "1.6.0-1"
+        },
+        {
+          "name": "rust-bitflags",
+          "version": "2.8.0-1"
+        },
+        {
+          "name": "rust-blake2",
+          "version": "0.10.6-3"
+        },
+        {
+          "name": "rust-block-buffer",
+          "version": "0.10.4-1"
+        },
+        {
+          "name": "rust-buffered-reader",
+          "version": "1.3.1-2"
+        },
+        {
+          "name": "rust-cfg-if",
+          "version": "1.0.0-1"
+        },
+        {
+          "name": "rust-chrono",
+          "version": "0.4.39-2"
+        },
+        {
+          "name": "rust-clap",
+          "version": "4.5.23-1"
+        },
+        {
+          "name": "rust-clap-builder",
+          "version": "4.5.23-1"
+        },
+        {
+          "name": "rust-clap-lex",
+          "version": "0.7.4-1"
+        },
+        {
+          "name": "rust-colorchoice",
+          "version": "1.0.0-1"
+        },
+        {
+          "name": "rust-cpufeatures",
+          "version": "0.2.16-1"
+        },
+        {
+          "name": "rust-crypto-common",
+          "version": "0.1.6-1"
+        },
+        {
+          "name": "rust-digest",
+          "version": "0.10.7-2"
+        },
+        {
+          "name": "rust-dyn-clone",
+          "version": "1.0.16-1"
+        },
+        {
+          "name": "rust-generic-array",
+          "version": "0.14.7-1"
+        },
+        {
+          "name": "rust-getrandom",
+          "version": "0.2.15-1"
+        },
+        {
+          "name": "rust-iana-time-zone",
+          "version": "0.1.63-1"
+        },
+        {
+          "name": "rust-idna",
+          "version": "1.0.3-2"
+        },
+        {
+          "name": "rust-idna-adapter",
+          "version": "1.1.0-1"
+        },
+        {
+          "name": "rust-idna-mapping",
+          "version": "1.0.0-1"
+        },
+        {
+          "name": "rust-lalrpop-util",
+          "version": "0.20.0-1"
+        },
+        {
+          "name": "rust-lazy-static",
+          "version": "1.5.0-1"
+        },
+        {
+          "name": "rust-libc",
+          "version": "0.2.169-1"
+        },
+        {
+          "name": "rust-linux-raw-sys",
+          "version": "0.4.14-1"
+        },
+        {
+          "name": "rust-memchr",
+          "version": "2.7.4-1"
+        },
+        {
+          "name": "rust-memsec",
+          "version": "0.7.0-1"
+        },
+        {
+          "name": "rust-nettle",
+          "version": "7.3.0-1"
+        },
+        {
+          "name": "rust-nettle-sys",
+          "version": "2.3.1-1"
+        },
+        {
+          "name": "rust-num-traits",
+          "version": "0.2.19-2"
+        },
+        {
+          "name": "rust-password-hash",
+          "version": "0.5.0-1"
+        },
+        {
+          "name": "rust-rand-core",
+          "version": "0.6.4-2"
+        },
+        {
+          "name": "rust-regex",
+          "version": "1.11.1-2"
+        },
+        {
+          "name": "rust-regex-automata",
+          "version": "0.4.9-2"
+        },
+        {
+          "name": "rust-regex-syntax",
+          "version": "0.8.5-1"
+        },
+        {
+          "name": "rust-rustix",
+          "version": "0.38.37-4"
+        },
+        {
+          "name": "rust-sequoia-openpgp",
+          "version": "2.0.0-2+deb13u1"
+        },
+        {
+          "name": "rust-sequoia-policy-config",
+          "version": "0.8.0-1"
+        },
+        {
+          "name": "rust-serde",
+          "version": "1.0.217-1"
+        },
+        {
+          "name": "rust-sha1collisiondetection",
+          "version": "0.3.2-1"
+        },
+        {
+          "name": "rust-smallvec",
+          "version": "1.13.2-1"
+        },
+        {
+          "name": "rust-strsim-0.10",
+          "version": "0.10.0-4"
+        },
+        {
+          "name": "rust-subtle",
+          "version": "2.6.1-1"
+        },
+        {
+          "name": "rust-terminal-size",
+          "version": "0.4.1-2"
+        },
+        {
+          "name": "rust-thiserror",
+          "version": "2.0.11-1"
+        },
+        {
+          "name": "rust-thiserror-1",
+          "version": "1.0.69-1"
+        },
+        {
+          "name": "rust-tinyvec",
+          "version": "1.6.0-2"
+        },
+        {
+          "name": "rust-tinyvec-macros",
+          "version": "0.1.0-1"
+        },
+        {
+          "name": "rust-toml-0.5",
+          "version": "0.5.11-4"
+        },
+        {
+          "name": "rust-typenum",
+          "version": "1.17.0-3"
+        },
+        {
+          "name": "rust-unicode-bidi",
+          "version": "0.3.17-1"
+        },
+        {
+          "name": "rust-unicode-joining-type",
+          "version": "1.0.0-1"
+        },
+        {
+          "name": "rust-unicode-normalization",
+          "version": "0.1.24-1"
+        },
+        {
+          "name": "rust-utf8-iter",
+          "version": "1.0.4-1"
+        },
+        {
+          "name": "rust-utf8parse",
+          "version": "0.2.1-1"
+        },
+        {
+          "name": "rust-xxhash-rust",
+          "version": "0.8.15-1"
+        },
+        {
+          "name": "rustc",
+          "version": "1.85.0+dfsg3-1"
+        }
+      ]
+    },
+    {
+      "name": "sysvinit-utils",
+      "version": "3.14-4",
+      "filename": "pool/main/s/sysvinit/sysvinit-utils_3.14-4_amd64.deb",
+      "sha256": "c7e957360dff89675b491e501b00047cf750695178cabab167c92fc260d358ec",
+      "source": "sysvinit",
+      "sourceVersion": "3.14-4",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "tar",
+      "version": "1.35+dfsg-3.1",
+      "filename": "pool/main/t/tar/tar_1.35+dfsg-3.1_amd64.deb",
+      "sha256": "214c02e1aa291076a3147b8a4c4cae02fadf4c67df629186e3e313726faef1de",
+      "source": "tar",
+      "sourceVersion": "1.35+dfsg-3.1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "tzdata",
+      "version": "2026f-0+deb13u1",
+      "filename": "https://snapshot.debian.org/file/9b8f6cc58caf882d3013519edabc88e1794239b6",
+      "sha256": "2c1c561091402883430d0d47c57a3c0aa00b44afc8a6239265065a87211a5c11",
+      "source": "tzdata",
+      "sourceVersion": "2026f-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "util-linux",
+      "version": "2.41.5-0+deb13u1",
+      "filename": "pool/main/u/util-linux/util-linux_2.41.5-0+deb13u1_amd64.deb",
+      "sha256": "7d5b1176cc3d8cc6b290b3ec17af458f362d9200845f30da22057a8198744430",
+      "source": "util-linux",
+      "sourceVersion": "2.41.5-0+deb13u1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "zlib1g",
+      "version": "1:1.3.dfsg+really1.3.1-1+b1",
+      "filename": "pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.1-1+b1_amd64.deb",
+      "sha256": "015be740d6236ad114582dea500c1d907f29e16d6db00566ca32fb68d71ac90d",
+      "source": "zlib",
+      "sourceVersion": "1:1.3.dfsg+really1.3.1-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    }
+  ],
+  "sources": [
+    {
+      "name": "acl",
+      "version": "2.3.2-2",
+      "files": [
+        {
+          "filename": "pool/main/a/acl/acl_2.3.2-2.dsc",
+          "sha256": "1f42130ccb5442fe2db2aee1dcc03c51a31512dd2519a38e8fc9270c5abbc807",
+          "size": 2604
+        },
+        {
+          "filename": "pool/main/a/acl/acl_2.3.2.orig.tar.xz",
+          "sha256": "97203a72cae99ab89a067fe2210c1cbf052bc492b479eca7d226d9830883b0bd",
+          "size": 371680
+        },
+        {
+          "filename": "pool/main/a/acl/acl_2.3.2.orig.tar.xz.asc",
+          "sha256": "184c6a903490885a096095db67b433a04542c6569f167cbe8115268c0f227273",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/a/acl/acl_2.3.2-2.debian.tar.xz",
+          "sha256": "e27b6e194c0a7554595d76f96acdceb800631bdc46c36457b73bc7e4a0c5f2ee",
+          "size": 24296
+        }
+      ]
+    },
+    {
+      "name": "apt",
+      "version": "3.0.4",
+      "files": [
+        {
+          "filename": "https://snapshot.debian.org/file/10cfc55acc4632dce0336edd1a40ad51b46ea50a",
+          "sha256": "efc029dbfb0e264dfb38a8bf34398a8d3709cd35a463c270153b59e2e4ffb404",
+          "size": 3091
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/b1e9d1bda2a44fef4ea8db7e78c7b89765905631",
+          "sha256": "e853aec49afbe520ebcd4dbcbc98e1c55262c6bf1c119cf43e6aec69752443c6",
+          "size": 2423460
+        }
+      ]
+    },
+    {
+      "name": "attr",
+      "version": "1:2.5.2-3",
+      "files": [
+        {
+          "filename": "pool/main/a/attr/attr_2.5.2-3.dsc",
+          "sha256": "c2ae3e15db059029030ddf4fdac179d8f90d423f2310a6ef8c745ba28ac18b0a",
+          "size": 2576
+        },
+        {
+          "filename": "pool/main/a/attr/attr_2.5.2.orig.tar.xz",
+          "sha256": "f2e97b0ab7ce293681ab701915766190d607a1dba7fae8a718138150b700a70b",
+          "size": 334180
+        },
+        {
+          "filename": "pool/main/a/attr/attr_2.5.2.orig.tar.xz.asc",
+          "sha256": "eeac729088d3c6379e91b7596cb3582e46b047c47f0fa3c5c77f9c9e84dc3a4c",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/a/attr/attr_2.5.2-3.debian.tar.xz",
+          "sha256": "153f98c87575277ea021e24dae36293b7738699174438a2060b47e8312b771e3",
+          "size": 32260
+        }
+      ]
+    },
+    {
+      "name": "audit",
+      "version": "1:4.0.2-2+deb13u1",
+      "files": [
+        {
+          "filename": "pool/main/a/audit/audit_4.0.2-2+deb13u1.dsc",
+          "sha256": "f72198219d4a50967e328a143c9c0a7ba981c8f3790b2880465b8a80ac33850e",
+          "size": 2761
+        },
+        {
+          "filename": "pool/main/a/audit/audit_4.0.2.orig.tar.gz",
+          "sha256": "d5d1b5d50ee4a2d0d17875bc6ae6bd6a7d5b34d9557ea847a39faec531faaa0a",
+          "size": 1198769
+        },
+        {
+          "filename": "pool/main/a/audit/audit_4.0.2-2+deb13u1.debian.tar.xz",
+          "sha256": "ab39cb2d6dc6b0440da37f085b643dffc86d8cc5370b5cc6502d36b53edaa862",
+          "size": 25008
+        }
+      ]
+    },
+    {
+      "name": "base-files",
+      "version": "13.8+deb13u7",
+      "files": [
+        {
+          "filename": "pool/main/b/base-files/base-files_13.8+deb13u7.dsc",
+          "sha256": "6240b5a02fc32bd6d925bb7776e00c467e80d930f8cf3c4a20c299ce692dc7e4",
+          "size": 1247
+        },
+        {
+          "filename": "pool/main/b/base-files/base-files_13.8+deb13u7.tar.xz",
+          "sha256": "be32803b9408ac9aa46b96f68c83ee45e88d04d89854a87999986efc4cb34c69",
+          "size": 83444
+        }
+      ]
+    },
+    {
+      "name": "base-passwd",
+      "version": "3.6.7",
+      "files": [
+        {
+          "filename": "pool/main/b/base-passwd/base-passwd_3.6.7.dsc",
+          "sha256": "23dafe71f85d7595d9e20efba17729c1c975a33bd469cf09bfad9e96b1f542f3",
+          "size": 1891
+        },
+        {
+          "filename": "pool/main/b/base-passwd/base-passwd_3.6.7.tar.xz",
+          "sha256": "cf869870fed7862b57bfa9e99cd5cd6f365e2349705a1b65af7fc182629bd1ab",
+          "size": 60872
+        }
+      ]
+    },
+    {
+      "name": "bash",
+      "version": "5.2.37-2",
+      "files": [
+        {
+          "filename": "pool/main/b/bash/bash_5.2.37-2.dsc",
+          "sha256": "7e5f6d5a26093e812f8841d5cf3245054102e86986017d8edd859417b03707f9",
+          "size": 2162
+        },
+        {
+          "filename": "pool/main/b/bash/bash_5.2.37.orig.tar.xz",
+          "sha256": "370704c9c859f4060b7df19055e43bb9b5fa09d887699cf6ba87885c5485d36a",
+          "size": 5600932
+        },
+        {
+          "filename": "pool/main/b/bash/bash_5.2.37-2.debian.tar.xz",
+          "sha256": "42e03ef523258b61fa765b8c9719d7bf461f2a274260d07fbe45ca7e4627923a",
+          "size": 88360
+        }
+      ]
+    },
+    {
+      "name": "bzip2",
+      "version": "1.0.8-6",
+      "files": [
+        {
+          "filename": "pool/main/b/bzip2/bzip2_1.0.8-6.dsc",
+          "sha256": "cd3bfd77254a6b5ef1be144bdc90a0dd374bc8206afd98ba4abf828741b79820",
+          "size": 1604
+        },
+        {
+          "filename": "pool/main/b/bzip2/bzip2_1.0.8.orig.tar.gz",
+          "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269",
+          "size": 810029
+        },
+        {
+          "filename": "pool/main/b/bzip2/bzip2_1.0.8-6.debian.tar.bz2",
+          "sha256": "648ed0dac9a041ba6951e0cca521628aa39947cefee78139f7b934a5dc502095",
+          "size": 26991
+        }
+      ]
+    },
+    {
+      "name": "cdebconf",
+      "version": "0.280",
+      "files": [
+        {
+          "filename": "pool/main/c/cdebconf/cdebconf_0.280.dsc",
+          "sha256": "36cdaa45fca445d2164fbdd81faad9918d748fa703678d8af237354d5744b1d1",
+          "size": 2703
+        },
+        {
+          "filename": "pool/main/c/cdebconf/cdebconf_0.280.tar.xz",
+          "sha256": "c42115131939845e452a323ceded937efad3b2e3e1b80a1a186f9d5c494a43a2",
+          "size": 286132
+        }
+      ]
+    },
+    {
+      "name": "coreutils",
+      "version": "9.7-3",
+      "files": [
+        {
+          "filename": "pool/main/c/coreutils/coreutils_9.7-3.dsc",
+          "sha256": "c3a207e3aaad165765c7a6fab89045f5fd20035fea6830b9f9ebbb92ebfbff89",
+          "size": 2122
+        },
+        {
+          "filename": "pool/main/c/coreutils/coreutils_9.7.orig.tar.xz",
+          "sha256": "e8bb26ad0293f9b5a1fc43fb42ba970e312c66ce92c1b0b16713d7500db251bf",
+          "size": 6158960
+        },
+        {
+          "filename": "pool/main/c/coreutils/coreutils_9.7.orig.tar.xz.asc",
+          "sha256": "5070e9428bd372a7fa1f66b395b81092bb40c98f9f56a2e2bc55c47fd387e901",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/c/coreutils/coreutils_9.7-3.debian.tar.xz",
+          "sha256": "483f77876a080577f63da1d004cc1cf17d16df65d6925aefdd3294c6101eccfb",
+          "size": 26820
+        }
+      ]
+    },
+    {
+      "name": "dash",
+      "version": "0.5.12-12",
+      "files": [
+        {
+          "filename": "pool/main/d/dash/dash_0.5.12-12.dsc",
+          "sha256": "589efc4d87a4ae4745c273bdb33198d7c4f28a71736a8ece81d3677cf9c6e5ce",
+          "size": 1460
+        },
+        {
+          "filename": "pool/main/d/dash/dash_0.5.12.orig.tar.gz",
+          "sha256": "6a474ac46e8b0b32916c4c60df694c82058d3297d8b385b74508030ca4a8f28a",
+          "size": 246054
+        },
+        {
+          "filename": "pool/main/d/dash/dash_0.5.12-12.debian.tar.xz",
+          "sha256": "a278acb5d9a1f5d9a086d36a547287cbf3105b8f33c0e62d86d264decf5ba1ad",
+          "size": 47300
+        }
+      ]
+    },
+    {
+      "name": "db5.3",
+      "version": "5.3.28+dfsg2-9",
+      "files": [
+        {
+          "filename": "pool/main/d/db5.3/db5.3_5.3.28+dfsg2-9.dsc",
+          "sha256": "045f392c75dffc9d4f3bd44978b90ca8d45b935cf0ae4202bf79a760f2ce07b1",
+          "size": 2373
+        },
+        {
+          "filename": "pool/main/d/db5.3/db5.3_5.3.28+dfsg2.orig.tar.xz",
+          "sha256": "ad41b507415dec8316e828b2230242af2251d2c86eefa3c7aa9ef47c5239ef33",
+          "size": 21287688
+        },
+        {
+          "filename": "pool/main/d/db5.3/db5.3_5.3.28+dfsg2-9.debian.tar.xz",
+          "sha256": "21fe6ee0491c83d0c34fe52e0e0e423946172eff68262584a0cc8ef880c36b74",
+          "size": 36412
+        }
+      ]
+    },
+    {
+      "name": "debconf",
+      "version": "1.5.91",
+      "files": [
+        {
+          "filename": "pool/main/d/debconf/debconf_1.5.91.dsc",
+          "sha256": "1aa3ceaef24ef533cfffe7f9ca750c6325dbaea86a7abca77cb4439ceae930d8",
+          "size": 2035
+        },
+        {
+          "filename": "pool/main/d/debconf/debconf_1.5.91.tar.xz",
+          "sha256": "18f3f43924ccc870be483d7c5f1a9be59e51ae1da403059d654666b5a175bf15",
+          "size": 609964
+        }
+      ]
+    },
+    {
+      "name": "debian-archive-keyring",
+      "version": "2025.1",
+      "files": [
+        {
+          "filename": "pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1.dsc",
+          "sha256": "09604bd8d4562a1e942e5d1a19a6b82447cbdeb2e7c7f0df7c32a2503647ea47",
+          "size": 1267
+        },
+        {
+          "filename": "pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1.tar.xz",
+          "sha256": "2d019c3fa19c42da4d37571e473c296286dad0214cb3bd5cafd99f04a8bf5471",
+          "size": 138248
+        }
+      ]
+    },
+    {
+      "name": "debianutils",
+      "version": "5.23.2",
+      "files": [
+        {
+          "filename": "pool/main/d/debianutils/debianutils_5.23.2.dsc",
+          "sha256": "471b65deec232bb033f3e3e06d5bf64dac0ced474c6fd61d41538f3f3de876f8",
+          "size": 1908
+        },
+        {
+          "filename": "pool/main/d/debianutils/debianutils_5.23.2.tar.xz",
+          "sha256": "79e524b7526dba2ec5c409d0ee52ebec135815cf5b2907375d444122e0594b69",
+          "size": 82376
+        }
+      ]
+    },
+    {
+      "name": "diffutils",
+      "version": "1:3.10-4",
+      "files": [
+        {
+          "filename": "pool/main/d/diffutils/diffutils_3.10-4.dsc",
+          "sha256": "087b414ddfc92161a30186926bc4b4ac02c7cba589b0323561cacd54c8b48392",
+          "size": 1875
+        },
+        {
+          "filename": "pool/main/d/diffutils/diffutils_3.10.orig.tar.xz",
+          "sha256": "90e5e93cc724e4ebe12ede80df1634063c7a855692685919bfe60b556c9bd09e",
+          "size": 1624240
+        },
+        {
+          "filename": "pool/main/d/diffutils/diffutils_3.10.orig.tar.xz.asc",
+          "sha256": "a94faf8f1baa04ff220f7b2ccb137c16337284e023ebc4a1d5df475c08d810f7",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/d/diffutils/diffutils_3.10-4.debian.tar.xz",
+          "sha256": "8588b6ffb897ccff46c583e58ef50500b2511eee41949b21e8afa5439712c2c7",
+          "size": 14304
+        }
+      ]
+    },
+    {
+      "name": "dpkg",
+      "version": "1.22.22",
+      "files": [
+        {
+          "filename": "pool/main/d/dpkg/dpkg_1.22.22.dsc",
+          "sha256": "fc481d9b87cd4416cd55673cc1fa716b57480a6b23253ac0d87c1abbfad4c964",
+          "size": 3449
+        },
+        {
+          "filename": "pool/main/d/dpkg/dpkg_1.22.22.tar.xz",
+          "sha256": "d5ea9f132deec8030b50ab2a02ade2b49f0c7a195805a302c8301156fe833a57",
+          "size": 5746724
+        }
+      ]
+    },
+    {
+      "name": "findutils",
+      "version": "4.10.0-3",
+      "files": [
+        {
+          "filename": "pool/main/f/findutils/findutils_4.10.0-3.dsc",
+          "sha256": "fa6b67056d9e5b4d8edbfc8ab95ac15ac769b140284426973f6a1ef07a4594ec",
+          "size": 2291
+        },
+        {
+          "filename": "pool/main/f/findutils/findutils_4.10.0.orig.tar.xz",
+          "sha256": "1387e0b67ff247d2abde998f90dfbf70c1491391a59ddfecb8ae698789f0a4f5",
+          "size": 2240712
+        },
+        {
+          "filename": "pool/main/f/findutils/findutils_4.10.0.orig.tar.xz.asc",
+          "sha256": "7f53670eea6bd114e014571221eb652855c1129a3ed99f2a9257c2a313cc216f",
+          "size": 488
+        },
+        {
+          "filename": "pool/main/f/findutils/findutils_4.10.0-3.debian.tar.xz",
+          "sha256": "7d19668508523a6fcfb7731f5646305a8b1a00a3105ee3f0a5f167adf93a8a46",
+          "size": 33364
+        }
+      ]
+    },
+    {
+      "name": "fuse",
+      "version": "2.9.9-9",
+      "files": [
+        {
+          "filename": "pool/main/f/fuse/fuse_2.9.9-9.dsc",
+          "sha256": "2aa78ed0ad94e6aac2c118e0fa3aaccff8e8011ab54f2822ef15cd3850123e33",
+          "size": 2099
+        },
+        {
+          "filename": "pool/main/f/fuse/fuse_2.9.9.orig.tar.gz",
+          "sha256": "d0e69d5d608cc22ff4843791ad097f554dd32540ddc9bed7638cc6fea7c1b4b5",
+          "size": 1813177
+        },
+        {
+          "filename": "pool/main/f/fuse/fuse_2.9.9.orig.tar.gz.asc",
+          "sha256": "2306ebb33ecc560701f1b569cff3b1cee3dd1c02b46462a9f2c5ba0e5c263a51",
+          "size": 1012
+        },
+        {
+          "filename": "pool/main/f/fuse/fuse_2.9.9-9.debian.tar.xz",
+          "sha256": "2d57e172d14460a6df39366337852ba6e57ba0e6e64e9a9caec5c3da4556a588",
+          "size": 24720
+        }
+      ]
+    },
+    {
+      "name": "fuse3",
+      "version": "3.17.2-3",
+      "files": [
+        {
+          "filename": "pool/main/f/fuse3/fuse3_3.17.2-3.dsc",
+          "sha256": "1339847e7e6512f31d61cf1fe4598341c4b8aa43ea6dc546914b21f96f29deb3",
+          "size": 2428
+        },
+        {
+          "filename": "pool/main/f/fuse3/fuse3_3.17.2.orig.tar.gz",
+          "sha256": "3d932431ad94e86179e5265cddde1d67aa3bb2fb09a5bd35c641f86f2b5ed06f",
+          "size": 5627028
+        },
+        {
+          "filename": "pool/main/f/fuse3/fuse3_3.17.2.orig.tar.gz.asc",
+          "sha256": "df18d3972c68dd0e8f7ad2a544a24ac54d48aa4b42d99b717448f7fe8e71cea4",
+          "size": 314
+        },
+        {
+          "filename": "pool/main/f/fuse3/fuse3_3.17.2-3.debian.tar.xz",
+          "sha256": "eaf7a177761ae8bf99ea97619f2cccf83f169b4f000e17b6106834e69456b5a2",
+          "size": 19440
+        }
+      ]
+    },
+    {
+      "name": "gcc-14",
+      "version": "14.2.0-19",
+      "files": [
+        {
+          "filename": "pool/main/g/gcc-14/gcc-14_14.2.0-19.dsc",
+          "sha256": "7db1e202cce66617e9134a662c877a3a773de5b612fd52179815877e0ecfb847",
+          "size": 47347
+        },
+        {
+          "filename": "pool/main/g/gcc-14/gcc-14_14.2.0.orig.tar.gz",
+          "sha256": "e162a5ef3f0077ecae598c6556908d2ab80841532df3398072a96a6df6e6aa29",
+          "size": 94299633
+        },
+        {
+          "filename": "pool/main/g/gcc-14/gcc-14_14.2.0-19.debian.tar.xz",
+          "sha256": "31cbab4bafa48aa1c540497bd8098cbcf98e673778f927651ed944709f687781",
+          "size": 2577016
+        }
+      ]
+    },
+    {
+      "name": "glibc",
+      "version": "2.41-12+deb13u4",
+      "files": [
+        {
+          "filename": "pool/main/g/glibc/glibc_2.41-12+deb13u4.dsc",
+          "sha256": "0915324aa646bb99abfaa9aa6ecb734b30babd28454a3e51f3152912370fbd3e",
+          "size": 7576
+        },
+        {
+          "filename": "pool/main/g/glibc/glibc_2.41.orig.tar.xz",
+          "sha256": "f24aa441021121a79266f0d75242706cab8843a47901fefe74527491807f1998",
+          "size": 20323540
+        },
+        {
+          "filename": "pool/main/g/glibc/glibc_2.41-12+deb13u4.debian.tar.xz",
+          "sha256": "dda4153511bfd543502d18e5bc9323110996fe9c531f14ae3fad6eb17f027c7d",
+          "size": 499524
+        }
+      ]
+    },
+    {
+      "name": "gmp",
+      "version": "2:6.3.0+dfsg-3",
+      "files": [
+        {
+          "filename": "pool/main/g/gmp/gmp_6.3.0+dfsg-3.dsc",
+          "sha256": "f7b64af28f52b7346bb8581e01d3c19daf769639345f234f8ae1e29c42171443",
+          "size": 2251
+        },
+        {
+          "filename": "pool/main/g/gmp/gmp_6.3.0+dfsg.orig.tar.xz",
+          "sha256": "bd2966e6d277f79328e894a5a9f3ba3fbf2ed2be81def5f48623e30c23fb1572",
+          "size": 1870556
+        },
+        {
+          "filename": "pool/main/g/gmp/gmp_6.3.0+dfsg-3.debian.tar.xz",
+          "sha256": "1d890bbe25dd649d2ddba1926483176520e50f22115a00566f250b613b8c20ad",
+          "size": 19912
+        }
+      ]
+    },
+    {
+      "name": "grep",
+      "version": "3.11-4",
+      "files": [
+        {
+          "filename": "pool/main/g/grep/grep_3.11-4.dsc",
+          "sha256": "dd6f8eb933bc05446e483f7792c8bf0a1aba9d498e65c6ccafe64e9bf27ac054",
+          "size": 1642
+        },
+        {
+          "filename": "pool/main/g/grep/grep_3.11.orig.tar.xz",
+          "sha256": "1db2aedde89d0dea42b16d9528f894c8d15dae4e190b59aecc78f5a951276eab",
+          "size": 1703776
+        },
+        {
+          "filename": "pool/main/g/grep/grep_3.11.orig.tar.xz.asc",
+          "sha256": "89ec23ffd59b68822732dc8204fc89883c3af30a90ae390feb94346d9d09a589",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/g/grep/grep_3.11-4.debian.tar.xz",
+          "sha256": "f10394b7589c58ca7de4b580692b1b59431f898cb2068e86222c174e093fdf49",
+          "size": 20468
+        }
+      ]
+    },
+    {
+      "name": "gzip",
+      "version": "1.13-1+deb13u1",
+      "files": [
+        {
+          "filename": "pool/main/g/gzip/gzip_1.13-1+deb13u1.dsc",
+          "sha256": "0c25763da4f7242fbe7e9185b69bcb3f986011b04446b66a84c52bbdf731d308",
+          "size": 1708
+        },
+        {
+          "filename": "pool/main/g/gzip/gzip_1.13.orig.tar.xz",
+          "sha256": "7454eb6935db17c6655576c2e1b0fabefd38b4d0936e0f87f48cd062ce91a057",
+          "size": 838248
+        },
+        {
+          "filename": "pool/main/g/gzip/gzip_1.13-1+deb13u1.debian.tar.xz",
+          "sha256": "ffc69d13290009f42dbb4d10a34839350eff3fdaf4be1fda03d10b238ba2f77d",
+          "size": 21364
+        }
+      ]
+    },
+    {
+      "name": "hostname",
+      "version": "3.25",
+      "files": [
+        {
+          "filename": "pool/main/h/hostname/hostname_3.25.dsc",
+          "sha256": "80aadf116c3423044be69a4cef8ba2766f412bd4d46a500aacb61f303c19c4ef",
+          "size": 1519
+        },
+        {
+          "filename": "pool/main/h/hostname/hostname_3.25.tar.xz",
+          "sha256": "5bb5d1be011158090157c9e7587ae5606c262a5020ecdc5caac6686b9910592e",
+          "size": 12804
+        }
+      ]
+    },
+    {
+      "name": "init-system-helpers",
+      "version": "1.69~deb13u1",
+      "files": [
+        {
+          "filename": "pool/main/i/init-system-helpers/init-system-helpers_1.69~deb13u1.dsc",
+          "sha256": "873082d72727267b6207e38df47e3002aeb0ed554f876db17c7bbfeb26174ee6",
+          "size": 2266
+        },
+        {
+          "filename": "pool/main/i/init-system-helpers/init-system-helpers_1.69~deb13u1.tar.xz",
+          "sha256": "bbd65c63420b6335b91cbf5daad9a70632a087657eb9078ea000f0a16c2d83da",
+          "size": 45852
+        }
+      ]
+    },
+    {
+      "name": "libbsd",
+      "version": "0.12.2-2",
+      "files": [
+        {
+          "filename": "pool/main/libb/libbsd/libbsd_0.12.2-2.dsc",
+          "sha256": "01eb1d0c896096f9038213f5f00376ecfd1c0d1def21b7042f28ae070e4837e3",
+          "size": 2446
+        },
+        {
+          "filename": "pool/main/libb/libbsd/libbsd_0.12.2.orig.tar.xz",
+          "sha256": "b88cc9163d0c652aaf39a99991d974ddba1c3a9711db8f1b5838af2a14731014",
+          "size": 446032
+        },
+        {
+          "filename": "pool/main/libb/libbsd/libbsd_0.12.2.orig.tar.xz.asc",
+          "sha256": "620dc92f158ebe0a650c0e92214a8121b927276895dc9a1dcaa38f627fa0fcb0",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/libb/libbsd/libbsd_0.12.2-2.debian.tar.xz",
+          "sha256": "36c878a32c1f190ca2cb474de5c6139990a6c029906493d3566770b1ebd569bf",
+          "size": 18688
+        }
+      ]
+    },
+    {
+      "name": "libcap-ng",
+      "version": "0.8.5-4",
+      "files": [
+        {
+          "filename": "pool/main/libc/libcap-ng/libcap-ng_0.8.5-4.dsc",
+          "sha256": "a5745b7d68a11068ae5beddcc7fbc94cd87dd81cb2d7495e7d48610603be3526",
+          "size": 1710
+        },
+        {
+          "filename": "pool/main/libc/libcap-ng/libcap-ng_0.8.5.orig.tar.gz",
+          "sha256": "e4be07fdd234f10b866433f224d183626003c65634ed0552b02e654a380244c2",
+          "size": 59265
+        },
+        {
+          "filename": "pool/main/libc/libcap-ng/libcap-ng_0.8.5-4.debian.tar.xz",
+          "sha256": "f5d4e7f38bdbca87de77317ce95f973883081370ef257019b484e29e3368a20d",
+          "size": 7816
+        }
+      ]
+    },
+    {
+      "name": "libcap2",
+      "version": "1:2.75-10+deb13u1",
+      "files": [
+        {
+          "filename": "pool/main/libc/libcap2/libcap2_2.75-10+deb13u1.dsc",
+          "sha256": "cb6af220de216655ec55bb1f5abf3fa8f03e82c9956f120b313056e895c02ea6",
+          "size": 2714
+        },
+        {
+          "filename": "pool/main/libc/libcap2/libcap2_2.75.orig.tar.xz",
+          "sha256": "de4e7e064c9ba451d5234dd46e897d7c71c96a9ebf9a0c445bc04f4742d83632",
+          "size": 197868
+        },
+        {
+          "filename": "pool/main/libc/libcap2/libcap2_2.75.orig.tar.xz.asc",
+          "sha256": "c71b593e7c3160fd7f406641074d93462bbc4906c9243937a0e232f42d5c54d2",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/libc/libcap2/libcap2_2.75-10+deb13u1.debian.tar.xz",
+          "sha256": "d375de2f743f112835fc0eef2a9c305c1109371954cf53e109b7f046fe58c1bc",
+          "size": 24628
+        }
+      ]
+    },
+    {
+      "name": "libmd",
+      "version": "1.1.0-2",
+      "files": [
+        {
+          "filename": "pool/main/libm/libmd/libmd_1.1.0-2.dsc",
+          "sha256": "46cc951cd6d71bbfeff4522de66f968fb92601ec4cc622b07f6ac0a2a36ac5f0",
+          "size": 2280
+        },
+        {
+          "filename": "pool/main/libm/libmd/libmd_1.1.0.orig.tar.xz",
+          "sha256": "1bd6aa42275313af3141c7cf2e5b964e8b1fd488025caf2f971f43b00776b332",
+          "size": 271228
+        },
+        {
+          "filename": "pool/main/libm/libmd/libmd_1.1.0.orig.tar.xz.asc",
+          "sha256": "402fd3024e43ab975733d09e661804a58ca58697194e4b15216b1217cfe1dadb",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/libm/libmd/libmd_1.1.0-2.debian.tar.xz",
+          "sha256": "3b6ff35fc921eb5450fa9bf2d300c9e058e3771f96f8f13f759768fadd53324c",
+          "size": 8244
+        }
+      ]
+    },
+    {
+      "name": "libseccomp",
+      "version": "2.6.0-2",
+      "files": [
+        {
+          "filename": "pool/main/libs/libseccomp/libseccomp_2.6.0-2.dsc",
+          "sha256": "d05f94536558d34fa339326c6f958a3357b51efac8234470b5d97b69472db765",
+          "size": 2622
+        },
+        {
+          "filename": "pool/main/libs/libseccomp/libseccomp_2.6.0.orig.tar.gz",
+          "sha256": "83b6085232d1588c379dc9b9cae47bb37407cf262e6e74993c61ba72d2a784dc",
+          "size": 685655
+        },
+        {
+          "filename": "pool/main/libs/libseccomp/libseccomp_2.6.0.orig.tar.gz.asc",
+          "sha256": "52e338fa958128293cbd25d2be189e34da41c4f4abbb1b641cf58f373c001f94",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/libs/libseccomp/libseccomp_2.6.0-2.debian.tar.xz",
+          "sha256": "ed705ec85719403e77d004c99c0b06b795f090c66fcae265c4bcf37ffea9cc27",
+          "size": 20800
+        }
+      ]
+    },
+    {
+      "name": "libselinux",
+      "version": "3.8.1-1",
+      "files": [
+        {
+          "filename": "pool/main/libs/libselinux/libselinux_3.8.1-1.dsc",
+          "sha256": "e430b782a396e266f86c32fa779efadebfd40e6a0d10ddbd786fc47905f723b9",
+          "size": 3013
+        },
+        {
+          "filename": "pool/main/libs/libselinux/libselinux_3.8.1.orig.tar.gz",
+          "sha256": "ec2d2789f931152d21c1db1eb4bc202ce4eccede34d9be9e360e3b45243cee2c",
+          "size": 204411
+        },
+        {
+          "filename": "pool/main/libs/libselinux/libselinux_3.8.1.orig.tar.gz.asc",
+          "sha256": "7f983714a780d89f7677e7ba140ce29974022b8ba225f60246b6c33de1477dd6",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/libs/libselinux/libselinux_3.8.1-1.debian.tar.xz",
+          "sha256": "1af25952374f083cf3d6d0edd5beb938f2e53c30eb404afa1e32fcd1cb127db7",
+          "size": 37812
+        }
+      ]
+    },
+    {
+      "name": "libsemanage",
+      "version": "3.8.1-1",
+      "files": [
+        {
+          "filename": "pool/main/libs/libsemanage/libsemanage_3.8.1-1.dsc",
+          "sha256": "b22bfc4ab2cd47fac46cc9e45d418bb30eb540c3e5c1052d6c669f53e180e4e5",
+          "size": 2992
+        },
+        {
+          "filename": "pool/main/libs/libsemanage/libsemanage_3.8.1.orig.tar.gz",
+          "sha256": "7b39127b219cc70bfd935a4af6b0f2ba83d4b35c916f253c7e942c23ab490f07",
+          "size": 184618
+        },
+        {
+          "filename": "pool/main/libs/libsemanage/libsemanage_3.8.1.orig.tar.gz.asc",
+          "sha256": "5b4856cb5823fba1b247ff1b5355692706da68a4df61a936d1b33b1f9e9b2f3d",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/libs/libsemanage/libsemanage_3.8.1-1.debian.tar.xz",
+          "sha256": "6d1e5bd4d06bbd25ced1b75fba394c3e2157bd604cf1cd33fb581793d70bd7b8",
+          "size": 37572
+        }
+      ]
+    },
+    {
+      "name": "libsepol",
+      "version": "3.8.1-1",
+      "files": [
+        {
+          "filename": "pool/main/libs/libsepol/libsepol_3.8.1-1.dsc",
+          "sha256": "0351ffc8c3f66918c9e4ecae9244ae2af27857d8795e424e384ddda794718c34",
+          "size": 2347
+        },
+        {
+          "filename": "pool/main/libs/libsepol/libsepol_3.8.1.orig.tar.gz",
+          "sha256": "0e78705305f955abd4c0654d37a5477ee26349ab74db9e2b03a7868897ae1ddf",
+          "size": 513830
+        },
+        {
+          "filename": "pool/main/libs/libsepol/libsepol_3.8.1.orig.tar.gz.asc",
+          "sha256": "183f6cf96054986704d4224f89518e9139370385c43a533078f45ca688dca8b6",
+          "size": 833
+        },
+        {
+          "filename": "pool/main/libs/libsepol/libsepol_3.8.1-1.debian.tar.xz",
+          "sha256": "7aac515a941f8dd19581b16c664b3098962e6a8ed7fa0afdafd306a85c667619",
+          "size": 21432
+        }
+      ]
+    },
+    {
+      "name": "libxcrypt",
+      "version": "1:4.4.38-1",
+      "files": [
+        {
+          "filename": "pool/main/libx/libxcrypt/libxcrypt_4.4.38-1.dsc",
+          "sha256": "feba1874a84616791c1c17f9a290c9e97562b2904b3b0200edc82a2db54f3f07",
+          "size": 1573
+        },
+        {
+          "filename": "pool/main/libx/libxcrypt/libxcrypt_4.4.38.orig.tar.xz",
+          "sha256": "6a275a356622c64ba9f693892215dbb399c003a7a4afeed9c4c74070eaab20f4",
+          "size": 394216
+        },
+        {
+          "filename": "pool/main/libx/libxcrypt/libxcrypt_4.4.38-1.debian.tar.xz",
+          "sha256": "6b87bcb5325e417ab3f4c01c364233444b4c9008a69ec1d6fababb3f6e693a5e",
+          "size": 8512
+        }
+      ]
+    },
+    {
+      "name": "libzstd",
+      "version": "1.5.7+dfsg-1",
+      "files": [
+        {
+          "filename": "pool/main/libz/libzstd/libzstd_1.5.7+dfsg-1.dsc",
+          "sha256": "8f6ab97fa772d921334e50fa5756a0951e23c718dc913e43a228f28c1a23adf9",
+          "size": 2371
+        },
+        {
+          "filename": "pool/main/libz/libzstd/libzstd_1.5.7+dfsg.orig.tar.xz",
+          "sha256": "0c092ef267edce57ba7f3f2645c861f72eaf5e76273c6c3632869423464b90a5",
+          "size": 1834780
+        },
+        {
+          "filename": "pool/main/libz/libzstd/libzstd_1.5.7+dfsg-1.debian.tar.xz",
+          "sha256": "5e88424d919941291f79e1bfada6cb1a6f748671d9de7d4b7d931f361f183a15",
+          "size": 23036
+        }
+      ]
+    },
+    {
+      "name": "lz4",
+      "version": "1.10.0-4",
+      "files": [
+        {
+          "filename": "pool/main/l/lz4/lz4_1.10.0-4.dsc",
+          "sha256": "394c635aa75a21cd5896680e48821c05336645072ae866b2717d53f36b9ba851",
+          "size": 1941
+        },
+        {
+          "filename": "pool/main/l/lz4/lz4_1.10.0.orig.tar.gz",
+          "sha256": "537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b",
+          "size": 387114
+        },
+        {
+          "filename": "pool/main/l/lz4/lz4_1.10.0-4.debian.tar.xz",
+          "sha256": "8d276c3254182c2c9cf319b9a6504cf257c56b441f37d3db8ad97d33d46a0911",
+          "size": 8080
+        }
+      ]
+    },
+    {
+      "name": "mawk",
+      "version": "1.3.4.20250131-1",
+      "files": [
+        {
+          "filename": "pool/main/m/mawk/mawk_1.3.4.20250131-1.dsc",
+          "sha256": "147dd01670e2ebf61f3c78470e0025b87d14e69c7ba9cfafd54da32a355dea84",
+          "size": 2969
+        },
+        {
+          "filename": "pool/main/m/mawk/mawk_1.3.4.20250131.orig.tar.gz",
+          "sha256": "51bcb82d577b141d896d9d9c3077d7aaa209490132e9f2b9573ba8511b3835be",
+          "size": 433213
+        },
+        {
+          "filename": "pool/main/m/mawk/mawk_1.3.4.20250131.orig.tar.gz.asc",
+          "sha256": "bc83f127727edb42a91d516770c8d0d3cdb5f6e541aa3cb5213b79dae494db95",
+          "size": 729
+        },
+        {
+          "filename": "pool/main/m/mawk/mawk_1.3.4.20250131-1.debian.tar.xz",
+          "sha256": "23dea8244bf4f116ec3cd202ab5d4693207d82d986cd0a3d79442b916be4e2b7",
+          "size": 16008
+        }
+      ]
+    },
+    {
+      "name": "ncurses",
+      "version": "6.5+20250216-2",
+      "files": [
+        {
+          "filename": "pool/main/n/ncurses/ncurses_6.5+20250216-2.dsc",
+          "sha256": "00539cc2bc6bb84be1b8a8a5decf606682e14b6f39b76b9aa090e65d2c2d4580",
+          "size": 3890
+        },
+        {
+          "filename": "pool/main/n/ncurses/ncurses_6.5+20250216.orig.tar.gz",
+          "sha256": "b37baafa436e7133bb12a185cb8f60e1599b1947e9f0181c76f3190acf28b6eb",
+          "size": 3774714
+        },
+        {
+          "filename": "pool/main/n/ncurses/ncurses_6.5+20250216.orig.tar.gz.asc",
+          "sha256": "64f4d17923322176c44079f18f170e2164a59d551d7e4e9c1a6e4eebedc5dd6f",
+          "size": 729
+        },
+        {
+          "filename": "pool/main/n/ncurses/ncurses_6.5+20250216-2.debian.tar.xz",
+          "sha256": "546930a8992ae3325d8c38378f290265d969cf6333cfae9648ac6d69e1e8a8a6",
+          "size": 50420
+        }
+      ]
+    },
+    {
+      "name": "nettle",
+      "version": "3.10.1-1",
+      "files": [
+        {
+          "filename": "pool/main/n/nettle/nettle_3.10.1-1.dsc",
+          "sha256": "7b440850ce04b341363f3f5e23dfb9f96ebf7d52e0ef7ba2d07120c90ca61b3c",
+          "size": 2053
+        },
+        {
+          "filename": "pool/main/n/nettle/nettle_3.10.1.orig.tar.gz",
+          "sha256": "b0fcdd7fc0cdea6e80dcf1dd85ba794af0d5b4a57e26397eee3bc193272d9132",
+          "size": 2643267
+        },
+        {
+          "filename": "pool/main/n/nettle/nettle_3.10.1-1.debian.tar.xz",
+          "sha256": "2d40d02ddac5985d8833532a17a0ef96cb685ee0547ee9617ec13793b22e34c6",
+          "size": 25036
+        }
+      ]
+    },
+    {
+      "name": "openssl",
+      "version": "3.5.7-1~deb13u3",
+      "files": [
+        {
+          "filename": "https://snapshot.debian.org/file/11a6b388b1ce45f8c60021ed66f8772f7c963c62",
+          "sha256": "0a427fdc3e773f4119a7dd5b36d1f0903a163cf4ea15d812bb823b251ff1cbc5",
+          "size": 147344
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/53d331880fbde8e6fe25870d5325a61201f6264d",
+          "sha256": "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8",
+          "size": 53153930
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/9408998095f984b36591732286ef1df1ba7ce492",
+          "sha256": "d3d082bee3f658c31db53af625eceecf29d777c7010394bed5787ebcc98abdf2",
+          "size": 833
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/db56cd5070f847d98b8fec3dde05ce8ee276ba64",
+          "sha256": "9cdb0d9daf0773ca5c0f3f5ea1fc59b1106a99e005a5c048948b826e8d3b47e1",
+          "size": 2710
+        }
+      ]
+    },
+    {
+      "name": "pam",
+      "version": "1.7.0-5",
+      "files": [
+        {
+          "filename": "pool/main/p/pam/pam_1.7.0-5.dsc",
+          "sha256": "5c127aa18c7cb52ec9ee91fa2099453b3a851bcc0088e79045384a2a508b341c",
+          "size": 2210
+        },
+        {
+          "filename": "pool/main/p/pam/pam_1.7.0.orig.tar.xz",
+          "sha256": "57dcd7a6b966ecd5bbd95e1d11173734691e16b68692fa59661cdae9b13b1697",
+          "size": 507824
+        },
+        {
+          "filename": "pool/main/p/pam/pam_1.7.0.orig.tar.xz.asc",
+          "sha256": "7a8ea18ec7d9dd1f8cbf9055c32128cbca8241aa63e9fea44d56ce6f0e15e441",
+          "size": 801
+        },
+        {
+          "filename": "pool/main/p/pam/pam_1.7.0-5.debian.tar.xz",
+          "sha256": "d776d7cb6fc8b08273f96b7f843299356ef13c6756e30468c594ab28faf1701c",
+          "size": 145640
+        }
+      ]
+    },
+    {
+      "name": "pcre2",
+      "version": "10.46-1~deb13u3",
+      "files": [
+        {
+          "filename": "https://snapshot.debian.org/file/205a17397d764e25a8b4e86af9d70263e74eff66",
+          "sha256": "28734c85365f431a4494c2efe2cdb42ed432673f962e421826f3c3b7aa76c4cf",
+          "size": 20405
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/6858f0eb287c8285f53a038c8a95dc43ba51c653",
+          "sha256": "8d28d7f2c3b970c3a4bf3776bcbb5adfc923183ce74bc8df1ebaad8c1985bd07",
+          "size": 2718545
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/e5fb135d6cf0465aa05ebdd5b5e72c3eb700a52b",
+          "sha256": "5f317534eff1e33f0a5690a866ba2f2c9399c60ce9b74c89039d4de372420c5c",
+          "size": 2406
+        }
+      ]
+    },
+    {
+      "name": "perl",
+      "version": "5.40.1-6+deb13u1",
+      "files": [
+        {
+          "filename": "pool/main/p/perl/perl_5.40.1-6+deb13u1.dsc",
+          "sha256": "92d1cfb32167d77fada7284f1c291de72f93eb896f5cfd58247d020182b403a8",
+          "size": 2404
+        },
+        {
+          "filename": "pool/main/p/perl/perl_5.40.1.orig-regen-configure.tar.xz",
+          "sha256": "4ea023d08101443f6ed9dc3bdd9bb5f5e08087678dc9e443d195df22da36209a",
+          "size": 421056
+        },
+        {
+          "filename": "pool/main/p/perl/perl_5.40.1.orig.tar.xz",
+          "sha256": "dfa20c2eef2b4af133525610bbb65dd13777ecf998c9c5b1ccf0d308e732ee3f",
+          "size": 13930924
+        },
+        {
+          "filename": "pool/main/p/perl/perl_5.40.1-6+deb13u1.debian.tar.xz",
+          "sha256": "5ee76db601d6f4638433ab9b0f5bd5cfb15b102a79d902ff282e762becb7e724",
+          "size": 186360
+        }
+      ]
+    },
+    {
+      "name": "rust-aho-corasick",
+      "version": "1.1.3-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-aho-corasick/rust-aho-corasick_1.1.3-1.dsc",
+          "sha256": "cbf161d93f0afe1eab4799e264ef8923f06de313e1a3b63d1b80103d69c21443",
+          "size": 1820
+        },
+        {
+          "filename": "pool/main/r/rust-aho-corasick/rust-aho-corasick_1.1.3.orig.tar.gz",
+          "sha256": "8e60d3430d3a69478ad0993f19238d2df97c507009a52b3c10addcd7f6bcb916",
+          "size": 183311
+        },
+        {
+          "filename": "pool/main/r/rust-aho-corasick/rust-aho-corasick_1.1.3-1.debian.tar.xz",
+          "sha256": "88f32007e98ea9aa3aa204bc77fd9bf675a16e2e867e19c569cac46174e25073",
+          "size": 3900
+        }
+      ]
+    },
+    {
+      "name": "rust-anstream",
+      "version": "0.6.15-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-anstream/rust-anstream_0.6.15-1.dsc",
+          "sha256": "7bf37fe0cf8cc662bb5034c43dfb7fa6c9ae2be2b9fa82cb2d4a1a45ad15b953",
+          "size": 2663
+        },
+        {
+          "filename": "pool/main/r/rust-anstream/rust-anstream_0.6.15.orig.tar.gz",
+          "sha256": "64e15c1ab1f89faffbf04a634d5e1962e9074f2741eef6d97f3c4e322426d526",
+          "size": 29231
+        },
+        {
+          "filename": "pool/main/r/rust-anstream/rust-anstream_0.6.15-1.debian.tar.xz",
+          "sha256": "ed2b979e85fc0aa0d434f4b31cfaa84c8561ed44818cf4d7755d8851a1248a7a",
+          "size": 4164
+        }
+      ]
+    },
+    {
+      "name": "rust-anstyle-parse",
+      "version": "0.2.1-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-anstyle-parse/rust-anstyle-parse_0.2.1-1.dsc",
+          "sha256": "b396f3b93bcdd3a0a53038627ca8620c5217d259b1ae38942c386684e581c9ae",
+          "size": 2502
+        },
+        {
+          "filename": "pool/main/r/rust-anstyle-parse/rust-anstyle-parse_0.2.1.orig.tar.gz",
+          "sha256": "938874ff5980b03a87c5524b3ae5b59cf99b1d6bc836848df7bc5ada9643c333",
+          "size": 24802
+        },
+        {
+          "filename": "pool/main/r/rust-anstyle-parse/rust-anstyle-parse_0.2.1-1.debian.tar.xz",
+          "sha256": "11943a37abdafa1c97c3fbf3e69713da9d245e0f8ef135e074c33cd724e28969",
+          "size": 2816
+        }
+      ]
+    },
+    {
+      "name": "rust-anstyle-query",
+      "version": "1.0.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-anstyle-query/rust-anstyle-query_1.0.0-1.dsc",
+          "sha256": "27dbc0bf61bce902be1562aa57022bdedaf87a00059292676882f7640d90a901",
+          "size": 2176
+        },
+        {
+          "filename": "pool/main/r/rust-anstyle-query/rust-anstyle-query_1.0.0.orig.tar.gz",
+          "sha256": "5ca11d4be1bab0c8bc8734a9aa7bf4ee8316d462a08c6ac5052f888fef5b494b",
+          "size": 8620
+        },
+        {
+          "filename": "pool/main/r/rust-anstyle-query/rust-anstyle-query_1.0.0-1.debian.tar.xz",
+          "sha256": "a07155c10908d1a0411a97132d8e81c436c6fb997d78152d9268698ff9166314",
+          "size": 2888
+        }
+      ]
+    },
+    {
+      "name": "rust-anstyle",
+      "version": "1.0.8-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-anstyle/rust-anstyle_1.0.8-1.dsc",
+          "sha256": "07f24d2f671b035dd858eb88a6b134d58bd70a924226ec29470748152190ce23",
+          "size": 2232
+        },
+        {
+          "filename": "pool/main/r/rust-anstyle/rust-anstyle_1.0.8.orig.tar.gz",
+          "sha256": "1bec1de6f59aedf83baf9ff929c98f2ad654b97c9510f4e70cf6f661d49fd5b1",
+          "size": 15771
+        },
+        {
+          "filename": "pool/main/r/rust-anstyle/rust-anstyle_1.0.8-1.debian.tar.xz",
+          "sha256": "fdc6c688f98483253db68d934c4403c30bbf76aca4e52048060aa03996a88aff",
+          "size": 2708
+        }
+      ]
+    },
+    {
+      "name": "rust-anyhow",
+      "version": "1.0.95-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-anyhow/rust-anyhow_1.0.95-1.dsc",
+          "sha256": "759b1929aa692d8a5f433a9ef03a5034695ee7016f895c96a6006f01268b8e45",
+          "size": 1777
+        },
+        {
+          "filename": "pool/main/r/rust-anyhow/rust-anyhow_1.0.95.orig.tar.gz",
+          "sha256": "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04",
+          "size": 52155
+        },
+        {
+          "filename": "pool/main/r/rust-anyhow/rust-anyhow_1.0.95-1.debian.tar.xz",
+          "sha256": "bcdc9c5144c95c22c7e098ca29e8227fe36a273701d531e19498aa334135d9b9",
+          "size": 3452
+        }
+      ]
+    },
+    {
+      "name": "rust-argon2",
+      "version": "0.5.3-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-argon2/rust-argon2_0.5.3-1.dsc",
+          "sha256": "3cd87bca09ac99c9f5a38528bd3ffa4d6f994cfa84353689af2af0daa746af1d",
+          "size": 1939
+        },
+        {
+          "filename": "pool/main/r/rust-argon2/rust-argon2_0.5.3.orig.tar.gz",
+          "sha256": "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072",
+          "size": 28795
+        },
+        {
+          "filename": "pool/main/r/rust-argon2/rust-argon2_0.5.3-1.debian.tar.xz",
+          "sha256": "019624a55c9ce16e276ebc8d5238787df1b16cebd5c426468073bce8d5ec67d2",
+          "size": 3076
+        }
+      ]
+    },
+    {
+      "name": "rust-base64",
+      "version": "0.22.1-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-base64/rust-base64_0.22.1-1.dsc",
+          "sha256": "217563b495bf02bfc2c89b94c14d6e7e7f59d7f685d292e0f32a3b75f0cd3b23",
+          "size": 2111
+        },
+        {
+          "filename": "pool/main/r/rust-base64/rust-base64_0.22.1.orig.tar.gz",
+          "sha256": "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6",
+          "size": 81597
+        },
+        {
+          "filename": "pool/main/r/rust-base64/rust-base64_0.22.1-1.debian.tar.xz",
+          "sha256": "f7470347d420134780ee6c6f4361ec7987e9d8b7b07b3830d7b63f585e98250b",
+          "size": 3120
+        }
+      ]
+    },
+    {
+      "name": "rust-base64ct",
+      "version": "1.6.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-base64ct/rust-base64ct_1.6.0-1.dsc",
+          "sha256": "bfb531d6a73c41ce44eb7e948c46a212bb0391d37d8ba68a890b4f1097290c81",
+          "size": 1645
+        },
+        {
+          "filename": "pool/main/r/rust-base64ct/rust-base64ct_1.6.0.orig.tar.gz",
+          "sha256": "52fcc144b1509866fe6645354b9ad3ea3b84fabe665fdf83c572b1cf2c339566",
+          "size": 28372
+        },
+        {
+          "filename": "pool/main/r/rust-base64ct/rust-base64ct_1.6.0-1.debian.tar.xz",
+          "sha256": "5ab1a5f8a40de29dfd287e1ef044d372cbd961460ffec0f5b162e6d66e266f55",
+          "size": 3060
+        }
+      ]
+    },
+    {
+      "name": "rust-bitflags",
+      "version": "2.8.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-bitflags/rust-bitflags_2.8.0-1.dsc",
+          "sha256": "dcc92c6939080c94ccc321e3942fc7671554568fc08c25108e9b5b2305c7ba9d",
+          "size": 2513
+        },
+        {
+          "filename": "pool/main/r/rust-bitflags/rust-bitflags_2.8.0.orig.tar.gz",
+          "sha256": "8f68f53c83ab957f72c32642f3868eec03eb974d1fb82e453128456482613d36",
+          "size": 47482
+        },
+        {
+          "filename": "pool/main/r/rust-bitflags/rust-bitflags_2.8.0-1.debian.tar.xz",
+          "sha256": "7cd6a849647ee9f18570a029238bdc4ad33a277bebddfbe7624bce5726fa8fc5",
+          "size": 4052
+        }
+      ]
+    },
+    {
+      "name": "rust-blake2",
+      "version": "0.10.6-3",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-blake2/rust-blake2_0.10.6-3.dsc",
+          "sha256": "c579de741512bd9d93336c64198379b8b8e8af2de29082543683c63da20db32e",
+          "size": 2397
+        },
+        {
+          "filename": "pool/main/r/rust-blake2/rust-blake2_0.10.6.orig.tar.gz",
+          "sha256": "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe",
+          "size": 47234
+        },
+        {
+          "filename": "pool/main/r/rust-blake2/rust-blake2_0.10.6-3.debian.tar.xz",
+          "sha256": "aced6452699de96342234b97674bf97e1dcd598094149bacdecbba5d75eb6e9e",
+          "size": 3272
+        }
+      ]
+    },
+    {
+      "name": "rust-block-buffer",
+      "version": "0.10.4-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-block-buffer/rust-block-buffer_0.10.4-1.dsc",
+          "sha256": "825e1ba1d84ac9c8e06eecfddf93c6e36c1eeba2741873a4790866afb5f36157",
+          "size": 1676
+        },
+        {
+          "filename": "pool/main/r/rust-block-buffer/rust-block-buffer_0.10.4.orig.tar.gz",
+          "sha256": "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71",
+          "size": 10538
+        },
+        {
+          "filename": "pool/main/r/rust-block-buffer/rust-block-buffer_0.10.4-1.debian.tar.xz",
+          "sha256": "5977232a486753e7570377614ebb98cffb079d2a8c9993282c0d8e73091f48aa",
+          "size": 3012
+        }
+      ]
+    },
+    {
+      "name": "rust-buffered-reader",
+      "version": "1.3.1-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-buffered-reader/rust-buffered-reader_1.3.1-2.dsc",
+          "sha256": "337fbf51f0fa38ee87b8c71c1e8117d946b300fc86b1b621447b76f08e21714c",
+          "size": 2569
+        },
+        {
+          "filename": "pool/main/r/rust-buffered-reader/rust-buffered-reader_1.3.1.orig.tar.gz",
+          "sha256": "cd098763fdb64579407a8c83cf0d751e6d4a7e161d0114c89cc181a2ca760ec8",
+          "size": 63723
+        },
+        {
+          "filename": "pool/main/r/rust-buffered-reader/rust-buffered-reader_1.3.1-2.debian.tar.xz",
+          "sha256": "69920a1b197e791c524091dfdb612f7752bb2c9bc7e143b3de9eacef5bd52722",
+          "size": 3152
+        }
+      ]
+    },
+    {
+      "name": "rust-cfg-if",
+      "version": "1.0.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-cfg-if/rust-cfg-if_1.0.0-1.dsc",
+          "sha256": "adbc0c23a3669be444992d4463faf18b1fda48644f16493bb52f2cf43b36a094",
+          "size": 2259
+        },
+        {
+          "filename": "pool/main/r/rust-cfg-if/rust-cfg-if_1.0.0.orig.tar.gz",
+          "sha256": "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd",
+          "size": 7934
+        },
+        {
+          "filename": "pool/main/r/rust-cfg-if/rust-cfg-if_1.0.0-1.debian.tar.xz",
+          "sha256": "73fefcd4a14f1e57975c7a0a702b587130a264b7c36f8095983c2a259d6435cb",
+          "size": 3640
+        }
+      ]
+    },
+    {
+      "name": "rust-chrono",
+      "version": "0.4.39-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-chrono/rust-chrono_0.4.39-2.dsc",
+          "sha256": "986562fb01eb1fed86f1e29a30ad785da5a83bdf23545ad76ee9be5974fc65b2",
+          "size": 1958
+        },
+        {
+          "filename": "pool/main/r/rust-chrono/rust-chrono_0.4.39.orig.tar.gz",
+          "sha256": "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825",
+          "size": 222248
+        },
+        {
+          "filename": "pool/main/r/rust-chrono/rust-chrono_0.4.39-2.debian.tar.xz",
+          "sha256": "b09085f451662c56ebe1ababb9f32ebe5181dca8a3de045094470d9fa91dfac9",
+          "size": 5900
+        }
+      ]
+    },
+    {
+      "name": "rust-clap-builder",
+      "version": "4.5.23-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-clap-builder/rust-clap-builder_4.5.23-1.dsc",
+          "sha256": "baac3eec4bab01a72f875a7e46b44dd0a767157a6774e85943cb7523f461986f",
+          "size": 2682
+        },
+        {
+          "filename": "pool/main/r/rust-clap-builder/rust-clap-builder_4.5.23.orig.tar.gz",
+          "sha256": "30582fc632330df2bd26877bde0c1f4470d57c582bbc070376afcd04d8cb4838",
+          "size": 164180
+        },
+        {
+          "filename": "pool/main/r/rust-clap-builder/rust-clap-builder_4.5.23-1.debian.tar.xz",
+          "sha256": "140f2ebec407866e050ef28c33b106275b8be6d4d991a5f4148928d50c27101d",
+          "size": 4024
+        }
+      ]
+    },
+    {
+      "name": "rust-clap-lex",
+      "version": "0.7.4-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-clap-lex/rust-clap-lex_0.7.4-1.dsc",
+          "sha256": "de53d2ba1aed0f5eb646184767c3bb64140d035e2fc96cb3743b0092df1b1158",
+          "size": 2244
+        },
+        {
+          "filename": "pool/main/r/rust-clap-lex/rust-clap-lex_0.7.4.orig.tar.gz",
+          "sha256": "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6",
+          "size": 12858
+        },
+        {
+          "filename": "pool/main/r/rust-clap-lex/rust-clap-lex_0.7.4-1.debian.tar.xz",
+          "sha256": "cd65a4da9b6f2d7c184341bdf043877ce81663b1e34a9b0b56f90ac3673b28d3",
+          "size": 2816
+        }
+      ]
+    },
+    {
+      "name": "rust-clap",
+      "version": "4.5.23-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-clap/rust-clap_4.5.23-1.dsc",
+          "sha256": "0e6ae09bdb82b280d058bfabdac5d4c163aa42c83322d4b3846bf7250a44293d",
+          "size": 2990
+        },
+        {
+          "filename": "pool/main/r/rust-clap/rust-clap_4.5.23.orig.tar.gz",
+          "sha256": "3135e7ec2ef7b10c6ed8950f0f792ed96ee093fa088608f1c76e569722700c84",
+          "size": 56460
+        },
+        {
+          "filename": "pool/main/r/rust-clap/rust-clap_4.5.23-1.debian.tar.xz",
+          "sha256": "939705bdea4d10cb2963e451a2fe42eddf21ee34bb5e290c11b8e6c6bf8590c9",
+          "size": 8764
+        }
+      ]
+    },
+    {
+      "name": "rust-colorchoice",
+      "version": "1.0.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-colorchoice/rust-colorchoice_1.0.0-1.dsc",
+          "sha256": "6f44847d13b52965603de503e5122ee9cd56c19774c53acffeb372c5ec9b4712",
+          "size": 2164
+        },
+        {
+          "filename": "pool/main/r/rust-colorchoice/rust-colorchoice_1.0.0.orig.tar.gz",
+          "sha256": "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7",
+          "size": 6857
+        },
+        {
+          "filename": "pool/main/r/rust-colorchoice/rust-colorchoice_1.0.0-1.debian.tar.xz",
+          "sha256": "ebd800843cb117e8baceaef09eeab36b7724c579d4372377cb51c576246abcb6",
+          "size": 2524
+        }
+      ]
+    },
+    {
+      "name": "rust-cpufeatures",
+      "version": "0.2.16-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-cpufeatures/rust-cpufeatures_0.2.16-1.dsc",
+          "sha256": "a2aff46fb0027535406cd97cf9a7eb9146a918efa353a803a9ca08e949547011",
+          "size": 2290
+        },
+        {
+          "filename": "pool/main/r/rust-cpufeatures/rust-cpufeatures_0.2.16.orig.tar.gz",
+          "sha256": "16b80225097f2e5ae4e7179dd2266824648f3e2f49d9134d584b76389d31c4c3",
+          "size": 13405
+        },
+        {
+          "filename": "pool/main/r/rust-cpufeatures/rust-cpufeatures_0.2.16-1.debian.tar.xz",
+          "sha256": "91d5113e826409b678d1a46c8f11bfe729229162860897637f3ef8b6fee87822",
+          "size": 3120
+        }
+      ]
+    },
+    {
+      "name": "rust-crypto-common",
+      "version": "0.1.6-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-crypto-common/rust-crypto-common_0.1.6-1.dsc",
+          "sha256": "b4cbff7eb8be065f6fd0764a64cdfad06a74f6cc4899c46f19fa4488263f7401",
+          "size": 2408
+        },
+        {
+          "filename": "pool/main/r/rust-crypto-common/rust-crypto-common_0.1.6.orig.tar.gz",
+          "sha256": "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3",
+          "size": 8760
+        },
+        {
+          "filename": "pool/main/r/rust-crypto-common/rust-crypto-common_0.1.6-1.debian.tar.xz",
+          "sha256": "75996106ff2365e1db921d0d9b97dbb8ecc464faee0a57490f6e7e7efce74dac",
+          "size": 2816
+        }
+      ]
+    },
+    {
+      "name": "rust-digest",
+      "version": "0.10.7-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-digest/rust-digest_0.10.7-2.dsc",
+          "sha256": "de6606d536131881a035dbab6e7343d9fc930b638bc9dd3a00a94388a69ec54c",
+          "size": 2215
+        },
+        {
+          "filename": "pool/main/r/rust-digest/rust-digest_0.10.7.orig.tar.gz",
+          "sha256": "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292",
+          "size": 19557
+        },
+        {
+          "filename": "pool/main/r/rust-digest/rust-digest_0.10.7-2.debian.tar.xz",
+          "sha256": "9586e225fec87efaf95ad11879e41a572e12592f583dbc71f31add9e91ec1548",
+          "size": 3272
+        }
+      ]
+    },
+    {
+      "name": "rust-dyn-clone",
+      "version": "1.0.16-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-dyn-clone/rust-dyn-clone_1.0.16-1.dsc",
+          "sha256": "bc8bfbb3e33b18cb3ea6d71d52f5aa17e882f885a873208e12d35d10dbac075d",
+          "size": 2276
+        },
+        {
+          "filename": "pool/main/r/rust-dyn-clone/rust-dyn-clone_1.0.16.orig.tar.gz",
+          "sha256": "545b22097d44f8a9581187cdf93de7a71e4722bf51200cfaba810865b49a495d",
+          "size": 11766
+        },
+        {
+          "filename": "pool/main/r/rust-dyn-clone/rust-dyn-clone_1.0.16-1.debian.tar.xz",
+          "sha256": "422661ef2b46eaeabab85d594725219e3359d50221846d25dfef14243de42372",
+          "size": 2592
+        }
+      ]
+    },
+    {
+      "name": "rust-generic-array",
+      "version": "0.14.7-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-generic-array/rust-generic-array_0.14.7-1.dsc",
+          "sha256": "f8d14ed8d7101327da9e1623a7b8868ea587e5000f52aeaf211fdd57d9840178",
+          "size": 2006
+        },
+        {
+          "filename": "pool/main/r/rust-generic-array/rust-generic-array_0.14.7.orig.tar.gz",
+          "sha256": "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a",
+          "size": 15950
+        },
+        {
+          "filename": "pool/main/r/rust-generic-array/rust-generic-array_0.14.7-1.debian.tar.xz",
+          "sha256": "2f2ef1c598c0895b02a21ec108496788cef4e56a3a3d45aaee4aab358934221f",
+          "size": 2892
+        }
+      ]
+    },
+    {
+      "name": "rust-getrandom",
+      "version": "0.2.15-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-getrandom/rust-getrandom_0.2.15-1.dsc",
+          "sha256": "ca16c8fbb30859dd0b0f3889b1718faaf6c23e48e4b3dbdf54fef12c2d3ae10e",
+          "size": 2588
+        },
+        {
+          "filename": "pool/main/r/rust-getrandom/rust-getrandom_0.2.15.orig.tar.gz",
+          "sha256": "c4567c8db10ae91089c99af84c68c38da3ec2f087c3f82960bcdbf3656b6f4d7",
+          "size": 37163
+        },
+        {
+          "filename": "pool/main/r/rust-getrandom/rust-getrandom_0.2.15-1.debian.tar.xz",
+          "sha256": "fa89dfd27641747cce731997e2614fec6f2b62f0fd01211e38db467871c196e0",
+          "size": 4368
+        }
+      ]
+    },
+    {
+      "name": "rust-iana-time-zone",
+      "version": "0.1.63-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-iana-time-zone/rust-iana-time-zone_0.1.63-1.dsc",
+          "sha256": "b7efa3441d289c93cba6bdfab3adcb6244840ef1532432c718ba528cee7d85f8",
+          "size": 1747
+        },
+        {
+          "filename": "pool/main/r/rust-iana-time-zone/rust-iana-time-zone_0.1.63.orig.tar.gz",
+          "sha256": "b0c919e5debc312ad217002b8048a17b7d83f80703865bbfcfebb0458b0b27d8",
+          "size": 32919
+        },
+        {
+          "filename": "pool/main/r/rust-iana-time-zone/rust-iana-time-zone_0.1.63-1.debian.tar.xz",
+          "sha256": "6a3f0547969707e5080a83672cacc1bcf5d3f227d498b193163c757250542fad",
+          "size": 3160
+        }
+      ]
+    },
+    {
+      "name": "rust-idna-adapter",
+      "version": "1.1.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-idna-adapter/rust-idna-adapter_1.1.0-1.dsc",
+          "sha256": "aec8cf95547acc61635adcb0beca747560734c17db1e6283c6ec7e93b6f463be",
+          "size": 2466
+        },
+        {
+          "filename": "pool/main/r/rust-idna-adapter/rust-idna-adapter_1.1.0.orig.tar.gz",
+          "sha256": "279259b0ac81c89d11c290495fdcfa96ea3643b7df311c138b6fe8ca5237f0f8",
+          "size": 7941
+        },
+        {
+          "filename": "pool/main/r/rust-idna-adapter/rust-idna-adapter_1.1.0-1.debian.tar.xz",
+          "sha256": "fb0d6d8bdcc7e244680d2dc6d498ca3da0920421f7bb9bb23045d8997572fc80",
+          "size": 2624
+        }
+      ]
+    },
+    {
+      "name": "rust-idna-mapping",
+      "version": "1.0.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-idna-mapping/rust-idna-mapping_1.0.0-1.dsc",
+          "sha256": "ad704c0404c4cf88531ff2ea572f8dbe3ded8b8630b47dcc5870177b350a0ab7",
+          "size": 2375
+        },
+        {
+          "filename": "pool/main/r/rust-idna-mapping/rust-idna-mapping_1.0.0.orig.tar.gz",
+          "sha256": "d5422cc5bc64289a77dbb45e970b86b5e9a04cb500abc7240505aedc1bf40f38",
+          "size": 158783
+        },
+        {
+          "filename": "pool/main/r/rust-idna-mapping/rust-idna-mapping_1.0.0-1.debian.tar.xz",
+          "sha256": "e32c3e214ecfafd8fe7b731f9c69adc3f152a02e8fbc0d4b375099c5b844f57d",
+          "size": 3564
+        }
+      ]
+    },
+    {
+      "name": "rust-idna",
+      "version": "1.0.3-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-idna/rust-idna_1.0.3-2.dsc",
+          "sha256": "a4d7dd9f34208b36377c9e914d20097d8ff2bd46e78c92464dbb6bdbaa0bd3ce",
+          "size": 2577
+        },
+        {
+          "filename": "pool/main/r/rust-idna/rust-idna_1.0.3.orig.tar.gz",
+          "sha256": "686f825264d630750a544639377bae737628043f20d38bbc029e8f29ea968a7e",
+          "size": 142515
+        },
+        {
+          "filename": "pool/main/r/rust-idna/rust-idna_1.0.3-2.debian.tar.xz",
+          "sha256": "204ea1ec73b198504c5bd2b49bb489225e31101c9aa12ea9f8129916a6c3e4d0",
+          "size": 3692
+        }
+      ]
+    },
+    {
+      "name": "rust-lalrpop-util",
+      "version": "0.20.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-lalrpop-util/rust-lalrpop-util_0.20.0-1.dsc",
+          "sha256": "886f05884f9752676b34a72edb162f2f9bdc745eb0c8dc6a59c7d55cd2da7a95",
+          "size": 2203
+        },
+        {
+          "filename": "pool/main/r/rust-lalrpop-util/rust-lalrpop-util_0.20.0.orig.tar.gz",
+          "sha256": "3f35c735096c0293d313e8f2a641627472b83d01b937177fe76e5e2708d31e0d",
+          "size": 10403
+        },
+        {
+          "filename": "pool/main/r/rust-lalrpop-util/rust-lalrpop-util_0.20.0-1.debian.tar.xz",
+          "sha256": "4a6e7138f1eb222270f4a12db71bc7a91f511ab6ae8010cf99a3da9a1b804835",
+          "size": 3028
+        }
+      ]
+    },
+    {
+      "name": "rust-lazy-static",
+      "version": "1.5.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-lazy-static/rust-lazy-static_1.5.0-1.dsc",
+          "sha256": "119afd10ec5eb4cb9d82890f4e9a26a24cde1ec4d8b21f5abd44ced79f74ce65",
+          "size": 2305
+        },
+        {
+          "filename": "pool/main/r/rust-lazy-static/rust-lazy-static_1.5.0.orig.tar.gz",
+          "sha256": "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe",
+          "size": 14025
+        },
+        {
+          "filename": "pool/main/r/rust-lazy-static/rust-lazy-static_1.5.0-1.debian.tar.xz",
+          "sha256": "2ff633c181d5ee373ee7e46cb089b5d6564e26558d91ffd26459f3b0a8bbc06b",
+          "size": 3360
+        }
+      ]
+    },
+    {
+      "name": "rust-libc",
+      "version": "0.2.169-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-libc/rust-libc_0.2.169-1.dsc",
+          "sha256": "1f564d0213b8455557f241f8d2530b76e43f1654085adaa6118b958e7db29333",
+          "size": 2264
+        },
+        {
+          "filename": "pool/main/r/rust-libc/rust-libc_0.2.169.orig.tar.gz",
+          "sha256": "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a",
+          "size": 757901
+        },
+        {
+          "filename": "pool/main/r/rust-libc/rust-libc_0.2.169-1.debian.tar.xz",
+          "sha256": "adc6f54c3a72cc78de01a0e5dd9f881f45aad3f00d300dcbe0b9136356657968",
+          "size": 15564
+        }
+      ]
+    },
+    {
+      "name": "rust-linux-raw-sys",
+      "version": "0.4.14-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-linux-raw-sys/rust-linux-raw-sys_0.4.14-1.dsc",
+          "sha256": "710291227e832380a4b786b469fdfee1f252aff8ed9cb62e4a44446ee80344d8",
+          "size": 1674
+        },
+        {
+          "filename": "pool/main/r/rust-linux-raw-sys/rust-linux-raw-sys_0.4.14.orig.tar.gz",
+          "sha256": "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89",
+          "size": 1826665
+        },
+        {
+          "filename": "pool/main/r/rust-linux-raw-sys/rust-linux-raw-sys_0.4.14-1.debian.tar.xz",
+          "sha256": "95eec6ef60bd322a6066eb9f7232381b126dfc37009bda9d443fdf09a6948b94",
+          "size": 4348
+        }
+      ]
+    },
+    {
+      "name": "rust-memchr",
+      "version": "2.7.4-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-memchr/rust-memchr_2.7.4-1.dsc",
+          "sha256": "2db87d79e45dbbc7838e26b866979b10f743c11d937de16f8e123cea0ec31d5e",
+          "size": 2130
+        },
+        {
+          "filename": "pool/main/r/rust-memchr/rust-memchr_2.7.4.orig.tar.gz",
+          "sha256": "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3",
+          "size": 96670
+        },
+        {
+          "filename": "pool/main/r/rust-memchr/rust-memchr_2.7.4-1.debian.tar.xz",
+          "sha256": "d0d8d6b046793cbe90e82318ff5d506cba427fa44ab4132d46ad1217d0086211",
+          "size": 3740
+        }
+      ]
+    },
+    {
+      "name": "rust-memsec",
+      "version": "0.7.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-memsec/rust-memsec_0.7.0-1.dsc",
+          "sha256": "f670ef3ef019a52622b9bef9b8ffeb7bc7b2c863830881c0a7b0f31da66f5b75",
+          "size": 2284
+        },
+        {
+          "filename": "pool/main/r/rust-memsec/rust-memsec_0.7.0.orig.tar.gz",
+          "sha256": "c797b9d6bb23aab2fc369c65f871be49214f5c759af65bde26ffaaa2b646b492",
+          "size": 6532
+        },
+        {
+          "filename": "pool/main/r/rust-memsec/rust-memsec_0.7.0-1.debian.tar.xz",
+          "sha256": "ad6bc3bbb4eb4947a1aca008bbe9d9dd46c6eaa6342ab56003d0eaf9d110efb1",
+          "size": 3380
+        }
+      ]
+    },
+    {
+      "name": "rust-nettle-sys",
+      "version": "2.3.1-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-nettle-sys/rust-nettle-sys_2.3.1-1.dsc",
+          "sha256": "c18bdfa50fb184563e1bc0fc5a90d8bd5129d4067bbf2ec8de3b93ba7cc18b09",
+          "size": 2528
+        },
+        {
+          "filename": "pool/main/r/rust-nettle-sys/rust-nettle-sys_2.3.1.orig.tar.gz",
+          "sha256": "61a3f5406064d310d59b1a219d3c5c9a49caf4047b6496032e3f930876488c34",
+          "size": 81980
+        },
+        {
+          "filename": "pool/main/r/rust-nettle-sys/rust-nettle-sys_2.3.1-1.debian.tar.xz",
+          "sha256": "cc9e694f1d34c121fc0c7a2ebbb65418c95addeebb45ca4bc2225e6fd09530bf",
+          "size": 3956
+        }
+      ]
+    },
+    {
+      "name": "rust-nettle",
+      "version": "7.3.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-nettle/rust-nettle_7.3.0-1.dsc",
+          "sha256": "a737b98e97a2572c11fd4e8d5abcd7b8a0272084cb88dbee596aed6e079bc866",
+          "size": 2378
+        },
+        {
+          "filename": "pool/main/r/rust-nettle/rust-nettle_7.3.0.orig.tar.gz",
+          "sha256": "b9fdccf3eae7b161910d2daa2f0155ca35041322e8fe5c5f1f2c9d0b12356336",
+          "size": 580277
+        },
+        {
+          "filename": "pool/main/r/rust-nettle/rust-nettle_7.3.0-1.debian.tar.xz",
+          "sha256": "a8327eb1cef117b9276f3ad644a82567dd2d93445da24a2a0ffb9b4c6b69f2a9",
+          "size": 2564
+        }
+      ]
+    },
+    {
+      "name": "rust-num-traits",
+      "version": "0.2.19-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-num-traits/rust-num-traits_0.2.19-2.dsc",
+          "sha256": "e4d9c64eba88cf3d0040627724bc487f5475a1afc412a69f66faeee939c701d2",
+          "size": 1711
+        },
+        {
+          "filename": "pool/main/r/rust-num-traits/rust-num-traits_0.2.19.orig.tar.gz",
+          "sha256": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841",
+          "size": 51631
+        },
+        {
+          "filename": "pool/main/r/rust-num-traits/rust-num-traits_0.2.19-2.debian.tar.xz",
+          "sha256": "33f3384db5d75038495909f6e6b447c8e3f7d38736032bcdb36acc75615d644d",
+          "size": 3740
+        }
+      ]
+    },
+    {
+      "name": "rust-password-hash",
+      "version": "0.5.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-password-hash/rust-password-hash_0.5.0-1.dsc",
+          "sha256": "7b95378746170691fc5598430921e133ff4232e8ca816e68a529f8b2ccb3b691",
+          "size": 2316
+        },
+        {
+          "filename": "pool/main/r/rust-password-hash/rust-password-hash_0.5.0.orig.tar.gz",
+          "sha256": "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166",
+          "size": 26884
+        },
+        {
+          "filename": "pool/main/r/rust-password-hash/rust-password-hash_0.5.0-1.debian.tar.xz",
+          "sha256": "b67e774d376acc22856a039c1389fbef8f9cad7e547d328a88b583f36b7e347b",
+          "size": 3024
+        }
+      ]
+    },
+    {
+      "name": "rust-rand-core",
+      "version": "0.6.4-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-rand-core/rust-rand-core_0.6.4-2.dsc",
+          "sha256": "1f6938a4015b700fc497dd3c114a56abbcc7fddd12dee47442a88767ac9bb8e2",
+          "size": 2468
+        },
+        {
+          "filename": "pool/main/r/rust-rand-core/rust-rand-core_0.6.4.orig.tar.gz",
+          "sha256": "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c",
+          "size": 22666
+        },
+        {
+          "filename": "pool/main/r/rust-rand-core/rust-rand-core_0.6.4-2.debian.tar.xz",
+          "sha256": "837d4c4b51f94a2174475dbb0fc8cbfd2ed7beced4da5459dacb329fa2c868e1",
+          "size": 3692
+        }
+      ]
+    },
+    {
+      "name": "rust-regex-automata",
+      "version": "0.4.9-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-regex-automata/rust-regex-automata_0.4.9-2.dsc",
+          "sha256": "fe6100d84deb445d6b774fb236a89eb2ad3f5c050d310ff2bf4e89aadb29b8c3",
+          "size": 2765
+        },
+        {
+          "filename": "pool/main/r/rust-regex-automata/rust-regex-automata_0.4.9.orig.tar.gz",
+          "sha256": "809e8dc61f6de73b46c85f4c96486310fe304c434cfa43669d7b40f711150908",
+          "size": 618525
+        },
+        {
+          "filename": "pool/main/r/rust-regex-automata/rust-regex-automata_0.4.9-2.debian.tar.xz",
+          "sha256": "11b98d19a71d0f8782d887135371c43c64f370e3d4751b8ca01f3b74c0bd85be",
+          "size": 9464
+        }
+      ]
+    },
+    {
+      "name": "rust-regex-syntax",
+      "version": "0.8.5-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-regex-syntax/rust-regex-syntax_0.8.5-1.dsc",
+          "sha256": "8eb84d33a84041bb0b21b3de8afb24ba1310a8bebab2d8452afe43dba4269155",
+          "size": 2274
+        },
+        {
+          "filename": "pool/main/r/rust-regex-syntax/rust-regex-syntax_0.8.5.orig.tar.gz",
+          "sha256": "a2f15dee26d2376c65b5d90ba8289ac685df876df4b4ab0968f4d9287861d2f6",
+          "size": 357304
+        },
+        {
+          "filename": "pool/main/r/rust-regex-syntax/rust-regex-syntax_0.8.5-1.debian.tar.xz",
+          "sha256": "e91be4261db59d435539bbfc47911f69ddb6391a1700c78506a3b3bef266f7ef",
+          "size": 4656
+        }
+      ]
+    },
+    {
+      "name": "rust-regex",
+      "version": "1.11.1-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-regex/rust-regex_1.11.1-2.dsc",
+          "sha256": "091cc8f5f2cff589a949d39f38b5c55c350e3eee5aa8d870d94058a37db34df7",
+          "size": 4070
+        },
+        {
+          "filename": "pool/main/r/rust-regex/rust-regex_1.11.1.orig.tar.gz",
+          "sha256": "b544ef1b4eac5dc2db33ea63606ae9ffcfac26c1416a2806ae0bf5f56b201191",
+          "size": 254170
+        },
+        {
+          "filename": "pool/main/r/rust-regex/rust-regex_1.11.1-2.debian.tar.xz",
+          "sha256": "26f774f2a703482181b21b5aff7d2b9126e8cae8269a93f848cbba8991d2279c",
+          "size": 6512
+        }
+      ]
+    },
+    {
+      "name": "rust-rustix",
+      "version": "0.38.37-4",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-rustix/rust-rustix_0.38.37-4.dsc",
+          "sha256": "8c94643d56893892f7c081f13e67211c3515f76024f0db2e9c2821f2ff903c33",
+          "size": 3163
+        },
+        {
+          "filename": "pool/main/r/rust-rustix/rust-rustix_0.38.37.orig.tar.gz",
+          "sha256": "8acb788b847c24f28525660c4d7758620a7210875711f79e7f663cc152726811",
+          "size": 371243
+        },
+        {
+          "filename": "pool/main/r/rust-rustix/rust-rustix_0.38.37-4.debian.tar.xz",
+          "sha256": "416f7a02bb0d23e39a2ff410939e08454baf019c6737cf7667d1df1bef5f1b43",
+          "size": 12216
+        }
+      ]
+    },
+    {
+      "name": "rust-sequoia-openpgp",
+      "version": "2.0.0-2+deb13u1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-sequoia-openpgp/rust-sequoia-openpgp_2.0.0-2+deb13u1.dsc",
+          "sha256": "b3ff010f9ae8faeb8e459f89b6fa6de66647556de239c8d46e3a410f047bc1fc",
+          "size": 3712
+        },
+        {
+          "filename": "pool/main/r/rust-sequoia-openpgp/rust-sequoia-openpgp_2.0.0.orig.tar.gz",
+          "sha256": "015e5fc3d023418b9db98ca9a7f3e90b305872eeafe5ca45c5c32b5eb335c1e8",
+          "size": 3049067
+        },
+        {
+          "filename": "pool/main/r/rust-sequoia-openpgp/rust-sequoia-openpgp_2.0.0-2+deb13u1.debian.tar.xz",
+          "sha256": "817b79e4f22a69844a0a4e44e4154ba8d4f85ccd488f563dd67d08a8d350eb74",
+          "size": 9908
+        }
+      ]
+    },
+    {
+      "name": "rust-sequoia-policy-config",
+      "version": "0.8.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-sequoia-policy-config/rust-sequoia-policy-config_0.8.0-1.dsc",
+          "sha256": "b2b5d077d8245969c0872bc30e015f8f72b4569d1bc6090efe1ffa5c7719da87",
+          "size": 2880
+        },
+        {
+          "filename": "pool/main/r/rust-sequoia-policy-config/rust-sequoia-policy-config_0.8.0.orig.tar.gz",
+          "sha256": "8e016b708d64857b6a97e1a331d9471b73e30ed450d247628e1a0ce236b1e597",
+          "size": 102267
+        },
+        {
+          "filename": "pool/main/r/rust-sequoia-policy-config/rust-sequoia-policy-config_0.8.0-1.debian.tar.xz",
+          "sha256": "9a00e0db1ee576be1ec7832be469e45c7afc537c73041299e7381c64c3c4bbeb",
+          "size": 2936
+        }
+      ]
+    },
+    {
+      "name": "rust-sequoia-sqv",
+      "version": "1.3.0-3",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-sequoia-sqv/rust-sequoia-sqv_1.3.0-3.dsc",
+          "sha256": "98ad852ed30d42d3b0d6ce40d2f56a96fb443cc6fa2caeaa12516fe5bbe544af",
+          "size": 2704
+        },
+        {
+          "filename": "pool/main/r/rust-sequoia-sqv/rust-sequoia-sqv_1.3.0.orig.tar.gz",
+          "sha256": "8924571d26720b245292ad3c450e4061fcb24890461874790549747bffa35e60",
+          "size": 140759
+        },
+        {
+          "filename": "pool/main/r/rust-sequoia-sqv/rust-sequoia-sqv_1.3.0-3.debian.tar.xz",
+          "sha256": "be04e0365bc1206617a3e55d507bfce2e972819fb737e23a1112a717cc89b9bc",
+          "size": 3876
+        }
+      ]
+    },
+    {
+      "name": "rust-serde",
+      "version": "1.0.217-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-serde/rust-serde_1.0.217-1.dsc",
+          "sha256": "84c33735002681681a10bc804d324a20d9ea7d77f69b303882719a9cefce724e",
+          "size": 1772
+        },
+        {
+          "filename": "pool/main/r/rust-serde/rust-serde_1.0.217.orig.tar.gz",
+          "sha256": "02fc4265df13d6fa1d00ecff087228cc0a2b5f3c0e87e258d8b94a156e984c70",
+          "size": 79019
+        },
+        {
+          "filename": "pool/main/r/rust-serde/rust-serde_1.0.217-1.debian.tar.xz",
+          "sha256": "d020bcfdef35bb2a94a28b85f84e3dc8610aeaa9e910c688af16e10dafed7dd7",
+          "size": 4136
+        }
+      ]
+    },
+    {
+      "name": "rust-sha1collisiondetection",
+      "version": "0.3.2-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-sha1collisiondetection/rust-sha1collisiondetection_0.3.2-1.dsc",
+          "sha256": "96b9eef3ac0e24234f3c9918101d2e5b5b725cee459d6d982a3aa7d487015634",
+          "size": 2584
+        },
+        {
+          "filename": "pool/main/r/rust-sha1collisiondetection/rust-sha1collisiondetection_0.3.2.orig.tar.gz",
+          "sha256": "31c0b86a052106b16741199985c9ec2bf501f619f70c48fa479b44b093ad9a68",
+          "size": 801440
+        },
+        {
+          "filename": "pool/main/r/rust-sha1collisiondetection/rust-sha1collisiondetection_0.3.2-1.debian.tar.xz",
+          "sha256": "0a148b3bba99111ba0032d8c7ff37eb1a9277d96cc01e300bb34e2cc723582da",
+          "size": 4948
+        }
+      ]
+    },
+    {
+      "name": "rust-smallvec",
+      "version": "1.13.2-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-smallvec/rust-smallvec_1.13.2-1.dsc",
+          "sha256": "31aee6988d6dc28f17b2956d0ad71e320857f3f2cbf4f00865d8b050da720dff",
+          "size": 2183
+        },
+        {
+          "filename": "pool/main/r/rust-smallvec/rust-smallvec_1.13.2.orig.tar.gz",
+          "sha256": "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67",
+          "size": 35216
+        },
+        {
+          "filename": "pool/main/r/rust-smallvec/rust-smallvec_1.13.2-1.debian.tar.xz",
+          "sha256": "e63475ae919a64a0937c60283c57c340afc262a921ee08a5fdb4811922a7d5e3",
+          "size": 4012
+        }
+      ]
+    },
+    {
+      "name": "rust-strsim-0.10",
+      "version": "0.10.0-4",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-strsim-0.10/rust-strsim-0.10_0.10.0-4.dsc",
+          "sha256": "8fad57c67c078cb9e35633711521c2905760bc0d147703e48ee53fbcff8df5a0",
+          "size": 2266
+        },
+        {
+          "filename": "pool/main/r/rust-strsim-0.10/rust-strsim-0.10_0.10.0.orig.tar.gz",
+          "sha256": "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623",
+          "size": 11355
+        },
+        {
+          "filename": "pool/main/r/rust-strsim-0.10/rust-strsim-0.10_0.10.0-4.debian.tar.xz",
+          "sha256": "b4618954cdee560f90529fafa7215a3f9ce8cb371ecfa8894507d204da61ac62",
+          "size": 3132
+        }
+      ]
+    },
+    {
+      "name": "rust-subtle",
+      "version": "2.6.1-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-subtle/rust-subtle_2.6.1-1.dsc",
+          "sha256": "efd8cbe5c09f1cc4122c8c7a2ff39ba5d8857ef63b2d9158b55e1154ee87714d",
+          "size": 2348
+        },
+        {
+          "filename": "pool/main/r/rust-subtle/rust-subtle_2.6.1.orig.tar.gz",
+          "sha256": "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292",
+          "size": 14562
+        },
+        {
+          "filename": "pool/main/r/rust-subtle/rust-subtle_2.6.1-1.debian.tar.xz",
+          "sha256": "6dd54ce7fd46849ab90a238d078a61d5a4815ed1f7c702d771b42a05a4aa85e9",
+          "size": 3348
+        }
+      ]
+    },
+    {
+      "name": "rust-terminal-size",
+      "version": "0.4.1-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-terminal-size/rust-terminal-size_0.4.1-2.dsc",
+          "sha256": "df8f90d8f3ed1eacca51a6194a99771a1db54d927b722a9c96f9f4014e8e826e",
+          "size": 2388
+        },
+        {
+          "filename": "pool/main/r/rust-terminal-size/rust-terminal-size_0.4.1.orig.tar.gz",
+          "sha256": "5352447f921fda68cf61b4101566c0bdb5104eff6804d0678e5227580ab6a4e9",
+          "size": 10037
+        },
+        {
+          "filename": "pool/main/r/rust-terminal-size/rust-terminal-size_0.4.1-2.debian.tar.xz",
+          "sha256": "1f80ef16f34513ac12ca498b9b2e90a467a038645cf96ddb6528ca9efdb6e61b",
+          "size": 4628
+        }
+      ]
+    },
+    {
+      "name": "rust-thiserror-1",
+      "version": "1.0.69-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-thiserror-1/rust-thiserror-1_1.0.69-1.dsc",
+          "sha256": "44914a7eec4ebd7017bdfccd5c7bdc70f9649c41dce1c6df936111ea30ba2bfa",
+          "size": 1985
+        },
+        {
+          "filename": "pool/main/r/rust-thiserror-1/rust-thiserror-1_1.0.69.orig.tar.gz",
+          "sha256": "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52",
+          "size": 22198
+        },
+        {
+          "filename": "pool/main/r/rust-thiserror-1/rust-thiserror-1_1.0.69-1.debian.tar.xz",
+          "sha256": "aca5d823d6f0a205849eac54e74bc23cbc5b9810d0cb5ccdbb1c8b7e6a839fb6",
+          "size": 3140
+        }
+      ]
+    },
+    {
+      "name": "rust-thiserror",
+      "version": "2.0.11-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-thiserror/rust-thiserror_2.0.11-1.dsc",
+          "sha256": "93136745124b5bca68133f5cbf99fc13661c2fdc1fccb85ee2dc7ecef61bb65a",
+          "size": 2499
+        },
+        {
+          "filename": "pool/main/r/rust-thiserror/rust-thiserror_2.0.11.orig.tar.gz",
+          "sha256": "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc",
+          "size": 28648
+        },
+        {
+          "filename": "pool/main/r/rust-thiserror/rust-thiserror_2.0.11-1.debian.tar.xz",
+          "sha256": "8d9d8a7574de1b4bd2081552cd5badfbd840e0b904fee57cf62473352a5b4efb",
+          "size": 3072
+        }
+      ]
+    },
+    {
+      "name": "rust-tinyvec-macros",
+      "version": "0.1.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-tinyvec-macros/rust-tinyvec-macros_0.1.0-1.dsc",
+          "sha256": "b05d835aaf76a4f3f8a6aabf71c00c51b7524ddaa1e9f2e6e4c515e81884c0d3",
+          "size": 2210
+        },
+        {
+          "filename": "pool/main/r/rust-tinyvec-macros/rust-tinyvec-macros_0.1.0.orig.tar.gz",
+          "sha256": "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c",
+          "size": 1817
+        },
+        {
+          "filename": "pool/main/r/rust-tinyvec-macros/rust-tinyvec-macros_0.1.0-1.debian.tar.xz",
+          "sha256": "b65ff96734b066508731ae64ccf12cff7ccc9756641d7d827b623472d0e77ad8",
+          "size": 2884
+        }
+      ]
+    },
+    {
+      "name": "rust-tinyvec",
+      "version": "1.6.0-2",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-tinyvec/rust-tinyvec_1.6.0-2.dsc",
+          "sha256": "4a636c770b3f47c212ae34975d4de0a15a1beabbb7d8d8c8f71da0106d7652fa",
+          "size": 2506
+        },
+        {
+          "filename": "pool/main/r/rust-tinyvec/rust-tinyvec_1.6.0.orig.tar.gz",
+          "sha256": "87cc5ceb3875bb20c2890005a4e226a4651264a5c75edb2421b52861a0a0cb50",
+          "size": 45991
+        },
+        {
+          "filename": "pool/main/r/rust-tinyvec/rust-tinyvec_1.6.0-2.debian.tar.xz",
+          "sha256": "eb5e3ef79c7a7bd5d5ce86f1acfd6f28c88de9f94b9ab1da35e3553b4a3c8a30",
+          "size": 3976
+        }
+      ]
+    },
+    {
+      "name": "rust-toml-0.5",
+      "version": "0.5.11-4",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-toml-0.5/rust-toml-0.5_0.5.11-4.dsc",
+          "sha256": "dc17bdb46d0173b59d8e8eba9940ee0557108d5bcae25daf0b659dc9157a9815",
+          "size": 2349
+        },
+        {
+          "filename": "pool/main/r/rust-toml-0.5/rust-toml-0.5_0.5.11.orig.tar.gz",
+          "sha256": "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234",
+          "size": 54910
+        },
+        {
+          "filename": "pool/main/r/rust-toml-0.5/rust-toml-0.5_0.5.11-4.debian.tar.xz",
+          "sha256": "1e722d8ac2c6ca7754f495217a26a976d1f163c412daeb35ef07d8984cde133d",
+          "size": 3512
+        }
+      ]
+    },
+    {
+      "name": "rust-typenum",
+      "version": "1.17.0-3",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-typenum/rust-typenum_1.17.0-3.dsc",
+          "sha256": "7abe75ba67e55e987ea58e2e65024176f5bc16cbb4f1e0ff1507c1021bac07b2",
+          "size": 2314
+        },
+        {
+          "filename": "pool/main/r/rust-typenum/rust-typenum_1.17.0.orig.tar.gz",
+          "sha256": "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825",
+          "size": 42849
+        },
+        {
+          "filename": "pool/main/r/rust-typenum/rust-typenum_1.17.0-3.debian.tar.xz",
+          "sha256": "cc9a536f27325e5a3989ad7af509d495d1e737b8cb680d39b9fbc42f13f0e185",
+          "size": 4560
+        }
+      ]
+    },
+    {
+      "name": "rust-unicode-bidi",
+      "version": "0.3.17-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-unicode-bidi/rust-unicode-bidi_0.3.17-1.dsc",
+          "sha256": "1d8db1deafc8185d69389b943985eb34c7e5d251ecf0878ff6bb119e2abbc631",
+          "size": 2346
+        },
+        {
+          "filename": "pool/main/r/rust-unicode-bidi/rust-unicode-bidi_0.3.17.orig.tar.gz",
+          "sha256": "5ab17db44d7388991a428b2ee655ce0c212e862eff1768a455c58f9aad6e7893",
+          "size": 58120
+        },
+        {
+          "filename": "pool/main/r/rust-unicode-bidi/rust-unicode-bidi_0.3.17-1.debian.tar.xz",
+          "sha256": "a7f688bb9eb70eef08afe64142fec7aacb8a6b0bda852debb5255b95693e26f1",
+          "size": 3568
+        }
+      ]
+    },
+    {
+      "name": "rust-unicode-joining-type",
+      "version": "1.0.0-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-unicode-joining-type/rust-unicode-joining-type_1.0.0-1.dsc",
+          "sha256": "49a7477979aeaf9ae6e6616e96efb388814e1b1b49a46adab21a35920597ba8a",
+          "size": 2364
+        },
+        {
+          "filename": "pool/main/r/rust-unicode-joining-type/rust-unicode-joining-type_1.0.0.orig.tar.gz",
+          "sha256": "d8d00a78170970967fdb83f9d49b92f959ab2bb829186b113e4f4604ad98e180",
+          "size": 18167
+        },
+        {
+          "filename": "pool/main/r/rust-unicode-joining-type/rust-unicode-joining-type_1.0.0-1.debian.tar.xz",
+          "sha256": "57e87b39ab011debcf2cc4f44bc04abd606ecef74f29839d51090062549f980e",
+          "size": 1936
+        }
+      ]
+    },
+    {
+      "name": "rust-unicode-normalization",
+      "version": "0.1.24-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-unicode-normalization/rust-unicode-normalization_0.1.24-1.dsc",
+          "sha256": "a609654c7be16c4203500e7a3d3e4bc8deb2a79007d928b50f4b301eb7ea79a9",
+          "size": 1893
+        },
+        {
+          "filename": "pool/main/r/rust-unicode-normalization/rust-unicode-normalization_0.1.24.orig.tar.gz",
+          "sha256": "5033c97c4262335cded6d6fc3e5c18ab755e1a3dc96376350f3d8e9f009ad956",
+          "size": 126536
+        },
+        {
+          "filename": "pool/main/r/rust-unicode-normalization/rust-unicode-normalization_0.1.24-1.debian.tar.xz",
+          "sha256": "f40802d74715eb7e2d93d018187d386b5cd04b60fa8e40b55f99253d62333d5c",
+          "size": 3728
+        }
+      ]
+    },
+    {
+      "name": "rust-utf8-iter",
+      "version": "1.0.4-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-utf8-iter/rust-utf8-iter_1.0.4-1.dsc",
+          "sha256": "df5bc076eb6e02863f91e8edad54eae8e23884ad0ae96fcaa40501aab8cdc050",
+          "size": 2212
+        },
+        {
+          "filename": "pool/main/r/rust-utf8-iter/rust-utf8-iter_1.0.4.orig.tar.gz",
+          "sha256": "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be",
+          "size": 10437
+        },
+        {
+          "filename": "pool/main/r/rust-utf8-iter/rust-utf8-iter_1.0.4-1.debian.tar.xz",
+          "sha256": "4c436c892ea4a13d0386fcfa2600b93ba2950118c773507e0f63f146a225d86d",
+          "size": 2920
+        }
+      ]
+    },
+    {
+      "name": "rust-utf8parse",
+      "version": "0.2.1-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-utf8parse/rust-utf8parse_0.2.1-1.dsc",
+          "sha256": "f73564c9054fec31a2a487f166c8806f508451bd005b2f15bd21032a401b4ddb",
+          "size": 2110
+        },
+        {
+          "filename": "pool/main/r/rust-utf8parse/rust-utf8parse_0.2.1.orig.tar.gz",
+          "sha256": "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a",
+          "size": 13435
+        },
+        {
+          "filename": "pool/main/r/rust-utf8parse/rust-utf8parse_0.2.1-1.debian.tar.xz",
+          "sha256": "08e7fc92ad8d7c8517c1102201c005e23875f1f9d5729f0eb6aa5645b78c2a4e",
+          "size": 2752
+        }
+      ]
+    },
+    {
+      "name": "rust-xxhash-rust",
+      "version": "0.8.15-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rust-xxhash-rust/rust-xxhash-rust_0.8.15-1.dsc",
+          "sha256": "60d6d9cab099291556d89468b9e1f080a2ded90d052ee5a89952426be0f53d2f",
+          "size": 2304
+        },
+        {
+          "filename": "pool/main/r/rust-xxhash-rust/rust-xxhash-rust_0.8.15.orig.tar.gz",
+          "sha256": "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3",
+          "size": 21515
+        },
+        {
+          "filename": "pool/main/r/rust-xxhash-rust/rust-xxhash-rust_0.8.15-1.debian.tar.xz",
+          "sha256": "d45170003eea56725ff54165ef6462aef47c7501faf062a1ea6ffa8903bf5a5e",
+          "size": 55832
+        }
+      ]
+    },
+    {
+      "name": "rustc",
+      "version": "1.85.0+dfsg3-1",
+      "files": [
+        {
+          "filename": "pool/main/r/rustc/rustc_1.85.0+dfsg3-1.dsc",
+          "sha256": "d8221d3e2f3526b5911cb763a9afb2f2b3e6fc598b8279ca164c7db52022e56a",
+          "size": 4366
+        },
+        {
+          "filename": "pool/main/r/rustc/rustc_1.85.0+dfsg3.orig-extra.tar.xz",
+          "sha256": "664df803dead620ebe459dc37fae7a5bc4aabe09d9bae0dd81762ea18225a36d",
+          "size": 230724
+        },
+        {
+          "filename": "pool/main/r/rustc/rustc_1.85.0+dfsg3.orig.tar.xz",
+          "sha256": "8cfaf52ab168a12c3082b5956bcc16c8969d8791b2fe54ed5192672b25518af2",
+          "size": 83014324
+        },
+        {
+          "filename": "pool/main/r/rustc/rustc_1.85.0+dfsg3-1.debian.tar.xz",
+          "sha256": "aa398a4a046d266eb2fd22df96b43c01ce190e1e09175929e44881faedd73aa4",
+          "size": 146724
+        }
+      ]
+    },
+    {
+      "name": "sed",
+      "version": "4.9-2+deb13u1",
+      "files": [
+        {
+          "filename": "pool/main/s/sed/sed_4.9-2+deb13u1.dsc",
+          "sha256": "9fcc5dffe5e712b4631757c057228ae57919aec1cca1c91a80e76719167f443b",
+          "size": 2047
+        },
+        {
+          "filename": "pool/main/s/sed/sed_4.9.orig.tar.xz",
+          "sha256": "6e226b732e1cd739464ad6862bd1a1aba42d7982922da7a53519631d24975181",
+          "size": 1397092
+        },
+        {
+          "filename": "pool/main/s/sed/sed_4.9-2+deb13u1.debian.tar.xz",
+          "sha256": "9c9aacda91e02802f33fb6a1a6e86f80be1bc67b92a4dae009e78f77e26e130a",
+          "size": 63644
+        }
+      ]
+    },
+    {
+      "name": "shadow",
+      "version": "1:4.17.4-2",
+      "files": [
+        {
+          "filename": "pool/main/s/shadow/shadow_4.17.4-2.dsc",
+          "sha256": "920de0d3be5303f2c0511d5531c1815abc258b15af8f9c511c8aa6d8e1a91a86",
+          "size": 2851
+        },
+        {
+          "filename": "pool/main/s/shadow/shadow_4.17.4.orig.tar.xz",
+          "sha256": "554801054694ff7d8a7abdf0d6ece34e2f16e111673cc01b8c9ee1278451181e",
+          "size": 2326584
+        },
+        {
+          "filename": "pool/main/s/shadow/shadow_4.17.4.orig.tar.xz.asc",
+          "sha256": "82437d2b54790b3a6734c526b757e693cd0c734ec6afd69f9a9cf0eb1dad8dc4",
+          "size": 488
+        },
+        {
+          "filename": "pool/main/s/shadow/shadow_4.17.4-2.debian.tar.xz",
+          "sha256": "97eaf0b3682a8a1a1ae6e4c4fac00885a7433d2487e636bde7c1c406e66bdb23",
+          "size": 167792
+        }
+      ]
+    },
+    {
+      "name": "sqlite3",
+      "version": "3.46.1-7+deb13u2",
+      "files": [
+        {
+          "filename": "pool/main/s/sqlite3/sqlite3_3.46.1-7+deb13u2.dsc",
+          "sha256": "46e1eec171e11108fc436e45309b635b601029726b6ffd3bf435bb474e511638",
+          "size": 2673
+        },
+        {
+          "filename": "pool/main/s/sqlite3/sqlite3_3.46.1.orig-www.tar.xz",
+          "sha256": "648df41a8e532882b1905df45919aae4bafaf74c455f66bc86f1f52f45c8b8f0",
+          "size": 5861820
+        },
+        {
+          "filename": "pool/main/s/sqlite3/sqlite3_3.46.1.orig.tar.xz",
+          "sha256": "d0cdd2ece271b29e7ce18095745d892517ee26d0f270065b3a25c2e9eb11639c",
+          "size": 8456776
+        },
+        {
+          "filename": "pool/main/s/sqlite3/sqlite3_3.46.1-7+deb13u2.debian.tar.xz",
+          "sha256": "59d33bc436258603702bb051d645743ab03612b82f79e7c7d638c65127c21261",
+          "size": 37084
+        }
+      ]
+    },
+    {
+      "name": "systemd",
+      "version": "257.13-1~deb13u1",
+      "files": [
+        {
+          "filename": "pool/main/s/systemd/systemd_257.13-1~deb13u1.dsc",
+          "sha256": "1b3405d671a82d1e20c9d99f52d4336aafe8543b28d04e91b7f1f586d3a667c7",
+          "size": 8696
+        },
+        {
+          "filename": "pool/main/s/systemd/systemd_257.13.orig.tar.gz",
+          "sha256": "1eb7d5f9ff8a426ff880a3cded9ce819613ba8003ac5ddde9eca162f14ddabe7",
+          "size": 16543653
+        },
+        {
+          "filename": "pool/main/s/systemd/systemd_257.13-1~deb13u1.debian.tar.xz",
+          "sha256": "9c6e435d613b996efcdb3b7dd9a4cebaa745333a3f64dc722f3fad646f1fdc1a",
+          "size": 183128
+        }
+      ]
+    },
+    {
+      "name": "sysvinit",
+      "version": "3.14-4",
+      "files": [
+        {
+          "filename": "pool/main/s/sysvinit/sysvinit_3.14-4.dsc",
+          "sha256": "1cfe65682218077e6f76011f0c5caacc9f2ab214d55893307d4a54c93312ac92",
+          "size": 2375
+        },
+        {
+          "filename": "pool/main/s/sysvinit/sysvinit_3.14.orig.tar.gz",
+          "sha256": "4e90a148707cf64113fc97343c053f9c0c9589551936b053999dcc69731f295f",
+          "size": 516357
+        },
+        {
+          "filename": "pool/main/s/sysvinit/sysvinit_3.14-4.debian.tar.xz",
+          "sha256": "2ba0aa763232112696bce50ee5acc707a515fcbd5b2c194193bfa7a0a525bff6",
+          "size": 122156
+        }
+      ]
+    },
+    {
+      "name": "tar",
+      "version": "1.35+dfsg-3.1",
+      "files": [
+        {
+          "filename": "pool/main/t/tar/tar_1.35+dfsg-3.1.dsc",
+          "sha256": "5bb58d4966d94c99a9f1b182676089ecc05058d62fdb927f5c07539d9cda4077",
+          "size": 2017
+        },
+        {
+          "filename": "pool/main/t/tar/tar_1.35+dfsg.orig.tar.xz",
+          "sha256": "9ae57e981c1e73c0eebc2b26c9b0c4497fe310ef1d516ea430efb5470b71f7a8",
+          "size": 2111608
+        },
+        {
+          "filename": "pool/main/t/tar/tar_1.35+dfsg-3.1.debian.tar.xz",
+          "sha256": "0d0278034b82ed84dce04a461879b6e1871e4cb416a0ff04d3d35ff05fc30a53",
+          "size": 21540
+        }
+      ]
+    },
+    {
+      "name": "tzdata",
+      "version": "2026f-0+deb13u1",
+      "files": [
+        {
+          "filename": "https://snapshot.debian.org/file/0d0a54d527c3dbf9b11ac02badbc445cdc10239f",
+          "sha256": "1e591c778ef71dc461cdc3d16841edb48872c536cd04a27bf2ad86187126388c",
+          "size": 128876
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/18ef1f36d1704f1613b31b56eeada48e16c9a3e7",
+          "sha256": "01b4a91cec5167ed48c11e8ab78f2048cead78ce94b0cafcad0ae8c5a3044d3d",
+          "size": 483310
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/97c9e345a2c4c28dc15f6a4449082efdc6e1209f",
+          "sha256": "5b054ca653d94f5c26e8485f002915cff2e542bd5be473b224708ae301c2f9df",
+          "size": 2466
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/a3c920bd1fec58a6071ae932df5ecbd02bbb35cf",
+          "sha256": "21d673c017910cf47e392e2e8e23a855ed22456da16a9a26ae714bd1e723255d",
+          "size": 833
+        }
+      ]
+    },
+    {
+      "name": "util-linux",
+      "version": "2.41.5-0+deb13u1",
+      "files": [
+        {
+          "filename": "pool/main/u/util-linux/util-linux_2.41.5-0+deb13u1.dsc",
+          "sha256": "43e9b2cbebd10fdc598c4ad10217c8202c28de53af6eafc892c8e9b5cbf3a3a5",
+          "size": 4988
+        },
+        {
+          "filename": "pool/main/u/util-linux/util-linux_2.41.5.orig.tar.xz",
+          "sha256": "f586e35d320ff537aab3ffeca37e9ecd482ccbe013590db4429a414d8aa6a728",
+          "size": 9474992
+        },
+        {
+          "filename": "pool/main/u/util-linux/util-linux_2.41.5-0+deb13u1.debian.tar.xz",
+          "sha256": "5b327ccd22f0f4ed28a389870aa51d04ecedb8693e52a1d122850f2b3188cbf6",
+          "size": 107604
+        }
+      ]
+    },
+    {
+      "name": "xxhash",
+      "version": "0.8.3-2",
+      "files": [
+        {
+          "filename": "pool/main/x/xxhash/xxhash_0.8.3-2.dsc",
+          "sha256": "9d1f7aaace7871fbdb8775d756c6eaca84e6ad5d8e9c6ac465b7e0adc06ff90c",
+          "size": 1969
+        },
+        {
+          "filename": "pool/main/x/xxhash/xxhash_0.8.3.orig.tar.gz",
+          "sha256": "aae608dfe8213dfd05d909a57718ef82f30722c392344583d3f39050c7f29a80",
+          "size": 1147630
+        },
+        {
+          "filename": "pool/main/x/xxhash/xxhash_0.8.3-2.debian.tar.xz",
+          "sha256": "13824bfb2b2367225dfe3090d0ae050614f1c470a47db7232a2e9d4b2b14ad31",
+          "size": 5144
+        }
+      ]
+    },
+    {
+      "name": "xz-utils",
+      "version": "5.8.1-1+deb13u2",
+      "files": [
+        {
+          "filename": "https://snapshot.debian.org/file/183b0cf1dce421176532909902d728165be3748b",
+          "sha256": "f02574465dcb7da3d5b7bdfc20ea350248c3371b0df36bb005152af80d61cdfc",
+          "size": 2562
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/3658f92b0eec052a58ca69fa3c12c5b095a05fc6",
+          "sha256": "4138f4ceca1aa7fd2085fb15a23f6d495d27bca6d3c49c429a8520ea622c27ae",
+          "size": 833
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/4d9c41375f1fcc5f8ee0f803e8853257e576da7b",
+          "sha256": "7dfcff43a8035561c4860a4893f7cf9de5e977e79a90aee4d101053e21912cb0",
+          "size": 28044
+        },
+        {
+          "filename": "https://snapshot.debian.org/file/c29df8058b6279bfab2744f3e79b2940229207a3",
+          "sha256": "0b54f79df85912504de0b14aec7971e3f964491af1812d83447005807513cd9e",
+          "size": 1461872
+        }
+      ]
+    },
+    {
+      "name": "zlib",
+      "version": "1:1.3.dfsg+really1.3.1-1",
+      "files": [
+        {
+          "filename": "pool/main/z/zlib/zlib_1.3.dfsg+really1.3.1-1.dsc",
+          "sha256": "ede2791e29c1d3b422f9208bdd7edf040c20445ea1e7453a72037576e64fa197",
+          "size": 2637
+        },
+        {
+          "filename": "pool/main/z/zlib/zlib_1.3.dfsg+really1.3.1.orig.tar.gz",
+          "sha256": "60dd315c07f616887caa029408308a018ace66e3d142726a97db164b3b8f69fb",
+          "size": 1325737
+        },
+        {
+          "filename": "pool/main/z/zlib/zlib_1.3.dfsg+really1.3.1-1.debian.tar.xz",
+          "sha256": "9ed525955ce9fb0c1b39be8ff98f73450dbfc6305a9a27e6149c8972d38a0a9e",
+          "size": 16576
+        }
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:9f4637c57d28d94e19eb448f66cbcf4dcca06761ae890ec1d75081c642e7cb3d",
+      "size": 43314190
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+      "size": 29856132
+    }
+  ]
+}
