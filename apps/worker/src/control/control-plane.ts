@@ -19,6 +19,7 @@ import { ProviderAuth } from "./provider-auth.js";
 import { Relay } from "./relay.js";
 import { drainRepairResume, postponeRepair, repairEligible } from "./repair.js";
 import { Revocations } from "./revocation.js";
+import { readStorageSample } from "./storage-budget.js";
 import { ControlError, check, fail, id, json, outcome, Store, same } from "./store.js";
 import { type ExecutorState, Tickets } from "./tickets.js";
 import { WorkspaceLeases } from "./workspace-leases.js";
@@ -745,7 +746,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
         }
         case "getUsage": {
           requireGrant(ctx, route.action);
-          const usage = this.capacity.usage();
+          const usage = this.directory.budget.usage();
           return {
             status: 200,
             body: {
@@ -1018,8 +1019,15 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       const modelMatch = /^\/internal\/agents\/([a-zA-Z0-9_-]+)\/model$/.exec(url.pathname);
       const adminMatch = /^\/v1\/admin\/artifacts\/([a-zA-Z0-9_-]+)$/.exec(url.pathname);
       const executorWorkspace = url.pathname.startsWith("/v1/executor/jobs/");
+      const storageSample = url.pathname === "/internal/storage-sample";
       check(
-        match || statusMatch || artifactMatch || modelMatch || adminMatch || executorWorkspace,
+        match ||
+          statusMatch ||
+          artifactMatch ||
+          modelMatch ||
+          adminMatch ||
+          executorWorkspace ||
+          storageSample,
         "not_found",
         "Control route unavailable",
       );
@@ -1056,6 +1064,12 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       if (executorWorkspace) {
         this.capacity.admitRequest(auth.principalId);
         return this.#executorWorkspace.fetch(auth, request, headers);
+      }
+      if (storageSample) {
+        this.capacity.admitRequest(auth.principalId);
+        const input = await readStorageSample(request, auth.deadline);
+        const receipt = this.capacity.sample(auth, input);
+        return Response.json({ ok: true, value: receipt }, { headers });
       }
       if (adminMatch) {
         const result = await this.#call(auth, () =>

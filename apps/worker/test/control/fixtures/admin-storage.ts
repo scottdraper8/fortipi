@@ -40,7 +40,7 @@ export class AdminStorageFixture extends DurableObject<Env> {
       operationId: "existing-pending-work",
       ownerId: "pending-owner",
       policyVersion: freeInfrastructurePolicy.version,
-      bytes: limit - this.ctx.storage.sql.databaseSize - 16384,
+      bytes: limit - this.#capacity.directory.budget.usage().total - 16384,
       admissionSlots: 0,
     });
     return JSON.stringify({

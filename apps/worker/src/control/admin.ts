@@ -109,21 +109,10 @@ export class AdminChunks {
   }
 
   admitGrowth(bytes: number): void {
-    const bounds = this.#bounds(),
-      totals = this.#capacity.usage(),
-      physical = this.#store.storage.sql.databaseSize,
-      growth = bytes * 3 + 8192;
-    check(
-      physical + growth <= bounds.objectBytes * (1 - bounds.headroomFraction),
-      "quota_exceeded",
-      "Admin byte storage preserves object repair headroom",
-    );
-    check(
-      totals.reserved + totals.consumed + physical + growth <=
-        Math.floor(bounds.installBytes * (1 - bounds.headroomFraction)),
-      "quota_exceeded",
-      "Admin byte storage preserves remaining install repair headroom",
-    );
+    const budget = this.#capacity.directory.budget;
+    // append checks and writes in one existing synchronous CP transaction.
+    // Public physical size is sampled directly; the CP floor is counted once.
+    budget.admit(budget.controlKey, bytes * 3 + 8192);
   }
 
   verify(

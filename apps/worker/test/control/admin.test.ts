@@ -225,7 +225,7 @@ test("actual whole-SHA corruption and oversized descriptors never publish comple
   }
 });
 
-test("near-full reserved install rejects the next real copy chunk and preserves its existing pending prefix", {
+test("near-full reserved install permits a bounded copy inside prepaid CP coverage without refunding pending claims", {
   timeout: 15000,
 }, async () => {
   const f = await adminHarness();
@@ -274,9 +274,8 @@ test("near-full reserved install rejects the next real copy chunk and preserves 
     await f.raw(`/fixture/source/${agentId}?mode=normal`);
     assert.equal(accepted.status, 202);
     const result = await f.observe(accepted.body.operationId, reader.token);
-    assert.equal(result.state, "unavailable");
-    assert.match(result.reason ?? "", /object\/install storage bounds/);
-    assert.deepEqual(result.artifacts, []);
+    assert.equal(result.state, "completed");
+    assert.equal(result.artifacts.length, 1);
     const after: {
       usage: typeof reserved.usage;
       chunks: { bytes: number };
@@ -285,13 +284,9 @@ test("near-full reserved install rejects the next real copy chunk and preserves 
       blobHash: string;
     } = JSON.parse(await (await f.raw("/fixture/inspect")).text());
     assert.deepEqual(after.usage, reserved.usage);
-    assert.equal(after.chunks.bytes, before.chunks.bytes);
-    assert.equal(after.blobHash, before.blobHash);
-    assert.equal(after.indexes, 0);
-    assert.ok(
-      after.physical <= reserved.physical + 16384,
-      "Rejected copy preserves physical repair slack",
-    );
+    assert.equal(after.chunks.bytes, bytes.length);
+    assert.equal(after.blobHash, sha(bytes));
+    assert.equal(after.indexes, 1);
   } finally {
     await f.close();
   }

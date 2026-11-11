@@ -1,5 +1,6 @@
 import type * as D from "../boundary/dto.js";
-import { contains, emptyScope, requireGrant } from "./authorization.js";
+import type { StorageSampleInput, StorageSampleReceipt } from "../boundary/infrastructure.js";
+import { contains, emptyScope, requireGrant, roleAllows } from "./authorization.js";
 import type { Directory } from "./directory.js";
 import type { Identities } from "./identity.js";
 import { queueRepairResume } from "./repair.js";
@@ -14,6 +15,10 @@ interface Reservation {
   reservation: D.CapacityReservation;
   principal: string;
   workspaceId?: string;
+  allocationKey?: string;
+  growthBytes?: number;
+  settledAt?: number;
+  covered?: true;
   agentAuthority?: {
     registrationId: string;
     agentId: string;
@@ -44,23 +49,21 @@ export class Capacity {
   }
   pressure(): D.InfrastructurePressure[] {
     const usage = this.usage();
+    const storageUsage = this.directory.budget.usage();
     const policy = this.directory.policy();
     const bytes = this.store.storage.sql.databaseSize;
-    const pressure: D.InfrastructurePressure[] = [];
+    const pressure: D.InfrastructurePressure[] = this.directory.budget.pressure();
     const installLimit = Math.floor(
       policy.bounds.installBytes * (1 - policy.bounds.headroomFraction),
     );
-    if (
-      usage.reserved + usage.consumed + bytes >= installLimit ||
-      bytes >= this.store.admissionBytes
-    )
+    if (storageUsage.total >= installLimit || bytes >= this.store.admissionBytes)
       pressure.push({
         resource: "storage",
         scope: { kind: "install" },
         source: "policy",
         measurement: "estimated",
         limit: installLimit,
-        remaining: Math.max(0, installLimit - usage.reserved - usage.consumed - bytes),
+        remaining: Math.max(0, installLimit - storageUsage.total),
         reason: "Outstanding reservations and observed local storage reach admission headroom",
         action: "reclaim-storage",
       });
@@ -316,14 +319,19 @@ export class Capacity {
       const policy = this.directory.policy();
       check(input.policyVersion === policy.version, "conflict", "Policy version changed");
       const totals = this.usage();
-      const storage = this.store.storage.sql.databaseSize;
-      check(
-        totals.reserved + totals.consumed + storage + input.bytes <=
-          Math.floor(policy.bounds.installBytes * (1 - policy.bounds.headroomFraction)) &&
-          storage <= policy.bounds.objectBytes * (1 - policy.bounds.headroomFraction),
-        "quota_exceeded",
-        "Reserved storage exhausted",
-      );
+      const knownWorkspace =
+        this.store.get("binding", input.ownerId) ||
+        this.store.get("binding_pending", input.ownerId);
+      const knownAgent = this.store.get("agent", input.ownerId);
+      const allocationKey =
+        workspace || knownWorkspace
+          ? this.directory.budget.key("workspace", input.ownerId)
+          : agentAuthority
+            ? this.directory.budget.key("agent", agentAuthority.agentId)
+            : knownAgent
+              ? this.directory.budget.key("agent", input.ownerId)
+              : undefined;
+      this.directory.budget.admit(allocationKey, input.bytes);
       check(
         totals.slots + input.admissionSlots <= policy.bounds.activeMutatingJobs,
         "quota_exceeded",
@@ -352,7 +360,10 @@ export class Capacity {
         principal: ctx.principalId,
         ...(workspace ? { workspaceId: input.ownerId } : {}),
         ...(agentAuthority ? { agentAuthority } : {}),
+        ...(allocationKey ? { allocationKey, growthBytes: input.bytes } : {}),
       };
+      if (allocationKey) this.directory.budget.pending(allocationKey, input.bytes);
+      else this.directory.budget.legacy(input.bytes);
       this.store.put("capacity_request", key, row);
       this.store.put("capacity_reservation", reservation.reservationId, row);
       this.store.put("capacity", "counters", {
@@ -384,7 +395,22 @@ export class Capacity {
       const observedBytes = input.observedBytes;
       const totals = this.usage();
       const reservation = { ...row.reservation, state: "settled" as const };
-      const updated = { ...row, reservation, settlement };
+      const retainedGrowth = observedBytes ?? row.reservation.bytes;
+      if (row.allocationKey) {
+        if (!row.covered)
+          this.directory.budget.pending(
+            row.allocationKey,
+            retainedGrowth - (row.growthBytes ?? row.reservation.bytes),
+          );
+      } else if (observedBytes !== undefined)
+        this.directory.budget.legacy(observedBytes - row.reservation.bytes);
+      const updated = {
+        ...row,
+        reservation,
+        settlement,
+        settledAt: Date.now(),
+        ...(row.allocationKey ? { growthBytes: retainedGrowth } : {}),
+      };
       this.store.put("capacity_reservation", input.reservationId, updated);
       this.store.put(
         "capacity_request",
@@ -399,6 +425,81 @@ export class Capacity {
       if (observedBytes !== undefined && observedBytes < reservation.bytes)
         queueRepairResume(this.store, "reclaimed");
       return reservation;
+    });
+  }
+
+  private sampleAuthority(ctx: D.AuthContext): D.AuthorityRegistration {
+    this.identities.current(ctx);
+    const registration = this.directory.registeredAuthority(ctx);
+    check(
+      registration && ["agent", "workspace"].includes(registration.recipient.kind),
+      "unauthorized",
+      "Sample recipient is not registered",
+    );
+    const resources = registration.resources;
+    const objectId = registration.recipient.id;
+    check(
+      ctx.role !== "executor" &&
+        resources.actions.length > 0 &&
+        resources.actions.every((action) => roleAllows(ctx, action)) &&
+        ctx.grants.some(
+          (grant) =>
+            (grant.expiresAt === undefined || Date.now() < grant.expiresAt) &&
+            contains(grant.resources, resources),
+        ),
+      "unauthorized",
+      "One current covering sample grant required",
+    );
+    const ids =
+      registration.recipient.kind === "agent" ? resources.agentIds : resources.workspaceIds;
+    check(
+      ids.length === 1 && ids[0] === objectId,
+      "unauthorized",
+      "Sample must bind one physical recipient",
+    );
+    check(
+      registration.recipient.kind === "agent"
+        ? this.store.get("agent", objectId)
+        : this.store.get("binding", objectId) || this.store.get("binding_pending", objectId),
+      "not_found",
+      "Sample allocation owner unavailable",
+    );
+    return registration;
+  }
+  /** A private registered service observation; it grants no new business authority. */
+  sample(ctx: D.AuthContext, input: StorageSampleInput): StorageSampleReceipt {
+    const registration = this.sampleAuthority(ctx);
+    check(
+      registration.recipient.kind === input.coverage.kind,
+      "unauthorized",
+      "Sample recipient kind changed",
+    );
+    const key = this.directory.budget.key(input.coverage.kind, registration.recipient.id);
+    return this.store.tx(() => {
+      this.identities.current(ctx);
+      return this.directory.budget.sample(key, input, () => {
+        for (const reservationId of input.coveredReservationIds) {
+          const row = this.store.get<Reservation>("capacity_reservation", reservationId);
+          check(
+            row &&
+              row.allocationKey === key &&
+              row.settlement?.disposition === "consumed" &&
+              row.settledAt !== undefined &&
+              row.settledAt <= input.observedAt,
+            "conflict",
+            "Only matched completed pre-barrier growth can be covered",
+          );
+          if (row.covered) continue;
+          this.directory.budget.pending(key, -(row.growthBytes ?? row.reservation.bytes));
+          const covered: Reservation = { ...row, covered: true };
+          this.store.put("capacity_reservation", reservationId, covered);
+          this.store.put(
+            "capacity_request",
+            `${row.principal}:${row.reservation.operationId}:${row.reservation.ownerId}`,
+            covered,
+          );
+        }
+      });
     });
   }
 }
