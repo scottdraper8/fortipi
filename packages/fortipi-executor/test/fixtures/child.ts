@@ -28,4 +28,7 @@ if (mode === "append" && path) {
 } else if (mode === "output") {
   process.stdout.write("λ".repeat(50000));
   process.stderr.write("stderr-marker");
+} else if (mode === "local-manifest" && path) {
+  appendFileSync(path, "effect\n");
+  for (let index = 0; index < 12; index++) writeFileSync(`file-${index}.txt`, `native-${index}\n`);
 } else throw new Error("unknown synthetic child mode");

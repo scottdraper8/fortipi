@@ -106,6 +106,14 @@ The original caller credential and lease identity remain part of that journal;
 the CP authenticates a newly authorized reader separately. Rewriting historical
 scope or changing the executor generation cannot recover or apply that operation.
 Current bytes are never silently substituted for unavailable historical content.
+Applied observations may carry `postManifest` from their matching retained journal,
+after checking the actual root/hash and current authority/fence. The complete wire
+response must fit the negotiated bound and 1MiB maximum; manifest bounds remain
+512 entries by default, 4096 hard and 524288 encoded bytes. Missing, corrupt or
+oversized required metadata fails closed. Legacy stale-fence or historical-receipt
+observations stay readable without a full-manifest attestation. Non-applied states
+never carry it. Metadata observation alone does not release the receipt pin or
+authorize a changed hash-only native commit, spawn or repeated apply.
 An exact repeated preparation can carry a newer authoritative lease observation
 while apply awaits filesystem work. It returns the same preparation ID and updated
 expiry, preserves the effect journal, and cannot revive an already expired lease.
