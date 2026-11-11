@@ -188,6 +188,7 @@ type Call =
   | { kind: "start-execution"; input: D.PreparedExecution }
   | { kind: "query-execution"; input: D.ExecutionIdentity }
   | { kind: "collect-execution"; input: D.ExecutionIdentity }
+  | { kind: "cancel-execution"; input: D.CancelRequest }
   | { kind: "renew"; input: D.LeaseRenewal }
   | { kind: "release"; input: D.LeaseRelease }
   | { kind: "begin"; input: D.OperationRequest<"beginUpload"> }
@@ -348,6 +349,8 @@ export default {
             body: JSON.stringify(call.input),
           }),
         );
+      case "cancel-execution":
+        return Response.json(await authority.cancelExecution(ctx, call.input));
       case "acquire": {
         const reservation = await env.CONTROL_PLANE.getByName("control").reserveTarget(
           ctx,

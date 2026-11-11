@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { assignmentDigest, operationDigest } from "fortipi-contract";
 import type * as D from "../../src/boundary/dto.js";
 import { harness } from "./harness.ts";
 
-async function runFixture(source?: string, denied = false): Promise<void> {
+async function runFixture(source?: string, denied = false, cancelled = false): Promise<void> {
   const server = harness(true);
   async function call<T>(input: unknown): Promise<T> {
     const response = await server.fetch("/rpc", { method: "POST", body: JSON.stringify(input) });
@@ -139,6 +140,48 @@ async function runFixture(source?: string, denied = false): Promise<void> {
       );
       return;
     }
+    if (cancelled) {
+      await delay(1000);
+      const cancellation = await call<D.CancelDisposition>({
+        kind: "cancel-execution",
+        input: { identity, requestId: "cancel-existing", reason: "user" },
+      });
+      assert.equal(cancellation.state, "stopped");
+      assert.equal(cancellation.possibleExternalEffects, true);
+      const result = await call<D.PreparedResult>({ kind: "collect-execution", input: identity });
+      assert.equal(result.state, "failed");
+      assert.equal(result.uploadId, undefined, "Cancelled bytes became a successful staged result");
+      assert.equal(
+        (await call<D.ExecutionObservation>({ kind: "start-execution", input: prepared })).state,
+        "terminal",
+        "Cancellation reopened the execution for another start",
+      );
+      const described = await call<{ status: 200; body: D.WorkspaceBinding }>({
+        kind: "describe",
+        input: { operationId: "describeWorkspace", path: { workspaceId: "workspace" }, query: {} },
+      });
+      assert.equal(described.body.revision, seeded.value.revision);
+      const storage = await server
+        .getWorker()
+        .getDurableObjectStorage("WORKSPACES", { name: "workspace" });
+      const rows = (await storage.exec(
+        "SELECT value FROM fp_ws_record WHERE key='execution:cloud-execution'",
+      )) as { value: string }[];
+      const record = JSON.parse(rows[0]?.value ?? "null") as { manifest: D.Manifest };
+      const marker = record.manifest.entries.find((entry) => entry.path === "cancel-marker.txt");
+      assert.deepEqual(
+        marker,
+        {
+          path: "cancel-marker.txt",
+          type: "file",
+          mode: 420,
+          size: new TextEncoder().encode("before-cancel").length,
+          sha256: createHash("sha256").update("before-cancel").digest("hex"),
+        },
+        "Cancellation ran before the independently hashed scratch effect",
+      );
+      return;
+    }
     let observation: D.ExecutionObservation | undefined;
     for (let attempt = 0; attempt < 750; attempt++) {
       observation = await call({ kind: "query-execution", input: identity });
@@ -262,6 +305,16 @@ test(
   () =>
     runFixture(
       "import value from 'fortipi-host-secret'; export default async function(){ return value; }",
+      true,
+    ),
+);
+test(
+  "actual Loader cancellation retains its scratch effect without publication or another start",
+  { timeout: 60_000 },
+  () =>
+    runFixture(
+      "import {writeFile} from 'node:fs/promises'; export default async function(){ await writeFile('/workspace/cancel-marker.txt','before-cancel'); await new Promise(()=>{}); }",
+      false,
       true,
     ),
 );
