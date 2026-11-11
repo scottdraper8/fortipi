@@ -227,7 +227,14 @@ under the same ID conflicts. The operation deadline is from the original request
 not a new AuthContext/RPC deadline. Renewal also persists its derived private
 expiresAt/input before RPC; retries cannot do now+TTL. Source3 durably recovers
 exact requestId/body receipts before CAS after floors. An old receipt never revives
-a released/revoked lease. Release's public receipt omits the private tombstone ID.
+an expired, released or revoked lease. TargetReservation.expiresAt bounds only the
+first acquisition; it is not the renewal ceiling for an existing lease. Renewal
+requires a still-active lease with current fence, floors and expected version, and
+is bounded by the original immutable operation deadline, now+30s, and current
+credential and matching-grant expiry. Persist that derived expiry and complete
+private input before RPC; matching business-request receipts precede CAS without
+creating a new fence or reviving stale authority. Release's public receipt omits
+the private tombstone ID.
 
 Private TargetRequest's workspace-operation variant requires baseRevision; job
 requests additionally require executionId from the actual stable ExecutionIdentity

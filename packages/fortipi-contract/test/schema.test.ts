@@ -849,7 +849,13 @@ test("executor numeric transfer limits are required closed registration observat
     accepted("ExecutorTransferLimits", valid);
     assert.doesNotThrow(() => validateExecutorTransferLimits(valid));
   }
-  for (const field of Object.keys(maxima) as (keyof typeof maxima)[]) {
+  for (const field of [
+    "chunkBytes",
+    "fileBytes",
+    "snapshotBytes",
+    "artifactBytes",
+    "manifestEntries",
+  ] as const) {
     const missing = { ...limits };
     Reflect.deleteProperty(missing, field);
     rejected("ExecutorTransferLimits", missing);
