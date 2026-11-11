@@ -31,7 +31,7 @@ test("input diagnostics preserve the request/error while withholding signed URL 
   };
   console.error = (value: unknown) => logs.push(String(value));
   try {
-    await import(new URL("./image-network-diagnostics.ts", import.meta.url).href);
+    const { metadataDigests } = await import("./image-network-diagnostics.ts");
     await assert.rejects(
       () => fetch(input, init),
       (error) => error === failure,
@@ -39,6 +39,24 @@ test("input diagnostics preserve the request/error while withholding signed URL 
     assert.equal(calls, 1);
     assert.match(logs.join("\n"), /registry-1\.docker\.io \(ECONNREFUSED\)/);
     assert.doesNotMatch(logs.join("\n"), /diagnostic-test-only|private-blob|signature|Bearer/);
+    const digest = `sha256:${"a".repeat(64)}`;
+    const summary = metadataDigests({
+      "containerimage.digest": digest,
+      "containerimage.config.digest": "credential-test-only",
+      "containerimage.descriptor": { digest, annotations: { token: "credential-test-only" } },
+      "buildx.build.provenance": { secret: "credential-test-only" },
+    });
+    assert.deepEqual(summary["containerimage.digest"], { present: true, digest });
+    assert.deepEqual(summary["containerimage.config.digest"], { present: true, digest: null });
+    assert.deepEqual(summary["containerimage.descriptor.digest"], { present: true, digest });
+    assert.deepEqual(metadataDigests(null)["containerimage.digest"], {
+      present: false,
+      digest: null,
+    });
+    assert.doesNotMatch(
+      JSON.stringify(summary),
+      /credential-test-only|annotations|provenance|secret/,
+    );
   } finally {
     globalThis.fetch = originalFetch;
     console.error = originalError;

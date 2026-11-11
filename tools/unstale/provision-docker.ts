@@ -251,6 +251,38 @@ async function rootlessPrerequisites(
       process.getegid?.() === user.gid,
     "rootless prerequisite: nonroot job user",
   );
+  // The private XDG runtime has no user bus. Bind runc to this UID's real user manager,
+  // rather than falling back to the privileged system bus for cgroup scopes.
+  await command("sudo", ["-n", "systemctl", "start", `user@${user.uid}.service`], env);
+  const userRuntime = `/run/user/${user.uid}`;
+  const runtime = await lstat(userRuntime);
+  assert.ok(
+    runtime.isDirectory() && runtime.uid === user.uid && (runtime.mode & 0o777) === 0o700,
+    "rootless prerequisite: actual UID's private systemd runtime directory",
+  );
+  const bus = await lstat(`${userRuntime}/bus`);
+  assert.ok(bus.isSocket() && bus.uid === user.uid, "rootless prerequisite: actual UID's user bus");
+  env.DBUS_SESSION_BUS_ADDRESS = `unix:path=${userRuntime}/bus`;
+  assert.equal(
+    (await command("systemctl", ["--user", "is-active", "dbus.socket"], env)).trim(),
+    "active",
+    "rootless prerequisite: existing user D-Bus session must be active",
+  );
+  const controllers = (
+    await readFile(
+      `/sys/fs/cgroup/user.slice/user-${user.uid}.slice/user@${user.uid}.service/cgroup.controllers`,
+      "utf8",
+    )
+  )
+    .trim()
+    .split(/\s+/);
+  assert.ok(
+    ["cpu", "memory", "pids"].every((controller) => controllers.includes(controller)),
+    "rootless prerequisite: cgroup v2 CPU/memory/PID delegation required; no limits disabled",
+  );
+  console.log(
+    "Rootless actual-UID private user bus and cgroup v2 CPU/memory/PID delegation verified",
+  );
   const kernel = /^(\d+)\.(\d+)/.exec(release());
   assert.ok(
     kernel && (Number(kernel[1]) > 5 || (Number(kernel[1]) === 5 && Number(kernel[2]) >= 11)),
@@ -697,6 +729,17 @@ async function main(): Promise<void> {
         ),
       ) as string[];
       assert.ok(options.includes("name=rootless"), "Daemon is not actually rootless");
+      assert.equal(
+        (
+          await command(
+            resolve(directory, "docker"),
+            ["info", "--format", "{{.CgroupDriver}}/{{.CgroupVersion}}"],
+            env,
+          )
+        ).trim(),
+        "systemd/2",
+        "Rootless daemon must retain actual systemd/cgroup v2 enforcement",
+      );
       // RootlessKit's child is a supervisor which starts and waits for dockerd.
       const child = (await readFile(resolve(session, "state/child_pid"), "utf8")).trim();
       assert.match(child, /^[1-9]\d*$/);
