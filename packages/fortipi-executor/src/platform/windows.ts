@@ -76,7 +76,9 @@ export function windows(): PlatformAdapter {
     async protect(path, directory) {
       const type = directory ? "DirectorySecurity" : "FileSecurity";
       await ps(
-        `$p=${literal(path)};$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User;$acl=New-Object System.Security.AccessControl.${type};$acl.SetOwner($sid);$acl.SetAccessRuleProtection($true,$false);$flags=${directory ? "'ContainerInherit,ObjectInherit'" : "'None'"};foreach($s in @($sid,[System.Security.Principal.SecurityIdentifier]'S-1-5-18')){$r=New-Object System.Security.AccessControl.FileSystemAccessRule($s,'FullControl',$flags,'None','Allow');$acl.AddAccessRule($r)};Set-Acl -LiteralPath $p -AclObject $acl`,
+        // Windows PowerShell runs on .NET Framework. Typed SID overloads avoid account-name resolution;
+        // direct BCL calls do not depend on Security/Management/Utility cmdlet module autoload.
+        `$p=${literal(path)};$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User;$acl=[System.Security.AccessControl.${type}]::new();$acl.SetOwner($sid);$acl.SetAccessRuleProtection($true,$false);$flags=[System.Security.AccessControl.InheritanceFlags]${directory ? "'ContainerInherit,ObjectInherit'" : "'None'"};foreach($s in @($sid,[System.Security.Principal.SecurityIdentifier]::new('S-1-5-18'))){$r=[System.Security.AccessControl.FileSystemAccessRule]::new($s,[System.Security.AccessControl.FileSystemRights]::FullControl,$flags,[System.Security.AccessControl.PropagationFlags]::None,[System.Security.AccessControl.AccessControlType]::Allow);$acl.AddAccessRule($r)};[System.IO.${directory ? "Directory" : "File"}]::SetAccessControl($p,$acl)`,
       );
     },
     async verifyProtection(path, directory) {
@@ -86,7 +88,7 @@ export function windows(): PlatformAdapter {
       await this.verifyEntry(path, stat);
       const result = JSON.parse(
         await ps(
-          `$a=Get-Acl -LiteralPath ${literal(path)};$me=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;[pscustomobject]@{owner=$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value;me=$me;protected=$a.AreAccessRulesProtected;rules=@($a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])|ForEach-Object{[pscustomobject]@{sid=$_.IdentityReference.Value;allow=($_.AccessControlType -eq 'Allow');rights=[int64]$_.FileSystemRights}})}|ConvertTo-Json -Depth 4`,
+          `$a=[System.IO.${directory ? "Directory" : "File"}]::GetAccessControl(${literal(path)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');$me=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;$b=[System.Text.StringBuilder]::new();[void]$b.Append('{"owner":"'+$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value+'","me":"'+$me+'","protected":'+$a.AreAccessRulesProtected.ToString().ToLowerInvariant()+',"rules":[');$sep='';foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){[void]$b.Append($sep+'{"sid":"'+$r.IdentityReference.Value+'","allow":'+($r.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow).ToString().ToLowerInvariant()+',"rights":'+([int64]$r.FileSystemRights).ToString([System.Globalization.CultureInfo]::InvariantCulture)+'}');$sep=','};[void]$b.Append(']}');[Console]::Out.Write($b.ToString())`,
         ),
       ) as {
         owner: string;
@@ -115,7 +117,7 @@ export function windows(): PlatformAdapter {
       )
         throw new Error("unsafe workspace link");
       const attributes = Number(
-        await ps(`[int](Get-Item -Force -LiteralPath ${literal(path)}).Attributes`),
+        await ps(`[Console]::Out.Write([int][System.IO.File]::GetAttributes(${literal(path)}))`),
       );
       if (!Number.isInteger(attributes) || (attributes & 1024) !== 0)
         throw new Error("reparse point rejected");

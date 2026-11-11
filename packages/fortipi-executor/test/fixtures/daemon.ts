@@ -376,15 +376,127 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
       }
     }
   const path = await realpath(await mkdtemp(join(tmpdir(), "fortipi-windows-probe-"))),
+    file = join(path, "synthetic.txt"),
+    psLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
+  await writeFile(file, "synthetic");
+  function marked(steps: [string, string][]): string {
+    const stamp = (stage: string) =>
+      `[Console]::Out.WriteLine('fortipi-acl:${stage}:'+$clock.ElapsedMilliseconds);[Console]::Out.Flush()`;
+    return `$ErrorActionPreference='Stop';$clock=[System.Diagnostics.Stopwatch]::StartNew();${steps.map(([stage, body]) => `${stamp(`${stage}.begin`)};${body};${stamp(`${stage}.done`)}`).join(";")}`;
+  }
+  async function runMarked(phase: string, steps: [string, string][]): Promise<boolean> {
+    const started = performance.now(),
+      pending = execute(executable, powershellArgs(marked(steps)), {
+        env: environment,
+        timeout: 10000,
+        maxBuffer: 8192,
+        windowsHide: true,
+      });
+    pending.child.stdin?.on("error", () => {});
+    pending.child.stdin?.end();
+    let stdout = "",
+      stderr = "",
+      exitCode: string | number | null = 0,
+      signal: string | null = null,
+      killed = false;
+    try {
+      ({ stdout, stderr } = await pending);
+    } catch (error) {
+      const e = error as {
+        stdout?: string;
+        stderr?: string;
+        code?: string | number;
+        signal?: string;
+        killed?: boolean;
+      };
+      stdout = e.stdout ?? "";
+      stderr = e.stderr ?? "";
+      exitCode = e.code ?? null;
+      signal = e.signal ?? null;
+      killed = e.killed === true;
+    }
+    const stages = stdout
+      .split(/\r?\n/)
+      .flatMap((line) => {
+        const m = /^fortipi-acl:([a-z0-9-]+\.(?:begin|done)):(\d{1,8})$/.exec(line);
+        return m ? [{ stage: m[1], elapsedMs: Number(m[2]) }] : [];
+      })
+      .slice(0, 64);
+    process.stdout.write(
+      `${JSON.stringify({ phase, elapsedMs: Math.round(performance.now() - started), exitCode, signal, killed, stages, stdoutBytes: Buffer.byteLength(stdout), stderrBytes: Buffer.byteLength(stderr) })}\n`,
+    );
+    return exitCode === 0 && stages.at(-1)?.stage === `${steps.at(-1)?.[0]}.done`;
+  }
+  // Frozen old commands, separately measured. Markers contain no paths, SIDs or account names.
+  await runMarked("cmdlet-protection", [
+    ["sid", "$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User"],
+    ["new-acl", "$acl=New-Object System.Security.AccessControl.DirectorySecurity"],
+    ["owner", "$acl.SetOwner($sid);$acl.SetAccessRuleProtection($true,$false)"],
+    [
+      "rules",
+      "foreach($s in @($sid,[System.Security.Principal.SecurityIdentifier]'S-1-5-18')){$r=New-Object System.Security.AccessControl.FileSystemAccessRule($s,'FullControl','ContainerInherit,ObjectInherit','None','Allow');$acl.AddAccessRule($r)}",
+    ],
+    ["set-acl", `Set-Acl -LiteralPath ${psLiteral(path)} -AclObject $acl`],
+  ]);
+  await runMarked("security-module", [
+    ["import-security", "Import-Module Microsoft.PowerShell.Security -ErrorAction Stop"],
+    ["get-acl", `$a=Get-Acl -LiteralPath ${psLiteral(path)}`],
+  ]);
+  await runMarked("management-module", [
+    ["import-management", "Import-Module Microsoft.PowerShell.Management -ErrorAction Stop"],
+    ["get-item", `$attributes=[int](Get-Item -Force -LiteralPath ${psLiteral(path)}).Attributes`],
+  ]);
+  await runMarked("utility-module", [
+    ["import-utility", "Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop"],
+    ["new-object", "$o=New-Object System.Object"],
+    ["convert-json", "$j=[pscustomobject]@{synthetic=$true}|ConvertTo-Json"],
+  ]);
+  const bclSteps: [string, string][] = [
+    [
+      "sid",
+      "$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User;$system=[System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')",
+    ],
+  ];
+  for (const directory of [true, false]) {
+    const kind = directory ? "Directory" : "File",
+      tag = directory ? "directory" : "file",
+      nativePath = directory ? path : file;
+    bclSteps.push(
+      [
+        `${tag}-new-acl`,
+        `$acl=[System.Security.AccessControl.${kind}Security]::new();$acl.SetOwner($sid);$acl.SetAccessRuleProtection($true,$false)`,
+      ],
+      [
+        `${tag}-rules`,
+        `$flags=[System.Security.AccessControl.InheritanceFlags]'${directory ? "ContainerInherit,ObjectInherit" : "None"}';foreach($s in @($sid,$system)){$r=[System.Security.AccessControl.FileSystemAccessRule]::new($s,[System.Security.AccessControl.FileSystemRights]::FullControl,$flags,[System.Security.AccessControl.PropagationFlags]::None,[System.Security.AccessControl.AccessControlType]::Allow);$acl.AddAccessRule($r)}`,
+      ],
+      [`${tag}-set-acl`, `[System.IO.${kind}]::SetAccessControl(${psLiteral(nativePath)},$acl)`],
+      [
+        `${tag}-get-acl`,
+        `$a=[System.IO.${kind}]::GetAccessControl(${psLiteral(nativePath)},[System.Security.AccessControl.AccessControlSections]'Owner,Access')`,
+      ],
+      [
+        `${tag}-verify`,
+        "if(!$a.AreAccessRulesProtected -or $a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){throw 'ACL invariant'};$found=$false;foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){if($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow -or ($r.IdentityReference.Value -ne $sid.Value -and $r.IdentityReference.Value -ne $system.Value)){throw 'ACL invariant'};if($r.IdentityReference.Value -eq $sid.Value -and (([int64]$r.FileSystemRights -band 2032127) -eq 2032127)){$found=$true}};if(!$found){throw 'ACL invariant'}",
+      ],
+      [
+        `${tag}-attributes`,
+        `$attributes=[int][System.IO.File]::GetAttributes(${psLiteral(nativePath)});if(($attributes -band 1024) -ne 0){throw 'reparse invariant'}`,
+      ],
+    );
+  }
+  const bclPassed = await runMarked("direct-bcl", bclSteps),
     started = performance.now();
   let aclPassed = false;
+  let operation = "protect-directory";
   try {
     const p = adapter();
     await p.protect(path, true);
+    operation = "verify-directory";
     await p.verifyProtection(path, true);
-    const file = join(path, "synthetic.txt");
-    await writeFile(file, "synthetic");
+    operation = "protect-file";
     await p.protect(file, false);
+    operation = "verify-file";
     await p.verifyProtection(file, false);
     aclPassed = true;
     process.stdout.write(
@@ -392,13 +504,13 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     );
   } catch (error) {
     process.stdout.write(
-      `${JSON.stringify({ phase: "actual-dacl", elapsedMs: Math.round(performance.now() - started), protectedDirectoryAndFile: false, reason: error instanceof Error ? error.message : "unknown" })}\n`,
+      `${JSON.stringify({ phase: "actual-dacl", operation, elapsedMs: Math.round(performance.now() - started), protectedDirectoryAndFile: false, reason: error instanceof Error ? error.message : "unknown" })}\n`,
     );
   } finally {
     await rm(path, { recursive: true, force: true });
   }
   process.stdout.write(
-    `${JSON.stringify({ phase: "normal-exit", controlledEofPassed, aclPassed })}\n`,
+    `${JSON.stringify({ phase: "normal-exit", controlledEofPassed, bclPassed, aclPassed })}\n`,
   );
-  if (!controlledEofPassed || !aclPassed) process.exitCode = 1;
+  if (!controlledEofPassed || !bclPassed || !aclPassed) process.exitCode = 1;
 }

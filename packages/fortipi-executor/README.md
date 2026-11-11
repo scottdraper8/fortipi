@@ -125,6 +125,10 @@ component and operation on all three operating systems; an arbitrary process
 with the same OS user's access can still race these checks or write outside the
 root. Root trust remains necessary. POSIX modes or restrictive current-user/SYSTEM
 DACLs protect state. ACL inspection alone is not a demonstrated other-user denial.
+Windows permission utilities use typed SID ACL operations from .NET Framework
+and direct filesystem attributes, without cmdlet module autoload or account-name
+translation. The native diagnostic emits bounded stage timings without identities
+or paths; it retains the same per-process protection timeout.
 
 ## Reproduction and evidence limits
 
