@@ -863,61 +863,91 @@ export class ExecutorRuntime implements FrameHandler {
         }
       }
     });
+    const reply = (
+      response: LocalWorkspaceResponse | ErrorBody,
+    ): Extract<ExecutorFrame, { type: "workspace.response" }> => ({
+      type: "workspace.response",
+      requestId: value.requestId,
+      payload: { requestId, correlationId, response },
+    });
+    const preflight = (response: LocalWorkspaceResponse | ErrorBody) => {
+      const result = reply(response);
+      if (Buffer.byteLength(canonicalJson(result)) > Math.min(1048576, this.http.jsonBytes))
+        throw new Error("payload_too_large: complete workspace response");
+      frame(result);
+      return result;
+    };
+    const failed = (error: unknown): ErrorBody => {
+      const message = error instanceof Error ? error.message : "unknown";
+      if (/payload_too_large|capacity|chunk grid|manifest bytes|manifest limit/.test(message))
+        return {
+          error: {
+            code: "payload_too_large",
+            message: "Local metadata or capacity limit exceeded",
+            requestId,
+            retryable: false,
+          },
+        };
+      const reason = message.includes("revision_unavailable")
+        ? "revision_unavailable"
+        : message.includes("expired_lease")
+          ? "expired_lease"
+          : message.includes("stale_fence")
+            ? "stale_fence"
+            : message.includes("uncertain")
+              ? "uncertain_effects"
+              : "local_drift";
+      return {
+        error: {
+          code: "workspace.conflict",
+          message: "Local workspace requires current authority or recovery",
+          requestId,
+          retryable: false,
+          details: { reason },
+        },
+      };
+    };
+    const persist = (response: LocalWorkspaceResponse | ErrorBody) => {
+      preflight(response);
+      const metadata = { ...response };
+      Reflect.deleteProperty(metadata, "postManifest");
+      const encoded = canonicalJson(metadata);
+      this.ledger.transaction(() => {
+        this.ledger.capacity(Buffer.byteLength(encoded) + 4096, true);
+        this.ledger.db
+          .prepare(
+            "INSERT INTO meta VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+          )
+          .run(`workspace_response_${requestId}`, encoded);
+      });
+      return response;
+    };
     let work = this.workspaceRequests.get(requestId);
     if (!work) {
       if (this.workspaceRequests.size >= Math.min(32, this.http.limits.queuedAdmissions))
         throw new Error("workspace request concurrency exhausted");
       work = local
         .request(request)
-        .catch((error: unknown): ErrorBody => {
-          const message = error instanceof Error ? error.message : "unknown";
-          if (/payload_too_large|capacity|chunk grid/.test(message))
-            return {
-              error: {
-                code: "payload_too_large",
-                message: "Local metadata or capacity limit exceeded",
-                requestId,
-                retryable: false,
-              },
-            };
-          const reason = message.includes("revision_unavailable")
-            ? "revision_unavailable"
-            : message.includes("expired_lease")
-              ? "expired_lease"
-              : message.includes("stale_fence")
-                ? "stale_fence"
-                : message.includes("uncertain")
-                  ? "uncertain_effects"
-                  : "local_drift";
-          return {
-            error: {
-              code: "workspace.conflict",
-              message: "Local workspace requires current authority or recovery",
-              requestId,
-              retryable: false,
-              details: { reason },
-            },
-          };
-        })
         .then((response) => {
-          this.ledger.db
-            .prepare(
-              "INSERT INTO meta VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            )
-            .run(`workspace_response_${requestId}`, canonicalJson(response));
-          return response;
+          this.http.assertExecutorAuthority();
+          return persist(response);
         })
+        .catch((error: unknown) => persist(failed(error)))
         .finally(() => {
           this.workspaceRequests.delete(requestId);
         });
       this.workspaceRequests.set(requestId, work);
     }
-    return {
-      type: "workspace.response",
-      requestId: value.requestId,
-      payload: { requestId, correlationId, response: await work },
-    };
+    try {
+      const response = await work;
+      this.http.assertExecutorAuthority();
+      // Coalesced callers may have different outer IDs; check each actual envelope.
+      return preflight(response);
+    } catch (error) {
+      return preflight(failed(error));
+    }
   }
+
   async transfer(descriptor: TransferDescriptor, requestId?: string): Promise<void> {
     const key = `${descriptor.transferId}:${descriptor.attemptId}`,
       verifiedChunks: number[] = [];
