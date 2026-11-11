@@ -4,10 +4,12 @@ import type * as D from "../boundary/dto.js";
 export class ServiceError extends Error {
   readonly code: D.ErrorCode;
   readonly details: D.ErrorDetails | undefined;
-  constructor(code: D.ErrorCode, message: string, details?: D.ErrorDetails) {
+  readonly retryable: boolean | undefined;
+  constructor(code: D.ErrorCode, message: string, details?: D.ErrorDetails, retryable?: boolean) {
     super(message);
     this.code = code;
     this.details = details;
+    this.retryable = retryable;
   }
 }
 export function check(
@@ -19,7 +21,8 @@ export function check(
   if (!value) throw new ServiceError(code, message, details);
 }
 export function unwrap<T>(result: D.Outcome<T>): T {
-  if (!result.ok) throw new ServiceError(result.code, result.message, result.details);
+  if (!result.ok)
+    throw new ServiceError(result.code, result.message, result.details, result.retryable);
   return result.value;
 }
 export function failure(error: unknown, requestId: string): D.Outcome<never> & { ok: false } {
@@ -33,7 +36,7 @@ export function failure(error: unknown, requestId: string): D.Outcome<never> & {
     ok: false as const,
     message: known.message,
     requestId,
-    retryable: false,
+    retryable: known.retryable ?? false,
   };
   const code = known.code,
     details = known.details;
@@ -49,6 +52,7 @@ export function failure(error: unknown, requestId: string): D.Outcome<never> & {
       return {
         ...base,
         code,
+        retryable: details.pressure.action === "retry-later" && (known.retryable ?? false),
         // Zero means an operator/workload change is needed, not a storage reset
         // or permission to retry an uncertain side effect automatically.
         details: {
@@ -58,6 +62,14 @@ export function failure(error: unknown, requestId: string): D.Outcome<never> & {
         },
       };
     case "rate_limited":
+      return {
+        ...base,
+        code,
+        retryable:
+          known.retryable ??
+          (Number.isSafeInteger(details?.retryAfterMs) && (details?.retryAfterMs ?? 0) > 0),
+        details: { ...details, retryAfterMs: details?.retryAfterMs ?? 1000 },
+      };
     case "unavailable":
     case "unavailable_executor":
       return {

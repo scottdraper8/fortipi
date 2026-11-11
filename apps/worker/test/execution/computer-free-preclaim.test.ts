@@ -7,7 +7,9 @@ import { pause } from "../agent/harness.ts";
 import { nativeService } from "./native-service.ts";
 
 test("default Free preparation of31 actual Computer files preserves its admitted native identity through request pressure", {
-  timeout: 120000,
+  // Actual30/min can require two60s backoffs for31 files because each GET
+  // crosses two physical CP admissions. The assignment deadline stays unchanged.
+  timeout: 330000,
 }, async () => {
   const calls: {
     path: string;

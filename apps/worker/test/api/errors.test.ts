@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import Ajv from "ajv/dist/2020.js";
 import { schemaRegistry } from "fortipi-contract";
-import { errorResponse, failure, pressure, ServiceError } from "../../src/api/common.ts";
+import { errorResponse, failure, pressure, ServiceError, unwrap } from "../../src/api/common.ts";
 
 const ajv = new Ajv({ strict: true, validateFormats: false });
 for (const schema of Object.values(schemaRegistry)) ajv.addSchema(schema);
@@ -58,5 +58,52 @@ test("existing owner retry/reason metadata survives error normalization", () => 
       "request",
     );
     assert.equal(protocol(body), true, JSON.stringify(protocol.errors));
+  }
+});
+
+test("a typed soft rate limit retains its explicit backoff through the outer router envelope", async () => {
+  const response = errorResponse(
+    new ServiceError("rate_limited", "Request rate exceeded", { retryAfterMs: 60000 }),
+    "request",
+  );
+  assert.equal(response.status, 429);
+  const { error } = (await response.json()) as { error: unknown };
+  assert.equal(protocol(error), true, JSON.stringify(protocol.errors));
+  assert.deepEqual(error, {
+    code: "rate_limited",
+    message: "Request rate exceeded",
+    requestId: "request",
+    retryable: true,
+    details: { retryAfterMs: 60000 },
+  });
+  for (const retryAfterMs of [undefined, 0]) {
+    const error = failure(
+      new ServiceError(
+        "rate_limited",
+        "No explicit future retry",
+        retryAfterMs === undefined ? undefined : { retryAfterMs },
+      ),
+      "request",
+    );
+    assert.equal(error.retryable, false);
+  }
+  assert.equal(
+    failure(new ServiceError("interrupted", "Unknown dispatched outcome"), "request").retryable,
+    false,
+  );
+  for (const retryable of [true, false]) {
+    try {
+      unwrap({
+        ok: false,
+        code: "rate_limited",
+        message: "Owner disposition",
+        requestId: "owner-request",
+        retryable,
+        details: { retryAfterMs: 60000 },
+      });
+      assert.fail("Owner failure expected");
+    } catch (error) {
+      assert.equal(failure(error, "request").retryable, retryable);
+    }
   }
 });
