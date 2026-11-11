@@ -68,6 +68,14 @@ async function setup() {
   }
 }
 
+async function publicUsage(h: Awaited<ReturnType<typeof setup>>) {
+  const result = value(await h.cp.handleApi(h.admin, request("getUsage", undefined)));
+  assert.ok(
+    result.status === 200 && "reservedBytes" in result.body && "observedBytes" in result.body,
+  );
+  return { reservedBytes: result.body.reservedBytes, observedBytes: result.body.observedBytes };
+}
+
 test("unmeasured consumed settlement durably retains the full charge, keeps absence distinct and cannot reclaim or partially acknowledge", async () => {
   const h = await setup();
   try {
@@ -81,8 +89,13 @@ test("unmeasured consumed settlement durably retains the full charge, keeps abse
       "consumed without measurement must settle conservatively under its original authority",
     );
     assert.deepEqual(
+      await publicUsage(h),
+      { reservedBytes: 4096, observedBytes: 0 },
+      "public observedBytes must exclude unmeasured conservative charges and retain their full reservedBytes",
+    );
+    assert.deepEqual(
       JSON.parse(await h.cp.capacityUsage()),
-      { reserved: 0, consumed: 4096, slots: 0 },
+      { reserved: 4096, consumed: 0, slots: 0 },
       "unmeasured consumed storage must retain the entire original byte charge",
     );
     assert.equal(
@@ -102,8 +115,8 @@ test("unmeasured consumed settlement durably retains the full charge, keeps abse
       "later explicit measurement must not rewrite the original unmeasured settlement identity",
     );
     assert.deepEqual(JSON.parse(await h.cp.capacityUsage()), {
-      reserved: 0,
-      consumed: 4096,
+      reserved: 4096,
+      consumed: 0,
       slots: 0,
     });
     const second = value(await h.cp.reserveCapacity(ctx, h.input(2048)));
@@ -149,8 +162,8 @@ test("unmeasured consumed settlement durably retains the full charge, keeps abse
     );
     assert.equal(await h.cp.capacitySettlement(third.reservationId), undefined);
     assert.deepEqual(JSON.parse(await h.cp.capacityUsage()), {
-      reserved: 8192,
-      consumed: 4096,
+      reserved: 12288,
+      consumed: 0,
       slots: 0,
     });
     await h.cp.refuseWrites(null);
@@ -161,13 +174,27 @@ test("unmeasured consumed settlement durably retains the full charge, keeps abse
     );
     value(await h.cp.settleCapacity(ctx, conservative));
     assert.deepEqual(JSON.parse(await h.cp.capacityUsage()), {
-      reserved: 0,
-      consumed: 12288,
+      reserved: 12288,
+      consumed: 0,
       slots: 0,
     });
     assert.equal(
       await h.cp.capacitySettlement(third.reservationId),
       JSON.stringify({ disposition: "consumed" }),
+    );
+    const measuredBytes = new TextEncoder().encode("known retained fixture bytes").length;
+    const measured = value(await h.cp.reserveCapacity(ctx, h.input(512)));
+    value(
+      await h.cp.settleCapacity(ctx, {
+        reservationId: measured.reservationId,
+        disposition: "consumed",
+        observedBytes: measuredBytes,
+      }),
+    );
+    assert.deepEqual(
+      await publicUsage(h),
+      { reservedBytes: 12288, observedBytes: measuredBytes },
+      "an explicit measured claim must not release another unmeasured charge or relabel it observed",
     );
   } finally {
     await h.close();

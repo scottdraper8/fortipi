@@ -125,7 +125,7 @@ test("abrupt Wrangler/workerd kill preserves authority, OAuth and structured quo
         typeof settled.value.reservationId === "string",
     );
     const settledId = settled.value.reservationId;
-    assert.deepEqual(await get("/capacity-usage"), { reserved: 8192, consumed: 4096, slots: 1 });
+    assert.deepEqual(await get("/capacity-usage"), { reserved: 12288, consumed: 0, slots: 1 });
     assert.deepEqual(await get(`/capacity-settlement?id=${settledId}`), {
       disposition: "consumed",
     });
@@ -162,7 +162,7 @@ test("abrupt Wrangler/workerd kill preserves authority, OAuth and structured quo
     );
     assert.deepEqual(
       await get("/capacity-usage"),
-      { reserved: 8192, consumed: 4096, slots: 1 },
+      { reserved: 12288, consumed: 0, slots: 1 },
       "unmeasured full conservative charge survives actual runtime-tree SIGKILL",
     );
     assert.deepEqual(
