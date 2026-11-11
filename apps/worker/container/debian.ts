@@ -1,5 +1,23 @@
 /** Debian Policy version ordering and a bounded closure over one immutable binary index. */
 export type Fields = Map<string, string>;
+export function paragraphs(text: string): Fields[] {
+  return text
+    .trim()
+    .split(/\n\n+/)
+    .map((paragraph) => {
+      const fields: Fields = new Map();
+      let key = "";
+      for (const line of paragraph.split("\n")) {
+        if (/^\s/.test(line)) fields.set(key, `${fields.get(key) ?? ""}\n${line.trim()}`);
+        else {
+          const colon = line.indexOf(":");
+          key = line.slice(0, colon);
+          fields.set(key, line.slice(colon + 1).trim());
+        }
+      }
+      return fields;
+    });
+}
 function versionPart(a: string, b: string): number {
   const order = (c: string) =>
     c === "~"

@@ -1,0 +1,280 @@
+// Observes the real app network namespace with the existing host Node client.
+import assert from "node:assert/strict";
+import { execFile, spawn } from "node:child_process";
+import { X509Certificate } from "node:crypto";
+import { Resolver, resolve4 } from "node:dns/promises";
+import { lstat, readFile, readlink } from "node:fs/promises";
+import { request } from "node:https";
+import { isIP } from "node:net";
+import { delimiter, resolve } from "node:path";
+import { rootCertificates } from "node:tls";
+import { promisify } from "node:util";
+import { repository } from "../../scripts/build-workspaces.ts";
+import { hash } from "./review-supply-chain.ts";
+import { isStepSecuritySinkhole } from "./verify-container-egress.ts";
+
+const execute = promisify(execFile);
+const self = resolve(repository, "tools/unstale/verify-app-network.ts");
+const client = "host Node client in actual application network namespace";
+const sidecarImage =
+  "cloudflare/proxy-everything:3cb1195@sha256:0ef6716c52430096900b150d84a3302057d6cd2319dae7987128c85d0733e3c8";
+const format =
+  '{"id":{{json .Id}},"image":{{json .Image}},"pid":{{.State.Pid}},"running":{{.State.Running}},"network":{{json .HostConfig.NetworkMode}},"imageRef":{{json .Config.Image}}}';
+const env = {
+  HOME: process.env.HOME,
+  PATH: process.env.PATH,
+  DOCKER_HOST: process.env.DOCKER_HOST,
+  DOCKER_CONFIG: process.env.DOCKER_CONFIG,
+};
+interface Container {
+  id: string;
+  image: string;
+  pid: number;
+  running: boolean;
+  network: string;
+  imageRef: string;
+}
+interface Authority {
+  app: Container;
+  sidecar: Container;
+}
+async function docker(file: string, args: string[]): Promise<string> {
+  return (
+    await execute(file, args, { env, timeout: 5000, maxBuffer: 64 * 1024, encoding: "utf8" })
+  ).stdout.trim();
+}
+async function inspect(file: string, ids: string[]): Promise<Container[]> {
+  return (await docker(file, ["inspect", "--format", format, ...ids])).split("\n").map((line) => {
+    const value = JSON.parse(line) as Container;
+    assert.match(value.id, /^[a-f0-9]{64}$/);
+    assert.match(value.image, /^sha256:[a-f0-9]{64}$/);
+    assert.ok(Number.isSafeInteger(value.pid) && value.pid > 1 && value.running === true);
+    assert.ok(typeof value.network === "string" && typeof value.imageRef === "string");
+    return value;
+  });
+}
+async function authority(file: string, imageId: string, appId?: string): Promise<Authority> {
+  const ids = appId ? [appId] : (await docker(file, ["ps", "--quiet", "--no-trunc"])).split("\n");
+  assert.ok(ids.length > 0 && ids.length <= 8 && ids.every((id) => /^[a-f0-9]{64}$/.test(id)));
+  const apps = (await inspect(file, ids)).filter(
+    (row) => row.image === imageId && row.network.startsWith("container:"),
+  );
+  assert.equal(apps.length, 1);
+  const app = apps[0];
+  assert.ok(app);
+  const shared = app.network.slice("container:".length);
+  assert.match(shared, /^[A-Za-z0-9_.-]{1,200}$/);
+  const sidecar = (await inspect(file, [shared]))[0];
+  assert.ok(sidecar);
+  assert.equal(sidecar.imageRef, sidecarImage);
+  return { app, sidecar };
+}
+async function publicInputs(value: Authority) {
+  for (const pid of [value.app.pid, value.sidecar.pid])
+    assert.equal(await readlink(`/proc/${pid}/ns/net`), await readlink("/proc/self/ns/net"));
+  const startTime = async (pid: number) => {
+    const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+    const value = stat.slice(stat.lastIndexOf(") ") + 2).split(" ")[19];
+    assert.ok(value && /^[0-9]+$/.test(value));
+    return value;
+  };
+  const root = `/proc/${value.app.pid}/root`;
+  const resolvPath = `${root}/etc/resolv.conf`;
+  const caPath = `${root}/etc/cloudflare/certs/cloudflare-containers-ca.crt`;
+  for (const path of [resolvPath, caPath]) {
+    const stat = await lstat(path);
+    assert.ok(stat.isFile() && stat.size > 0 && stat.size <= 64 * 1024);
+  }
+  const resolv = await readFile(resolvPath, "utf8");
+  const ca = await readFile(caPath);
+  assert.ok(!ca.includes(Buffer.from("PRIVATE KEY")) && new X509Certificate(ca).ca);
+  const servers = [...resolv.matchAll(/^\s*nameserver\s+(\S+)\s*(?:#.*)?$/gm)].map(
+    (match) => match[1] ?? "",
+  );
+  assert.ok(
+    servers.length > 0 && servers.length <= 3 && servers.every((address) => isIP(address) !== 0),
+  );
+  const fingerprint = hash(
+    Buffer.from(
+      JSON.stringify({
+        value,
+        appStart: await startTime(value.app.pid),
+        sidecarStart: await startTime(value.sidecar.pid),
+        netns: await readlink("/proc/self/ns/net"),
+        servers,
+        ca: hash(ca),
+      }),
+    ),
+  );
+  return { ca, servers, fingerprint };
+}
+async function head(
+  hostname: "registry.npmjs.org" | "example.com",
+  resolver: Resolver,
+  ca: Buffer,
+) {
+  return new Promise<{ status: number | null; transportFailure: boolean }>((accept) => {
+    const req = request(
+      {
+        hostname,
+        port: 443,
+        path: hostname === "registry.npmjs.org" ? "/pnpm/12.18.0" : "/",
+        method: "HEAD",
+        family: 4,
+        agent: false,
+        rejectUnauthorized: true,
+        ca: [...rootCertificates, ca],
+        signal: AbortSignal.timeout(5000),
+        lookup: (host, _options, callback) => {
+          resolver.resolve4(host).then(
+            (addresses) => {
+              const address = addresses[0];
+              if (address) callback(null, address, 4);
+              else callback(new Error("No app DNS address"), "", 4);
+            },
+            () => callback(new Error("App DNS unavailable"), "", 4),
+          );
+        },
+      },
+      (response) => {
+        const status = response.statusCode ?? null;
+        response.destroy();
+        req.destroy();
+        accept({ status, transportFailure: false });
+      },
+    );
+    req.once("error", () => accept({ status: null, transportFailure: true }));
+    req.end();
+  });
+}
+async function observeApplicationNamespace(imageId: string): Promise<void> {
+  assert.equal(process.platform, "linux");
+  assert.match(imageId, /^sha256:[a-f0-9]{64}$/);
+  const directory = (process.env.PATH ?? "")
+    .split(delimiter)
+    .find((path) => path.startsWith(resolve(repository, "dist/toolchain/docker-")));
+  assert.ok(directory);
+  const file = resolve(directory, "docker");
+  const before = await authority(file, imageId);
+  // This is the workerd namespace's protected upstream route, not the app's DNS descriptor.
+  assert.ok(isStepSecuritySinkhole(await resolve4("example.com")));
+  const security = JSON.parse(
+    await docker(file, ["info", "--format", "{{json .SecurityOptions}}"]),
+  ) as string[];
+  const rootless = security.includes("name=rootless");
+  const args = [
+    "--net",
+    "--target",
+    String(before.app.pid),
+    "--",
+    process.execPath,
+    self,
+    "--client",
+    file,
+    imageId,
+    before.app.id,
+    String(before.app.pid),
+    before.sidecar.id,
+    String(before.sidecar.pid),
+  ];
+  if (!rootless)
+    args.unshift("-n", "--preserve-env=HOME,DOCKER_HOST,DOCKER_CONFIG", "--", "/usr/bin/nsenter");
+  const child = spawn(rootless ? "/usr/bin/nsenter" : "/usr/bin/sudo", args, {
+    cwd: repository,
+    env,
+    stdio: "inherit",
+  });
+  const timer = setTimeout(() => child.kill("SIGKILL"), 30000);
+  await new Promise<void>((accept, reject) => {
+    child.once("error", () => {
+      clearTimeout(timer);
+      reject(new Error("Application namespace client unavailable"));
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      if (code === 0) accept();
+      else reject(new Error("Application namespace measurement failed or unknown"));
+    });
+  });
+  assert.equal(
+    hash(Buffer.from(JSON.stringify(await authority(file, imageId, before.app.id)))),
+    hash(Buffer.from(JSON.stringify(before))),
+  );
+}
+
+export async function verifyApplicationNamespace(imageId: string): Promise<void> {
+  try {
+    await observeApplicationNamespace(imageId);
+  } catch {
+    console.log(JSON.stringify({ probe: "application-namespace-https", client, unknown: true }));
+    throw new Error("Application namespace measurement failed or unknown");
+  }
+}
+
+if (import.meta.main) {
+  let stage = "authority-before";
+  try {
+    assert.equal(process.platform, "linux");
+    assert.equal(process.argv[2], "--client");
+    assert.equal(process.argv.length, 9);
+    const [file, imageId, appId, appPid, sidecarId, sidecarPid] = process.argv.slice(3);
+    assert.ok(file && imageId && appId && appPid && sidecarId && sidecarPid);
+    assert.ok(file.startsWith(resolve(repository, "dist/toolchain/docker-")));
+    assert.match(
+      file.slice(resolve(repository, "dist/toolchain/docker-").length),
+      /^[A-Za-z0-9_-]+\/docker$/,
+    );
+    assert.match(imageId, /^sha256:[a-f0-9]{64}$/);
+    assert.match(appId, /^[a-f0-9]{64}$/);
+    assert.match(sidecarId, /^[a-f0-9]{64}$/);
+    assert.match(appPid, /^[1-9][0-9]*$/);
+    assert.match(sidecarPid, /^[1-9][0-9]*$/);
+    const before = await authority(file, imageId, appId);
+    assert.equal(before.app.pid, Number(appPid));
+    assert.equal(before.sidecar.id, sidecarId);
+    assert.equal(before.sidecar.pid, Number(sidecarPid));
+    const inputs = await publicInputs(before);
+    const resolver = new Resolver({ timeout: 1000, tries: 1 });
+    resolver.setServers(inputs.servers);
+    stage = "allow-before";
+    const first = await head("registry.npmjs.org", resolver, inputs.ca);
+    stage = "deny";
+    const denied = await head("example.com", resolver, inputs.ca);
+    stage = "allow-after";
+    const last = await head("registry.npmjs.org", resolver, inputs.ca);
+    stage = "authority-after";
+    const after = await authority(file, imageId, appId);
+    const final = await publicInputs(after);
+    assert.equal(inputs.fingerprint, final.fingerprint);
+    stage = "vendor-attribution";
+    const appSinkhole = isStepSecuritySinkhole(await resolver.resolve4("example.com"));
+    console.log(
+      JSON.stringify({
+        probe: "application-namespace-https",
+        client,
+        imageId,
+        appPid: before.app.pid,
+        authorityVerifiedBeforeAfter: true,
+        allowedBefore: first.status,
+        deniedStatus: denied.status,
+        deniedTransportFailure: denied.transportFailure,
+        allowedAfter: last.status,
+        applicationDnsSinkhole: appSinkhole,
+        workerdNamespaceSinkholeVerified: true,
+        unknown: false,
+      }),
+    );
+    assert.equal(first.status, 200);
+    assert.equal(last.status, 200);
+    assert.ok(denied.transportFailure && denied.status === null);
+    // If the app DNS uses a synthetic route, provider attribution needs a further reviewed oracle.
+    assert.ok(appSinkhole, "Actual app DNS denial attribution remains unproved");
+  } catch {
+    console.log(
+      JSON.stringify({ probe: "application-namespace-https", client, stage, unknown: true }),
+    );
+    throw new Error(
+      "Application namespace authority, HTTPS controls or vendor attribution unknown",
+    );
+  }
+}

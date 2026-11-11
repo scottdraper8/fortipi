@@ -3,24 +3,17 @@
   "releaseSha256": "ed56aac47e7911e65ee63aae8d67e29f20e023f840e49f8ed037043a33de138a",
   "packagesIndexSha256": "7778d3e3f303b7ddb8ce0fe7c8d57473a076c6bf2e8f241f75421d2396352498",
   "sourcesIndexSha256": "6002f81f463a2d976d84b34170367cc16da2d60bd0ba9ab9d868d6e1c1a935d9",
+  "fuseReleaseSha256": "d3b31f0c712c49f4c6d8d802bebaad394a1c3d1bb3244262f996494ddcfa3783",
+  "fusePackagesIndexSha256": "a1619d267517462de0021ee365a2b9590c5cc2bf5b03b3ebd78406ed6b408e44",
+  "fuseSourcesIndexSha256": "451461c80cea225e9aaf961318c03709d88763ce1a5440d184cfe7e207130d7f",
   "packages": [
     {
-      "name": "adduser",
-      "version": "3.152",
-      "filename": "pool/main/a/adduser/adduser_3.152_all.deb",
-      "sha256": "e50984d2e1ef6300e3fd51303839842189a077b10cb5cadff1923df10c61c493",
-      "source": "adduser",
-      "sourceVersion": "3.152",
-      "builtUsing": [],
-      "staticBuiltUsing": []
-    },
-    {
       "name": "fuse3",
-      "version": "3.17.2-3",
-      "filename": "pool/main/f/fuse3/fuse3_3.17.2-3_amd64.deb",
-      "sha256": "4866550a235224b538a66fcaf95c8a796b6968d21c6f231086e142350b302eea",
+      "version": "3.18.3-1",
+      "filename": "pool/main/f/fuse3/fuse3_3.18.3-1_amd64.deb",
+      "sha256": "f99f3365ba6153f246ec7201bdbe962bdb4e0460f7ba1aa729f1128d1096fdb0",
       "source": "fuse3",
-      "sourceVersion": "3.17.2-3",
+      "sourceVersion": "3.18.3-1",
       "builtUsing": [],
       "staticBuiltUsing": []
     },
@@ -36,26 +29,16 @@
     },
     {
       "name": "libfuse3-4",
-      "version": "3.17.2-3",
-      "filename": "pool/main/f/fuse3/libfuse3-4_3.17.2-3_amd64.deb",
-      "sha256": "92e2d521ff872755a13aa69dba7b24025a7dc0f0f5aa708c9a86cd3565f570da",
+      "version": "3.18.3-1",
+      "filename": "pool/main/f/fuse3/libfuse3-4_3.18.3-1_amd64.deb",
+      "sha256": "218f0fb446e2b36d7bd16c4324ce54a3755ac3ad564ab76c5fe9b6dc18718210",
       "source": "fuse3",
-      "sourceVersion": "3.17.2-3",
+      "sourceVersion": "3.18.3-1",
       "builtUsing": [],
       "staticBuiltUsing": []
     }
   ],
   "installed": [
-    {
-      "name": "adduser",
-      "version": "3.152",
-      "filename": "pool/main/a/adduser/adduser_3.152_all.deb",
-      "sha256": "e50984d2e1ef6300e3fd51303839842189a077b10cb5cadff1923df10c61c493",
-      "source": "adduser",
-      "sourceVersion": "3.152",
-      "builtUsing": [],
-      "staticBuiltUsing": []
-    },
     {
       "name": "apt",
       "version": "3.0.4",
@@ -188,11 +171,11 @@
     },
     {
       "name": "fuse3",
-      "version": "3.17.2-3",
-      "filename": "pool/main/f/fuse3/fuse3_3.17.2-3_amd64.deb",
-      "sha256": "4866550a235224b538a66fcaf95c8a796b6968d21c6f231086e142350b302eea",
+      "version": "3.18.3-1",
+      "filename": "pool/main/f/fuse3/fuse3_3.18.3-1_amd64.deb",
+      "sha256": "f99f3365ba6153f246ec7201bdbe962bdb4e0460f7ba1aa729f1128d1096fdb0",
       "source": "fuse3",
-      "sourceVersion": "3.17.2-3",
+      "sourceVersion": "3.18.3-1",
       "builtUsing": [],
       "staticBuiltUsing": []
     },
@@ -408,11 +391,11 @@
     },
     {
       "name": "libfuse3-4",
-      "version": "3.17.2-3",
-      "filename": "pool/main/f/fuse3/libfuse3-4_3.17.2-3_amd64.deb",
-      "sha256": "92e2d521ff872755a13aa69dba7b24025a7dc0f0f5aa708c9a86cd3565f570da",
+      "version": "3.18.3-1",
+      "filename": "pool/main/f/fuse3/libfuse3-4_3.18.3-1_amd64.deb",
+      "sha256": "218f0fb446e2b36d7bd16c4324ce54a3755ac3ad564ab76c5fe9b6dc18718210",
       "source": "fuse3",
-      "sourceVersion": "3.17.2-3",
+      "sourceVersion": "3.18.3-1",
       "builtUsing": [],
       "staticBuiltUsing": []
     },
@@ -1181,22 +1164,6 @@
       ]
     },
     {
-      "name": "adduser",
-      "version": "3.152",
-      "files": [
-        {
-          "filename": "pool/main/a/adduser/adduser_3.152.dsc",
-          "sha256": "5ad23648a879d006e7a57d351720d4cbbbe3fb5e274ea52beb4f619896b9d520",
-          "size": 1678
-        },
-        {
-          "filename": "pool/main/a/adduser/adduser_3.152.tar.xz",
-          "sha256": "484cdde2d48053be40657b564375469fc577e89f3b984b01aed247b6081355b8",
-          "size": 334252
-        }
-      ]
-    },
-    {
       "name": "apt",
       "version": "3.0.4",
       "files": [
@@ -1561,27 +1528,27 @@
     },
     {
       "name": "fuse3",
-      "version": "3.17.2-3",
+      "version": "3.18.3-1",
       "files": [
         {
-          "filename": "pool/main/f/fuse3/fuse3_3.17.2-3.dsc",
-          "sha256": "1339847e7e6512f31d61cf1fe4598341c4b8aa43ea6dc546914b21f96f29deb3",
-          "size": 2428
+          "filename": "pool/main/f/fuse3/fuse3_3.18.3-1.dsc",
+          "sha256": "90396d7bd6bdb2f7d414babeaaf6a9c637a13bdb7d18e28c4e34432ba9b425bc",
+          "size": 2395
         },
         {
-          "filename": "pool/main/f/fuse3/fuse3_3.17.2.orig.tar.gz",
-          "sha256": "3d932431ad94e86179e5265cddde1d67aa3bb2fb09a5bd35c641f86f2b5ed06f",
-          "size": 5627028
+          "filename": "pool/main/f/fuse3/fuse3_3.18.3.orig.tar.gz",
+          "sha256": "bcd19582c5e30f7fe45dd86a5540e998590aa01903afc7ebcbeea6c8ac5421ee",
+          "size": 2579900
         },
         {
-          "filename": "pool/main/f/fuse3/fuse3_3.17.2.orig.tar.gz.asc",
-          "sha256": "df18d3972c68dd0e8f7ad2a544a24ac54d48aa4b42d99b717448f7fe8e71cea4",
+          "filename": "pool/main/f/fuse3/fuse3_3.18.3.orig.tar.gz.asc",
+          "sha256": "b476217895b74498dd1d38aabba8dbed8694f0b687f25e03973e70b5fdc84727",
           "size": 314
         },
         {
-          "filename": "pool/main/f/fuse3/fuse3_3.17.2-3.debian.tar.xz",
-          "sha256": "eaf7a177761ae8bf99ea97619f2cccf83f169b4f000e17b6106834e69456b5a2",
-          "size": 19440
+          "filename": "pool/main/f/fuse3/fuse3_3.18.3-1.debian.tar.xz",
+          "sha256": "c562192287e9ab78656e3ba1faf2cf837cbb0b775f62b97ba1f9993e7eb596e4",
+          "size": 11940
         }
       ]
     },

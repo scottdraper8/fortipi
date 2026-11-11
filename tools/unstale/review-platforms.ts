@@ -136,8 +136,8 @@ async function main(): Promise<void> {
         "Official static Linux x64 archive identity; run actual daemon/image build on Linux before claiming compatibility",
     },
     fuse: {
-      fuse3: "3.17.2-3",
-      libfuse3: "3.17.2-3",
+      fuse3: "3.18.3-1",
+      libfuse3: "3.18.3-1",
       libfuse2t64: "2.9.9-9",
       observation:
         "Owner3 freezes dated Debian snapshot and transitive inventory; separate OS licensing gate",

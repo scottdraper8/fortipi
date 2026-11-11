@@ -11,6 +11,8 @@ on:
       - tools/unstale/verify-container-egress.test.ts
       - tools/unstale/image-network-diagnostics.ts
       - tools/unstale/container-runtime-diagnostics.ts
+      - tools/unstale/run-container-probe.ts
+      - tools/unstale/verify-app-network.ts
   push:
     branches: [main]
     paths:
@@ -23,6 +25,8 @@ on:
       - tools/unstale/verify-container-egress.test.ts
       - tools/unstale/image-network-diagnostics.ts
       - tools/unstale/container-runtime-diagnostics.ts
+      - tools/unstale/run-container-probe.ts
+      - tools/unstale/verify-app-network.ts
   workflow_dispatch:
 permissions:
   contents: read
@@ -48,10 +52,8 @@ jobs:
         include:
           - mode: rootful
             provision_args: ""
-            fuse_args: ""
           - mode: rootless
             provision_args: --rootless
-            fuse_args: --require-fuse
     steps:
       - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
@@ -75,6 +77,7 @@ jobs:
             ghcr.io:443
             pkg-containers.githubusercontent.com:443
             snapshot.debian.org:443
+            keyring.debian.org:443
             go.dev:443
             dl.google.com:443
             proxy.golang.org:443
@@ -119,13 +122,25 @@ jobs:
           pnpm exec tsc -p apps/worker/tsconfig.json --noEmit
           pnpm exec tsc -p tsconfig.tools.json --noEmit
           node --test tools/unstale/verify-container-egress.test.ts apps/worker/test/backends/image-archive.test.ts
+      - name: Verify existing signed-source and ELF tools
+        run: |
+          /usr/bin/timeout 5 /usr/bin/gpgv --version
+          /usr/bin/timeout 5 /usr/bin/ar --version
+          /usr/bin/timeout 5 /usr/bin/xz --version
+          /usr/bin/timeout 5 /usr/bin/tar --version
+          /usr/bin/timeout 5 /usr/bin/objdump --version
+          /usr/bin/timeout 5 /usr/bin/nsenter --version
+      - name: Prepare authenticated inputs and challenge signature and ABI checks
+        run: |
+          node apps/worker/container/build.ts --prepare
+          node --test apps/worker/container/fuse-security.test.ts
       - name: Provision reviewed Docker (${{ matrix.mode }})
         run: node tools/unstale/provision-docker.ts ${{ matrix.provision_args }}
       - name: Build the pinned image and collect its actual inventory
         id: build
         run: node --import ./tools/unstale/image-network-diagnostics.ts apps/worker/container/build.ts
       - name: Verify ContainerHost transport (${{ matrix.mode }})
-        run: node --import ./tools/unstale/container-runtime-diagnostics.ts apps/worker/test/backends/linux-image.ts ${{ matrix.fuse_args }}
+        run: node tools/unstale/run-container-probe.ts ${{ matrix.provision_args }}
       - name: Observe actual bridge and host container egress
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: node tools/unstale/verify-container-egress.ts

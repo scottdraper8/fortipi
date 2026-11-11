@@ -15,8 +15,10 @@ import {
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { c as createTar, x as extractTar } from "tar";
-import { requiredPackages } from "./debian.ts";
+import { paragraphs, requiredPackages } from "./debian.ts";
+import { verifyNativeCompatibility } from "./elf-compatibility.ts";
 import { freezeEmbedded, prepareEmbedded } from "./embedded.ts";
+import { authenticateIndexes } from "./fuse-security.ts";
 import { verifyBuildMetadata, verifyImageArchive } from "./image-archive.ts";
 import { imageInputs } from "./inputs.ts";
 
@@ -50,6 +52,9 @@ interface Freeze {
   releaseSha256: string;
   packagesIndexSha256: string;
   sourcesIndexSha256: string;
+  fuseReleaseSha256: string;
+  fusePackagesIndexSha256: string;
+  fuseSourcesIndexSha256: string;
   packages: PackagePin[];
   installed: PackagePin[];
   sources: SourcePin[];
@@ -111,24 +116,6 @@ async function parallel<T>(items: readonly T[], work: (item: T) => Promise<void>
       }
     }),
   );
-}
-function paragraphs(text: string): Map<string, string>[] {
-  return text
-    .trim()
-    .split(/\n\n+/)
-    .map((paragraph) => {
-      const fields = new Map<string, string>();
-      let key = "";
-      for (const line of paragraph.split("\n")) {
-        if (/^\s/.test(line)) fields.set(key, `${fields.get(key) ?? ""}\n${line.trim()}`);
-        else {
-          const colon = line.indexOf(":");
-          key = line.slice(0, colon);
-          fields.set(key, line.slice(colon + 1).trim());
-        }
-      }
-      return fields;
-    });
 }
 async function oci(
   repository: string,
@@ -230,32 +217,14 @@ async function freeze(): Promise<Freeze> {
     "Freeze must retain its approved dated snapshot",
   );
   const layers = await verifyOCI();
-  const base = `https://snapshot.debian.org/archive/debian/${imageInputs.snapshot}/`;
-  const release = await download(`${base}dists/trixie/Release`, previous.releaseSha256);
-  const releaseText =
-    new TextDecoder().decode(release).split("SHA256:\n")[1]?.split("SHA512:")[0] ?? "";
-  async function index(path: string): Promise<{ text: string; sha256: string }> {
-    const hash = releaseText
-      .split("\n")
-      .map((line) => line.trim().split(/\s+/))
-      .find((line) => line[2] === path)?.[0];
-    check(
-      hash && /^[a-f0-9]{64}$/.test(hash),
-      "Snapshot index is absent from Release SHA256 section",
-    );
-    const bytes = await download(`${base}dists/trixie/${path}`, hash);
-    const filename = resolve(output, path.replaceAll("/", "-"));
-    await writeFile(filename, bytes);
-    return { text: command("xz", ["--decompress", "--stdout", filename]), sha256: hash };
-  }
-  const binaries = await index("main/binary-amd64/Packages.xz");
-  const sources = await index("main/source/Sources.xz");
+  const authenticated = await authenticateIndexes(download, output);
   check(
-    binaries.sha256 === previous.packagesIndexSha256 &&
-      sources.sha256 === previous.sourcesIndexSha256,
+    authenticated.releaseSha256 === previous.releaseSha256 &&
+      authenticated.packagesIndexSha256 === previous.packagesIndexSha256 &&
+      authenticated.sourcesIndexSha256 === previous.sourcesIndexSha256,
     "Approved snapshot index drift",
   );
-  const packageFields = paragraphs(binaries.text);
+  const packageFields = authenticated.packages;
   const packages = packageFields.map(toPin);
   const layer = layers[1];
   check(layer, "Missing Debian layer");
@@ -306,7 +275,7 @@ async function freeze(): Promise<Freeze> {
     installed.push(pin);
   }
   const roots = Object.entries(imageInputs.packages).map(([name, version]) => {
-    const pin = packageFields.find(
+    const pin = [...authenticated.fusePackages, ...packageFields].find(
       (entry) => entry.get("Package") === name && entry.get("Version") === version,
     );
     check(pin, `Snapshot missing ${name}=${version}`);
@@ -318,7 +287,7 @@ async function freeze(): Promise<Freeze> {
     ...installed.filter((pin) => !additions.some((item) => item.name === pin.name)),
     ...additions,
   ].sort((a, b) => a.name.localeCompare(b.name));
-  const sourceFields = paragraphs(sources.text);
+  const sourceFields = [...authenticated.sources, authenticated.fuseSource];
   const sourcePins: SourcePin[] = [];
   const identities = [
     ...new Map(
@@ -377,9 +346,12 @@ async function freeze(): Promise<Freeze> {
   sourcePins.sort((a, b) => `${a.name}=${a.version}`.localeCompare(`${b.name}=${b.version}`));
   return {
     snapshot: imageInputs.snapshot,
-    releaseSha256: digest(release),
-    packagesIndexSha256: binaries.sha256,
-    sourcesIndexSha256: sources.sha256,
+    releaseSha256: authenticated.releaseSha256,
+    packagesIndexSha256: authenticated.packagesIndexSha256,
+    sourcesIndexSha256: authenticated.sourcesIndexSha256,
+    fuseReleaseSha256: authenticated.fuseReleaseSha256,
+    fusePackagesIndexSha256: authenticated.fusePackagesIndexSha256,
+    fuseSourcesIndexSha256: authenticated.fuseSourcesIndexSha256,
     packages: additions,
     installed: all,
     sources: sourcePins,
@@ -767,9 +739,22 @@ async function main(): Promise<void> {
     return;
   }
   const pin = JSON.parse(await readFile(resolve(here, "debian-freeze.json"), "utf8")) as Freeze;
-  await verifyOCI();
+  const reconstructed = await freeze();
+  check(
+    JSON.stringify(reconstructed) === JSON.stringify(pin),
+    "Signed image dependency/source closure drift",
+  );
   const names = await prepare(pin);
-  await prepareEmbedded(download);
+  const embedded = await prepareEmbedded(download);
+  // Compare actual .deb controls to authenticated records, then resolve actual addon symbols.
+  const signedBinaries = paragraphs(
+    command("xz", [
+      "--decompress",
+      "--stdout",
+      resolve(output, "security/sid-main-binary-amd64-Packages.xz"),
+    ]),
+  );
+  await verifyNativeCompatibility(output, embedded.addon, embedded.binary, signedBinaries);
   await sourceKit(names);
   if (process.argv.includes("--prepare") || process.argv.includes("--freeze-licenses")) return;
   await build(pin);
@@ -785,6 +770,8 @@ async function sourceKit(sources: NamedSource[]): Promise<void> {
     "Dockerfile",
     "build.ts",
     "debian.ts",
+    "fuse-security.ts",
+    "elf-compatibility.ts",
     "embedded.ts",
     "inputs.ts",
     "image-archive.ts",
@@ -846,6 +833,8 @@ async function sourceKit(sources: NamedSource[]): Promise<void> {
     "fortipi-source.tar",
     "source-revision.json",
     "computer-source.tgz",
+    "native-compatibility.json",
+    ...(await readdir(resolve(output, "security"))).map((name) => `security/${name}`),
     ...embedded.components.map(
       (pin) => `embedded-${pin.name.replaceAll("/", "_")}-${pin.version}.tgz`,
     ),

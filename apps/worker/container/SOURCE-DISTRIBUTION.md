@@ -33,12 +33,44 @@ must publish that exact commit before distributing the kit. With the recorded
 Node26.13.0 and pnpm12.18.0 first on PATH, run `node scripts/install-dependencies.ts`
 at its root. This installs the exact reviewed `tar` dependency through the frozen
 lock; do not install a floating package or copy a dependency tree. The source
-snapshot supplies all installer/configuration inputs. Host `git`, `tar`, and `xz`
-are required; the recorded Docker/Buildx provisioner is required for image builds.
+snapshot supplies all installer/configuration inputs. Host `git`, `tar`, `ar`, `xz`,
+`gpgv`, and GNU or LLVM `objdump` with amd64 ELF support are required; the recorded
+Docker/Buildx provisioner is required for image builds. These host tools are not
+installed into the runtime image. Signature verification uses a fresh temporary
+home and explicit public keyrings, without consulting personal GnuPG state.
 Run `node apps/worker/container/build.ts --prepare` to verify/reconstruct the kit,
 or `--verify` for the offline image and runtime fixture. Generated image recipes
 must match their recorded commit; construction-only kits mark mismatches and are
 not distributable images. No model/deployment credentials are needed in this flow.
+
+The FUSE3 runtime and library are Debian amd64 **3.18.3-1**, selected only from the
+signed SID indexes at `20261110T000000Z`. All other dependencies retain the frozen
+Trixie/base identities. Their actual controls require libc6 >=2.38 and the existing
+mount package; the base supplies libc6 2.41. The previous adduser dependency is no
+longer selected. No development package is installed. The separately installed
+libfuse2t64 2.9.9-9 is not covered by the FUSE3 security comparison.
+
+`fuse-security.ts` authenticates both dated InRelease files and their exact index
+hashes. Its archive trust bootstrap is the exact public keyring extracted from the
+hash-verified Debian base layer, with an independently pinned keyring hash and
+Debian13 archive fingerprint. The FUSE DSC signature uses the exact public key
+response from Debian's keyring service and its full signing/primary fingerprints.
+The original tarball's upstream signify Ed25519 signature is verified with the
+key from official tag `3dbcfce64ba0dd529cec7b94305662e7901a991b`;
+four mount/session source files must equal that reviewed tag's bytes. No local
+backport or vendor patch is used. `security/` ships those signatures, public keys,
+authenticated indexes and verification identities with the source kit. This
+reconstructs a dated snapshot, including after its Valid-Until date; it does not
+substitute for a fresh security/release review.
+
+`elf-compatibility.ts` compares actual package controls to their signed-index
+records, checks SONAME/needed libraries, and resolves the actual embedded addon's
+symbols against the new library, base libc and source-matched computerd exports.
+It also checks the new library/helper's required symbols against the frozen libc.
+`native-compatibility.json` binds those exact ELF bytes and versioned requirements.
+Static symbol resolution does not prove structure layouts, installation, helper
+effective privileges, the Linux dynamic loader or a FUSE mount. The offline
+Docker build and actual supported Linux/FUSE checks remain required.
 
 The complete Computer source archive includes its modified vendored native addon,
 upstream provenance and patch descriptions. The kit also carries the exact embedded

@@ -206,7 +206,9 @@ export async function freezeEmbedded(download: Download): Promise<void> {
   };
   await writeFile(resolve(here, "embedded-freeze.json"), `${JSON.stringify(inventory, null, 2)}\n`);
 }
-export async function prepareEmbedded(download: Download): Promise<void> {
+export async function prepareEmbedded(
+  download: Download,
+): Promise<{ binary: Buffer; addon: Buffer }> {
   const frozen = JSON.parse(
     await readFile(resolve(here, "embedded-freeze.json"), "utf8"),
   ) as Inventory;
@@ -257,4 +259,7 @@ export async function prepareEmbedded(download: Download): Promise<void> {
       await writeFile(resolve(vendorNotices, posix.basename(path)), bytes);
   }
   await writeFile(resolve(notices, "embedded-inventory.json"), JSON.stringify(frozen, null, 2));
+  const addon = extracted.assets.get("fuse.node");
+  check(addon, "Missing verified native addon");
+  return { binary, addon };
 }
