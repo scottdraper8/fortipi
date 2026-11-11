@@ -1861,6 +1861,9 @@ export interface ByteReference {
     expiresAt?: Timestamp;
   };
   chunks?: ChunkInventory;
+  outputSource?: {
+    stream: "stdout" | "stderr";
+  };
 }
 /**
  * Bounded hashes computed from actual owner bytes before transfer allocation, on an announced grid within negotiated limits. Empty files have no chunks.

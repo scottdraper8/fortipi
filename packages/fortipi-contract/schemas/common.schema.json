@@ -525,10 +525,68 @@
         },
         "chunks": {
           "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ChunkInventory"
+        },
+        "outputSource": {
+          "type": "object",
+          "properties": {
+            "stream": {
+              "enum": ["stdout", "stderr"]
+            }
+          },
+          "required": ["stream"],
+          "additionalProperties": false
         }
       },
       "required": ["workspaceId", "revision", "sha256", "size", "endpoint", "owner"],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "dependentSchemas": {
+        "artifactId": {
+          "anyOf": [
+            {
+              "properties": {
+                "owner": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "cloud"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "required": ["outputSource", "chunks"],
+              "properties": {
+                "outputSource": {},
+                "chunks": {},
+                "owner": {
+                  "type": "object",
+                  "properties": {
+                    "executorId": {}
+                  },
+                  "required": ["executorId"]
+                }
+              }
+            }
+          ]
+        },
+        "outputSource": {
+          "required": ["artifactId"],
+          "properties": {
+            "artifactId": {},
+            "owner": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "local"
+                },
+                "executorId": {}
+              },
+              "required": ["executorId"]
+            }
+          }
+        }
+      }
     },
     "TransportAck": {
       "title": "TransportAck",
