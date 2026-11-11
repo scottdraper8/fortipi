@@ -1,7 +1,7 @@
 # Compatibility maintenance
 
 The standalone **Compatibility review** workflow proposes a weekly public, read-only
-check plus `workflow_dispatch`. Integration into the default branch activates the
+check plus `workflow_dispatch` and checks on pull requests changing this guard. Integration into the default branch activates the
 schedule. It uses Node builtins and `contents: read`; no Cloudflare account, npm or
 model credentials are needed. It writes an Actions summary and a small JSON report
 to the job log (normal repository log retention); it creates no issues, comments,
@@ -17,7 +17,7 @@ node --test tools/compatibility-watch/watch.test.ts
 ```
 
 `catalog.ts` limits the check to official Cloudflare policy/compatibility sources,
-Computer/computerd/FUSE, Agents PiHarness/Lifecycle, the Pi package family, Wrangler,
+Computer/computerd, upstream libfuse, Agents PiHarness/Lifecycle, the Pi package family, Wrangler,
 workerd, Node, pnpm, TypeScript's original compiler release repository and node-pty. Policy watches include shared pricing
 partials and compatibility flag data. GitHub Contents identities include recursive
 directory tree hashes. Each repository ref resolves once per run; all its paths
@@ -67,6 +67,11 @@ scope**, not a claim that all upstream APIs or future releases are compatible.
 Its notes preserve material plan/experimental API caveats. Directory watches can
 flag irrelevant edits; published pages may lag their official source repository,
 and changes outside this small catalog remain possible.
+
+The upstream libfuse release watch is separate from Computer's vendored native addon.
+Before the first image release, bind its local pin to the integrated Debian freeze
+and review distro patches against relevant upstream fixes. The initial upstream
+reference does not establish security or compatibility of the packaged native library.
 
 Release tooling (thread 9) must run this check at preflight on the candidate SHA
 and inspect relevant unreviewed drift before deployment/publication. Attach the

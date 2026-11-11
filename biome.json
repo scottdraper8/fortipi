@@ -14,6 +14,7 @@
       "apps/**",
       "packages/**",
       "tools/unstale/**",
+      "tools/compatibility-watch/**",
       "docs/**",
       "README.md",
       "tests/**",

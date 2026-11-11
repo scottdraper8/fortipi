@@ -118,13 +118,13 @@
     "pi-runtime": {
       "catalogSha256": "8626cad373ee3e1232bd93e85856e9b37ac9de02e5b2b1bc0ea096fdfc2ef8d0",
       "snapshot": {
-        "commit": "49fe0a237450eb003434d4020b0bfdf53bc6449c",
+        "commit": "b3c2e4a6bef8d370e311c472306c43a3f8f7308a",
         "version": "1.5.2",
         "paths": {
-          "packages": "6b719c7fb28950435db55f583e09060075d3957f969f4d173aaef46026d620b2",
+          "packages": "494da1042431a4a4a41d0b764c53fd0e599ef26c8874acd020d8098e8f3e8679",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "5c1473b4d7482fe3cb174f322d904b1c7dc321a9d14965fbaa8469a3f38f37c5"
+        "sha256": "c0acd3a16221b3e1d103b3c263813fc07ca3a74bea01cc824222b7d1b5ae739a"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -136,8 +136,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed 1.5.2 manifest and main durable changelog. Unreleased changes rename runEndTask/RunEndTask to hookTask/HookTask, add parked/signal tasks and new persisted task versions. These are future adoption pointers, not the pinned 1.5.2 contract. Retain all exact Pi pins; no upgrade/rollback compatibility claim."
+      "reviewedAt": "2026-11-11T09:32:51.350Z",
+      "reviewNote": "Reviewed primary compare 49fe0a2...b3c2e4a: one unreleased commit changes coding-agent llama.cpp default port 8080 to 9931 plus examples/tests; no durable API or package-version change. Retain locked 1.5.2; future provider onboarding must respect explicit configured URLs. No runtime compatibility claim."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
@@ -226,6 +226,18 @@
       },
       "reviewedAt": "2026-11-11T09:06:45.505Z",
       "reviewNote": "Reviewed official v1.1.0 release/tag: native terminal I/O, platform builds and prebuild handling. Matches pin; source build under Node 26.13.0 remains required. Native installed Windows/macOS/Linux behavior is not established by this reference."
+    },
+    "libfuse": {
+      "catalogSha256": "4bc2b53a9f9706982f692072144073110d84e6683787b1a204e7063dbe419bfc",
+      "snapshot": {
+        "commit": "3dbcfce64ba0dd529cec7b94305662e7901a991b",
+        "version": "fuse-3.18.3",
+        "sha256": "cc350effafd4b1b0ec4a05a716b0a7d467e830d39daddcd0cb145a65ae7f859c",
+        "paths": {}
+      },
+      "pins": {},
+      "reviewedAt": "2026-11-11T09:31:22.733Z",
+      "reviewNote": "Reviewed official 3.18.3 release: API/ABI and mount/unmount security changes require comparison with exact Debian source/patches. Native image security disposition remains open; no installed-version safety claim. Bind the integrated native freeze before release."
     }
   }
 }

@@ -1,5 +1,10 @@
 name: Compatibility review
 on:
+  pull_request:
+    paths:
+      - "tools/compatibility-watch/**"
+      - ".github/workflows/compatibility-watch.yml"
+      - "docs/maintenance.md"
   schedule:
     - cron: "23 14 * * 2"
   workflow_dispatch:
@@ -21,7 +26,8 @@ jobs:
             github.com:443
             nodejs.org:443
             release-assets.githubusercontent.com:443
-            *.stepsecurity.io:443
+            agent.api.stepsecurity.io:443
+            prod.app-api.stepsecurity.io:443
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

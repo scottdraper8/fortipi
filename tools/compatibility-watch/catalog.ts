@@ -162,6 +162,12 @@ export const sources: Source[] = [
     links: ["https://github.com/cloudflare/workers-sdk/blob/main/packages/wrangler/CHANGELOG.md"],
   },
   release(
+    "libfuse",
+    "libfuse/libfuse",
+    [],
+    "Review upstream FUSE API/ABI, mount/unmount, security and kernel compatibility changes against the exact packaged Debian source and patches. Computer's vendored addon is separate. Bind the final image's native pin during release integration; an upstream reference alone does not establish installed-version security.",
+  ),
+  release(
     "workerd",
     "cloudflare/workerd",
     [pin(worker, "devDependencies", "@cloudflare/workers-types")],
