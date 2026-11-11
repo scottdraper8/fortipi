@@ -123,7 +123,12 @@ interface TargetScope {
 export type TargetRequest = TargetScope &
   (
     | { ownerKind: "job"; jobId: string; agentId: string; conversationId: string }
-    | { ownerKind: "workspace-operation"; agentId?: string; conversationId?: string }
+    | {
+        ownerKind: "workspace-operation";
+        baseRevision: string;
+        agentId?: string;
+        conversationId?: string;
+      }
   );
 interface ReservationAuthority {
   reservationId: string;
@@ -182,11 +187,13 @@ export interface ResultDelivery {
   deliveryId: string;
 }
 export interface LeaseRenewal {
+  requestId: string;
   lease: T.Lease;
   expectedLeaseVersion: number;
   expiresAt: number;
 }
 export interface LeaseRelease {
+  requestId: string;
   lease: T.Lease;
   reason: "completed" | "cancelled" | "expired" | "reconciled";
 }

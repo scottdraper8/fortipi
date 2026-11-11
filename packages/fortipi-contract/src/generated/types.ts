@@ -55,6 +55,7 @@ export type FortiPiValue =
   | ExecutorDescription
   | ExecutorFrame
   | ExecutorPage
+  | ExecutorTransferLimits
   | ExportInput
   | Fence
   | ForkInput
@@ -167,8 +168,14 @@ export type FortiPiValue =
   | WorkspaceConfig
   | WorkspaceDiff
   | WorkspaceDiffQuery
+  | WorkspaceLeaseAcquire
+  | WorkspaceLeaseDigestInput
+  | WorkspaceLeaseRelease
+  | WorkspaceLeaseReleaseReceipt
+  | WorkspaceLeaseRenew
   | WorkspaceList
   | WorkspaceListQuery
+  | WorkspaceOperationLease
   | WorkspacePage
   | WorkspacePathQuery
   | WorkspaceReadQuery
@@ -257,20 +264,7 @@ export type Lease =
       ownerKind: "job";
       jobId: Id;
     }
-  | {
-      leaseId: Id;
-      operationId: Id;
-      credential: CredentialRef;
-      registrationId: Id;
-      leaseVersion: number;
-      workspaceId: Id;
-      executorId: Id;
-      executorGeneration: number;
-      fence: Fence;
-      baseRevision: Revision;
-      expiresAt: Timestamp;
-      ownerKind: "workspace-operation";
-    };
+  | WorkspaceOperationLease;
 export type Fence = string;
 export type Sequence = number;
 export type BackendConfig =
@@ -1277,6 +1271,7 @@ export type ExecutorFrame =
          */
         rootBindingIds: Id[];
         confinement: "host" | "isolated";
+        transferLimits: ExecutorTransferLimits;
       };
     }
   | {
@@ -1965,6 +1960,23 @@ export interface CredentialRef {
   grantVersion: number;
 }
 /**
+ * Existing non-job Lease wire variant; no new fields. Job identity is forbidden.
+ */
+export interface WorkspaceOperationLease {
+  leaseId: Id;
+  operationId: Id;
+  credential: CredentialRef;
+  registrationId: Id;
+  leaseVersion: number;
+  workspaceId: Id;
+  executorId: Id;
+  executorGeneration: number;
+  fence: Fence;
+  baseRevision: Revision;
+  expiresAt: Timestamp;
+  ownerKind: "workspace-operation";
+}
+/**
  * Immutable operation preimage context shared by wire assignments and private cloud/native execution requests. Principal identity is not part of the version1 operation preimage.
  */
 export interface OperationContext {
@@ -2148,6 +2160,17 @@ export interface ExecutorDescription {
    */
   rootBindingIds: Id[];
   state: "online" | "offline" | "revoking";
+  transferLimits: ExecutorTransferLimits;
+}
+/**
+ * Validated numeric registration observation, not remaining capacity or a future availability promise. fileBytes/artifactBytes must also fit chunkBytes*256; source8 computes all effective profile/server bounds and actors recheck before bytes.
+ */
+export interface ExecutorTransferLimits {
+  chunkBytes: number;
+  fileBytes: number;
+  snapshotBytes: number;
+  artifactBytes: number;
+  manifestEntries: number;
 }
 export interface UnchangedBase {
   kind: "verified-unchanged";
@@ -2884,6 +2907,36 @@ export interface WorkspaceDiffQuery {
   otherRevision: Revision;
   pageToken?: string;
   limit?: number;
+}
+export interface WorkspaceLeaseAcquire {
+  requestId: Id;
+  operationId: Id;
+  bindingVersion: Sequence;
+  baseRevision: Revision;
+  deadline: Timestamp;
+}
+export interface WorkspaceLeaseDigestInput {
+  deploymentId: Id;
+  operationId: Id;
+  workspaceId: Id;
+  bindingVersion: Sequence;
+  baseRevision: Revision;
+  target: BackendRef;
+  credential: CredentialRef;
+  deadline: Timestamp;
+}
+export interface WorkspaceLeaseRelease {
+  requestId: Id;
+  lease: WorkspaceOperationLease;
+  reason: "completed" | "cancelled";
+}
+export interface WorkspaceLeaseReleaseReceipt {
+  leaseId: Id;
+  released: boolean;
+}
+export interface WorkspaceLeaseRenew {
+  requestId: Id;
+  lease: WorkspaceOperationLease;
 }
 export interface WorkspaceListQuery {
   revision: Revision;

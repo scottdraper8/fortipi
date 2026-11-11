@@ -49,6 +49,9 @@
         },
         "state": {
           "enum": ["online", "offline", "revoking"]
+        },
+        "transferLimits": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits"
         }
       },
       "required": [
@@ -60,7 +63,8 @@
         "confinement",
         "capabilities",
         "rootBindingIds",
-        "state"
+        "state",
+        "transferLimits"
       ],
       "additionalProperties": false
     },
@@ -715,6 +719,40 @@
       "required": ["deploymentId", "principalId", "role", "credential", "credentialExpiresAt"],
       "additionalProperties": false,
       "description": "Redacted identity from the validated current AuthContext, independent of short ticket expiry. Never reconstructed from a bearer."
+    },
+    "ExecutorTransferLimits": {
+      "title": "ExecutorTransferLimits",
+      "type": "object",
+      "properties": {
+        "chunkBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 262144
+        },
+        "fileBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864
+        },
+        "snapshotBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "artifactBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        },
+        "manifestEntries": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        }
+      },
+      "required": ["chunkBytes", "fileBytes", "snapshotBytes", "artifactBytes", "manifestEntries"],
+      "additionalProperties": false,
+      "description": "Validated numeric registration observation, not remaining capacity or a future availability promise. fileBytes/artifactBytes must also fit chunkBytes*256; source8 computes all effective profile/server bounds and actors recheck before bytes."
     }
   }
 }

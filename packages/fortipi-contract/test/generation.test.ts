@@ -91,6 +91,20 @@ test("renewal identity and private child disclosure regressions fail their consu
     await writeFile(resolve(temp, "package.json"), '{"type":"module"}\n');
     const cases = [
       {
+        label: "workspace lease immutable credential projection",
+        path: "dist/compatibility.js",
+        test: "compatibility",
+        pattern: "workspace lease digest",
+        failure: /mutable\/auth observations excluded/,
+        mutate: (source: string): string => {
+          const helper = source.indexOf("export function workspaceLeaseDigest(");
+          const start = source.indexOf("credential: {", helper);
+          const end = source.indexOf("deadline: input.deadline", start);
+          assert.ok(helper >= 0 && start > helper && end > start);
+          return `${source.slice(0, start)}credential: input.credential,\n${source.slice(end)}`;
+        },
+      },
+      {
         label: "ordered directory recreation",
         path: "dist/compatibility.js",
         test: "compatibility",
