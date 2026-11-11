@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { manifestDigest } from "fortipi-contract/executor";
-import { adapter, loadProfile, privateWrite } from "../dist/config.js";
+import { adapter, loadProfile, privateWrite, secureDirectory } from "../dist/config.js";
 import { ExecutorRuntime } from "../dist/daemon.js";
 import { approvalKey, hash } from "../dist/policy.js";
 import { HttpTransport } from "../dist/transport.js";
 import type { Manifest } from "../dist/workspace/manifest.js";
+import { scan } from "../dist/workspace/manifest.js";
+import { SafeRoot } from "../dist/workspace/paths.js";
 import {
   assignment,
   eventually,
@@ -20,21 +22,26 @@ import {
 } from "./fixtures/daemon.ts";
 import { connectExecutor, snapshotFixture } from "./fixtures/transport.ts";
 
-async function preparation(count = 1) {
+async function preparation(
+  count = 1,
+  options: { same?: boolean; empty?: boolean; mismatchedSize?: boolean } = {},
+) {
   const f = await fixture(),
     marker = join(f.path, "actual-start"),
     a = await assignment(nodeCommand(fixtureChild, "append", marker)),
     files = new Map<string, Buffer>(),
     manifest: Manifest = { version: 1, entries: [] };
   for (let i = 0; i < count; i++) {
-    const bytes = Buffer.from(`distinct immutable base ${i}`),
+    const bytes = options.empty
+        ? Buffer.alloc(0)
+        : Buffer.from(options.same ? "repeated immutable base" : `distinct immutable base ${i}`),
       sha = hash(bytes);
     files.set(sha, bytes);
     manifest.entries.push({
       path: `base-${i.toString().padStart(2, "0")}`,
       type: "file",
-      mode: 420,
-      size: bytes.length,
+      mode: options.same && i % 2 ? 493 : 420,
+      size: bytes.length + (options.mismatchedSize && i === 1 ? 1 : 0),
       sha256: sha,
     });
   }
@@ -88,6 +95,25 @@ async function preparation(count = 1) {
   };
 }
 type Preparation = Awaited<ReturnType<typeof preparation>>;
+
+/** Keep actual native writes/permissions; inject a change only after the first durable destination. */
+function afterFirstWrite(
+  h: Preparation,
+  change: (data: Uint8Array, root: SafeRoot) => Promise<void>,
+) {
+  const original = SafeRoot.prototype.write;
+  SafeRoot.prototype.write = async function (path, data, mode) {
+    await original.call(this, path, data, mode);
+    if (
+      path === "base-00" &&
+      this.identity.path === join(h.f.directory, "scratch", h.a.identity.executionId)
+    )
+      await change(data, this);
+  };
+  return () => {
+    SafeRoot.prototype.write = original;
+  };
+}
 
 function readFault(
   h: Preparation,
@@ -380,5 +406,199 @@ test("caller abort cancels the actual in-flight snapshot HTTP body and a fresh r
     );
   } finally {
     await fresh.close(pendingFresh);
+  }
+});
+
+test("31 repeated snapshot destinations fetch one verified blob, preserve all bytes and modes, and never share a cache with another job", async (t) => {
+  for (const { count, empty } of [
+    { count: 31, empty: false },
+    { count: 2, empty: false },
+    { count: 2, empty: true },
+  ]) {
+    const h = await preparation(count, { same: true, empty }),
+      renewals = jobRenewals(h.runtime, h.a);
+    let actualRoot: SafeRoot | undefined, pending: Promise<void> | undefined;
+    const restore = afterFirstWrite(h, async (_bytes, root) => {
+      actualRoot = root;
+      await renewals.renew();
+    });
+    const started = performance.now();
+    try {
+      pending = h.runtime.start(h.row);
+      await pending;
+      await eventually(() => !!h.f.ledger.get(h.a.identity.jobId)?.result, "native result missing");
+      assert.equal(h.f.ledger.get(h.a.identity.jobId)?.result?.state, "succeeded");
+      assert.equal(await readFile(h.marker, "utf8"), "effect\n");
+      assert.equal(
+        h.peer.requests.filter((r) => r.startsWith("GET ") && r.includes("/blobs/")).length,
+        1,
+        "one HTTP read per distinct SHA in each new materialization",
+      );
+      assert.ok(actualRoot);
+      assert.deepEqual((await scan(actualRoot, h.runtime.http.limits)).manifest, h.manifest);
+      for (const entry of h.manifest.entries) {
+        assert.equal(entry.type, "file");
+        if (entry.type === "file") {
+          const bytes: Buffer = await readFile(join(actualRoot.identity.path, entry.path));
+          assert.equal(bytes.length, entry.size);
+          assert.equal(hash(bytes), entry.sha256);
+        }
+      }
+      assert.ok(renewals.observations.some((r) => r.leaseVersion > 1));
+      await h.runtime.assignOnce(h.a);
+      assert.equal(await readFile(h.marker, "utf8"), "effect\n");
+      t.diagnostic(
+        JSON.stringify({
+          files: count,
+          empty,
+          blobGETs: 1,
+          leaseVersions: renewals.observations.map((r) => r.leaseVersion),
+          processStarts: 1,
+          elapsedMs: performance.now() - started,
+        }),
+      );
+    } finally {
+      restore();
+      await renewals.stop();
+      await h.close(pending);
+    }
+  }
+});
+test("cached snapshot destinations fail closed on mid-write authority, epoch, real lease expiry, root or bounds changes", async () => {
+  for (const change of [
+    "consent",
+    "revoke",
+    "epoch",
+    "lease",
+    "root",
+    "policy-version",
+    "credential-version",
+    "limits",
+    "stop",
+    "abort",
+  ] as const) {
+    const h = await preparation(3, { same: true }),
+      caller = new AbortController();
+    let pending: Promise<void> | undefined,
+      stopping: Promise<void> | undefined,
+      reconnected: ReturnType<typeof connectExecutor> | undefined;
+    const restore = afterFirstWrite(h, async () => {
+      if (change === "consent" || change === "policy-version" || change === "credential-version") {
+        const profile = structuredClone(h.f.profile);
+        if (change === "consent") profile.policy.trustedHost = false;
+        else if (change === "policy-version") profile.policy.version++;
+        else profile.credential.generation++;
+        await privateWrite(h.path, JSON.stringify(profile));
+      } else if (change === "revoke") {
+        await h.runtime.receive({
+          type: "executor.presence",
+          requestId: randomUUID(),
+          payload: {
+            executorId: h.f.profile.executorId,
+            generation: h.f.profile.executorGeneration,
+            connectionEpoch: h.connection.session.connectionEpoch,
+            state: "revoking",
+            platform: h.connection.registration.payload.platform,
+            capabilities: [],
+            caseBehavior: "sensitive",
+            confinement: "host",
+            rootBindingIds: ["root"],
+            transferLimits: h.runtime.http.transferLimits(),
+          },
+        });
+      } else if (change === "epoch") {
+        h.connection.controller.abort();
+        await h.connection.connected;
+        reconnected = connectExecutor(h.runtime.http, h.runtime);
+        await eventually(
+          () => reconnected?.session.registered === true,
+          "new epoch not registered",
+        );
+        assert.ok(reconnected.session.connectionEpoch > h.connection.session.connectionEpoch);
+      } else if (change === "lease") {
+        const row = h.f.ledger.existing(h.a.identity);
+        assert.ok(row);
+        await delay(Math.max(0, row.assignment.identity.lease.expiresAt - Date.now()) + 10);
+      } else if (change === "root") {
+        await rename(h.f.rootPath, `${h.f.rootPath}-previous`);
+        await secureDirectory(h.f.rootPath);
+      } else if (change === "limits") h.runtime.http.limits.snapshotBytes--;
+      else if (change === "stop") stopping = h.runtime.shutdown(pending?.catch(() => {}));
+      else caller.abort(new Error("explicit cached write abort"));
+    });
+    try {
+      pending = h.runtime.start(h.row, caller.signal);
+      void pending.catch(() => {});
+      const expected =
+        change === "consent"
+          ? /disabled|trusted|host/
+          : change === "policy-version"
+            ? /approval expired/
+            : change === "credential-version"
+              ? /profile identity changed/
+              : change === "lease"
+                ? /expired authority|expired assigned-job/
+                : change === "epoch"
+                  ? /registered assigned-job/
+                  : change === "root"
+                    ? /workspace root identity changed/
+                    : change === "limits"
+                      ? /snapshot limits changed/
+                      : change === "stop"
+                        ? /executor stopping/
+                        : change === "abort"
+                          ? /explicit cached write abort/
+                          : /preparation authority/;
+      await assert.rejects(pending, expected);
+      await stopping;
+      assert.equal(
+        h.peer.requests.filter((r) => r.startsWith("GET ") && r.includes("/blobs/")).length,
+        1,
+        "invalid context cannot fall back to HTTP",
+      );
+      await assert.rejects(
+        readFile(join(h.f.directory, "scratch", h.a.identity.executionId, "base-01")),
+        { code: "ENOENT" },
+        "authority loss must leave the next cached destination unwritten",
+      );
+      await assert.rejects(readFile(h.marker), { code: "ENOENT" });
+      assert.equal(h.runtime.children.size, 0);
+      assert.equal(h.f.ledger.get(h.a.identity.jobId)?.state, "closed");
+      await assert.rejects(h.runtime.snapshots.materialize(h.a), /query-only/);
+    } finally {
+      restore();
+      reconnected?.controller.abort();
+      await reconnected?.connected;
+      await h.close(pending);
+    }
+  }
+});
+
+test("snapshot cache rejects conflicting declared sizes, corrupt wire bytes and changed retained bytes without fallback or child", async () => {
+  for (const fault of ["size", "wire", "retained"] as const) {
+    const h = await preparation(2, { same: true, mismatchedSize: fault === "size" });
+    let pending: Promise<void> | undefined;
+    if (fault === "wire") h.peer.setCorrupt(true);
+    const restore = afterFirstWrite(h, async (bytes) => {
+      if (fault === "retained") bytes[0] = (bytes[0] ?? 0) ^ 0xff;
+    });
+    try {
+      pending = h.runtime.start(h.row);
+      await assert.rejects(pending, /snapshot file integrity/);
+      assert.equal(
+        h.peer.requests.filter((r) => r.startsWith("GET ") && r.includes("/blobs/")).length,
+        1,
+      );
+      await assert.rejects(
+        readFile(join(h.f.directory, "scratch", h.a.identity.executionId, "base-01")),
+        { code: "ENOENT" },
+      );
+      await assert.rejects(readFile(h.marker), { code: "ENOENT" });
+      assert.equal(h.runtime.children.size, 0);
+      await assert.rejects(h.runtime.snapshots.materialize(h.a), /query-only/);
+    } finally {
+      restore();
+      await h.close(pending);
+    }
   }
 });
