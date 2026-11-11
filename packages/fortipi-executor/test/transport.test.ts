@@ -9,18 +9,29 @@ import { promisify } from "node:util";
 import type { ErrorBody, ExecutorFrame, TransferDescriptor } from "fortipi-contract/executor";
 import { validateTransfer } from "fortipi-contract/executor";
 import { adapter, privateWrite } from "../dist/config.js";
+import { ExecutorRuntime } from "../dist/daemon.js";
 import { Guard, Ledger } from "../dist/ledger.js";
 import { Output } from "../dist/output.js";
 import { hash } from "../dist/policy.js";
-import { frame, HttpFailure, HttpTransport, readBounded } from "../dist/transport.js";
+import {
+  frame,
+  HttpFailure,
+  HttpTransport,
+  readBounded,
+  SessionTransport,
+} from "../dist/transport.js";
 import { inventoryFor } from "../dist/workspace/manifest.js";
 import { Staging } from "../dist/workspace/staging.js";
 import {
   assignment,
+  authenticateFixture,
   credential,
+  eventually,
   fixture,
   fixtureChild,
+  importRoot,
   nodeCommand,
+  prepare,
   resources,
 } from "./fixtures/daemon.ts";
 import { relayFixture } from "./fixtures/transport.ts";
@@ -580,6 +591,136 @@ test("real HTTP transfer slots bound concurrency and negotiated grid capacity re
     await read();
     assert.equal(server.requests.length, 2, "slot is released after the actual body completes");
   } finally {
+    await server.close();
+    await f.cleanup();
+  }
+});
+test("native artifact producer verifies retained bytes before correlated status and never replays the native command", async () => {
+  const f = await fixture(),
+    server = await relayFixture(Buffer.alloc(0));
+  let runtime: ExecutorRuntime | undefined;
+  let interruptAfterPut = false;
+  try {
+    f.profile.origin = server.origin;
+    f.profile.limits.chunkBytes = 3;
+    const http = new HttpTransport(
+      f.profile,
+      async (input, init) => {
+        const response = await fetch(input, init);
+        if (interruptAfterPut && init?.method === "PUT" && response.status === 204) {
+          interruptAfterPut = false;
+          server.setPressure(true);
+        }
+        return response;
+      },
+      true,
+    );
+    authenticateFixture(http);
+    runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http,
+    });
+    await runtime.initialize();
+    const local = runtime.locals.get("root");
+    if (!local) throw new Error("local provider absent");
+    await importRoot(local);
+    runtime.connected = true;
+    const marker = join(f.path, "artifact-original-effect"),
+      text = "retained native output",
+      a = await assignment(nodeCommand(fixtureChild, "append", marker, text));
+    await local.request(prepare(a, f.initial.manifestHash));
+    await runtime.assignOnce(a);
+    const pending = runtime.approvals.list()[0];
+    if (!pending) throw new Error("approval absent");
+    runtime.approvals.decide(a.identity.jobId, pending.digest, "allow");
+    await runtime.tick();
+    await eventually(
+      () => !!f.ledger.get(a.identity.jobId)?.result,
+      "native output was not persisted",
+    );
+    const row = f.ledger.get(a.identity.jobId),
+      reference = row?.result?.output.artifacts[0];
+    if (!row || !reference?.artifactId || !reference.chunks)
+      throw new Error("actual native artifact absent");
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+    const captured: ExecutorFrame[] = [],
+      session = new SessionTransport(http, runtime);
+    session.send = (value) => {
+      captured.push(frame(value));
+      return true;
+    };
+    runtime.session = session; // Synthetic channel only; file bytes use the actual HTTP relay.
+    const descriptor: Extract<TransferDescriptor, { purpose: "output" }> = {
+      transferId: "artifact_transfer",
+      attemptId: "artifact_attempt",
+      deploymentId: f.profile.deploymentId,
+      direction: "from-executor",
+      purpose: "output",
+      workspaceId: a.workspaceId,
+      bindingVersion: a.bindingVersion,
+      operationId: a.identity.lease.operationId,
+      operationDigest: a.identity.operationDigest,
+      jobId: a.identity.jobId,
+      executionId: a.identity.executionId,
+      executorId: f.profile.executorId,
+      executorGeneration: f.profile.executorGeneration,
+      credential,
+      consumer: f.profile.resources,
+      baseRevision: a.identity.baseRevision,
+      content: { kind: "job-output", artifactId: reference.artifactId, stream: "stdout" },
+      fileSha256: reference.sha256,
+      size: reference.size,
+      chunkBytes: reference.chunks.chunkBytes,
+      chunkHashes: reference.chunks.chunkHashes,
+      expiresAt: Date.now() + 20000,
+      deadline: Date.now() + 30000,
+    };
+    const open = async (requestId: string, transfer: typeof descriptor) => {
+      await runtime?.receive({ type: "transfer.open", requestId, payload: transfer });
+      await eventually(
+        () => captured.some((f) => f.type === "transfer.status" && f.requestId === requestId),
+        "producer status absent",
+      );
+      const status = captured.find(
+        (f) => f.type === "transfer.status" && f.requestId === requestId,
+      );
+      if (status?.type !== "transfer.status") throw new Error("status absent");
+      return status.payload;
+    };
+    const status = await open("output_open", descriptor);
+    assert.equal(status.state, "verified");
+    assert.equal(status.transferId, descriptor.transferId);
+    assert.equal(status.attemptId, descriptor.attemptId);
+    assert.deepEqual(
+      status.verifiedChunks,
+      descriptor.chunkHashes.map((_, i) => i),
+    );
+    assert.equal(status.bytes, Buffer.byteLength(text));
+    assert.equal(Buffer.concat(server.requests.map((r) => r.bytes)).toString(), text);
+    const requests = server.requests.length;
+    await privateWrite(
+      join(f.directory, "artifacts", reference.artifactId),
+      Buffer.alloc(reference.size, 0x5a),
+    );
+    const corrupt = await open("corrupt_open", { ...descriptor, attemptId: "corrupt_attempt" });
+    assert.equal(corrupt.state, "interrupted");
+    assert.deepEqual(corrupt.verifiedChunks, []);
+    assert.equal(corrupt.bytes, 0);
+    assert.equal(server.requests.length, requests, "corrupt source must fail before network bytes");
+    await privateWrite(join(f.directory, "artifacts", reference.artifactId), text);
+    interruptAfterPut = true;
+    const partial = await open("partial_open", { ...descriptor, attemptId: "partial_attempt" });
+    assert.equal(partial.state, "interrupted");
+    assert.deepEqual(partial.verifiedChunks, [0], "only the actual acknowledged chunk is verified");
+    assert.equal(partial.bytes, descriptor.chunkBytes);
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+    assert.equal(runtime.children.size, 0);
+    assert.equal(f.ledger.get(a.identity.jobId)?.bodyHash, row.bodyHash);
+  } finally {
+    await runtime?.shutdown();
     await server.close();
     await f.cleanup();
   }
