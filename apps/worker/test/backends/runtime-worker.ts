@@ -67,7 +67,7 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
           id: "probe",
           name: "computerd",
           restartAttempts: 0,
-          egress: { mode: "none" },
+          egress: { mode: "direct" },
           connectTimeoutMs: 20_000,
           healthProbeTimeoutMs: 1000,
         })
