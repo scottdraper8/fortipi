@@ -32,6 +32,9 @@ try {
       "slot-release",
       "work-limit",
       "tool-arguments",
+      "progress-batching",
+      "stalled-read",
+      "raw-work",
     ] as const) {
       const worker = fault === "tool-arguments",
         outfile = join(directory, `${fault}.${worker ? "js" : "mjs"}`);
@@ -72,6 +75,12 @@ try {
                     "this.#limits.toolArgumentsBytes",
                     "this.#limits.messageBytes",
                   ],
+                  "progress-batching": ["if (ownsLane && delta)", "if (false)"],
+                  "stalled-read": [
+                    "// Retain this SAME outstanding read until it settles.",
+                    "pendingNext = undefined;",
+                  ],
+                  "raw-work": ["output.charge(bytes);", "/* omit raw work accounting */"],
                 }[fault];
                 assert.ok(needle && replacement);
                 const found = contents.split(needle).length - 1;
@@ -90,7 +99,13 @@ try {
           ? "forwarded progress"
           : fault === "slot-release"
             ? "cancelled provider cleanup"
-            : "finite encoded work";
+            : fault === "progress-batching"
+              ? "contiguous deltas coalesce"
+              : fault === "stalled-read"
+                ? "100ms progress flush"
+                : fault === "raw-work"
+                  ? "raw event, encoded Unicode"
+                  : "finite encoded work";
       let output = "",
         code = 0;
       try {
@@ -129,7 +144,13 @@ try {
             ? '"replacementStarts":1,"slotRetained":false'
             : fault === "work-limit"
               ? '"workLimited":false'
-              : '"kind":"tool"';
+              : fault === "progress-batching"
+                ? "Contiguous provider progress must share snapshots"
+                : fault === "stalled-read"
+                  ? "Timer flush must"
+                  : fault === "raw-work"
+                    ? '"rawLimit":"work","rejected":false'
+                    : '"kind":"tool"';
       assert.ok(output.includes(evidence), output);
       if (worker) {
         const proof = output.split("\n").flatMap((line) => {

@@ -47,13 +47,11 @@ test("public provider bound preserves100KiB Pi answers and refuses encoded text/
     );
     const churn = await env.PROBE.getByName("high-churn").run("high-churn", 102400);
     console.log(JSON.stringify({ kind: "high-churn", ...churn }));
-    assert.equal(
-      churn.status,
-      "unanswered",
-      "Smaller chunks must reach finite encoded-work pressure",
-    );
-    assert.equal(churn.providerCancelled, true);
-    assert.ok(churn.maxAssistantBytes < 262144);
+    assert.equal(churn.status, "done", "Contiguous small deltas share bounded snapshot work");
+    assert.equal(churn.chunkBytes, 32);
+    assert.equal(churn.textBytes, 102400);
+    assert.ok(churn.retainedBytes >= 102400);
+    assert.ok(churn.physicalAfter - churn.physicalBefore <= 8 * 1024 * 1024);
     for (const [kind, size] of [
       ["text", 524288],
       ["unicode", 100000],

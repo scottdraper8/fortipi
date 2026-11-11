@@ -35,13 +35,217 @@ function completed() {
   return stream;
 }
 
+test("contiguous deltas coalesce exactly across type, index and structural boundaries", async () => {
+  const partial = fauxAssistantMessage('a🧪"b!'),
+    toolCall = fauxToolCall("tool", { a: "b" }),
+    upstream = new AssistantMessageEventStream();
+  partial.content.push({ type: "thinking", thinking: "reason" }, toolCall, {
+    type: "text",
+    text: "other-index",
+  });
+  const events: AssistantMessageEvent[] = [
+    { type: "start", partial },
+    { type: "text_start", contentIndex: 0, partial },
+    { type: "text_delta", contentIndex: 0, delta: "a🧪", partial },
+    { type: "text_delta", contentIndex: 0, delta: '"b', partial },
+    { type: "thinking_delta", contentIndex: 1, delta: "rea", partial },
+    { type: "thinking_delta", contentIndex: 1, delta: "son", partial },
+    { type: "text_delta", contentIndex: 0, delta: "!", partial },
+    { type: "text_delta", contentIndex: 3, delta: "other-index", partial },
+    { type: "toolcall_start", contentIndex: 2, partial },
+    { type: "toolcall_delta", contentIndex: 2, delta: '{"a":', partial },
+    { type: "toolcall_delta", contentIndex: 2, delta: '"b"}', partial },
+    { type: "toolcall_end", contentIndex: 2, toolCall, partial },
+    { type: "text_end", contentIndex: 0, content: 'a🧪"b!', partial },
+    { type: "done", reason: "stop", message: partial },
+  ];
+  for (const event of events) upstream.push(event);
+  const bounded = registry(new ModelStorageBounds(1), () => upstream),
+    output = bounded.models.streamSimple(bounded.model, { messages: [] }),
+    forwarded: AssistantMessageEvent[] = [];
+  for await (const event of output) forwarded.push(event);
+  assert.deepEqual(
+    forwarded.map((event) => event.type),
+    [
+      "start",
+      "text_start",
+      "text_delta",
+      "thinking_delta",
+      "text_delta",
+      "text_delta",
+      "toolcall_start",
+      "toolcall_delta",
+      "toolcall_end",
+      "text_end",
+      "done",
+    ],
+    "Contiguous provider progress must share snapshots",
+  );
+  assert.deepEqual(
+    forwarded.flatMap((event) =>
+      "delta" in event ? [[event.type, event.contentIndex, event.delta]] : [],
+    ),
+    [
+      ["text_delta", 0, 'a🧪"b'],
+      ["thinking_delta", 1, "reason"],
+      ["text_delta", 0, "!"],
+      ["text_delta", 3, "other-index"],
+      ["toolcall_delta", 2, '{"a":"b"}'],
+    ],
+    "Only exact contiguous same-kind/index deltas may be combined",
+  );
+  assert.deepEqual((await output.result()).content, partial.content);
+});
+
+class CountedStream extends AssistantMessageEventStream {
+  reads = 0;
+  override [Symbol.asyncIterator](): AsyncIterator<AssistantMessageEvent> {
+    const iterator = super[Symbol.asyncIterator](),
+      next = iterator.next.bind(iterator);
+    iterator.next = (...args) => {
+      this.reads++;
+      return next(...args);
+    };
+    return iterator;
+  }
+}
+
+test("100ms progress flush retains the same stalled public iterator read", {
+  timeout: 3000,
+}, async () => {
+  const source = new CountedStream(),
+    partial = fauxAssistantMessage("timer-visible"),
+    caller = new AbortController(),
+    bounded = registry(new ModelStorageBounds(1), () => source),
+    output = bounded.models.streamSimple(
+      bounded.model,
+      { messages: [] },
+      { signal: caller.signal },
+    ),
+    consumer = output[Symbol.asyncIterator]();
+  try {
+    source.push({ type: "start", partial });
+    source.push({ type: "text_delta", contentIndex: 0, delta: "timer-", partial });
+    source.push({ type: "text_delta", contentIndex: 0, delta: "visible", partial });
+    assert.equal((await consumer.next()).value?.type, "start");
+    const began = performance.now(),
+      progress = (await consumer.next()).value;
+    assert.ok(progress?.type === "text_delta");
+    assert.equal(progress.delta, "timer-visible");
+    assert.ok(
+      performance.now() - began >= 50,
+      "This must be a real cadence timer, not a structural flush",
+    );
+    assert.equal(source.reads, 4, "Timer flush must retain the outstanding next()");
+    await new Promise<void>((ready) => setTimeout(ready, 150));
+    assert.equal(source.reads, 4, "Timer flush must not consume a duplicate next()");
+    source.push({ type: "text_end", contentIndex: 0, content: "timer-visible", partial });
+    source.push({ type: "done", reason: "stop", message: partial });
+    const rest: AssistantMessageEvent[] = [];
+    for (let next = await consumer.next(); !next.done; next = await consumer.next())
+      rest.push(next.value);
+    assert.deepEqual(
+      rest.map((event) => event.type),
+      ["text_end", "done"],
+    );
+    assert.equal(source.reads, 5);
+    assert.equal((await output.result()).stopReason, "stop");
+  } finally {
+    caller.abort();
+    source.push({
+      type: "error",
+      reason: "aborted",
+      error: fauxAssistantMessage("", { stopReason: "aborted" }),
+    });
+    await consumer.return?.();
+  }
+});
+
+test("pending progress is discarded on cancellation or deadline without a late timer flush", async () => {
+  for (const cancel of [true, false]) {
+    const source = new CountedStream(),
+      caller = new AbortController(),
+      partial = fauxAssistantMessage("pending"),
+      bounded = registry(
+        new ModelStorageBounds(1, { durationMs: cancel ? 1000 : 30 }),
+        (signal) => {
+          signal?.addEventListener(
+            "abort",
+            () =>
+              source.push({
+                type: "error",
+                reason: "aborted",
+                error: fauxAssistantMessage("", { stopReason: "aborted" }),
+              }),
+            { once: true },
+          );
+          return source;
+        },
+      ),
+      output = bounded.models.streamSimple(
+        bounded.model,
+        { messages: [] },
+        { signal: caller.signal },
+      ),
+      consumer = output[Symbol.asyncIterator]();
+    source.push({ type: "start", partial });
+    source.push({ type: "text_delta", contentIndex: 0, delta: "pending", partial });
+    await consumer.next();
+    while (source.reads < 3) await pause();
+    if (cancel) caller.abort();
+    assert.equal((await output.result()).stopReason, cancel ? "aborted" : "error");
+    await new Promise<void>((ready) => setTimeout(ready, 150));
+    const rest: AssistantMessageEvent[] = [];
+    for (let next = await consumer.next(); !next.done; next = await consumer.next())
+      rest.push(next.value);
+    assert.deepEqual(
+      rest.map((event) => event.type),
+      ["error"],
+    );
+  }
+});
+
+test("raw event, encoded Unicode, argument and raw work limits apply before batching", async () => {
+  for (const kind of ["events", "unicode", "arguments", "work"] as const) {
+    const partial = fauxAssistantMessage(""),
+      bounded = registry(
+        new ModelStorageBounds(
+          1,
+          kind === "events" ? { events: 64 } : kind === "work" ? { encodedWorkBytes: 4096 } : {},
+        ),
+        () => {
+          const source = new AssistantMessageEventStream();
+          source.push({ type: "start", partial });
+          for (let i = 0; i < (kind === "unicode" ? 1 : kind === "arguments" ? 70 : 2200); i++)
+            source.push(
+              kind === "arguments"
+                ? { type: "toolcall_delta", contentIndex: 0, delta: "x".repeat(1024), partial }
+                : {
+                    type: "text_delta",
+                    contentIndex: 0,
+                    delta: kind === "unicode" ? "🧪".repeat(70000) : "",
+                    partial,
+                  },
+            );
+          source.push({ type: "done", reason: "stop", message: partial });
+          return source;
+        },
+      ),
+      output = bounded.models.streamSimple(bounded.model, { messages: [] });
+    for await (const event of output)
+      if (kind === "unicode") assert.notEqual(event.type, "text_delta");
+    const result = await output.result();
+    console.log(JSON.stringify({ rawLimit: kind, rejected: result.stopReason === "error" }));
+    assert.equal(result.stopReason, "error", kind);
+  }
+});
+
 test("queued encoded progress stays bounded when the public stream consumer stalls", async () => {
   const bounded = registry(new ModelStorageBounds(1), () => {
     const stream = new AssistantMessageEventStream(),
       partial = fauxAssistantMessage("x".repeat(102400));
     stream.push({ type: "start", partial });
-    for (let i = 0; i < 10; i++)
-      stream.push({ type: "text_delta", contentIndex: 0, delta: "", partial });
+    for (let i = 0; i < 10; i++) stream.push({ type: "text_start", contentIndex: 0, partial });
     stream.push({ type: "done", reason: "stop", message: partial });
     return stream;
   });
@@ -134,7 +338,7 @@ test("outer queue pressure aborts the original Models signal before a cooperativ
         await pause();
         if (cancelled) return;
         produced++;
-        source.push({ type: "text_delta", contentIndex: 0, delta: "", partial });
+        source.push({ type: "text_start", contentIndex: 0, partial });
       }
     })();
     return source;
@@ -339,8 +543,7 @@ test("finite encoded work and real task yields stop high churn before unbounded 
     const stream = new AssistantMessageEventStream(),
       partial = fauxAssistantMessage("x".repeat(4096));
     stream.push({ type: "start", partial });
-    for (let i = 0; i < 200; i++)
-      stream.push({ type: "text_delta", delta: "", contentIndex: 0, partial });
+    for (let i = 0; i < 200; i++) stream.push({ type: "text_start", contentIndex: 0, partial });
     stream.push({ type: "done", reason: "stop", message: partial });
     return stream;
   });

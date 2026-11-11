@@ -14,6 +14,12 @@ export const modelStorageLimits = Object.freeze({
   encodedWorkBytes: 32 * 1024 * 1024,
 } as const);
 export type ModelStorageSettings = { [K in keyof typeof modelStorageLimits]: number };
+type DeltaEvent = Extract<
+  AssistantMessageEvent,
+  { type: "text_delta" | "thinking_delta" | "toolcall_delta" }
+>;
+const progressBytes = 4096;
+const progressMs = 100;
 
 /** Fail before building an arbitrarily large serialized response; return an isolated JSON snapshot. */
 export function boundedJsonCopy<T>(value: T, limit: number): T {
@@ -97,6 +103,14 @@ class StorageEventStream extends AssistantMessageEventStream {
   #wake(): void {
     for (const ready of this.#waiters) ready();
     this.#waiters.clear();
+  }
+  charge(bytes: number): void {
+    check(
+      this.#work + bytes <= this.#limits.encodedWorkBytes,
+      "quota_paused",
+      "Encoded model progress work limit reached",
+    );
+    this.#work += bytes;
   }
   accept(event: AssistantMessageEvent): boolean {
     if (this.#closed) return false;
@@ -204,8 +218,9 @@ class StorageEventStream extends AssistantMessageEventStream {
  * caller and aborts upstream, retaining a lane until its public result settles.
  *
  * Copy work is O(accepted encoded work), not O(final text): 32MiB by default,
- * with a real task yield every32 events. Smaller valid chunks can hit that
- * envelope. Provider allocation before this boundary and aggregate Pi/Agent
+ * with a real task yield every32 RAW events. Contiguous provider deltas share
+ * one snapshot per4KiB/100ms; raw deltas and forwarded snapshots charge work.
+ * Provider allocation before this boundary and aggregate Pi/Agent
  * growth remain the owner's responsibility; maxTurns is not enforced here.
  */
 export class ModelStorageBounds {
@@ -319,7 +334,16 @@ export class ModelStorageBounds {
       let iterator: AsyncIterator<AssistantMessageEvent> | undefined,
         source: AssistantMessageEventStream | undefined,
         onAbort: (() => void) | undefined,
-        terminal = false;
+        terminal = false,
+        flushTimer: ReturnType<typeof setTimeout> | undefined;
+      let batch: { event: DeltaEvent; chunks: string[]; bytes: number } | undefined;
+      let flushReady: Promise<"flush"> | undefined;
+      const clearBatch = () => {
+        clearTimeout(flushTimer);
+        flushTimer = undefined;
+        flushReady = undefined;
+        batch = undefined;
+      };
       try {
         signal.throwIfAborted();
         source = start(signal);
@@ -331,42 +355,106 @@ export class ModelStorageBounds {
         });
         let count = 0;
         const argumentBytes = new Map<number, number>();
-        while (true) {
+        const forward = (event: AssistantMessageEvent) => {
           signal.throwIfAborted();
-          check(Date.now() <= deadline, "quota_paused", "Model stream duration reached");
-          const next = await Promise.race([iterator.next(), interrupted]);
-          if (next.done) break;
-          check(++count <= this.#limits.events, "quota_paused", "Model progress limit reached");
-          const event = next.value,
-            message =
-              event.type === "done"
-                ? event.message
-                : event.type === "error"
-                  ? event.error
-                  : event.partial;
-          terminal = event.type === "done" || event.type === "error";
-          const validated = !ownsLane && !terminal && knownEvents.has(event);
+          const message =
+            event.type === "done"
+              ? event.message
+              : event.type === "error"
+                ? event.error
+                : event.partial;
+          const validated =
+            !ownsLane && event.type !== "done" && event.type !== "error" && knownEvents.has(event);
           for (const block of validated ? [] : message.content)
             if (block.type === "toolCall")
               boundedJsonCopy(block.arguments, this.#limits.toolArgumentsBytes);
-          if (event.type === "toolcall_end" && !validated) {
+          if (event.type === "toolcall_end" && !validated)
             boundedJsonCopy(event.toolCall.arguments, this.#limits.toolArgumentsBytes);
-            argumentBytes.delete(event.contentIndex);
-          }
-          if (event.type === "toolcall_delta" && !validated) {
-            const bytes =
-              (argumentBytes.get(event.contentIndex) ?? 0) +
-              new TextEncoder().encode(event.delta).byteLength;
-            check(
-              bytes <= this.#limits.toolArgumentsBytes,
-              "quota_paused",
-              "Encoded tool arguments exceed their byte bound",
-            );
-            argumentBytes.set(event.contentIndex, bytes);
-          }
-          // The provider mutates its shared partial. Clone before handing it to Pi,
-          // so later rejected data cannot mutate an already accepted progress snapshot.
+          // Only actual SDK partials are copied; no reconstructed response state.
           check(output.accept(event), "quota_paused", "Model progress exceeds its bound");
+        };
+        const flush = async () => {
+          if (!batch) return;
+          const event = { ...batch.event, delta: batch.chunks.join("") };
+          clearBatch();
+          forward(event);
+          // A flush and its following authoritative boundary can each approach
+          // the queue envelope. Let public consumers drain between them.
+          await new Promise<void>((ready) => setTimeout(ready, 0));
+        };
+        let pendingNext: Promise<IteratorResult<AssistantMessageEvent>> | undefined;
+        while (true) {
+          signal.throwIfAborted();
+          check(Date.now() <= deadline, "quota_paused", "Model stream duration reached");
+          pendingNext ??= iterator.next();
+          const next = await Promise.race(
+            flushReady ? [flushReady, pendingNext, interrupted] : [pendingNext, interrupted],
+          );
+          if (next === "flush") {
+            await flush();
+            // Retain this SAME outstanding read until it settles.
+            continue;
+          }
+          pendingNext = undefined;
+          if (next.done) break;
+          check(++count <= this.#limits.events, "quota_paused", "Model progress limit reached");
+          const event = next.value;
+          terminal = event.type === "done" || event.type === "error";
+          if (event.type === "toolcall_end") argumentBytes.delete(event.contentIndex);
+          const delta =
+            event.type === "text_delta" ||
+            event.type === "thinking_delta" ||
+            event.type === "toolcall_delta";
+          if (ownsLane && delta) {
+            // Bound raw encoded work BEFORE retaining the delta. No growing
+            // partial is serialized until its cadence/boundary flush.
+            check(
+              event.delta.length <= this.#limits.messageBytes,
+              "quota_paused",
+              "Model delta too large",
+            );
+            const bytes = new TextEncoder().encode(JSON.stringify(event.delta)).byteLength;
+            check(
+              bytes <= this.#limits.messageBytes,
+              "quota_paused",
+              "Encoded model delta exceeds its byte bound",
+            );
+            output.charge(bytes);
+            if (event.type === "toolcall_delta") {
+              const total =
+                (argumentBytes.get(event.contentIndex) ?? 0) +
+                new TextEncoder().encode(event.delta).byteLength;
+              check(
+                total <= this.#limits.toolArgumentsBytes,
+                "quota_paused",
+                "Encoded tool arguments exceed their byte bound",
+              );
+              argumentBytes.set(event.contentIndex, total);
+            }
+            if (
+              batch &&
+              (batch.event.type !== event.type ||
+                batch.event.contentIndex !== event.contentIndex ||
+                batch.bytes + bytes > progressBytes)
+            )
+              await flush();
+            if (bytes > progressBytes) forward(event);
+            else {
+              if (!batch) {
+                batch = { event, chunks: [], bytes: 0 };
+                flushReady = new Promise<"flush">((ready) => {
+                  flushTimer = setTimeout(() => ready("flush"), progressMs);
+                });
+              }
+              batch.event = event;
+              batch.chunks.push(event.delta);
+              batch.bytes += bytes;
+              if (batch.bytes >= progressBytes) await flush();
+            }
+          } else {
+            await flush();
+            forward(event);
+          }
           if (terminal) break;
           // Yield to actual cancellation/deadline tasks even during a
           // microtask-only provider flood. This is not a replacement Pi loop.
@@ -376,6 +464,7 @@ export class ModelStorageBounds {
       } catch {
         output.reject(!!caller?.aborted);
       } finally {
+        clearBatch();
         clearTimeout(timer);
         if (onAbort) signal.removeEventListener("abort", onAbort);
         controller.abort();
