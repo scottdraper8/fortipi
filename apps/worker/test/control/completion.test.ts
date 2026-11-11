@@ -241,6 +241,33 @@ test("current registered queries use only unchanged repair headroom; wrong claim
           "unvalidated queries must stay on ordinary admission",
         );
     }
+    const leaseUpdate: D.ExecutorDelivery = {
+      executorId: "executor",
+      generation: 1,
+      connectionEpoch: h.channel.epoch,
+      frame: {
+        type: "job.lease_update",
+        requestId: uuid(),
+        payload: { identity: h.job.identity, leaseVersion: 2, expiresAt: Date.now() + 6000 },
+      },
+    };
+    for (const invalid of [
+      { ...leaseUpdate, executorId: "another" },
+      { ...leaseUpdate, connectionEpoch: h.channel.epoch + 1 },
+    ]) {
+      const rejected = await h.cp.deliverExecutorFrame(h.actor, invalid);
+      assert.equal(rejected.ok, false);
+      if (!rejected.ok) assert.equal(rejected.code, "rate_limited");
+    }
+    const beforeRenewal = await h.cp.admissions();
+    assert.equal(
+      (await h.cp.deliverExecutorFrame(h.actor, leaseUpdate)).ok,
+      true,
+      "retained lease delivery must survive new application pressure",
+    );
+    const afterRenewal = await h.cp.admissions();
+    assert.equal(afterRenewal.application, beforeRenewal.application);
+    assert.equal(afterRenewal.repair, beforeRenewal.repair + 1);
     while ((await h.cp.admissions()).repair < 29)
       assert.equal(
         (await h.cp.queryExecution(h.actor, h.job.identity)).ok,
@@ -299,6 +326,11 @@ test("current registered queries use only unchanged repair headroom; wrong claim
         ).status,
         200,
       );
+    for (let n = 0; n < 31; n++) {
+      const result = await closed.cp.listAgents(closed.actor, request("listAgents", undefined));
+      if (!result.ok && result.code === "rate_limited") break;
+    }
+    const beforeTerminal = await closed.cp.admissions();
     value(
       await closed.cp.deliverExecutorFrame(closed.actor, {
         executorId: "executor",
@@ -307,6 +339,9 @@ test("current registered queries use only unchanged repair headroom; wrong claim
         frame: { type: "job.committed", requestId: uuid(), payload: proof },
       }),
     );
+    const afterTerminal = await closed.cp.admissions();
+    assert.equal(afterTerminal.application, beforeTerminal.application);
+    assert.equal(afterTerminal.repair, beforeTerminal.repair + 1);
     assert.equal(await closed.cp.rowCount("command"), 1);
     const before = await closed.cp.admissions();
     assert.equal(
@@ -316,7 +351,7 @@ test("current registered queries use only unchanged repair headroom; wrong claim
     );
     const after = await closed.cp.admissions();
     assert.equal(after.repair, before.repair);
-    assert.equal(after.application, before.application + 1);
+    assert.equal(after.application, before.application);
   } finally {
     await closed.close();
   }

@@ -205,6 +205,33 @@ export class LocalWorkspace {
       "Observation executor generation changed",
     );
   }
+  #jobReceipt(ctx: D.AuthContext, input: D.LocalReceiptAck): void {
+    check(
+      input.receipt.providerKind === "local" &&
+        input.lease.ownerKind === "job" &&
+        input.receipt.jobId === input.lease.jobId &&
+        input.receipt.preparationId === input.preparationId &&
+        input.receipt.operationId === input.operationId &&
+        input.receipt.workspaceId === input.workspaceId &&
+        input.receipt.baseRevision === input.baseRevision,
+      "conflict",
+      "Receipt changed its retained native operation",
+    );
+    const { kind: _kind, receipt, ...scope } = input;
+    this.#jobObservation(ctx, { ...scope, kind: "observe", commitId: receipt.commitId });
+  }
+  completion(ctx: D.AuthContext, input: D.LocalWorkspaceRequest): boolean {
+    if (!valid("workspaces", "LocalWorkspaceRequest", input)) return false;
+    if (input.kind !== "observe" && input.kind !== "receipt") return false;
+    try {
+      if (input.kind === "receipt") this.#jobReceipt(ctx, input);
+      else this.#jobObservation(ctx, input);
+      return true;
+    } catch {
+      // Invalid closures use ordinary admission; request() retains the full validation.
+      return false;
+    }
+  }
   async renew(ctx: D.AuthContext, lease: D.WorkspaceOperationLease): Promise<void> {
     const prepared = this.store.get<{ request: D.LocalPrepare }>(
       "local_prepared",
@@ -245,10 +272,11 @@ export class LocalWorkspace {
       executorIds: [input.executorId],
     };
     const privateObservation =
-      input.kind === "observe" &&
+      (input.kind === "observe" || input.kind === "receipt") &&
       !(roleAllows(ctx, "workspace.read") && permits(ctx.grants, resources, "workspace.read"));
     const currentObservation = () => {
       if (privateObservation && input.kind === "observe") this.#jobObservation(ctx, input);
+      if (privateObservation && input.kind === "receipt") this.#jobReceipt(ctx, input);
     };
     currentObservation();
     if (input.kind === "prepare") this.#preparationContext(ctx, input);
@@ -412,6 +440,7 @@ export class LocalWorkspace {
         commitId: input.receipt.commitId,
         commitDigest: input.receipt.commitDigest,
       });
+      currentObservation();
       check(
         found.ok && same(found.value, input.receipt),
         "conflict",

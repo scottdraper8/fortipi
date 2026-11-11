@@ -95,11 +95,16 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       await this.store.rearm();
     });
   }
-  async #call<T>(ctx: D.AuthContext, fn: () => Promise<T> | T): Promise<D.Outcome<T>> {
+  async #call<T>(
+    ctx: D.AuthContext,
+    fn: () => Promise<T> | T,
+    completion: () => boolean = () => false,
+  ): Promise<D.Outcome<T>> {
     return outcome(ctx.requestId, async () => {
       await this.initialized;
       this.identities.current(ctx);
-      this.capacity.admitRequest(ctx.principalId);
+      if (completion()) this.capacity.admitRepair();
+      else this.capacity.admitRequest(ctx.principalId);
       return fn();
     });
   }
@@ -206,38 +211,63 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.ExecutorDelivery,
   ): Promise<D.Outcome<D.DeliveryAck>> {
-    return this.#call(ctx, () => {
-      check(
-        new TextEncoder().encode(json(input.frame)).length <= 1048576,
-        "payload_too_large",
-        "Executor frame exceeds the transport body bound",
-      );
-      check(
-        valid("executor-messages", "ExecutorFrame", input.frame),
-        "invalid_request",
-        "Invalid executor delivery frame",
-      );
-      return ctx.role === "executor"
-        ? input.frame.type === "transfer.status"
-          ? this.relay.receiveStatus(ctx, input)
-          : this.delivery.receive(ctx, input)
-        : this.delivery.forward(ctx, input, this.executors);
-    });
+    return this.#call(
+      ctx,
+      () => {
+        check(
+          new TextEncoder().encode(json(input.frame)).length <= 1048576,
+          "payload_too_large",
+          "Executor frame exceeds the transport body bound",
+        );
+        check(
+          valid("executor-messages", "ExecutorFrame", input.frame),
+          "invalid_request",
+          "Invalid executor delivery frame",
+        );
+        return ctx.role === "executor"
+          ? input.frame.type === "transfer.status"
+            ? this.relay.receiveStatus(ctx, input)
+            : this.delivery.receive(ctx, input)
+          : this.delivery.forward(ctx, input, this.executors);
+      },
+      () => {
+        const frame = input.frame;
+        if (
+          ctx.role === "executor" ||
+          !valid("executor-messages", "ExecutorFrame", frame) ||
+          (frame.type !== "job.lease_update" && frame.type !== "job.committed")
+        )
+          return false;
+        const target = frame.payload.identity.target;
+        const executor = this.store.get<ExecutorState>("executor", input.executorId);
+        return (
+          target.kind === "executor" &&
+          target.executorId === input.executorId &&
+          target.generation === input.generation &&
+          (input.connectionEpoch === undefined || input.connectionEpoch === executor?.epoch) &&
+          this.dispatch.completion(ctx, frame.payload.identity)
+        );
+      },
+    );
   }
   async requestLocalWorkspace(
     ctx: D.AuthContext,
     input: D.LocalWorkspaceRequest,
   ): Promise<D.Outcome<D.LocalWorkspaceResponse>> {
-    return this.#call(ctx, () => {
-      check(
-        new TextEncoder().encode(json(input)).length <= 1048576,
-        "payload_too_large",
-        "Local request exceeds the transport body bound",
-      );
-      this.bindings.validateLocalRead(ctx, input);
-      if (!("lease" in input)) this.relay.validateRead(ctx, input);
-      return this.local.request(ctx, input);
-    });
+    return this.#call(
+      ctx,
+      () => {
+        check(
+          new TextEncoder().encode(json(input)).length <= 1048576,
+          "payload_too_large",
+          "Local request exceeds the transport body bound",
+        );
+        this.bindings.validateLocalRead(ctx, input);
+        if (!("lease" in input)) this.relay.validateRead(ctx, input);
+        return this.local.request(ctx, input);
+      },
+      () => this.local.completion(ctx, input),
+    );
   }
   async openTransfer(
     ctx: D.AuthContext,

@@ -361,6 +361,111 @@ test("registered native job observation uses exact retained preparation and curr
   }
 });
 
+for (const expireGrant of [false, true])
+  test(`retained native receipt closure needs its original logical grant and actual Workspace receipt after effect expiry${expireGrant ? " with grant expiry in flight" : ""}`, async () => {
+    const h = await setup({
+      leaseMs: 1800,
+      operationMs: 1800,
+      ...(expireGrant ? { grantMs: 5000 } : {}),
+    });
+    try {
+      await preparedJob(h);
+      const {
+        kind: _kind,
+        mode: _mode,
+        expectedManifestHash: _hash,
+        commitId,
+        ...scope
+      } = h.prepare;
+      const intent = value(
+        await h.ws.prepareLocalCommit(h.workspaceAuth, {
+          scope,
+          commitId,
+          preparation: {
+            state: "prepared",
+            preparationId: "actual_native_preparation",
+            operationId: scope.operationId,
+            operationDigest: scope.operationDigest,
+            preManifestHash: h.prepare.expectedManifestHash,
+            expiresAt: scope.lease.expiresAt,
+          },
+        }),
+      );
+      const receipt = value(
+        await h.ws.commitLocal(h.workspaceAuth, {
+          intent,
+          observation: {
+            state: "applied",
+            operationId: scope.operationId,
+            operationDigest: scope.operationDigest,
+            preparationId: intent.preparationId,
+            commitId,
+            observationSeq: 1,
+            preManifestHash: intent.preManifestHash,
+            postManifestHash: intent.preManifestHash,
+            appliedAt: Date.now(),
+          },
+          manifest: { version: 1, entries: [] },
+        }),
+      );
+      const input: D.LocalReceiptAck = {
+        ...scope,
+        kind: "receipt",
+        preparationId: intent.preparationId,
+        receipt,
+      };
+      for (const altered of [
+        { ...input, preparationId: "another" },
+        { ...input, receipt: { ...receipt, commitDigest: "e".repeat(64) } },
+        { ...input, receipt: { ...receipt, jobId: "another" } },
+      ])
+        assert.equal((await h.cp.requestLocalWorkspace(h.agentAuth, altered)).ok, false);
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.max(0, scope.deadline - Date.now() + 15)),
+      );
+      for (let n = 0; n < 31; n++) {
+        const result = await h.cp.listAgents(h.agentAuth, request("listAgents", undefined));
+        if (!result.ok && result.code === "rate_limited") break;
+      }
+      const pending = h.cp.requestLocalWorkspace(h.agentAuth, input);
+      const frame = await Promise.race([
+        h.channel.wait(
+          "workspace.request",
+          (f) => f.type === "workspace.request" && f.payload.request.kind === "receipt",
+        ),
+        pending.then((result) => {
+          assert.equal(
+            result.ok,
+            true,
+            "retained native receipt closure needs no hidden workspace.read",
+          );
+          assert.fail("Receipt must await its actual native durable acknowledgment");
+        }),
+      ]);
+      if (frame.type !== "workspace.request") assert.fail("Missing receipt frame");
+      if (expireGrant)
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.max(0, (h.grantExpiresAt ?? 0) - Date.now() + 20)),
+        );
+      h.channel.send({
+        type: "workspace.response",
+        requestId: frame.requestId,
+        payload: {
+          requestId: frame.payload.requestId,
+          correlationId: frame.payload.correlationId,
+          response: { deliveryId: "retained_receipt_ack", sequence: 1, persisted: true },
+        },
+      });
+      assert.equal(
+        (await pending).ok,
+        !expireGrant,
+        "receipt closure must recheck grant after native acknowledgment",
+      );
+    } finally {
+      await h.close();
+    }
+  });
+
 test("registered native observation rechecks current credential, grant and executor floors after transport awaits", async () => {
   for (const fault of ["credential", "executor", "grant"] as const) {
     const h = await setup({ ...(fault === "grant" ? { grantMs: 1800 } : {}) });

@@ -24,6 +24,15 @@ try {
   );
   for (const mutation of [
     {
+      file: "local-workspace.ts",
+      pattern:
+        /if \(privateObservation && input.kind === "receipt"\) this\.#jobReceipt\(ctx, input\);/,
+      replacement: "// Deliberate fault: no receipt-specific current authority recheck.",
+      testFile: "local-authority.test.ts",
+      testPattern: "with grant expiry in flight",
+      oracle: "receipt closure must recheck grant after native acknowledgment",
+    },
+    {
       file: "dispatch.ts",
       pattern: /registration\.registrationId === reservation\.registrationIds\.agent &&/,
       replacement: "false &&",
@@ -39,7 +48,7 @@ try {
       testFile: "local-authority.test.ts",
       testPattern: "registered native job observation uses",
       oracle:
-        "registered retained native observation needs no hidden workspace.read even after effect expiry",
+        "the actual reservation Agent registration preserves the retained tool and one-grant authority",
     },
     {
       file: "control-plane.ts",
@@ -88,7 +97,7 @@ try {
     {
       file: "local-workspace.ts",
       pattern:
-        /const currentObservation = \(\) => \{\n {6}if \(privateObservation && input.kind === "observe"\) this\.#jobObservation\(ctx, input\);\n {4}\};/,
+        /const currentObservation = \(\) => \{\n {6}if \(privateObservation && input.kind === "observe"\) this\.#jobObservation\(ctx, input\);\n {6}if \(privateObservation && input.kind === "receipt"\) this\.#jobReceipt\(ctx, input\);\n {4}\};/,
       replacement:
         'let checkedObservation = false; const currentObservation = () => { if (checkedObservation) return; if (privateObservation && input.kind === "observe") this.#jobObservation(ctx, input); checkedObservation = true; };',
       testFile: "local-authority.test.ts",
@@ -120,6 +129,10 @@ try {
         },
       );
     const failed = run();
+    if (!(failed.stdout + failed.stderr).includes(mutation.oracle))
+      process.stdout.write(
+        `${JSON.stringify({ probe: "fault-subprocess", pattern: mutation.testPattern, status: failed.status, signal: failed.signal, error: failed.error?.name, errorCode: failed.error && "code" in failed.error ? failed.error.code : undefined, stdoutBytes: failed.stdout?.length, stderrBytes: failed.stderr?.length })}\n`,
+      );
     assert.equal(failed.status, 1, `Fault must fail behavior: ${failed.stdout}\n${failed.stderr}`);
     assert.ok(
       (failed.stdout + failed.stderr).includes(mutation.oracle),
