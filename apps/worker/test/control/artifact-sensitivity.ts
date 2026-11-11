@@ -20,6 +20,16 @@ try {
   for (const mutation of [
     {
       file: "executors.ts",
+      pattern:
+        /socket\.serializeAttachment\(a\);\s*(this\.beats\.set\(this\.key\(executor\.executorId, a\.epoch\), a\.lastBeat\);)/,
+      replacement: "$1",
+      test: "presence.test.ts",
+      timeoutMs: 65000,
+      oracle:
+        "actual recent heartbeats must keep the channel fresh after volatile liveness is lost",
+    },
+    {
+      file: "executors.ts",
       pattern: /payload: \{ \.\.\.ack, deliveryId: frame\.requestId \},/,
       replacement: "payload: ack,",
       test: "native-artifacts.test.ts",
@@ -114,7 +124,7 @@ try {
         {
           cwd: process.cwd(),
           encoding: "utf8",
-          timeout: 35000,
+          timeout: "timeoutMs" in mutation ? mutation.timeoutMs : 35000,
           env: {
             PATH: process.env.PATH ?? "",
             FORTIPI_CONTROL_TEST_SOURCE: directory,

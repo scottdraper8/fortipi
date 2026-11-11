@@ -35,7 +35,7 @@ test("real sockets: heartbeat writes nothing, reservation precedes lease, duplic
         },
       });
     await channel.wait("executor.heartbeat");
-    assert.deepEqual(await count(), before, "heartbeat may update only volatile liveness");
+    assert.deepEqual(await count(), before, "heartbeat must not write SQL control-plane rows");
     const operation: D.OperationDigestInput = {
       deploymentId: h.deploymentId,
       agentId: "agent",

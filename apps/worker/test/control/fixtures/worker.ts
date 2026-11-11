@@ -3,6 +3,7 @@ import type { ControlPlaneRpc } from "../../../src/boundary/control-plane.js";
 import type * as D from "../../../src/boundary/dto.js";
 import type { Env } from "../../../src/boundary/env.js";
 import { ControlPlane } from "../../../src/control/control-plane.js";
+import { Executors } from "../../../src/control/executors.js";
 import { EncryptedCredentialStore } from "../../../src/control/provider-auth-store.js";
 import { check, id, outcome } from "../../../src/control/store.js";
 import type { TestRecipient } from "./recipients.js";
@@ -10,6 +11,15 @@ import type { TestRecipient } from "./recipients.js";
 export { TestRecipient } from "./recipients.js";
 
 export class TestControlPlane extends ControlPlane {
+  async recoveredPresence(executorId: string, generation: number): Promise<D.Outcome<boolean>> {
+    // Reconstruct only the component: use real retained workerd sockets and
+    // storage, while its process-local heartbeat map starts empty.
+    const recovered = new Executors(this.ctx, this.store, this.identities, this.executors.receive);
+    return outcome(id(), async () => {
+      recovered.channel(executorId, generation);
+      return true;
+    });
+  }
   private refreshCalls = 0;
   private tokenResponseMode: "valid" | "redirect" | "oversize" = "valid";
   async setTokenResponseMode(mode: "valid" | "redirect" | "oversize"): Promise<void> {
@@ -392,6 +402,7 @@ export type FixtureControl = DurableObject<Env> &
   Pick<
     TestControlPlane,
     | "deployment"
+    | "recoveredPresence"
     | "drainTest"
     | "canary"
     | "rowCount"

@@ -56,10 +56,16 @@ generation or superseded connection. The platform owns WebSockets and hibernatio
 there is no Agents socket protocol or
 second scheduler. Attachments contain nonsecret identity/scope/epoch metadata.
 The negotiated heartbeat frame contains dynamic identity/time fields, so the
-handler uses volatile liveness instead of inventing a static auto-response.
-Heartbeat eligibility ends after 45 seconds. A coalesced alarm records semantic
-offline transitions; observed offline notification may be later. On a wake with
-no recent volatile liveness, routing conservatively waits for a fresh heartbeat.
+handler validates it rather than inventing a static auto-response. Each
+authenticated current-epoch heartbeat records only the observed server timestamp
+in the existing nonsecret socket attachment and its volatile liveness cache.
+The attachment survives hibernation; no SQL row, history/event, audit, counter,
+version or alarm is written by the heartbeat. This narrow correctness exception
+to the original volatile-only plan retains the actual 45-second freshness bound.
+A coalesced alarm records semantic offline transitions; observed offline
+notification may be later. On wake, routing uses the retained observed heartbeat,
+never a fabricated fresh timestamp or an old connected flag. See
+[Cloudflare attachment semantics](https://developers.cloudflare.com/durable-objects/best-practices/websockets/#extended-methods).
 
 ## Dispatch, local files and delivery
 

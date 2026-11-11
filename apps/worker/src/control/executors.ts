@@ -354,7 +354,9 @@ export class Executors {
         "unauthenticated",
         "Heartbeat epoch mismatch",
       );
-      this.beats.set(this.key(executor.executorId, a.epoch), Date.now());
+      a.lastBeat = Date.now();
+      socket.serializeAttachment(a);
+      this.beats.set(this.key(executor.executorId, a.epoch), a.lastBeat);
       socket.send(json({ ...frame, payload: { ...frame.payload, timestamp: Date.now() } }));
       return;
     }
