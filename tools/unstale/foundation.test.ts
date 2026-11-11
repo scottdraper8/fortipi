@@ -10,7 +10,24 @@ import type { Manifest, SupplyChain } from "../../scripts/check-pins.ts";
 import { checkPins, json, manifestPaths, yaml } from "../../scripts/check-pins.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "../../scripts/pnpm-executable.ts";
 import { rejectedZodAdvisory, validateRejectedZodAuthorities } from "../../scripts/run-unstale.ts";
-import { createPtyProbeResponder } from "../../scripts/verify-foundation.ts";
+import {
+  createPtyProbeResponder,
+  macosNetworkExtensionActive,
+} from "../../scripts/verify-foundation.ts";
+
+test("macOS egress requires the exact vendor extension to be active and enabled", () => {
+  const active =
+    "* * D63S9HLM4L io.stepsecurity.harden-runner.ext (0.0.15/15) HardenRunner [activated enabled]";
+  assert.equal(macosNetworkExtensionActive(active), true);
+  for (const invalid of [
+    active.replace("D63S9HLM4L", "OTHERTEAM"),
+    active.replace("runner.ext", "runner.ext.unrelated"),
+    active.replace("[activated enabled]", "[activated waiting for user]"),
+    active.replace("* *", "* -"),
+    "Agent already installed; skipping installation",
+  ])
+    assert.equal(macosNetworkExtensionActive(invalid), false);
+});
 
 test("PTY probe sends one challenge despite echoed input before its reply", () => {
   const inputs: string[] = [];
