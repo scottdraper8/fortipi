@@ -65,10 +65,11 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     path: string,
     body?: unknown,
     method = body === undefined ? "GET" : "POST",
+    token = processBootstrap,
   ) => {
     const response = await fetch(`${origin}${path}`, {
       method,
-      headers: { Authorization: `Bearer ${processBootstrap}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(20000),
     });

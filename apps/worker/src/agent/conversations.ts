@@ -55,6 +55,14 @@ export interface Admission {
   model: D.ModelConfig;
   continuation?: { operationId: string; auth: D.AuthContext; capacity: D.CapacityReservation };
 }
+export type AdmissionIntent = Omit<
+  Admission,
+  "capacity" | "model" | "state" | "receipt" | "submission" | "piTask" | "continuation"
+> & {
+  state: "pending";
+  policyVersion: number;
+  model?: D.ModelConfig;
+};
 export interface ConversationHost {
   store: Store;
   authority: Authority;
@@ -352,6 +360,12 @@ export class Conversations {
         if (existing.receipt) return existing.receipt;
         return this.finishAdmission(existing);
       }
+      const pending = await store.get<AdmissionIntent>("admission-intent", key);
+      if (pending) {
+        check(pending.digest === fingerprint, "conflict", "Idempotency payload changed");
+        await this.host.arm();
+        return this.finishSubmission(pending);
+      }
       const row = await store.get<ConversationRow>("conversation", cid);
       check(row?.published, "not_found", "Conversation unavailable");
       check(
@@ -360,46 +374,119 @@ export class Conversations {
         "conflict",
         "Conversation revision changed",
       );
-      const operationId = resourceId("m", this.host.agentId);
-      store.admissionHeadroom(new TextEncoder().encode(body.content).length + 8192);
-      const model = await this.host.selectModel(
-        auth,
-        steer ? "conversations.steer" : "messages.submit",
-        cid,
-      );
-      const capacity = unwrap(
-        await this.host.authority.control.reserveCapacity(auth, {
-          operationId,
-          ownerId: cid,
-          policyVersion: 1,
-          bytes: new TextEncoder().encode(body.content).length + 8192,
-          admissionSlots: 1,
-        }),
-      );
-      const admission: Admission = {
+      const candidate: AdmissionIntent = {
         key,
         digest: fingerprint,
         conversationId: cid,
         content: body.content,
         auth,
-        operationId,
+        operationId: resourceId("m", this.host.agentId),
         messageId: resourceId("m", this.host.agentId),
         taskId: resourceId("t", this.host.agentId),
-        capacity,
         mode: steer ? "steer" : "busyBehavior" in body ? body.busyBehavior : "followUp",
         state: "pending",
-        model,
+        policyVersion: store.policy.version,
       };
-      await store.transaction(async (tx) => {
-        await store.put("admission", key, admission, tx, Date.now());
-        await store.put("task-admission", admission.taskId, { key }, tx);
-        await store.put("operation-admission", operationId, { key }, tx);
-        await store.put("input-pending", `${cid}:${operationId}`, { key }, tx);
-        await store.put("dirty", cid, { piId: row.piId }, tx, Date.now());
+      const intent = await store.transaction(async (tx) => {
+        const old = await store.get<AdmissionIntent>("admission-intent", key, tx);
+        if (old) {
+          check(old.digest === fingerprint, "conflict", "Idempotency payload changed");
+          return old;
+        }
+        await this.host.authority.current(
+          auth,
+          scope({
+            agentIds: [this.host.agentId],
+            conversationIds: [cid],
+            actions: [steer ? "conversations.steer" : "messages.submit"],
+          }),
+          tx,
+        );
+        const current = await store.get<ConversationRow>("conversation", cid, tx);
+        check(
+          current?.published &&
+            (body.expectedConversationRevision === undefined ||
+              body.expectedConversationRevision === current.conversation.revision),
+          "conflict",
+          "Conversation revision changed",
+        );
+        store.admissionHeadroom(new TextEncoder().encode(body.content).length + 8192);
+        await store.put("admission-intent", key, candidate, tx, Date.now());
+        await this.host.authority.current(
+          auth,
+          scope({
+            agentIds: [this.host.agentId],
+            conversationIds: [cid],
+            actions: [steer ? "conversations.steer" : "messages.submit"],
+          }),
+          tx,
+        );
+        return candidate;
       });
+      // All opaque identities and the original payload/authority exist before
+      // model lookup or the first capacity RPC. Lost replies reuse this operation.
       await this.host.arm();
-      return this.finishAdmission(admission);
+      return this.finishSubmission(intent);
     });
+  }
+  async finishSubmission(intent: AdmissionIntent): Promise<D.AdmissionReceipt> {
+    const { store } = this.host;
+    const old = await store.get<Admission>("admission", intent.key);
+    if (old) return old.receipt ?? this.finishAdmission(old);
+    const auth = { ...intent.auth, deadline: Date.now() + 30000 },
+      resources = scope({
+        agentIds: [this.host.agentId],
+        conversationIds: [intent.conversationId],
+        actions: [intent.mode === "steer" ? "conversations.steer" : "messages.submit"],
+      });
+    await this.host.authority.current(auth, resources);
+    if (!intent.model) {
+      const model = await this.host.selectModel(auth, resources.actions[0]!, intent.conversationId);
+      await store.transaction(async (tx) => {
+        await this.host.authority.current(auth, resources, tx);
+        const current = await store.get<AdmissionIntent>("admission-intent", intent.key, tx);
+        check(current && current.digest === intent.digest, "conflict", "Admission intent changed");
+        if (current.model) check(same(current.model, model), "conflict", "Admission model changed");
+        intent = { ...current, model };
+        await store.put("admission-intent", intent.key, intent, tx, Date.now());
+        await this.host.authority.current(auth, resources, tx);
+      });
+    }
+    const model = intent.model;
+    check(model, "interrupted", "Admission model unavailable");
+    const capacity = unwrap(
+      await this.host.authority.control.reserveCapacity(auth, {
+        operationId: intent.operationId,
+        ownerId: intent.conversationId,
+        policyVersion: intent.policyVersion,
+        bytes: new TextEncoder().encode(intent.content).length + 8192,
+        admissionSlots: 1,
+      }),
+    );
+    const admission: Admission = { ...intent, capacity, model };
+    await store.transaction(async (tx) => {
+      await this.host.authority.current(auth, resources, tx);
+      const current = await store.get<AdmissionIntent>("admission-intent", intent.key, tx);
+      check(
+        current && current.digest === intent.digest && current.operationId === intent.operationId,
+        "conflict",
+        "Admission intent changed",
+      );
+      const row = await store.get<ConversationRow>("conversation", intent.conversationId, tx);
+      check(row?.published, "not_found", "Conversation unavailable");
+      const key = intent.key,
+        cid = intent.conversationId,
+        operationId = intent.operationId;
+      await store.put("admission", key, admission, tx, Date.now());
+      await store.put("task-admission", admission.taskId, { key }, tx);
+      await store.put("operation-admission", operationId, { key }, tx);
+      await store.put("input-pending", `${cid}:${operationId}`, { key }, tx);
+      await store.put("dirty", cid, { piId: row.piId }, tx, Date.now());
+      await store.remove("admission-intent", key, tx);
+      await this.host.authority.current(auth, resources, tx);
+    });
+    await this.host.authority.current(auth, resources);
+    return this.finishAdmission(admission);
   }
   async finishAdmission(admission: Admission): Promise<D.AdmissionReceipt> {
     const { store, pi } = this.host;

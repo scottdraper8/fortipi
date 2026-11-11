@@ -330,6 +330,9 @@ export class TestAgentSession extends AgentSession {
         const creations = await this.store.page<
           import("../../src/agent/conversations.js").CreationIntent
         >("creation", 100);
+        const admissionIntents = await this.store.page<
+          import("../../src/agent/conversations.js").AdmissionIntent
+        >("admission-intent", 100);
         const harness = await this.pi.pi();
         const conversations = await harness.commit(
           (tx) => tx.scanConversations({ order: "ascending" }, 100),
@@ -342,6 +345,12 @@ export class TestAgentSession extends AgentSession {
             messageId: row.value.messageId,
             taskId: row.value.taskId,
             receipt: row.value.receipt ?? null,
+          })),
+          admissionIntents: admissionIntents.map(({ value }) => ({
+            operationId: value.operationId,
+            messageId: value.messageId,
+            taskId: value.taskId,
+            hasModel: !!value.model,
           })),
           creations: creations.map((row) => ({ conversationId: row.value.conversationId })),
           piIds: conversations.items.filter((c) => !c.owner).map((c) => String(c.id)),

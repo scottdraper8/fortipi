@@ -1,8 +1,8 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { ConversationId, EntryId } from "@earendil-works/pi-durable";
-import { check, same } from "../api/common.js";
+import { check, ServiceError, same } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
-import type { Admission, Conversations, CreationIntent } from "./conversations.js";
+import type { Admission, AdmissionIntent, Conversations, CreationIntent } from "./conversations.js";
 import type { ConversationRow } from "./store.js";
 
 export class Projection {
@@ -161,9 +161,44 @@ export class Projection {
     let processed = 0,
       remaining = false;
     const cap = Math.min(100, budget.maxItems);
+    for (const row of await store.page<AdmissionIntent>(
+      "admission-intent",
+      Math.min(4, cap),
+      "",
+      Date.now(),
+    )) {
+      if (processed >= cap || Date.now() >= budget.deadline) {
+        remaining = true;
+        break;
+      }
+      try {
+        await this.conversations.lanes.run(row.value.conversationId, () =>
+          this.conversations.finishSubmission(row.value),
+        );
+      } catch (error) {
+        const permanent =
+          error instanceof ServiceError &&
+          (error.code === "unauthorized" || error.code === "unauthenticated");
+        const current = await store.get<AdmissionIntent>("admission-intent", row.id);
+        if (current)
+          await store.put(
+            "admission-intent",
+            row.id,
+            current,
+            undefined,
+            permanent ? null : Date.now() + 30000,
+          );
+        await store.put("admission-pressure", row.id, {
+          code: error instanceof ServiceError ? error.code : "interrupted",
+          requiresCurrentAuthority: permanent,
+        });
+        if (!permanent) remaining = true;
+      }
+      processed++;
+    }
     for (const row of await store.page<CreationIntent>(
       "creation",
-      Math.min(4, cap),
+      Math.min(4, Math.max(0, cap - processed)),
       "",
       Date.now(),
     )) {
@@ -222,7 +257,7 @@ export class Projection {
       processed++;
     }
     const due = await store.db.get<{ due: number | null }>(
-      "SELECT MIN(due) AS due FROM fp_records_v1 WHERE kind IN ('admission','creation','dirty') AND due IS NOT NULL",
+      "SELECT MIN(due) AS due FROM fp_records_v1 WHERE kind IN ('admission-intent','admission','creation','dirty') AND due IS NOT NULL",
     );
     if (due?.due !== null && due?.due !== undefined) remaining = true;
     return {
