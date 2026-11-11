@@ -44,7 +44,7 @@ import {
   receiptScope,
   requestScope,
 } from "./fixtures/daemon.ts";
-import { relayFixture, snapshotFixture } from "./fixtures/transport.ts";
+import { connectExecutor, relayFixture, snapshotFixture } from "./fixtures/transport.ts";
 
 async function setup() {
   const f = await fixture(),
@@ -1000,13 +1000,20 @@ test("cloud snapshot bytes materialize and a lost upload acknowledgment retries 
       ],
     },
     baseHash = await manifestDigest(manifest),
-    server = await snapshotFixture(manifest, baseHash, new Map([[originalSha, original]]));
+    a = await assignment("never spawned"),
+    server = await snapshotFixture(
+      f.profile,
+      a,
+      manifest,
+      baseHash,
+      new Map([[originalSha, original]]),
+    );
   let renewals: ReturnType<typeof jobRenewals> | undefined;
+  let connection: ReturnType<typeof connectExecutor> | undefined;
   try {
     f.profile.origin = server.origin;
     const http = new HttpTransport(f.profile, fetch, true),
-      snapshots = new Snapshots(join(f.directory, "scratch"), f.ledger, http, adapter()),
-      a = await assignment("never spawned");
+      snapshots = new Snapshots(join(f.directory, "scratch"), f.ledger, http, adapter());
     authenticateFixture(http);
     const runtime = new ExecutorRuntime({
       profile: f.profile,
@@ -1015,6 +1022,11 @@ test("cloud snapshot bytes materialize and a lost upload acknowledgment retries 
       roots: new Map([["root", f.root]]),
       http,
     });
+    connection = connectExecutor(http, runtime);
+    await eventually(
+      () => connection?.session.registered === true,
+      "snapshot session not registered",
+    );
     renewals = jobRenewals(runtime, a);
     await renewals.renew();
     const root = await snapshots.materialize(a);
@@ -1036,6 +1048,18 @@ test("cloud snapshot bytes materialize and a lost upload acknowledgment retries 
     assert.equal(result.commitId, commitId);
     assert.equal(result.stageId, "public_stage");
     assert.deepEqual(server.begins[0], server.begins[1]);
+    assert.ok(server.queries.length >= 5);
+    assert.ok(
+      server.requests.every((path) => path.includes(`/v1/executor/jobs/${a.identity.jobId}/`)),
+    );
+    assert.ok(
+      server.queries.every(
+        (q) =>
+          q.executionId === a.identity.executionId &&
+          q.assignmentDigest === a.identity.assignmentDigest &&
+          q.epoch === connection?.session.connectionEpoch,
+      ),
+    );
     assert.equal(
       server.requests.some((r) => r.endsWith("/commit")),
       false,
@@ -1067,6 +1091,8 @@ test("cloud snapshot bytes materialize and a lost upload acknowledgment retries 
   } finally {
     try {
       await renewals?.stop();
+      connection?.controller.abort();
+      await connection?.connected;
     } finally {
       await server.close();
       await f.cleanup();

@@ -1,18 +1,47 @@
 import { createHash } from "node:crypto";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import { freeInfrastructurePolicy } from "fortipi-contract";
 import type {
+  Assignment,
   ErrorBody,
   ExecutorFrame,
   LocalPrepare,
   TicketIdentity,
 } from "fortipi-contract/executor";
 import type { Profile } from "../../dist/config.js";
+import type { ExecutorRuntime } from "../../dist/daemon.js";
 import { hash } from "../../dist/policy.js";
-import { validate } from "../../dist/transport.js";
+import { type HttpTransport, SessionTransport, validate } from "../../dist/transport.js";
 import type { Manifest } from "../../dist/workspace/manifest.js";
+
+/** Real protocol/ticket/WebSocket registration. The peer's authority is synthetic. */
+export function connectExecutor(http: HttpTransport, runtime: ExecutorRuntime) {
+  const controller = new AbortController(),
+    session = new SessionTransport(http, runtime),
+    registration: Extract<ExecutorFrame, { type: "executor.register" }> = {
+      type: "executor.register",
+      requestId: "fixture_registration",
+      payload: {
+        executorId: http.profile.executorId,
+        generation: http.profile.executorGeneration,
+        protocolVersion: "1.0",
+        schemaVersion: "1.0.0",
+        capabilities: [],
+        platform: process.platform as "linux" | "darwin" | "win32",
+        caseBehavior: "sensitive",
+        rootBindingIds: http.profile.bindings.map((b) => b.rootBindingId),
+        confinement: "host",
+        transferLimits: http.transferLimits(),
+      },
+    };
+  runtime.session = session;
+  const connected = session.connect(controller.signal, registration);
+  // The caller also awaits the original promise during cleanup, preserving failure.
+  void connected.catch(() => {});
+  return { session, controller, registration, connected };
+}
 
 /** Actual Node WebSocket peer; synthetic HTTP authority, no Worker/CP substitute. */
 export async function sessionFixture(
@@ -22,6 +51,8 @@ export async function sessionFixture(
     fault?: "protocol" | "binary";
     afterRegister?: ExecutorFrame[];
     acknowledge?: boolean;
+    dropPending?: boolean;
+    serve?: (request: IncomingMessage, response: ServerResponse, epoch: number) => Promise<void>;
   },
 ) {
   const peers = new Set<Duplex>(),
@@ -41,7 +72,7 @@ export async function sessionFixture(
     }
     socket.write(Buffer.concat([header, bytes]));
   }
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     res.setHeader("Content-Type", "application/json");
     if (req.url === "/v1/protocol") {
       res.end(
@@ -72,7 +103,8 @@ export async function sessionFixture(
           },
         }),
       );
-    } else {
+    } else if (options.serve) await options.serve(req, res, epoch);
+    else {
       res.writeHead(404);
       res.end();
     }
@@ -140,7 +172,9 @@ export async function sessionFixture(
           "ExecutorFrame",
           JSON.parse(bytes.toString()),
         );
-        received.push(value);
+        if (!(options.dropPending && value.type === "local_policy.pending")) received.push(value);
+        if (options.acknowledge && value.type === "executor.heartbeat")
+          send(socket, Buffer.from(JSON.stringify(value)));
         if (value.type === "job.query") {
           const reason = Buffer.from("Executor cannot send command frames");
           const close = Buffer.alloc(reason.length + 2);
@@ -198,6 +232,13 @@ export async function sessionFixture(
     options,
     received,
     closes,
+    send(value: ExecutorFrame) {
+      validate("executor-messages.schema.json", "ExecutorFrame", value);
+      for (const socket of peers) send(socket, Buffer.from(JSON.stringify(value)));
+    },
+    disconnect() {
+      for (const socket of peers) socket.destroy();
+    },
     async close() {
       for (const socket of peers) socket.destroy();
       server.closeAllConnections();
@@ -299,6 +340,8 @@ export async function relayFixture(data: Buffer) {
 
 /** Immutable base bytes and an idempotent staging HTTP peer; no Worker/canonical commit implementation. */
 export async function snapshotFixture(
+  profile: Profile,
+  assignment: Assignment,
   manifest: Manifest,
   manifestHash: string,
   files: Map<string, Buffer>,
@@ -306,7 +349,13 @@ export async function snapshotFixture(
   const begins: unknown[] = [],
     chunks = new Map<string, Buffer>(),
     requests: string[] = [];
-  let drop = true;
+  const queries: { executionId: string | null; assignmentDigest: string | null; epoch: number }[] =
+    [];
+  let drop: "begin" | "chunk" | "validate" | undefined = "chunk",
+    corrupt = false,
+    held: ReturnType<typeof Promise.withResolvers<void>> | undefined,
+    denied = false,
+    validated = false;
   let opened:
     | {
         requestId: string;
@@ -315,10 +364,40 @@ export async function snapshotFixture(
         mutations: Extract<LocalPrepare["mode"], { kind: "staged-change" }>["mutations"];
       }
     | undefined;
-  const server = createServer(async (req, res) => {
+  const serve = async (req: IncomingMessage, res: ServerResponse, epoch: number) => {
     try {
       const url = new URL(req.url ?? "/", "http://fixture");
       requests.push(`${req.method} ${url.pathname}`);
+      if (
+        denied ||
+        req.headers.authorization !== `Bearer ${profile.token}` ||
+        !url.pathname.startsWith(
+          `/v1/executor/jobs/${encodeURIComponent(assignment.identity.jobId)}/`,
+        ) ||
+        url.searchParams.get("executionId") !== assignment.identity.executionId ||
+        url.searchParams.get("assignmentDigest") !== assignment.identity.assignmentDigest ||
+        epoch < 1 ||
+        Number(url.searchParams.get("connectionEpoch")) !== epoch ||
+        [...url.searchParams.keys()].some(
+          (key) =>
+            ![
+              "executionId",
+              "assignmentDigest",
+              "connectionEpoch",
+              ...(req.method === "PUT" ? ["length", "sha256"] : []),
+            ].includes(key),
+        )
+      ) {
+        req.resume();
+        res.writeHead(403);
+        res.end();
+        return;
+      }
+      queries.push({
+        executionId: url.searchParams.get("executionId"),
+        assignmentDigest: url.searchParams.get("assignmentDigest"),
+        epoch,
+      });
       const pieces: Buffer[] = [];
       let size = 0;
       for await (const part of req) {
@@ -328,6 +407,7 @@ export async function snapshotFixture(
       }
       const body = Buffer.concat(pieces);
       if (req.method === "GET" && url.pathname.endsWith("/manifest")) {
+        await held?.promise;
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({ workspaceId: "workspace", revision: "r0", manifest, manifestHash }),
@@ -342,8 +422,13 @@ export async function snapshotFixture(
           res.end();
           return;
         }
-        res.writeHead(200, { "Content-Length": String(bytes.length), "X-Content-SHA256": sha });
-        res.end(bytes);
+        const actual = corrupt ? Buffer.alloc(bytes.length, 0x7f) : bytes;
+        res.writeHead(200, {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": String(actual.length),
+          "X-Content-SHA256": sha,
+        });
+        res.end(actual);
         return;
       }
       if (req.method === "POST" && url.pathname.endsWith("/uploads")) {
@@ -353,11 +438,16 @@ export async function snapshotFixture(
         if (opened && JSON.stringify(value) !== JSON.stringify(begins[0]))
           throw new Error("changed upload intent");
         opened = value as NonNullable<typeof opened>;
+        if (drop === "begin") {
+          drop = undefined;
+          req.socket.destroy();
+          return;
+        }
         res.writeHead(201, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
             uploadId: "server_upload",
-            state: "open",
+            state: validated ? "validated" : "open",
             baseRevision: opened.baseRevision,
             manifestHash: opened.manifestHash,
             receivedChunks: [],
@@ -375,9 +465,10 @@ export async function snapshotFixture(
         const key = url.pathname.split("/blobs/")[1] ?? "";
         const old = chunks.get(key);
         if (old && !old.equals(body)) throw new Error("conflicting duplicate chunk");
+        if (validated) throw new Error("sealed upload cannot accept new PUTs");
         chunks.set(key, body);
-        if (drop) {
-          drop = false;
+        if (drop === "chunk") {
+          drop = undefined;
           req.socket.destroy();
           return;
         }
@@ -395,6 +486,12 @@ export async function snapshotFixture(
             if (bytes.length !== m.size || hash(bytes) !== m.sha256)
               throw new Error("incomplete staged file");
           }
+        validated = true;
+        if (drop === "validate") {
+          drop = undefined;
+          req.socket.destroy();
+          return;
+        }
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
@@ -412,18 +509,33 @@ export async function snapshotFixture(
       if (!res.headersSent) res.writeHead(409);
       res.end();
     }
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  };
+  const peer = await sessionFixture(profile, { register: true, acknowledge: true, serve });
   return {
-    origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    ...peer,
     begins,
     chunks,
     requests,
+    queries,
+    setDrop(value: typeof drop) {
+      drop = value;
+    },
+    setCorrupt(value: boolean) {
+      corrupt = value;
+    },
+    setDenied(value: boolean) {
+      denied = value;
+    },
+    holdManifest() {
+      held = Promise.withResolvers<void>();
+    },
+    releaseManifest() {
+      held?.resolve();
+      held = undefined;
+    },
     async close() {
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
+      held?.resolve();
+      await peer.close();
     },
   };
 }

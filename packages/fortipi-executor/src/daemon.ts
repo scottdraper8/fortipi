@@ -284,6 +284,29 @@ export class ExecutorRuntime implements FrameHandler {
         state: row.committed ? "terminal" : "pending_sync",
         result: row.result,
       };
+    if (
+      row.state === "pending" &&
+      row.incarnation === this.ledger.incarnation &&
+      !row.cancelled &&
+      row.assignment.approval &&
+      (row.decision === "pending" || row.decision === "allow")
+    ) {
+      const binding = this.binding(row.assignment),
+        root = this.roots.get(binding.rootBindingId);
+      checkPolicy(row.assignment, this.profile.policy, Date.now());
+      if (root && approvalKey(row.assignment, this.profile.policy, root.key) === row.approvalKey)
+        return row.decision === "pending"
+          ? {
+              identity: row.assignment.identity,
+              state: "waiting_for_local_policy",
+              operation: row.assignment.approval,
+            }
+          : {
+              identity: row.assignment.identity,
+              state: "preparing",
+              operation: row.assignment.approval,
+            };
+    }
     return {
       identity: row.assignment.identity,
       state:
@@ -738,6 +761,7 @@ export class ExecutorRuntime implements FrameHandler {
     if (Buffer.byteLength(canonicalJson(value)) > this.http.jsonBytes)
       throw new Error("payload_too_large: encoded frame");
     frame(value);
+    if (value.type === "job.query") await this.currentPolicy();
     this.http.assertExecutorAuthority();
     if (value.type === "executor.registered") {
       this.connected = true;
