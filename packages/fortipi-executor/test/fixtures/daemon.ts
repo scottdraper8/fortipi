@@ -619,7 +619,17 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     );
     operation = "attribute-reader";
     const { lstat, mkdir: makeDirectory, symlink } = await import("node:fs/promises");
-    const entry = join(path, "reader-'$[data];λ.txt"),
+    let invalidLaunches = 0;
+    const invalidReader = new WindowsAttributeReader(() => {
+      invalidLaunches++;
+    });
+    for (const invalid of ["\ud800", "bad\udc00", "bad\0path", "x".repeat(131073)])
+      await assert.rejects(
+        invalidReader.query(invalid),
+        /Windows attribute path (?:is invalid|exceeds bound)/,
+      );
+    assert.equal(invalidLaunches, 0, "invalid paths must fail before child launch or encoding");
+    const entry = join(path, "reader-'$[data];λ-🚀.txt"),
       otherPath = join(path, "other-root");
     await writeFile(entry, "actual synthetic entry");
     await makeDirectory(otherPath);
@@ -650,6 +660,16 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     assert.equal(reads[0]?.toString(), "synthetic");
     assert.equal(reads[1]?.toString(), "different root bytes");
     assert.equal((await SafeRoot.open(path, adapter())).key, owner.key);
+    const savedCwd = process.cwd(),
+      relativeReader = new WindowsAttributeReader();
+    try {
+      process.chdir(path);
+      assert.equal((await relativeReader.query("synthetic.txt")) & 1024, 0);
+      process.chdir(otherPath);
+      await assert.rejects(relativeReader.query("synthetic.txt"), /Windows attribute query failed/);
+    } finally {
+      process.chdir(savedCwd);
+    }
     for (const fault of ["eof", "crash"] as const) {
       const children: { closed: boolean; code: number | null; signal: NodeJS.Signals | null }[] =
         [];
@@ -734,7 +754,7 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     await eventually(() => helperClosed, "independent helper failed idle cleanup", 2000);
     attributeReaderPassed = true;
     process.stdout.write(
-      `${JSON.stringify({ phase: "attribute-reader", fresh44ChecksMs, freshReparseRejected: true, missingRejected: true, multipleRoots: true, correlatedReplies: true, eofCrashFailClosed: true, restartPassed: true, idleNormalExit: true, independentOfJobTree: true })}\n`,
+      `${JSON.stringify({ phase: "attribute-reader", fresh44ChecksMs, invalidPathsPrelaunchRejected: true, unicodePathPassed: true, freshReparseRejected: true, missingRejected: true, multipleRoots: true, correlatedReplies: true, eofCrashFailClosed: true, restartPassed: true, idleNormalExit: true, independentOfJobTree: true })}\n`,
     );
     operation = "sqlite-sidecar-eligibility";
     const { link, mkdir, readFile, stat } = await import("node:fs/promises");

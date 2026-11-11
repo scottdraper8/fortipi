@@ -176,7 +176,14 @@ export class WindowsAttributeReader {
     return child;
   }
   query(path: string): Promise<number> {
-    if (Buffer.byteLength(path, "utf8") > 131072 || path.includes("\0"))
+    if (!path.isWellFormed() || path.includes("\0"))
+      return Promise.reject(new Error("Windows attribute path is invalid"));
+    if (Buffer.byteLength(path, "utf8") > 131072)
+      return Promise.reject(new Error("Windows attribute path exceeds bound"));
+    // Resolve in the caller's current cwd, never the persistent helper's old cwd.
+    path = resolve(path);
+    if (!path.isWellFormed()) return Promise.reject(new Error("Windows attribute path is invalid"));
+    if (Buffer.byteLength(path, "utf8") > 131072)
       return Promise.reject(new Error("Windows attribute path exceeds bound"));
     if (this.pending.size >= 64) return Promise.reject(new Error("Windows attribute reader busy"));
     clearTimeout(this.idle);
