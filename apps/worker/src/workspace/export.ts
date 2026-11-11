@@ -10,6 +10,7 @@ import {
 } from "./authority.js";
 import { requireThat } from "./errors.js";
 import { checkedManifest } from "./manifest.js";
+import { WorkspaceStorage } from "./storage.js";
 import { chunkBytes } from "./streams.js";
 import type { WorkspaceObject } from "./workspace-object.js";
 
@@ -219,12 +220,11 @@ export class WorkspaceExports {
       };
       requireThat(
         usage.count < owner.policy.bounds.retainedVersions &&
-          usage.bytes + row.reservedBytes <= owner.policy.bounds.snapshotBytes &&
-          owner.state.bytes + row.reservedBytes + (owner.state.get<number>("reserved") ?? 0) <=
-            owner.policy.bounds.workspaceBytes * (1 - owner.policy.bounds.headroomFraction),
+          usage.bytes + row.reservedBytes <= owner.policy.bounds.snapshotBytes,
         "quota_exceeded",
         "Retained export capacity reached",
       );
+      new WorkspaceStorage(owner).admit(row.reservedBytes * 2 + wireLimits.jsonBytes);
       owner.state.transaction(() => {
         this.physical(new TextEncoder().encode(canonicalJson(row)).length + 8192);
         owner.state.put(`export:${input.exportId}`, row);
@@ -250,6 +250,7 @@ export class WorkspaceExports {
         requireThat(current.state !== "expired", "not_found", "Export expired");
         return current.descriptor;
       });
+    await new WorkspaceStorage(owner).refresh(ctx);
     const prior = this.active.get(input.exportId);
     if (prior)
       return prior.then(async (result) => {
@@ -326,6 +327,7 @@ export class WorkspaceExports {
   }
   private physical(growth: number): void {
     const bounds = this.owner.policy.bounds;
+    new WorkspaceStorage(this.owner).admit(growth);
     requireThat(
       this.owner.state.bytes + growth <=
         Math.min(bounds.objectBytes, bounds.workspaceBytes, bounds.installBytes) *

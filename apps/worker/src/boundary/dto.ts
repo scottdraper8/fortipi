@@ -228,6 +228,21 @@ export interface ExecutorWorkspaceAccess {
   /** Exact retained current lease observation; the original assignment/digests stay immutable. */
   lease: T.Lease;
 }
+/** Private LinuxContainerHost.fetch stop intent; only the retained exact runtime may be stopped. */
+export interface RuntimeQuiesceRequest {
+  requestId: string;
+  runtimeId: string;
+  /** Recorded sha256:<64 lowercase hex> image identity, never inferred from a later deployment. */
+  imageDigest: string;
+}
+/** Returned only after actual native destruction and a stopped observation; exact retries retain this receipt. */
+export interface RuntimeQuiescence {
+  requestId: string;
+  runtimeId: string;
+  imageDigest: string;
+  stopped: true;
+  observedAt: number;
+}
 export interface PreparedExecution {
   preparationId: string;
   request: ExecutionRequest;

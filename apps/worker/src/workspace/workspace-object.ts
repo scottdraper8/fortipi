@@ -15,6 +15,7 @@ import {
 import { ExecutionLedger } from "../backends/ledger.js";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
+import type { WorkspaceStorageSampleInput } from "../boundary/infrastructure.js";
 import type { WorkspaceObjectRpc } from "../boundary/workspace-object.js";
 import {
   type AllocationRecord,
@@ -44,6 +45,7 @@ import {
 } from "./manifest.js";
 import { Mutex } from "./mutex.js";
 import { State } from "./state.js";
+import { storagePermit, WorkspaceStorage } from "./storage.js";
 import {
   boundedBytes,
   bytesStream,
@@ -110,6 +112,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   readonly localUploads: LocalUploads;
   readonly localReads: LocalReads;
   readonly #exports: WorkspaceExports;
+  readonly #storage: WorkspaceStorage;
   #child: ComputerStore | undefined;
   #deleted = false;
   constructor(ctx: DurableObjectState, env: Env) {
@@ -119,6 +122,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     this.localUploads = new LocalUploads(this);
     this.localReads = new LocalReads(this);
     this.#exports = new WorkspaceExports(this);
+    this.#storage = new WorkspaceStorage(this);
   }
   trackLocalRead(completion: Promise<unknown>): void {
     this.ctx.waitUntil(completion);
@@ -290,6 +294,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             availability:
               input.binding.config.kind === "computer" || input.import ? "available" : "unknown",
           };
+          this.#storage.admit(new TextEncoder().encode(JSON.stringify(manifest)).length * 2);
           this.state.put("authority", {
             workspaceId,
             deploymentId: ctx.deploymentId,
@@ -434,6 +439,22 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   ): Promise<D.Outcome<D.CapacityReservation>> {
     return outcome(async () => {
       await this.authority(ctx, input.ownerId, "workspace.write");
+      const prior = await this.mutex.run(() => {
+        authorize(this.state, ctx, input.ownerId, "workspace.write");
+        const existing = this.state.get<D.CapacityReservation>(`capacity:${input.operationId}`);
+        if (existing)
+          requireThat(
+            existing.ownerId === input.ownerId &&
+              existing.bytes === input.bytes &&
+              existing.policyVersion === input.policyVersion &&
+              input.admissionSlots === 0,
+            "conflict",
+            "Reservation changed",
+          );
+        return existing;
+      });
+      if (prior) return prior;
+      await this.#storage.refresh(ctx);
       return this.mutex.run(() =>
         this.state.transaction(() => {
           authorize(this.state, ctx, input.ownerId, "workspace.write");
@@ -457,22 +478,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             return existing;
           }
           const reserved = this.state.get<number>("reserved") ?? 0;
-          requireThat(
-            reserved + input.bytes + this.state.bytes <=
-              this.policy.bounds.workspaceBytes * (1 - this.policy.bounds.headroomFraction),
-            "quota_exceeded",
-            "Workspace capacity exhausted",
-            {
-              pressure: {
-                resource: "storage",
-                scope: { kind: "object" },
-                source: "policy",
-                measurement: "estimated",
-                reason: "Complete snapshots, staging and recovery reserve exceed workspace bound",
-                action: "reclaim-storage",
-              },
-            },
-          );
+          this.#storage.admit(input.bytes, input.operationId);
           const reservation: D.CapacityReservation = {
             ...input,
             reservationId: crypto.randomUUID(),
@@ -870,6 +876,8 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             allocationId: crypto.randomUUID(),
             childId: `fortipi:child:${crypto.randomUUID()}`,
           };
+          this.#storage.admitChild(input.role);
+          this.#storage.admit();
           const row: AllocationRecord = {
             state: { allocation, source: "registry", version: 1, state: "allocated" },
             referenced: false,
@@ -889,6 +897,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     return outcome(async () => {
       if (this.isSelf(input.authorityId))
         return this.mutex.run(() => {
+          if (storagePermit(this, ctx, input)) {
+            const row = this.state.get<AllocationRecord>(`allocation:${input.allocationId}`);
+            requireThat(row, "not_found", "Unknown sampled allocation");
+            return row.state;
+          }
           const read = ctx.grants.some(
             (grant) =>
               (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
@@ -1078,16 +1091,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             disposition: "unused",
           }),
         );
-        const installCapacity = this.state.get<string>(
-          `install-capacity:${row.state.allocation.capacityReservationId}`,
-        );
-        if (installCapacity)
-          unwrap(
-            await this.control().settleCapacity(ctx, {
-              reservationId: installCapacity,
-              disposition: "unused",
-            }),
-          );
+        await this.#storage.settleDeleted(ctx, row.state.allocation.capacityReservationId);
         return receipt;
       }
       const row = await this.registry(ctx, input);
@@ -1445,8 +1449,10 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         return row;
       });
       if (prior) {
-        if (prior.status.state === "open" && prior.status.expiresAt > Date.now())
+        if (prior.status.state === "open" && prior.status.expiresAt > Date.now()) {
           unwrap(await this.stub(prior.allocation.childId).initializeStore(ctx, prior.allocation));
+          await this.#storage.initialized(ctx, prior.allocation);
+        }
         return { status: 201 as const, body: prior.status };
       }
       const bytes = uploadStorageBytes(input.body);
@@ -1565,6 +1571,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         }),
       );
       unwrap(await this.stub(allocation.childId).initializeStore(ctx, allocation));
+      await this.#storage.initialized(ctx, allocation);
       await this.#armDue(upload.status.expiresAt + 60_000);
       return { status: 201 as const, body: upload.status };
     }, ctx.requestId);
@@ -2094,6 +2101,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     },
     manifest: D.Manifest,
   ) {
+    this.#storage.admit();
     const retained = this.state.get<{ versions: number; unique: Record<string, number> }>(
       "retained",
     );
@@ -2691,6 +2699,18 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const envelope = JSON.parse(raw) as InternalContext;
       const { auth } = envelope;
       const url = new URL(request.url);
+      if (url.pathname === "/__fortipi/storage-sample") {
+        requireThat(
+          request.method === "POST" && !url.search,
+          "invalid_request",
+          "Exact private storage sample POST required",
+        );
+        const sample = await this.#storage.sample(
+          auth,
+          await boundedJson<WorkspaceStorageSampleInput>(request, 65_536),
+        );
+        return Response.json(sample, { headers: { "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/__fortipi/job-snapshot") {
         requireThat(
           request.method === "POST" &&
@@ -3359,6 +3379,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           record.state.allocation,
         ),
       );
+      await this.#storage.initialized(auth, record.state.allocation);
       for (const entry of revision.manifest.entries) {
         const response = await this.childFetch(auth, record.state.allocation, "/materialize", {
           method: "PUT",
