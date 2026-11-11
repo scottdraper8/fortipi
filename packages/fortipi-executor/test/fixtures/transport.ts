@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { LocalPrepare, TicketIdentity } from "fortipi-contract/executor";
+import type { ErrorBody, LocalPrepare, TicketIdentity } from "fortipi-contract/executor";
 import { hash } from "../../dist/policy.js";
 import { validate } from "../../dist/transport.js";
 import type { Manifest } from "../../dist/workspace/manifest.js";
@@ -9,11 +9,13 @@ import type { Manifest } from "../../dist/workspace/manifest.js";
 export async function relayFixture(data: Buffer) {
   const requests: { path: string; authorization: string | undefined; bytes: Buffer }[] = [];
   let corrupt = false,
-    pressure = false,
+    pressure: boolean | ErrorBody = false,
     redirect = false;
   let ticketIdentity: TicketIdentity | undefined;
   let grid = Math.max(1, data.length),
-    delayMs = 0;
+    delayMs = 0,
+    pressureStatus = 503,
+    retryAfter = "60";
   const server = createServer(async (req, res) => {
     const pieces: Buffer[] = [];
     for await (const piece of req) pieces.push(Buffer.from(piece as Buffer));
@@ -37,8 +39,8 @@ export async function relayFixture(data: Buffer) {
       return;
     }
     if (pressure) {
-      res.writeHead(503, { "Retry-After": "60" });
-      res.end();
+      res.writeHead(pressureStatus, { "Retry-After": retryAfter });
+      res.end(typeof pressure === "object" ? JSON.stringify(pressure) : undefined);
       return;
     }
     if (req.method === "GET") {
@@ -75,8 +77,10 @@ export async function relayFixture(data: Buffer) {
     setTicketIdentity(value: TicketIdentity) {
       ticketIdentity = value;
     },
-    setPressure(value: boolean) {
+    setPressure(value: boolean | ErrorBody, status = 503, retry = "60") {
       pressure = value;
+      pressureStatus = status;
+      retryAfter = retry;
     },
     setRedirect(value: boolean) {
       redirect = value;

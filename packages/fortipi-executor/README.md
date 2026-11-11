@@ -110,6 +110,14 @@ retries while retaining operation identity. Effective limits are the minimum of
 local and discovered bounds. A paid account raises no limit or enables a backend
 automatically. There are no model-provider token/hour/week budgets.
 
+Quota pressure, known retry/reset timestamps and Retry-After delays are retained
+in SQLite across restart. The latest known bound controls retries; long delays
+are not shortened. Storage pressure without a known retry/reset stays held for
+explicit operator recovery, with no assumed daily reset. `status` exposes the
+redacted pressure and hold state. The exported `HttpTransport.clearPressure()`
+persists an explicit local recovery decision after resolving the reported cause;
+reconnect does not clear it or replay work.
+
 Local reads first return metadata with hashes computed from retained revision
 bytes, then accept an exactly correlated transfer descriptor to produce chunks.
 The announced grid is immutable and no larger than negotiated `chunkBytes`;

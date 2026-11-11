@@ -525,6 +525,7 @@ test("ordered put then directory deletion/recreation applies actual mutations on
     }
     const prepareRequest: LocalPrepare = {
       ...request,
+      lease: f.ledger.existing(a.identity)?.assignment.identity.lease ?? request.lease,
       mode: {
         kind: "staged-change",
         uploadId,
@@ -539,6 +540,7 @@ test("ordered put then directory deletion/recreation applies actual mutations on
     await renewals.renew();
     const apply = {
       ...requestScope(prepareRequest),
+      lease: f.ledger.local(request.operationId)?.request.lease ?? prepareRequest.lease,
       kind: "apply" as const,
       preparationId: prepared.preparationId,
     };
@@ -563,7 +565,14 @@ test("ordered put then directory deletion/recreation applies actual mutations on
       2,
       "ordered intermediate put and deletion must both be journaled",
     );
-    assert.deepEqual(await local.request(apply), result);
+    await renewals.renew();
+    assert.deepEqual(
+      await local.request({
+        ...apply,
+        lease: f.ledger.local(request.operationId)?.request.lease ?? apply.lease,
+      }),
+      result,
+    );
   } finally {
     try {
       await renewals?.stop();
@@ -960,6 +969,96 @@ test("exact metadata renewal reaches an active apply before expiry without losin
     await f.cleanup();
   }
 });
+test("revoking executor authority between actual filesystem effects stops an active local apply", async () => {
+  const f = await setup(),
+    entered = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>(),
+    mkdir = f.root.mkdir.bind(f.root);
+  let applying: Promise<unknown> | undefined;
+  try {
+    const base = prepare(await assignment("never executed"), f.initial.manifestHash),
+      manifest: Manifest = {
+        version: 1,
+        entries: [
+          { path: "a", type: "directory", mode: 493 },
+          { path: "b", type: "directory", mode: 493 },
+        ],
+      },
+      mutations = [
+        { kind: "mkdir" as const, path: "a", mode: 493 as const },
+        { kind: "mkdir" as const, path: "b", mode: 493 as const },
+      ],
+      uploadId = "revocation_stage",
+      request: LocalPrepare = {
+        ...base,
+        mode: {
+          kind: "staged-change",
+          uploadId,
+          manifest,
+          mutations,
+          postManifestHash: await manifestDigest(manifest),
+          stagedDigest: await localStageDigest({ uploadId, manifest, mutations }),
+        },
+      };
+    authenticateFixture(f.staging.http);
+    const runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http: f.staging.http,
+    });
+    const prepared = await f.local.request(request);
+    if (!("preparationId" in prepared)) throw new Error("preparation absent");
+    f.root.mkdir = async (path) => {
+      await mkdir(path);
+      if (path === "a") {
+        entered.resolve();
+        await release.promise;
+      }
+    };
+    applying = f.local.request({
+      ...requestScope(request),
+      kind: "apply",
+      preparationId: prepared.preparationId,
+    });
+    await Promise.race([
+      entered.promise,
+      applying.then(() => {
+        throw new Error("apply ended before the first filesystem effect");
+      }),
+    ]);
+    await runtime.receive({
+      type: "executor.presence",
+      requestId: "revoke_at_filesystem_barrier",
+      payload: {
+        executorId: f.profile.executorId,
+        generation: f.profile.executorGeneration,
+        connectionEpoch: 1,
+        platform: adapter().platform,
+        caseBehavior: f.root.identity.caseBehavior,
+        confinement: "host",
+        rootBindingIds: ["root"],
+        state: "revoking",
+        capabilities: ["local-workspace"],
+        transferLimits: f.staging.http.transferLimits(),
+      },
+    });
+    release.resolve();
+    const result = await applying;
+    assert.ok(typeof result === "object" && result !== null && "state" in result);
+    assert.equal(result.state, "partial", "revocation must stop the second filesystem effect");
+    assert.deepEqual(await f.root.entries(), ["a"]);
+    assert.deepEqual(f.ledger.local(request.operationId)?.journal, [{ path: "a", state: "done" }]);
+    assert.equal(f.ledger.rootAvailable(f.root.key), false);
+    assert.equal(f.ledger.local(request.operationId)?.observation.receipt, undefined);
+  } finally {
+    release.resolve();
+    await applying?.catch(() => {});
+    f.root.mkdir = mkdir;
+    await f.cleanup();
+  }
+});
 test("multi-chunk local stage verifies scoped bytes, shares one SHA only inside its upload, and applies empty files without PUT", async () => {
   const f = await setup(),
     bytes = Buffer.alloc(600000, 0x31),
@@ -967,6 +1066,7 @@ test("multi-chunk local stage verifies scoped bytes, shares one SHA only inside 
     emptySha = createHash("sha256").digest("hex"),
     grid = 16384,
     relay = await relayFixture(bytes);
+  let renewals: ReturnType<typeof jobRenewals> | undefined;
   try {
     const a = await assignment("never executed"),
       base = prepare(a, f.initial.manifestHash),
@@ -1011,6 +1111,23 @@ test("multi-chunk local stage verifies scoped bytes, shares one SHA only inside 
       () => validateUploadBlobs({ ...begin, blobs: [] }, { required: true }),
       /missing_blobs/,
     );
+    authenticateFixture(f.staging.http);
+    const runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http: f.staging.http,
+    });
+    renewals = jobRenewals(runtime, a);
+    await renewals.renew();
+    const currentLease = () => {
+      const lease = f.ledger.existing(a.identity)?.assignment.identity.lease;
+      if (!lease) throw new Error("renewed job lease missing");
+      assert.ok(Date.now() < lease.expiresAt, "challenge needs a live actual lease observation");
+      assert.ok(Date.now() < base.deadline, "challenge needs the unchanged admission deadline");
+      return lease;
+    };
     const descriptor: TransferDescriptor = {
       transferId: "input",
       attemptId: "input_attempt",
@@ -1088,18 +1205,22 @@ test("multi-chunk local stage verifies scoped bytes, shares one SHA only inside 
         postManifestHash,
         stagedDigest: await localStageDigest({ uploadId, manifest, mutations }),
       },
-      request: LocalPrepare = { ...base, mode };
+      request: LocalPrepare = { ...base, lease: currentLease(), mode };
     const badMode = {
       ...mode,
       uploadId: "foreign_upload",
       stagedDigest: await localStageDigest({ ...mode, uploadId: "foreign_upload" }),
     };
-    await assert.rejects(f.local.request({ ...base, mode: badMode }), /upload-scoped/);
+    await assert.rejects(
+      f.local.request({ ...base, lease: currentLease(), mode: badMode }),
+      /upload-scoped/,
+    );
     assert.equal((await scan(f.root, defaults)).manifestHash, f.initial.manifestHash);
     const prepared = await f.local.request(request);
     assert.ok("preparationId" in prepared);
     const apply = {
         ...requestScope(request),
+        lease: currentLease(),
         kind: "apply" as const,
         preparationId: prepared.preparationId,
       },
@@ -1109,15 +1230,29 @@ test("multi-chunk local stage verifies scoped bytes, shares one SHA only inside 
     assert.deepEqual(await f.root.read("one", defaults.fileBytes), bytes);
     assert.deepEqual(await f.root.read("two", defaults.fileBytes), bytes);
     assert.equal((await f.root.read("empty", defaults.fileBytes)).length, 0);
-    assert.equal(f.ledger.get(a.identity.jobId), undefined);
+    assert.equal(f.ledger.get(a.identity.jobId)?.state, "pending");
+    assert.equal(runtime.children.size, 0, "renewal fixture cannot execute the job");
+    await renewals.renew();
+    const liveLease = currentLease();
+    assert.equal(liveLease.fence, "1");
     await assert.rejects(
       f.local.request({
         ...request,
         operationId: "higher_fence",
-        lease: { ...request.lease, operationId: "higher_fence", fence: "2" },
+        lease: { ...liveLease, operationId: "higher_fence", fence: "2" },
       }),
+      /root pinned or quarantined/,
     );
-    await assert.rejects(f.local.request(apply), /stale_fence/);
+    assert.equal(
+      (
+        f.ledger.db.prepare("SELECT value FROM meta WHERE key='fence_root_1'").get() as {
+          value: string;
+        }
+      ).value,
+      "2",
+      "higher authoritative fence must be durable before challenging the old fence",
+    );
+    await assert.rejects(f.local.request({ ...apply, lease: currentLease() }), /stale_fence/);
     const observed = await f.local.request({
       ...requestScope(request),
       kind: "observe",
@@ -1127,7 +1262,11 @@ test("multi-chunk local stage verifies scoped bytes, shares one SHA only inside 
     assert.equal(observed.state, "applied");
     assert.deepEqual(await f.root.read("one", defaults.fileBytes), bytes);
   } finally {
-    await relay.close();
-    await f.cleanup();
+    try {
+      await renewals?.stop();
+    } finally {
+      await relay.close();
+      await f.cleanup();
+    }
   }
 });

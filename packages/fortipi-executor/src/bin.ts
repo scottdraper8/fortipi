@@ -158,8 +158,10 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
       return;
     }
     if (command === "status") {
+      const http = new HttpTransport(profile, fetch, local);
+      http.bindLedger(ledger);
       process.stdout.write(
-        `${JSON.stringify({ executorId: profile.executorId, executorGeneration: profile.executorGeneration, confinement: "host", nativeEnabled: profile.policy.trustedHost, executions: ledger.identities().map((i) => ({ jobId: i.jobId, executionId: i.executionId, state: ledger.get(i.jobId)?.state })), pendingApprovals: ledger.pending().length })}\n`,
+        `${JSON.stringify({ executorId: profile.executorId, executorGeneration: profile.executorGeneration, confinement: "host", nativeEnabled: profile.policy.trustedHost, infrastructure: { held: http.pressureHeld, retryAt: http.pressureHeld ? null : http.pausedUntil || null, pressure: http.pressure ?? null }, executions: ledger.identities().map((i) => ({ jobId: i.jobId, executionId: i.executionId, state: ledger.get(i.jobId)?.state })), pendingApprovals: ledger.pending().length })}\n`,
       );
       return;
     }
