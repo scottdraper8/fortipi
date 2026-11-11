@@ -165,6 +165,9 @@
                 },
                 "confinement": {
                   "enum": ["host", "isolated"]
+                },
+                "transferLimits": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits"
                 }
               },
               "required": [
@@ -176,7 +179,8 @@
                 "platform",
                 "caseBehavior",
                 "rootBindingIds",
-                "confinement"
+                "confinement",
+                "transferLimits"
               ],
               "additionalProperties": false
             }

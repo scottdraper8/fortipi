@@ -1051,6 +1051,47 @@
       },
       "required": ["chunkBytes", "chunkHashes"],
       "additionalProperties": false
+    },
+    "WorkspaceLeaseDigestInput": {
+      "title": "WorkspaceLeaseDigestInput",
+      "type": "object",
+      "properties": {
+        "deploymentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "workspaceId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "bindingVersion": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sequence"
+        },
+        "baseRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "target": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/BackendRef"
+        },
+        "credential": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+        },
+        "deadline": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "deploymentId",
+        "operationId",
+        "workspaceId",
+        "bindingVersion",
+        "baseRevision",
+        "target",
+        "credential",
+        "deadline"
+      ],
+      "additionalProperties": false
     }
   }
 }
