@@ -4,6 +4,13 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 import { t as listTar } from "tar";
+import {
+  assertRuntimeConfig,
+  filePolicy,
+  type ImageConfig,
+  type PrunePolicy,
+} from "./image-prune.ts";
+import { applyLayer, type FsEntry, scanRootfs } from "./rootfs.ts";
 
 const manifestTypes = [
   "application/vnd.oci.image.manifest.v1+json",
@@ -37,7 +44,11 @@ export interface SavedImage {
 }
 
 /** Hash the actual Docker-save OCI graph, independently of exporter metadata labels. */
-export async function verifyImageArchive(file: string, imageId: string): Promise<SavedImage> {
+export async function inspectImageArchive(
+  file: string,
+  imageId: string,
+  options: { filesystem?: boolean; pruning?: PrunePolicy } = {},
+): Promise<{ saved: SavedImage; filesystem: Map<string, FsEntry>; configuration: ImageConfig }> {
   assert.match(imageId, /^sha256:[a-f0-9]{64}$/);
   const members = new Map<string, Member>();
   const names = new Set<string>();
@@ -124,6 +135,7 @@ export async function verifyImageArchive(file: string, imageId: string): Promise
     os: string;
     architecture: string;
     rootfs: { type: string; diff_ids: string[] };
+    config?: ImageConfig;
   }>(`blobs/sha256/${manifest.config.digest.slice(7)}`);
   assert.equal(config.os, "linux");
   assert.equal(config.architecture, "amd64");
@@ -145,6 +157,138 @@ export async function verifyImageArchive(file: string, imageId: string): Promise
         "Repeated layer DiffID changed",
       );
       compressed.set(path, { layer, diffId });
+    }
+  }
+  if (options.pruning) {
+    assertRuntimeConfig(config.config ?? {});
+    for (const member of members.values())
+      assert.ok(
+        !options.pruning.forbiddenLayers.includes(member.digest),
+        "Original binary-bearing base blob conveyed",
+      );
+    for (const diff of config.rootfs.diff_ids)
+      assert.ok(
+        !options.pruning.forbiddenLayers.includes(diff),
+        "Original binary-bearing base DiffID conveyed",
+      );
+    const allowed = new Set([
+      "index.json",
+      "oci-layout",
+      `blobs/sha256/${selected.digest.slice(7)}`,
+      `blobs/sha256/${manifest.config.digest.slice(7)}`,
+      ...manifest.layers.map((layer) => `blobs/sha256/${layer.digest.slice(7)}`),
+    ]);
+    if (members.has("manifest.json")) {
+      const compatibility = json<{ Config: string; Layers: string[] }[]>("manifest.json");
+      assert.equal(compatibility.length, 1, "Multiple compatibility images conveyed");
+      const item = compatibility[0];
+      assert.ok(item);
+      assert.equal(
+        members.get(item.Config)?.digest,
+        manifest.config.digest,
+        "Compatibility config changed",
+      );
+      assert.equal(item.Layers.length, manifest.layers.length, "Compatibility layers changed");
+      allowed.add("manifest.json");
+      allowed.add(item.Config);
+      for (const [index, path] of item.Layers.entries()) {
+        assert.ok(
+          members.get(path)?.digest === manifest.layers[index]?.digest ||
+            members.get(path)?.digest === config.rootfs.diff_ids[index],
+          "Compatibility layer is not a verified layer",
+        );
+        allowed.add(path);
+      }
+    }
+    if (members.has("repositories")) {
+      const repositories = json<Record<string, Record<string, string>>>("repositories");
+      assert.ok(
+        repositories && typeof repositories === "object" && !Array.isArray(repositories),
+        "Invalid compatibility repositories",
+      );
+      for (const tags of Object.values(repositories)) {
+        assert.ok(
+          tags && typeof tags === "object" && !Array.isArray(tags),
+          "Invalid compatibility tags",
+        );
+        for (const digest of Object.values(tags))
+          assert.match(digest, /^[a-f0-9]{64}$/, "Invalid compatibility repository identity");
+      }
+      allowed.add("repositories");
+    }
+    for (const path of members.keys())
+      assert.ok(allowed.has(path), "Unexpected or unreferenced conveyed image file/blob");
+  }
+  const filesystem = new Map<string, FsEntry>();
+  if (options.filesystem || options.pruning) {
+    const layers = new Map(
+      manifest.layers.map((layer, index) => [
+        `blobs/sha256/${layer.digest.slice(7)}`,
+        { layer, index },
+      ]),
+    );
+    const inventories: (Map<string, FsEntry> | undefined)[] = [];
+    const tasks: Promise<void>[] = [],
+      failures: unknown[] = [];
+    await listTar({
+      file,
+      strict: true,
+      noResume: true,
+      filter: (path) => layers.has(path.replace(/^\.\//, "")),
+      onReadEntry(entry) {
+        const item = layers.get(entry.path.replace(/^\.\//, ""));
+        if (!item) return entry.resume();
+        const hash = createHash("sha256");
+        let size = 0;
+        const meter = new Transform({
+          transform(bytes: Buffer, _encoding, callback) {
+            hash.update(bytes);
+            size += bytes.length;
+            callback(null, bytes);
+          },
+        });
+        const policy = options.pruning ? filePolicy(options.pruning) : undefined;
+        const scan = async (source: AsyncIterable<Uint8Array>) => {
+          const iterator = source[Symbol.asyncIterator]();
+          // A format/policy rejection still drains the containing tar member so
+          // the outer parser can finish and surface the bounded failure.
+          const readable = { [Symbol.asyncIterator]: () => ({ next: () => iterator.next() }) };
+          try {
+            inventories[item.index] = await scanRootfs(readable, policy);
+          } catch (error) {
+            while (!(await iterator.next()).done) {}
+            throw error;
+          }
+        };
+        const task = (
+          gzipTypes.includes(item.layer.mediaType)
+            ? pipeline(Readable.from(entry), meter, createGunzip(), scan)
+            : pipeline(Readable.from(entry), meter, scan)
+        )
+          .then(() => {
+            assert.equal(size, item.layer.size);
+            assert.equal(
+              `sha256:${hash.digest("hex")}`,
+              item.layer.digest,
+              "Inspected filesystem layer changed",
+            );
+          })
+          .catch((error: unknown) => {
+            failures.push(error);
+          });
+        tasks.push(task);
+      },
+    });
+    await Promise.all(tasks);
+    assert.equal(
+      failures.length,
+      0,
+      `Filesystem layer validation failed: ${String(failures[0] ?? "")}`,
+    );
+    assert.equal(inventories.length, manifest.layers.length, "Missing filesystem layer");
+    for (const inventory of inventories) {
+      assert.ok(inventory, "Missing filesystem layer");
+      applyLayer(filesystem, inventory);
     }
   }
   // Containerd preserves compressed blobs. DiffIDs hash decompressed tar bytes,
@@ -220,12 +364,20 @@ export async function verifyImageArchive(file: string, imageId: string): Promise
   const indexMember = members.get("index.json");
   assert.ok(indexMember);
   return {
-    manifest: selected,
-    config: manifest.config,
-    layers: manifest.layers,
-    indexSha256: indexMember.digest.slice(7),
-    loadedIdentityKind: imageId === manifest.config.digest ? "config" : "manifest",
+    saved: {
+      manifest: selected,
+      config: manifest.config,
+      layers: manifest.layers,
+      indexSha256: indexMember.digest.slice(7),
+      loadedIdentityKind: imageId === manifest.config.digest ? "config" : "manifest",
+    },
+    filesystem,
+    configuration: config.config ?? {},
   };
+}
+
+export async function verifyImageArchive(file: string, imageId: string): Promise<SavedImage> {
+  return (await inspectImageArchive(file, imageId)).saved;
 }
 
 /** Classic Moby reports its config as containerimage.digest; that is not a manifest. */

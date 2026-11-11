@@ -332,6 +332,7 @@ export type FinalizeJob = {
 );
 export interface ExportRequest {
   exportId: string;
+  action: "exports.create" | "backups.create";
   resources: T.ResourceScope;
   maxBytes: number;
   deadline: number;
@@ -339,7 +340,7 @@ export interface ExportRequest {
 export interface ExportDescriptor {
   exportId: string;
   state: "ready" | "partial" | "unavailable";
-  artifacts: T.ByteReference[];
+  artifacts: (T.ByteReference | T.AdminArtifactReference)[];
   unavailableWorkspaceIds: string[];
   credentialsExcluded: true;
 }
