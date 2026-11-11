@@ -100,7 +100,7 @@ test("bounded gateway status diagnostics keep generic responses red and omit tai
   });
   const registry = receipt("allowed-registry", "response", 200);
   try {
-    for (const status of [200, 403, 502]) {
+    for (const status of [200, 403, 500, 502]) {
       logs.length = 0;
       assert.throws(() =>
         verifyGatewayEgress(
@@ -224,6 +224,7 @@ test("harness observation preserves asynchronous cancellation and the original r
       role: "denied-example",
       phase: "FAILURE",
       causeCode: "ECONNREFUSED",
+      stepSecurityEndpoint: false,
     });
     assert.doesNotMatch(JSON.stringify(trace), /diagnostic-private|error/);
   } finally {
@@ -259,6 +260,7 @@ test("harness diagnostics do not replace synchronous errors or clobber an interv
       role: "allowed-before",
       phase: "FAILURE",
       causeCode: "UNKNOWN",
+      stepSecurityEndpoint: false,
     });
     assert.doesNotMatch(JSON.stringify(trace), /diagnostic-private/);
   } finally {
@@ -310,6 +312,155 @@ test("harness observation delegates unrelated requests and bounds overflow or mi
     assert.equal(calls, 9);
   } finally {
     globalThis.fetch = realFetch;
+  }
+});
+
+test("only an original connect refusal to the verified policy endpoint permits the Miniflare500 conversion", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalLog = console.log;
+  const messages: string[] = [];
+  console.log = (message: string) => messages.push(message);
+  const endpoint = {
+    code: "ECONNREFUSED",
+    syscall: "connect",
+    address: "54.185.253.63",
+    port: 443,
+  };
+  const aggregate = (items: unknown[]) =>
+    Object.assign(new AggregateError(items, "diagnostic-private-aggregate"), {
+      code: "ECONNREFUSED",
+    });
+  const evidence: ApplicationNetworkEvidence = {
+    imageId: `sha256:${"a".repeat(64)}`,
+    appPid: 42,
+    authorityVerifiedBeforeAfter: true,
+    allowedBefore: 200,
+    deniedStatus: 500,
+    deniedTransportFailure: false,
+    allowedAfter: 200,
+    tlsAuthorized: true,
+    syntheticDns: true,
+    upstreamStepSecurityBeforeAfter: true,
+  };
+  const receipt = (target: string, status: number) => ({
+    message: `fortipi-gateway:${JSON.stringify({ target, forwarded: true, outcome: "response", status })}`,
+  });
+  const registry = receipt("allowed-registry", 200);
+  const receipts = [registry, receipt("denied-example", 500), registry];
+  try {
+    for (const [cause, expected] of [
+      [endpoint, true],
+      [aggregate(Array.from({ length: 4 }, () => ({ ...endpoint }))), true],
+      [{ code: "ECONNREFUSED" }, false],
+      [{ ...endpoint, address: "127.0.0.1" }, false],
+      [{ ...endpoint, port: 80 }, false],
+      [{ ...endpoint, syscall: "read" }, false],
+      [{ ...endpoint, code: "ECONNRESET" }, false],
+      [aggregate([]), false],
+      [aggregate(Array.from({ length: 5 }, () => ({ ...endpoint }))), false],
+      [aggregate([{ ...endpoint }, { ...endpoint, address: "127.0.0.1" }]), false],
+      [aggregate([aggregate([{ ...endpoint }])]), false],
+      [
+        Object.defineProperty({ ...endpoint }, "address", {
+          get() {
+            throw new Error("diagnostic-private-getter");
+          },
+        }),
+        false,
+      ],
+    ] as const) {
+      const failure = new Error("diagnostic-private-error", { cause });
+      const promised = Promise.reject(failure);
+      // The existing observer must preserve this exact rejected Promise/error.
+      void promised.catch(() => {});
+      globalThis.fetch = (input) =>
+        input === "https://example.com/"
+          ? promised
+          : Promise.resolve(new Response(null, { status: 200 }));
+      const observation = observeHarnessFetch();
+      try {
+        await fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" });
+        const actual = fetch("https://example.com/", { method: "HEAD" });
+        assert.equal(actual, promised);
+        await assert.rejects(actual, (error) => error === failure);
+        await fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" });
+        const trace = { ...observation.stop(), namespaceStable: true };
+        assert.equal(trace.complete, true);
+        const denied = trace.events[3];
+        assert.ok(denied?.phase === "FAILURE");
+        assert.equal(denied.stepSecurityEndpoint, expected);
+        assert.doesNotMatch(
+          JSON.stringify(trace),
+          /54\.185\.253\.63|127\.0\.0\.1|diagnostic-private|address|syscall/,
+        );
+        if (expected) {
+          verifyGatewayEgress(receipts, evidence, trace);
+          for (const changed of [
+            { ...evidence, deniedStatus: 502 },
+            { ...evidence, deniedTransportFailure: true },
+            { ...evidence, tlsAuthorized: false },
+            { ...evidence, authorityVerifiedBeforeAfter: false },
+            { ...evidence, syntheticDns: false },
+            { ...evidence, upstreamStepSecurityBeforeAfter: false },
+          ])
+            assert.throws(() => verifyGatewayEgress(receipts, changed, trace));
+          for (const changed of [
+            { ...trace, complete: false },
+            { ...trace, namespaceStable: false },
+            { ...trace, events: trace.events.slice(1) },
+            { ...trace, events: [...trace.events, ...trace.events] },
+            {
+              ...trace,
+              events: trace.events.map((event, index) =>
+                index === 3
+                  ? { role: "denied-example" as const, phase: "RESPONSE" as const, status: 500 }
+                  : event,
+              ),
+            },
+          ])
+            assert.throws(() => verifyGatewayEgress(receipts, evidence, changed));
+          assert.throws(() =>
+            verifyGatewayEgress(
+              [registry, receipt("denied-example", 200), registry],
+              evidence,
+              trace,
+            ),
+          );
+        } else {
+          assert.throws(() => verifyGatewayEgress(receipts, evidence, trace));
+        }
+      } finally {
+        observation.stop();
+      }
+    }
+    for (const name of ["AbortError", "TimeoutError"]) {
+      const failure = Object.assign(new Error("diagnostic-private-abort", { cause: endpoint }), {
+        name,
+      });
+      globalThis.fetch = () => Promise.reject(failure);
+      const observation = observeHarnessFetch();
+      try {
+        await assert.rejects(
+          fetch("https://example.com/", { method: "HEAD" }),
+          (error) => error === failure,
+        );
+        assert.deepEqual(observation.stop().events[1], {
+          role: "allowed-before",
+          phase: "FAILURE",
+          causeCode: "ABORT_ERR",
+          stepSecurityEndpoint: false,
+        });
+      } finally {
+        observation.stop();
+      }
+    }
+    assert.doesNotMatch(
+      messages.join("\n"),
+      /54\.185\.253\.63|127\.0\.0\.1|diagnostic-private|address|syscall/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.log = originalLog;
   }
 });
 

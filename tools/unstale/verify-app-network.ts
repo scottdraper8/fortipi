@@ -55,7 +55,64 @@ type FetchRole = "allowed-before" | "denied-example" | "allowed-after";
 type FetchEvent =
   | { role: FetchRole; phase: "START" }
   | { role: FetchRole; phase: "RESPONSE"; status: number }
-  | { role: FetchRole; phase: "FAILURE"; causeCode: string };
+  | { role: FetchRole; phase: "FAILURE"; causeCode: string; stepSecurityEndpoint: boolean };
+
+/** Only a flat, wholly validated connect-refusal cause can identify the policy endpoint. */
+function connectFailure(error: unknown): { causeCode: string; stepSecurityEndpoint: boolean } {
+  const unknown = { causeCode: "UNKNOWN", stepSecurityEndpoint: false };
+  try {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
+    )
+      return { causeCode: "ABORT_ERR", stepSecurityEndpoint: false };
+    const cause =
+      typeof error === "object" && error !== null && "cause" in error ? error.cause : error;
+    if (typeof cause !== "object" || cause === null) return unknown;
+    const code = "code" in cause ? cause.code : undefined;
+    const causeCode =
+      typeof code === "string" &&
+      [
+        "ECONNREFUSED",
+        "ECONNRESET",
+        "ENOTFOUND",
+        "EAI_AGAIN",
+        "ETIMEDOUT",
+        "UND_ERR_CONNECT_TIMEOUT",
+        "UND_ERR_SOCKET",
+        "ABORT_ERR",
+      ].includes(code)
+        ? code
+        : "UNKNOWN";
+    const failures = cause instanceof AggregateError ? cause.errors : [cause];
+    const stepSecurityEndpoint =
+      causeCode === "ECONNREFUSED" &&
+      Array.isArray(failures) &&
+      failures.length > 0 &&
+      failures.length <= 4 &&
+      failures.every(
+        (failure: unknown) =>
+          typeof failure === "object" &&
+          failure !== null &&
+          !(failure instanceof AggregateError) &&
+          !("errors" in failure) &&
+          "code" in failure &&
+          failure.code === "ECONNREFUSED" &&
+          "syscall" in failure &&
+          failure.syscall === "connect" &&
+          "port" in failure &&
+          failure.port === 443 &&
+          "address" in failure &&
+          typeof failure.address === "string" &&
+          isStepSecuritySinkhole([failure.address]),
+      );
+    return { causeCode, stepSecurityEndpoint };
+  } catch {
+    return unknown;
+  }
+}
 
 /** Observe the pinned harness's existing Node fetch without changing its promises or I/O. */
 export function observeHarnessFetch() {
@@ -72,30 +129,7 @@ export function observeHarnessFetch() {
     else valid = false;
   };
   const failure = (role: FetchRole, error: unknown) => {
-    let causeCode = "UNKNOWN";
-    try {
-      const cause =
-        typeof error === "object" && error !== null && "cause" in error ? error.cause : error;
-      const code =
-        typeof cause === "object" && cause !== null && "code" in cause ? cause.code : undefined;
-      if (
-        typeof code === "string" &&
-        [
-          "ECONNREFUSED",
-          "ECONNRESET",
-          "ENOTFOUND",
-          "EAI_AGAIN",
-          "ETIMEDOUT",
-          "UND_ERR_CONNECT_TIMEOUT",
-          "UND_ERR_SOCKET",
-          "ABORT_ERR",
-        ].includes(code)
-      )
-        causeCode = code;
-    } catch {
-      // Diagnostic property access must never replace the original error.
-    }
-    record({ role, phase: "FAILURE", causeCode });
+    record({ role, phase: "FAILURE", ...connectFailure(error) });
   };
   const wrapper: typeof globalThis.fetch = function (this: unknown, ...args) {
     let role: FetchRole | undefined;
@@ -178,6 +212,7 @@ export function observeHarnessFetch() {
 export function verifyGatewayEgress(
   messages: readonly { message: string }[],
   evidence: ApplicationNetworkEvidence,
+  trace?: ReturnType<ReturnType<typeof observeHarnessFetch>["stop"]> & { namespaceStable: boolean },
 ): void {
   const events = messages
     .filter(({ message }) => message.startsWith("fortipi-gateway:"))
@@ -218,10 +253,28 @@ export function verifyGatewayEgress(
       })),
     }),
   );
+  const conversion =
+    trace?.complete === true &&
+    trace.namespaceStable === true &&
+    trace.events.length === 6 &&
+    trace.events.every(
+      (event, index) =>
+        event.role ===
+          ["allowed-before", "denied-example", "allowed-after"][Math.floor(index / 2)] &&
+        (index % 2 === 0
+          ? event.phase === "START"
+          : index === 3
+            ? event.phase === "FAILURE" &&
+              event.causeCode === "ECONNREFUSED" &&
+              event.stepSecurityEndpoint === true
+            : event.phase === "RESPONSE" && event.status === 200),
+    ) &&
+    events[1]?.outcome === "response" &&
+    events[1].status === 500;
   for (const [index, event] of events.entries()) {
     assert.equal(event.target, index === 1 ? "denied-example" : "allowed-registry");
-    assert.equal(event.outcome, index === 1 ? "upstream-error" : "response");
-    assert.equal(event.status, index === 1 ? null : 200);
+    assert.equal(event.outcome, index === 1 && !conversion ? "upstream-error" : "response");
+    assert.equal(event.status, index === 1 ? (conversion ? 500 : null) : 200);
   }
   assert.match(evidence.imageId, /^sha256:[a-f0-9]{64}$/);
   assert.ok(Number.isSafeInteger(evidence.appPid) && evidence.appPid > 1);
@@ -232,7 +285,7 @@ export function verifyGatewayEgress(
   );
   assert.equal(evidence.allowedBefore, 200);
   assert.equal(evidence.allowedAfter, 200);
-  assert.equal(evidence.deniedStatus, 502);
+  assert.equal(evidence.deniedStatus, conversion ? 500 : 502);
   assert.equal(evidence.deniedTransportFailure, false);
   assert.equal(
     evidence.upstreamStepSecurityBeforeAfter,

@@ -7,8 +7,8 @@ import { resolve } from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import { c as createTar, Header } from "tar";
-import { describeOCI, inspectImageArchive } from "./image-archive.ts";
+import { c as createTar, Header, t as listTar } from "tar";
+import { canonicalizeImageArchive, describeOCI, inspectImageArchive } from "./image-archive.ts";
 import { assertRuntimeConfig, filePolicy, type PrunePolicy, pruningPolicy } from "./image-prune.ts";
 import { compareRootfs, scanRootfs } from "./rootfs.ts";
 
@@ -24,7 +24,7 @@ const configPath = resolve(
 );
 function record(
   path: string,
-  bytes = Buffer.alloc(0),
+  bytes: Buffer = Buffer.alloc(0),
   options: {
     mode?: number;
     uid?: number;
@@ -177,6 +177,12 @@ test("actual frozen base reproduces the independently reviewed removed-executabl
       inspectImageArchive(renamed.path, renamed.id, { pruning: policy }),
       /Forbidden retained binary/,
     );
+    const retained = resolve(work, "retained-old-elf.tar");
+    await canonicalizeImageArchive(renamed.path, retained, renamed.id);
+    await assert.rejects(
+      inspectImageArchive(retained, renamed.id, { pruning: policy }),
+      /Forbidden retained binary/,
+    );
     const unreferenced = await image(
       work,
       [clean],
@@ -191,6 +197,176 @@ test("actual frozen base reproduces the independently reviewed removed-executabl
       inspectImageArchive(oldBlob.path, oldBlob.id, { pruning: policy }),
       /binary-bearing base blob/,
     );
+    const withoutBase = resolve(work, "without-unreachable-base.tar");
+    await canonicalizeImageArchive(oldBlob.path, withoutBase, oldBlob.id);
+    await inspectImageArchive(withoutBase, oldBlob.id, { pruning: policy });
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+async function payloads(file: string): Promise<Map<string, Buffer>> {
+  const result = new Map<string, Buffer>();
+  await listTar({
+    file,
+    strict: true,
+    onReadEntry(entry) {
+      if (entry.type !== "File") return entry.resume();
+      const chunks: Buffer[] = [];
+      entry.on("data", (chunk: Buffer) => chunks.push(chunk));
+      entry.on("end", () => result.set(entry.path, Buffer.concat(chunks)));
+      entry.resume();
+    },
+  });
+  return result;
+}
+
+test("canonical export physically removes opaque unused blobs and preserves selected layers, wrappers and raw filesystem metadata", async () => {
+  const work = await mkdtemp(resolve(tmpdir(), "fortipi-canonical-"));
+  try {
+    const layer = archive(
+      attributes(Buffer.from([0x80, 0, 1])),
+      record("usr/bin/fusermount3", Buffer.from("safe helper"), { mode: 0o4755 }),
+      record("usr/bin/helper-alias", Buffer.alloc(0), {
+        type: "Link",
+        link: "usr/bin/fusermount3",
+      }),
+    );
+    const poison = Buffer.from("opaque-unreachable-private-content\u0000not JSON");
+    for (const compressed of [false, true]) {
+      const original = await image(work, [layer], [poison], compressed);
+      const before = await payloads(original.path);
+      const index = JSON.parse(before.get("index.json")?.toString() ?? "");
+      const manifest = JSON.parse(
+        before.get(`blobs/sha256/${index.manifests[0].digest.slice(7)}`)?.toString() ?? "",
+      );
+      const compatibility = JSON.stringify([
+        { Config: "config-copy.json", Layers: ["layer-copy.tar"] },
+      ]);
+      const wrappers: [string, Uint8Array | string][] = [
+        ["manifest.json", compatibility],
+        ["repositories", JSON.stringify({ fixture: { reviewed: original.id.slice(7) } })],
+        ["config-copy.json", before.get(`blobs/sha256/${manifest.config.digest.slice(7)}`) ?? ""],
+        ["layer-copy.tar", before.get(`blobs/sha256/${manifest.layers[0].digest.slice(7)}`) ?? ""],
+      ];
+      await image(work, [layer], [poison], compressed, wrappers);
+      const input = await payloads(original.path);
+      await createTar({ cwd: work, file: original.path, noDirRecurse: true }, [
+        "blobs",
+        "blobs/sha256",
+        ...input.keys(),
+      ]);
+      const candidate = resolve(work, `canonical-${compressed}.tar`);
+      const selected = await canonicalizeImageArchive(original.path, candidate, original.id);
+      const output = await payloads(candidate);
+      const poisonPath = `blobs/sha256/${sha(poison)}`;
+      assert.equal(output.has(poisonPath), false);
+      assert.equal((await readFile(candidate)).includes(poison), false);
+      input.delete(poisonPath);
+      assert.deepEqual(output, input);
+      const expected = await inspectImageArchive(original.path, original.id, { filesystem: true });
+      const checked = await inspectImageArchive(candidate, original.id, {
+        pruning: { removed: [], executables: [], aliases: [], forbiddenLayers: [] },
+      });
+      assert.deepEqual(checked.saved, selected);
+      compareRootfs(expected.filesystem, checked.filesystem);
+      await assert.rejects(
+        inspectImageArchive(candidate, original.id, {
+          pruning: {
+            removed: [],
+            executables: [],
+            aliases: [],
+            forbiddenLayers: [selected.layers[0]?.digest ?? ""],
+          },
+        }),
+        /binary-bearing base blob/,
+      );
+      assert.equal(checked.filesystem.get("usr/bin/fusermount3")?.mode, 0o4755);
+      assert.equal(
+        checked.filesystem.get("usr/bin/fusermount3")?.attributes[
+          "SCHILY.xattr.security.capability"
+        ],
+        "800001",
+      );
+      await writeFile(
+        candidate,
+        archive(
+          ...[...output].map(([path, bytes]) => record(path, bytes)),
+          record("unexpected", poison),
+        ),
+      );
+      await assert.rejects(
+        inspectImageArchive(candidate, original.id, {
+          pruning: { removed: [], executables: [], aliases: [], forbiddenLayers: [] },
+        }),
+        /unreferenced conveyed/,
+      );
+    }
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+test("canonical export refuses corrupt unused blobs, unsafe extras, duplicates, alternate roots and wrong selected identities", async () => {
+  const work = await mkdtemp(resolve(tmpdir(), "fortipi-canonical-reject-"));
+  try {
+    const layer = archive(record("safe", Buffer.from("safe")));
+    const base = await image(work, [layer]);
+    const input = await payloads(base.path);
+    const index = JSON.parse(input.get("index.json")?.toString() ?? "");
+    const selected = index.manifests[0];
+    const manifest = JSON.parse(
+      input.get(`blobs/sha256/${selected.digest.slice(7)}`)?.toString() ?? "",
+    );
+    const records = [...input].map(([path, bytes]) => record(path, bytes));
+    const cases = [
+      archive(...records, record(`blobs/sha256/${"f".repeat(64)}`, Buffer.from("corrupt"))),
+      archive(...records, record("private-name-must-not-be-printed", Buffer.from("poison"))),
+      archive(...records, record("./index.json", input.get("index.json"))),
+      archive(
+        ...records.filter((_item, i) => [...input.keys()][i] !== "index.json"),
+        record(
+          "index.json",
+          Buffer.from(JSON.stringify({ ...index, manifests: [selected, selected] })),
+        ),
+      ),
+      archive(
+        ...records,
+        record("manifest.json", Buffer.from(JSON.stringify([{ Config: "missing", Layers: [] }]))),
+      ),
+      archive(
+        ...records.filter(
+          (_item, i) =>
+            [...input.keys()][i] !== `blobs/sha256/${manifest.layers[0].digest.slice(7)}`,
+        ),
+        record(`blobs/sha256/${manifest.layers[0].digest.slice(7)}`, Buffer.from("changed layer")),
+      ),
+      archive(
+        ...records,
+        record("link", Buffer.alloc(0), { type: "SymbolicLink", link: "/private" }),
+      ),
+    ];
+    for (const [ordinal, bytes] of cases.entries()) {
+      await writeFile(base.path, bytes);
+      const output = resolve(work, `rejected-${ordinal}.tar`);
+      await assert.rejects(canonicalizeImageArchive(base.path, output, base.id));
+      await assert.rejects(readFile(output), { code: "ENOENT" });
+    }
+    await image(work, [layer]);
+    await assert.rejects(
+      canonicalizeImageArchive(
+        base.path,
+        resolve(work, "wrong-id.tar"),
+        `sha256:${"0".repeat(64)}`,
+      ),
+      /loaded image identity/,
+    );
+    const existing = resolve(work, "existing.tar");
+    await writeFile(existing, "preserve existing output");
+    await assert.rejects(canonicalizeImageArchive(base.path, existing, base.id), {
+      code: "EEXIST",
+    });
+    assert.equal(await readFile(existing, "utf8"), "preserve existing output");
   } finally {
     await rm(work, { recursive: true, force: true });
   }

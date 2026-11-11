@@ -118,7 +118,7 @@ try {
     }
     process.stdout.write(`${JSON.stringify({ ...trace, namespaceStable })}\n`);
   }
-  verifyGatewayEgress(harness.getLogs(), network);
+  verifyGatewayEgress(harness.getLogs(), network, trace && { ...trace, namespaceStable });
   assert.ok(
     trace?.complete && namespaceStable,
     "Harness host-fetch observation is incomplete or unknown",
