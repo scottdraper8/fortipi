@@ -207,6 +207,9 @@ export class Store {
       "local_prepared",
       "local_apply",
       "command",
+      "admin_job",
+      "admin_request",
+      "admin_artifact",
     ];
     if (
       admissions.includes(kind) &&
