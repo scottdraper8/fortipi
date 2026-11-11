@@ -387,6 +387,20 @@ test("native retained post-manifest survives lost metadata ack, obeys the full e
       false,
       "no stale wire proof is cached in a journal observation",
     );
+    const responseMetadata = JSON.parse(
+      (
+        f.ledger.db
+          .prepare("SELECT value FROM meta WHERE key='workspace_response_native_post'")
+          .get() as { value: string }
+      ).value,
+    );
+    assert.equal(responseMetadata.state, "applied");
+    assert.equal(responseMetadata.postManifestHash, applied.postManifestHash);
+    assert.equal(
+      "postManifest" in responseMetadata,
+      false,
+      "the response cache keeps legacy metadata without duplicating the retained full proof",
+    );
     await renewals.stop();
     renewals = undefined;
     await runtime.shutdown();

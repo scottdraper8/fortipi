@@ -909,7 +909,9 @@ export class ExecutorRuntime implements FrameHandler {
     };
     const persist = (response: LocalWorkspaceResponse | ErrorBody) => {
       preflight(response);
-      const encoded = canonicalJson(response);
+      const metadata = { ...response };
+      Reflect.deleteProperty(metadata, "postManifest");
+      const encoded = canonicalJson(metadata);
       this.ledger.transaction(() => {
         this.ledger.capacity(Buffer.byteLength(encoded) + 4096, true);
         this.ledger.db
