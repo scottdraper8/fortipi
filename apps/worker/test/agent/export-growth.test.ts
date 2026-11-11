@@ -11,11 +11,17 @@ interface Trace {
     growth: { pending: number; claims: { operationId: string; reservationId?: string }[] };
     works: { operationId: string; capacity?: D.CapacityReservation }[];
     physical: number;
+    retainedExports: string[];
     report: { input: { coverage: { bytes: number } }; receipt?: { sampleSeq: number } };
   };
-  control: { reservation: D.CapacityReservation; disposition?: string; covered: boolean }[];
+  control: {
+    reservation: D.CapacityReservation;
+    disposition?: string;
+    covered: boolean;
+    held: boolean;
+  }[];
 }
-for (const mode of ["capacity", "settlement"] as const)
+for (const mode of ["capacity", "settlement", "held-settlement"] as const)
   test(`export growth survives lost committed ${mode} reply and requires actual measured coverage`, {
     timeout: 60000,
   }, async () => {
@@ -110,7 +116,72 @@ for (const mode of ["capacity", "settlement"] as const)
       };
       const prepare = async () =>
         JSON.parse(await probe.exportDataJson(auth, input)) as D.Outcome<D.ExportDescriptor>;
+      if (mode === "held-settlement") {
+        const first = prepare().then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+        let draining: Promise<unknown> | undefined;
+        let known: Promise<unknown> | undefined;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await eventually(
+            () => trace(),
+            (state) => state.local.retainedExports.includes(input.exportId),
+          );
+          // Drives only EXISTING export-work repair; before the fix the initial
+          // call itself holds settlement and this drain queues behind it.
+          draining = trace(false, true).then(
+            (value) => ({ value }),
+            (error) => ({ error }),
+          );
+          await eventually(
+            () => trace(),
+            (state) => state.control[0]?.held === true,
+          );
+          known = prepare().then(
+            (value) => ({ value }),
+            (error) => ({ error }),
+          );
+          const observed = await Promise.race([
+            Promise.all([first, known]).then((values) => ({ ready: true as const, values })),
+            new Promise<{ ready: false }>((accept) => {
+              timeout = setTimeout(() => accept({ ready: false }), 2000);
+            }),
+          ]);
+          assert.equal(
+            observed.ready,
+            true,
+            "Durably READY initial and known export descriptors must not await a held CP settlement",
+          );
+          if (!observed.ready) assert.fail("Retained descriptor blocked on settlement");
+          const ready = observed.values[0] as { value: D.Outcome<D.ExportDescriptor> };
+          assert.ok(ready.value.ok);
+          assert.deepEqual(observed.values[0], observed.values[1]);
+          const held = await trace(true);
+          assert.equal(held.control[0]?.disposition, "consumed");
+          assert.equal(held.control[0]?.covered, false);
+          assert.ok(
+            held.local.growth.claims.some(
+              (row) => row.operationId === held.local.works[0]?.operationId,
+            ),
+            "Held completion reply cannot retire export P even after physical measurement",
+          );
+        } finally {
+          clearTimeout(timeout);
+          await raw("/__export-growth/mode");
+          await Promise.allSettled([first, draining, known]);
+        }
+        const repaired = await trace();
+        assert.equal(repaired.local.works.length, 0);
+        assert.ok(repaired.local.growth.pending > 0, "Actual ACK alone still retains P");
+        const covered = await trace(true);
+        assert.equal(covered.local.growth.pending, 0);
+        assert.equal(covered.control[0]?.covered, true);
+        return;
+      }
       const first = await prepare();
+      if (mode === "settlement") await trace(false, true);
       const held = await trace();
       assert.equal(held.local.works.length, 1);
       const operationId = held.local.works[0]?.operationId;

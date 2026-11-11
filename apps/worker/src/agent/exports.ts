@@ -94,9 +94,7 @@ export class AgentExports {
         "conflict",
         "Export identity changed",
       );
-      if (!(await this.store.get("export-work", input.exportId)))
-        return this.#retained(existing, auth);
-      return this.conversations.lanes.run("exports", () => this.#retained(existing, auth));
+      return this.#retained(existing, auth);
     }
     // Bound retained-copy working memory actor-wide; SQL/CP calls stay outside
     // one another's transactions. This lane does not own timers or execution.
@@ -317,25 +315,19 @@ export class AgentExports {
         await this.authority.current(auth, scope({ ...input.resources, actions: [action] }), tx);
         await this.store.put("export", input.exportId, retained, tx);
       });
-      // Ready describes immutable retained bytes. A lost settlement reply keeps
-      // the original work/P for repair; it cannot revoke those bytes or refund P.
-      await this.#complete(work, auth).catch((error) => this.#defer(input.exportId, error));
+      // Ready describes immutable retained bytes. Settlement is durable repair
+      // debt; a held CP reply must not block this receipt or the copy lane.
+      await this.conversations.host.arm();
       await this.authority.current(auth, resources);
       return this.descriptor(retained);
     });
   }
   async #retained(retained: RetainedExport, auth: D.AuthContext): Promise<D.ExportDescriptor> {
+    const resources = scope({ ...retained.resources, actions: [retained.action] });
+    await this.authority.current(auth, resources);
     const work = await this.store.get<ExportWork>("export-work", retained.exportId);
-    if (work)
-      await this.#complete(work, auth).catch(async (error) => {
-        // Retained bytes remain available if even the repair marker is unwritable.
-        // The original work and pending charge remain intact in either case.
-        await this.#defer(retained.exportId, error).catch(() => {});
-      });
-    await this.authority.current(
-      auth,
-      scope({ ...retained.resources, actions: [retained.action] }),
-    );
+    if (work) await this.conversations.host.arm();
+    await this.authority.current(auth, resources);
     return this.descriptor(retained);
   }
   async #defer(exportId: string, error: unknown): Promise<void> {
@@ -404,7 +396,7 @@ export class AgentExports {
       const auth = { ...row.value.auth, deadline: Math.min(budget.deadline, Date.now() + 30000) };
       try {
         if (await this.store.get("export", row.id)) {
-          await this.conversations.lanes.run("exports", () => this.#complete(row.value, auth));
+          await this.#complete(row.value, auth);
         } else await this.prepare(auth, { ...row.value.input, deadline: auth.deadline });
       } catch (error) {
         await this.#defer(row.id, error);

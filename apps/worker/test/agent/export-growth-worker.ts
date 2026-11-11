@@ -17,6 +17,7 @@ export {
 export class ControlPlane extends BaseControlPlane {
   #mode = "";
   #operationId = "";
+  readonly #held = new Set<() => void>();
   override async reserveCapacity(
     auth: D.AuthContext,
     input: {
@@ -43,6 +44,12 @@ export class ControlPlane extends BaseControlPlane {
     },
   ): Promise<D.Outcome<D.CapacityReservation>> {
     const result = await super.settleCapacity(auth, input);
+    if (result.ok && result.value.admissionSlots === 0 && this.#mode === "held-settlement") {
+      this.#operationId = result.value.operationId;
+      await new Promise<void>((accept) => {
+        this.#held.add(accept);
+      });
+    }
     if (result.ok && result.value.admissionSlots === 0 && this.#mode === "settlement") {
       this.#operationId = result.value.operationId;
       return this.#lost(auth);
@@ -63,6 +70,9 @@ export class ControlPlane extends BaseControlPlane {
     const url = new URL(request.url);
     if (url.pathname === "/__export-growth/mode") {
       this.#mode = url.searchParams.get("mode") ?? "";
+      const releases = [...this.#held];
+      this.#held.clear();
+      for (const release of releases) release();
       return Response.json(true);
     }
     if (url.pathname === "/__export-growth/trace")
@@ -78,6 +88,7 @@ export class ControlPlane extends BaseControlPlane {
             reservation: row.value.reservation,
             disposition: row.value.settlement?.disposition,
             covered: row.value.covered ?? false,
+            held: this.#held.size > 0,
           })),
       );
     return super.fetch(request);
@@ -102,6 +113,7 @@ export class TestAgentSession extends BaseAgent {
         );
       }
       return Response.json({
+        retainedExports: (await this.store.page("export", 100)).map((row) => row.id),
         growth: await this.growthReport(),
         physical: this.store.physicalBytes(),
         report: JSON.parse(await this.lastPhysicalSample()),
