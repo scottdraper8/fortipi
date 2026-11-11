@@ -333,12 +333,25 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
           jobs.processed,
       ),
     });
+    const exports = await this.exports.drain({
+      ...budget,
+      maxItems: Math.max(
+        0,
+        budget.maxItems -
+          control.processed -
+          reconciliation.processed -
+          fresh.processed -
+          jobs.processed -
+          projection.processed,
+      ),
+    });
     const wakes = [
       control.nextWakeAt,
       reconciliation.nextWakeAt,
       fresh.nextWakeAt,
       jobs.nextWakeAt,
       projection.nextWakeAt,
+      exports.nextWakeAt,
     ].filter((value): value is number => value !== undefined);
     return {
       processed:
@@ -346,13 +359,15 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         reconciliation.processed +
         fresh.processed +
         jobs.processed +
-        projection.processed,
+        projection.processed +
+        exports.processed,
       remaining:
         control.remaining ||
         reconciliation.remaining ||
         fresh.remaining ||
         jobs.remaining ||
-        projection.remaining,
+        projection.remaining ||
+        exports.remaining,
       ...(wakes.length ? { nextWakeAt: Math.min(...wakes) } : {}),
     };
   }

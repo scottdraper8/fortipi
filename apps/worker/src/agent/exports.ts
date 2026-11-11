@@ -1,6 +1,6 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { EntryId } from "@earendil-works/pi-durable";
-import { check, digest, scope } from "../api/common.js";
+import { check, digest, resourceId, ServiceError, same, scope, unwrap } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Jobs } from "../execution/jobs.js";
 import type { Authority } from "./authority.js";
@@ -19,6 +19,15 @@ interface RetainedExport {
   size: number;
   complete: boolean;
   createdAt: number;
+}
+interface ExportWork {
+  input: D.ExportRequest;
+  fingerprint: string;
+  auth: D.AuthContext;
+  operationId: string;
+  bytes: number;
+  policyVersion: number;
+  capacity?: D.CapacityReservation;
 }
 async function hash(bytes: Uint8Array) {
   return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (b) =>
@@ -85,9 +94,13 @@ export class AgentExports {
         "conflict",
         "Export identity changed",
       );
-      return this.descriptor(existing);
+      if (!(await this.store.get("export-work", input.exportId)))
+        return this.#retained(existing, auth);
+      return this.conversations.lanes.run("exports", () => this.#retained(existing, auth));
     }
-    return this.conversations.lanes.run(`export:${input.exportId}`, async () => {
+    // Bound retained-copy working memory actor-wide; SQL/CP calls stay outside
+    // one another's transactions. This lane does not own timers or execution.
+    return this.conversations.lanes.run("exports", async () => {
       const prior = await this.store.get<RetainedExport>("export", input.exportId);
       if (prior) {
         check(
@@ -95,9 +108,59 @@ export class AgentExports {
           "conflict",
           "Export identity changed",
         );
-        return this.descriptor(prior);
+        return this.#retained(prior, auth);
       }
-      this.store.admissionHeadroom(input.maxBytes);
+      const resources = scope({ ...input.resources, actions: [action] });
+      let work = await this.store.get<ExportWork>("export-work", input.exportId);
+      if (work)
+        check(
+          work.fingerprint === fingerprint && work.auth.principalId === auth.principalId,
+          "conflict",
+          "Export identity changed",
+        );
+      else {
+        // A bounded NDJSON payload is copied into a JSON string. At most two
+        // encoded payload bytes per byte are estimated here, plus the actual
+        // encoded metadata and app records. This is not a SQLite upper bound.
+        const metadataBytes = new TextEncoder().encode(JSON.stringify({ input, auth })).length;
+        const bytes = input.maxBytes * 2 + metadataBytes * 2 + 8192;
+        await this.authority.physical.makeRoom(auth, resources, bytes);
+        const candidate: ExportWork = {
+          input,
+          auth,
+          fingerprint,
+          bytes,
+          policyVersion: this.store.policy.version,
+          operationId: resourceId("m", this.authority.agentId),
+        };
+        await this.store.transaction(async (tx) => {
+          await this.authority.current(auth, resources, tx);
+          await this.store.claimGrowth(candidate.operationId, bytes, tx);
+          await this.store.put("export-work", input.exportId, candidate, tx, Date.now());
+        });
+        work = candidate;
+      }
+      await this.conversations.host.arm();
+      if (!work.capacity) {
+        const pending = work;
+        await this.authority.physical.beforeGrowth(auth, resources);
+        const capacity = unwrap(
+          await this.authority.control.reserveCapacity(auth, {
+            operationId: work.operationId,
+            ownerId: this.authority.agentId,
+            policyVersion: work.policyVersion,
+            bytes: work.bytes,
+            admissionSlots: 0,
+          }),
+        );
+        await this.store.transaction(async (tx) => {
+          await this.authority.current(auth, resources, tx);
+          await this.store.bindGrowth(pending.operationId, capacity.reservationId, tx);
+          work = { ...pending, capacity };
+          await this.store.put("export-work", input.exportId, work, tx, Date.now());
+        });
+      }
+      await this.authority.current(auth, resources);
       const parts: string[] = [],
         conversationIds: string[] = [];
       let size = 0,
@@ -254,8 +317,108 @@ export class AgentExports {
         await this.authority.current(auth, scope({ ...input.resources, actions: [action] }), tx);
         await this.store.put("export", input.exportId, retained, tx);
       });
+      // Ready describes immutable retained bytes. A lost settlement reply keeps
+      // the original work/P for repair; it cannot revoke those bytes or refund P.
+      await this.#complete(work, auth).catch((error) => this.#defer(input.exportId, error));
+      await this.authority.current(auth, resources);
       return this.descriptor(retained);
     });
+  }
+  async #retained(retained: RetainedExport, auth: D.AuthContext): Promise<D.ExportDescriptor> {
+    const work = await this.store.get<ExportWork>("export-work", retained.exportId);
+    if (work)
+      await this.#complete(work, auth).catch(async (error) => {
+        // Retained bytes remain available if even the repair marker is unwritable.
+        // The original work and pending charge remain intact in either case.
+        await this.#defer(retained.exportId, error).catch(() => {});
+      });
+    await this.authority.current(
+      auth,
+      scope({ ...retained.resources, actions: [retained.action] }),
+    );
+    return this.descriptor(retained);
+  }
+  async #defer(exportId: string, error: unknown): Promise<void> {
+    const retry = error instanceof ServiceError ? error.details?.retryAfterMs : undefined;
+    const held =
+      error instanceof ServiceError &&
+      (error.retryable === false ||
+        retry === 0 ||
+        error.code === "unauthorized" ||
+        error.code === "unauthenticated");
+    const current = await this.store.get<ExportWork>("export-work", exportId);
+    if (current)
+      await this.store.put(
+        "export-work",
+        exportId,
+        current,
+        undefined,
+        held
+          ? null
+          : Date.now() +
+              (typeof retry === "number" && Number.isSafeInteger(retry) && retry > 0
+                ? retry
+                : 30000),
+      );
+  }
+  async #complete(work: ExportWork, auth: D.AuthContext): Promise<void> {
+    const resources = scope({ ...work.input.resources, actions: [work.input.action] });
+    await this.authority.current(auth, resources);
+    const retained = await this.store.get<RetainedExport>("export", work.input.exportId);
+    check(
+      retained?.fingerprint === work.fingerprint && work.capacity,
+      "interrupted",
+      "Export completion proof unavailable",
+    );
+    const capacity = work.capacity;
+    const settled = unwrap(
+      await this.authority.control.settleCapacity(auth, {
+        reservationId: work.capacity.reservationId,
+        disposition: "consumed",
+      }),
+    );
+    check(
+      same(settled, { ...work.capacity, state: "settled" }),
+      "conflict",
+      "Export settlement identity changed",
+    );
+    await this.store.transaction(async (tx) => {
+      await this.authority.current(auth, resources, tx);
+      const current = await this.store.get<ExportWork>("export-work", work.input.exportId, tx);
+      if (!current) return;
+      check(current.operationId === work.operationId, "conflict", "Export work changed");
+      await this.authority.physical.completed(capacity.reservationId, tx, work.operationId);
+      await this.store.remove("export-work", work.input.exportId, tx);
+    });
+    await this.authority.current(auth, resources);
+  }
+  async drain(budget: D.DrainBudget): Promise<D.DrainProgress> {
+    let processed = 0;
+    for (const row of await this.store.page<ExportWork>(
+      "export-work",
+      Math.min(1, budget.maxItems),
+      "",
+      Date.now(),
+    )) {
+      if (Date.now() >= budget.deadline) break;
+      const auth = { ...row.value.auth, deadline: Math.min(budget.deadline, Date.now() + 30000) };
+      try {
+        if (await this.store.get("export", row.id)) {
+          await this.conversations.lanes.run("exports", () => this.#complete(row.value, auth));
+        } else await this.prepare(auth, { ...row.value.input, deadline: auth.deadline });
+      } catch (error) {
+        await this.#defer(row.id, error);
+      }
+      processed++;
+    }
+    const due = await this.store.db.get<{ due: number | null }>(
+      "SELECT min(due) AS due FROM fp_records_v1 WHERE kind='export-work' AND due IS NOT NULL",
+    );
+    return {
+      processed,
+      remaining: due?.due != null,
+      ...(due?.due != null ? { nextWakeAt: Math.max(Date.now() + 5000, due.due) } : {}),
+    };
   }
   private descriptor(retained: RetainedExport): D.ExportDescriptor {
     return {

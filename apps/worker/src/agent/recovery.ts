@@ -84,6 +84,7 @@ export class Recovery {
     const kinds = [
       "admission",
       "creation",
+      "export-work",
       "dirty",
       "control",
       "reconciliation",
