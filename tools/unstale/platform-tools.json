@@ -246,5 +246,113 @@
       "reason": "Publisher description says fixed in v0.37.2 despite stale unbounded structured affected range; exact v0.38.2 is later. CI invokes reviewed Dockerfile build, never bake/rawjson or untrusted definitions. Other published advisories fixed by v0.38.1 or earlier."
     },
     "observation": "Official latest non-prerelease; GitHub asset digest and publisher checksum match downloaded Linux amd64 bytes; standalone CI tool only, no product distribution. Actual Linux plugin/default driver build proof remains required."
+  },
+  "rootless": {
+    "version": "29.9.3",
+    "url": "https://download.docker.com/linux/static/stable/x86_64/docker-rootless-extras-29.9.3.tgz",
+    "sha256": "c41b7194dca722fe929bc0225fc87f3166c97e67d50a521533b0b23f3c79a466",
+    "files": {
+      "rootlesskit": "e4daafede0347d4efe2f5eddd5fc93ba1c29a1f94b9320c427f55bbbb1f79dc6",
+      "dockerd-rootless.sh": "200203633806081a401e60aefdf68a8fa73fc7dc80aa854c52a69d47710a3488",
+      "dockerd-rootless-setuptool.sh": "1c9f0dc93ebb3d75255254ec760d26a912affba7f329ab8abffe8e25eb0b3f94"
+    },
+    "rootlesskit": {
+      "version": "3.3.0",
+      "source": "888c3189e9cdf34dcdb19011e1c7c34eb94b5393",
+      "sourceArchiveSha256": "e560e4d46b8e168ea02d34d1cd95306eaa6361568a09d8b8ac92d37f4f5e7c59",
+      "go": "go1.26.10",
+      "network": "integrated gvisor-tap-vsock v0.8.9; builtin port driver; host loopback disabled; static subids"
+    },
+    "scriptSource": "https://github.com/moby/moby/blob/a46e6fa73efcb25d5298ef798ba865744dc5485a/contrib/dockerd-rootless.sh",
+    "licenses": [
+      {
+        "path": "tools/unstale/licenses/rootless-containers/rootlesskit/888c3189e9cdf34dcdb19011e1c7c34eb94b5393/LICENSE",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "path": "tools/unstale/licenses/moby/moby/a46e6fa73efcb25d5298ef798ba865744dc5485a/LICENSE",
+        "sha256": "7c87873291f289713ac5df48b1f2010eb6963752bbd6b530416ab99fc37914a8"
+      },
+      {
+        "path": "tools/unstale/licenses/moby/moby/a46e6fa73efcb25d5298ef798ba865744dc5485a/NOTICE",
+        "sha256": "b40ec5b16182103ef1cd69d42a21c98369e35bd483b3973902da4807c0755446"
+      },
+      {
+        "path": "tools/unstale/licenses/ubuntu/uidmap/4.13+dfsg1-4ubuntu3.2/copyright",
+        "sha256": "a4c3e5b19700dd3cc5961663d204bd7150f65f913314682aede5931548c436d5"
+      },
+      {
+        "path": "tools/unstale/licenses/containers/gvisor-tap-vsock/v0.8.9/LICENSE",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "path": "tools/unstale/licenses/golang/go/go1.26.10/LICENSE",
+        "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+      }
+    ],
+    "uidmap": {
+      "version": "1:4.13+dfsg1-4ubuntu3.2",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/s/shadow/uidmap_4.13+dfsg1-4ubuntu3.2_amd64.deb",
+      "sha256": "a80cb7f72dd18c73cbb0b07b7fbe855504f26bfafae072a9b3d125c89d499b9e",
+      "binaries": {
+        "newuidmap": "9035472d2a4ab77d5df65b8b500054330e1e6c1ba58d6ddfdf7234b4e6d8b038",
+        "newgidmap": "32011f9ee3aeda7c26c6aacc0a6046013aa958c35d468fd15d0dd34788f2bcc5"
+      },
+      "observation": "Require already-installed exact Ubuntu noble-updates amd64 package and root-owned setuid binary hashes; no package installation. Dynamic host libraries and actual runner baseline remain Linux review."
+    },
+    "securityReferences": [
+      "https://github.com/rootless-containers/rootlesskit/releases/tag/v3.3.0",
+      "https://github.com/rootless-containers/rootlesskit/security/advisories",
+      "https://github.com/containers/gvisor-tap-vsock/security/advisories",
+      "https://docs.docker.com/engine/security/rootless/",
+      "https://docs.docker.com/engine/security/rootless/troubleshoot/"
+    ],
+    "observation": "Optional CI-only proposal. Official archive SHA and embedded source/build metadata verified statically on macOS; no executable runtime, signature, attestation, Linux, image or FUSE approval. No selected tooling bytes enter product images. Exact advisory reachability and license review in canonical phase3/thread-1/rootless-ci-followup.md; independent parent review required.",
+    "securityReview": {
+      "checkedAt": "2026-11-11T04:53:12.231Z",
+      "rootlesskitPublishedAdvisories": 0,
+      "networkPublishedAdvisories": 0,
+      "osvModuleQueries": 28,
+      "findings": [
+        {
+          "ids": ["GO-2026-5932"],
+          "affected": "golang.org/x/crypto v0.57.0; OpenPGP packages",
+          "observation": "OpenPGP package names absent from selected binary. Proposed nonapplicability for parent review; module-version finding is retained."
+        },
+        {
+          "ids": ["GO-2026-6860", "GO-2026-6866"],
+          "affected": "golang.org/x/net v0.60.0; HTML parser/renderer",
+          "observation": "HTML package names absent from selected binary. Proposed nonapplicability for parent review; module-version findings are retained."
+        },
+        {
+          "ids": ["GO-2026-6859"],
+          "affected": "Go 1.26.10 net/http; concurrent MaxBytesReader response-header writes",
+          "observation": "MaxBytesReader symbol text is present. Scan of 3,829 non-test Go files in all 27 embedded modules found no API uses outside two documentation comments. No direct application use found; source review suggests the stated race is not exercised. Independent parent review required; no blanket stdlib/security suppression."
+        }
+      ],
+      "scope": "Static source/package reachability observations, not govulncheck, runtime exploit testing, signature verification or security approval. Revalidate before Linux use.",
+      "sources": [
+        {
+          "id": "GO-2026-5932",
+          "url": "https://vuln.go.dev/ID/GO-2026-5932.json",
+          "sha256": "bde8769150ec1368d9a8dbd61fbbde52296de692c57147e02e3ae295e1981f11"
+        },
+        {
+          "id": "GO-2026-6860",
+          "url": "https://vuln.go.dev/ID/GO-2026-6860.json",
+          "sha256": "443304c129b9540dc46d28392b973a136db90644019dc20c3e25941833d49df3"
+        },
+        {
+          "id": "GO-2026-6866",
+          "url": "https://vuln.go.dev/ID/GO-2026-6866.json",
+          "sha256": "c0d687be9779f000941b6c847646075598b659cdd51476951559208956bd0f82"
+        },
+        {
+          "id": "GO-2026-6859",
+          "url": "https://vuln.go.dev/ID/GO-2026-6859.json",
+          "sha256": "9eb1590c57233fd8a63e8ad737d12cbdef5572eed86ffee05897291fff12a9ce"
+        }
+      ]
+    }
   }
 }
