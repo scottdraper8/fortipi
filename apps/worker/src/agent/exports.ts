@@ -325,9 +325,6 @@ export class AgentExports {
   async #retained(retained: RetainedExport, auth: D.AuthContext): Promise<D.ExportDescriptor> {
     const resources = scope({ ...retained.resources, actions: [retained.action] });
     await this.authority.current(auth, resources);
-    const work = await this.store.get<ExportWork>("export-work", retained.exportId);
-    if (work) await this.conversations.host.arm();
-    await this.authority.current(auth, resources);
     return this.descriptor(retained);
   }
   async #defer(exportId: string, error: unknown): Promise<void> {

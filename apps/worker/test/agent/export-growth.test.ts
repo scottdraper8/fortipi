@@ -12,6 +12,7 @@ interface Trace {
     works: { operationId: string; capacity?: D.CapacityReservation }[];
     physical: number;
     retainedExports: string[];
+    armFailures: number;
     report: { input: { coverage: { bytes: number } }; receipt?: { sampleSeq: number } };
   };
   control: {
@@ -139,6 +140,7 @@ for (const mode of ["capacity", "settlement", "held-settlement"] as const)
             () => trace(),
             (state) => state.control[0]?.held === true,
           );
+          await raw(`/__export-growth/arm-failure?agent=${agent.agentId}`);
           known = prepare().then(
             (value) => ({ value }),
             (error) => ({ error }),
@@ -157,8 +159,13 @@ for (const mode of ["capacity", "settlement", "held-settlement"] as const)
           if (!observed.ready) assert.fail("Retained descriptor blocked on settlement");
           const ready = observed.values[0] as { value: D.Outcome<D.ExportDescriptor> };
           assert.ok(ready.value.ok);
-          assert.deepEqual(observed.values[0], observed.values[1]);
+          assert.deepEqual(
+            observed.values[0],
+            observed.values[1],
+            "Known READY descriptor must survive an unwritable app wake arm",
+          );
           const held = await trace(true);
+          assert.equal(held.local.armFailures, 0, "Known receipt attempts no wake/marker mutation");
           assert.equal(held.control[0]?.disposition, "consumed");
           assert.equal(held.control[0]?.covered, false);
           assert.ok(

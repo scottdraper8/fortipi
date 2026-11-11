@@ -95,8 +95,25 @@ export class ControlPlane extends BaseControlPlane {
   }
 }
 export class TestAgentSession extends BaseAgent {
+  #failArm = false;
+  #armFailures = 0;
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    const arm = this.conversations.host.arm;
+    this.conversations.host.arm = async () => {
+      if (this.#failArm) {
+        this.#armFailures++;
+        throw new Error("Synthetic unwritable own application wake intent");
+      }
+      await arm();
+    };
+  }
   override async onRequest(request: Request) {
     const url = new URL(request.url);
+    if (url.pathname === "/__export-growth/arm-failure") {
+      this.#failArm = true;
+      return Response.json(true);
+    }
     if (url.pathname === "/__export-growth/trace") {
       await this.lifecycle.start();
       if (url.searchParams.get("drain") === "true")
@@ -113,6 +130,7 @@ export class TestAgentSession extends BaseAgent {
         );
       }
       return Response.json({
+        armFailures: this.#armFailures,
         retainedExports: (await this.store.page("export", 100)).map((row) => row.id),
         growth: await this.growthReport(),
         physical: this.store.physicalBytes(),
@@ -133,6 +151,8 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/__export-growth/mode")
       return env.CONTROL_PLANE.getByName("control").fetch(request);
+    if (url.pathname === "/__export-growth/arm-failure")
+      return env.AGENT_SESSIONS.getByName(url.searchParams.get("agent") ?? "").fetch(request);
     if (url.pathname === "/__export-growth/trace") {
       const local = await (
         await env.AGENT_SESSIONS.getByName(url.searchParams.get("agent") ?? "").fetch(
