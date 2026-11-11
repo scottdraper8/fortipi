@@ -1,20 +1,35 @@
 import { DurableObject } from "cloudflare:workers";
 import { Workspace, WorkspaceProxy } from "@cloudflare/computer";
 import { CodemodeBackend } from "@cloudflare/computer/backends/codemode";
-import { ContainerBackend, withWorkspaceContainer } from "@cloudflare/computer/backends/container";
+import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
 import {
   containerRequestFailureStage,
   FencedContainerAPI,
 } from "../../src/container/host-adapter.js";
+import { ContainerHostTransport } from "../../src/container/host-transport.js";
 
 export { WorkspaceProxy };
 
-class Host extends DurableObject {}
-export class ProbeHost extends withWorkspaceContainer(Host) {
+export class ProbeHost extends DurableObject {
+  #transport: ContainerHostTransport | undefined;
   preparedImage(): string {
     const image = this.ctx.container?.images.computerd;
     if (!image) throw new Error("Prepared computerd image required");
     return image;
+  }
+  #host(): ContainerHostTransport {
+    this.#transport ??= new ContainerHostTransport(
+      this.ctx.storage,
+      new WorkspaceContainerAPI(this.ctx),
+      () => this.preparedImage(),
+    );
+    return this.#transport;
+  }
+  getWorkspaceContainer() {
+    return this.#host().getWorkspaceContainer();
+  }
+  override fetch(request: Request): Promise<Response> {
+    return this.#host().fetch(request);
   }
 }
 interface ProbeEnv {
@@ -38,6 +53,7 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
       if (!this.env.LINUX_CONTAINERS) throw new Error("Container binding required");
       containerHost = new FencedContainerAPI(
         await this.env.LINUX_CONTAINERS.getByName("probe-host").getWorkspaceContainer(),
+        this.env.LINUX_CONTAINERS.getByName("probe-host"),
       );
     }
     const backend = linux

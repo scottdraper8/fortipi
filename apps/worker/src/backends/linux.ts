@@ -37,7 +37,7 @@ export async function linux(
   const stub = env.LINUX_CONTAINERS.get(
     env.LINUX_CONTAINERS.idFromName(linuxHostId(config.host, scratchId)),
   );
-  const host = new FencedContainerAPI(await stub.getWorkspaceContainer());
+  const host = new FencedContainerAPI(await stub.getWorkspaceContainer(), stub);
   return {
     host,
     backend: new ContainerBackend({
