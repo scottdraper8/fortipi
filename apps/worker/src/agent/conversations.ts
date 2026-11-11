@@ -79,6 +79,30 @@ export class Conversations {
   constructor(host: ConversationHost) {
     this.host = host;
   }
+  /** An infrastructure bound on one admitted run, not a provider usage allowance. */
+  async configureRun(
+    auth: D.AuthContext,
+    piId: string,
+    conversationId: string,
+    action: string,
+  ): Promise<void> {
+    const resources = scope({
+      agentIds: [this.host.agentId],
+      conversationIds: [conversationId],
+      actions: [action],
+    });
+    await this.host.authority.current(auth, resources);
+    const harness = await this.host.pi.pi();
+    const conversation = await harness.conversation(
+      Number(piId) as ConversationId,
+      BACKGROUND_CONTEXT,
+    );
+    check(conversation, "interrupted", "Pi conversation unavailable");
+    const agent = await conversation.agent(BACKGROUND_CONTEXT);
+    await this.host.authority.current(auth, resources);
+    if (agent.maxTurns !== 4) await conversation.configure({ maxTurns: 4 }, BACKGROUND_CONTEXT);
+    await this.host.authority.current(auth, resources);
+  }
   draft(
     cid: string,
   ): Pick<
@@ -524,6 +548,12 @@ export class Conversations {
         await pi
           .session(row.piId)
           .setModel({ provider: admission.model.providerId, id: admission.model.modelId });
+        await this.configureRun(
+          { ...admission.auth, deadline: Date.now() + 30000 },
+          row.piId,
+          admission.conversationId,
+          admission.mode === "steer" ? "conversations.steer" : "messages.submit",
+        );
         await pi.session(row.piId).submit(admission.content, {
           operationId: admission.operationId,
           whenBusy: admission.mode,

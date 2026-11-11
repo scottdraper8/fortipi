@@ -210,6 +210,8 @@ export class TestAgentSession extends AgentSession {
       provider: "cloudflare",
       models: [{ id: defaultModel.modelId }, { id: "fixture-alternate" }],
       tokensPerSecond: 100000,
+      // Pi faux token sizes are four ASCII characters each:64 gives actual256B deltas.
+      tokenSize: { min: 64, max: 64 },
     });
     faux.setResponses(
       Array.from({ length: 100 }, () => async (context) => {
@@ -451,6 +453,40 @@ export class TestAgentSession extends AgentSession {
       },
       fauxAssistantMessage("resumed-without-input"),
     ]);
+  }
+  async queueRepeatedInvalidTools() {
+    await this.lifecycle.start();
+    await this.pi.pi();
+    if (!this.faux) throw new Error("Faux provider unavailable");
+    this.faux.setResponses(
+      Array.from({ length: 8 }, () =>
+        fauxAssistantMessage(fauxToolCall("fortipi_dispatch", {}), { stopReason: "toolUse" }),
+      ),
+    );
+  }
+  async runPolicy(cid: string) {
+    const row = await this.store.get<ConversationRow>("conversation", cid);
+    if (!row) throw new Error("Unknown conversation");
+    const harness = await this.pi.pi(),
+      conversation = await harness.conversation(
+        Number(row.piId) as import("@earendil-works/pi-durable").ConversationId,
+        BACKGROUND_CONTEXT,
+      );
+    if (!conversation) throw new Error("Unknown Pi conversation");
+    const agent = await conversation.agent(BACKGROUND_CONTEXT);
+    const admissions = await this.store.page<import("../../src/agent/conversations.js").Admission>(
+      "admission",
+      100,
+    );
+    const records = [];
+    for (const item of admissions.filter((item) => item.value.conversationId === cid))
+      records.push(
+        await harness.commit(
+          (tx) => tx.submissionByRequest(conversation.id, item.value.operationId),
+          BACKGROUND_CONTEXT,
+        ),
+      );
+    return JSON.stringify({ maxTurns: agent.maxTurns, records, calls: this.faux?.state.callCount });
   }
   async toolState(cid: string) {
     const mapped = await this.store.get<ConversationRow>("conversation", cid);

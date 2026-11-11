@@ -173,6 +173,7 @@ export class Controls {
         });
         if (!submission) {
           await pi.session(row.piId).setModel({ provider: model.providerId, id: model.modelId });
+          await this.conversations.configureRun(auth, row.piId, admission.conversationId, action);
           await pi.session(row.piId).continue({ operationId: id });
         }
       }

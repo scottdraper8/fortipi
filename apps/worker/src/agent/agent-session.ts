@@ -35,6 +35,7 @@ import { type JobState, Jobs } from "../execution/jobs.js";
 import { FreshJobs } from "../execution/new-job.js";
 import { Reconciliation } from "../execution/reconciliation.js";
 import { buildRegistry, type DispatchTask } from "../execution/registry.js";
+import { ModelStorageBounds } from "../models/bounded.js";
 import { bootstrapModels, buildModels } from "../models/factory.js";
 import { retainedModelConfigurations } from "../models/retained.js";
 import { configuredModel } from "../models/selection.js";
@@ -86,6 +87,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
   #modelRegistry: MutableModels | undefined;
   #installedModelConfiguration: D.ModelConfig | undefined;
   readonly #modelBuilder: typeof buildModels;
+  readonly #modelBounds: ModelStorageBounds;
   readonly #testModelBuilder: boolean;
   constructor(ctx: DurableObjectState, env: Env, modelBuilder?: typeof buildModels) {
     super(ctx, env);
@@ -94,6 +96,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
     this.lifecycle = Lifecycle.install(this);
     this.agentId = this.lifecycle.name;
     this.store = new Store(ctx.storage, env.FORTIPI_CONFIG.infrastructure);
+    this.#modelBounds = new ModelStorageBounds(this.store.policy.bounds.activeMutatingJobs);
     this.authority = new Authority(
       this.store,
       env.CONTROL_PLANE.getByName("control"),
@@ -223,7 +226,10 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
             agentId: this.agentId,
             deploymentId: this.env.CONTROL_PLANE.idFromName("control").toString(),
           });
-    if (result.ok) this.#installedModelConfiguration = selected;
+    if (result.ok) {
+      this.#modelBounds.install(result.value);
+      this.#installedModelConfiguration = selected;
+    }
     return result;
   }
   #selectedModel(auth: D.AuthContext): Promise<D.ModelConfig> {
@@ -244,6 +250,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       "Selected model unavailable",
     );
     check(provider && this.#modelRegistry, "unsupported", "Selected model provider unavailable");
+    this.#modelBounds.install(replacement);
     return { models: replacement, catalog: retained.catalog };
   }
   async #selectModel(

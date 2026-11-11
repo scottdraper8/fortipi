@@ -11,7 +11,7 @@ import { PiHarness } from "agents/harness/pi";
 import { Lifecycle } from "agents/lifecycle";
 import { ModelStorageBounds } from "../../src/models/bounded.js";
 
-/** UNADOPTED helper qualification: real PiHarness/Lifecycle/SQLite, synthetic provider only. */
+/** Helper qualification: real PiHarness/Lifecycle/SQLite, synthetic provider only. */
 export class BoundsProbe extends DurableObject {
   readonly lifecycle = Lifecycle.install(this);
   readonly bounds = new ModelStorageBounds(1);
@@ -31,7 +31,8 @@ export class BoundsProbe extends DurableObject {
       const provider = fauxProvider({
         models: [{ id: "bounded" }],
         tokensPerSecond: 1000000,
-        tokenSize: { min: this.#chunkBytes, max: this.#chunkBytes },
+        // The pinned faux provider emits four ASCII characters per faux token.
+        tokenSize: { min: this.#chunkBytes / 4, max: this.#chunkBytes / 4 },
       });
       this.#responseProvider = provider;
       const original = provider.provider.streamSimple.bind(provider.provider);
