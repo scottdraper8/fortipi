@@ -9,7 +9,13 @@ import { build } from "esbuild";
 
 const directory = await mkdtemp(join(tmpdir(), "fortipi-auth-fault-"));
 try {
-  for (const fault of ["provider-only", "latest-only"] as const) {
+  for (const fault of [
+    "provider-only",
+    "latest-only",
+    "stale-installed-auth",
+    "historical-auth",
+    "cold-stored-selection",
+  ] as const) {
     const outfile = join(directory, `${fault}.js`);
     let changes = 0;
     await build({
@@ -28,32 +34,72 @@ try {
         {
           name: "owned-model-regression",
           setup(builder) {
-            builder.onLoad({ filter: /src\/agent\/agent-session\.ts$/ }, async (args) => {
-              let contents = await readFile(args.path, "utf8");
-              const needle =
-                fault === "provider-only"
-                  ? "this.#modelRegistry = installed.models;"
-                  : "const { configurations } = await retainedModelConfigurations(this.store);";
-              assert.equal(contents.split(needle).length, 2);
-              contents = contents.replace(
-                needle,
-                fault === "provider-only"
-                  ? "this.#modelRegistry.setProvider(installed.models.getProvider(selected.providerId));"
-                  : 'const selected = await this.store.get("meta", "selected-model"); const configurations = selected ? [selected] : [];',
-              );
-              changes++;
-              return { contents, loader: "ts" };
-            });
+            builder.onLoad(
+              { filter: /src\/(agent\/agent-session|models\/retained)\.ts$/ },
+              async (args) => {
+                if (args.path.endsWith("retained.ts") !== (fault === "historical-auth")) return;
+                let contents = await readFile(args.path, "utf8");
+                const mutations = {
+                  "provider-only": [
+                    "this.#modelRegistry = installed.models;",
+                    "this.#modelRegistry.setProvider(installed.models.getProvider(selected.providerId));",
+                  ],
+                  "latest-only": [
+                    "const { configurations, selected } = await retainedModelConfigurations(\n      this.store,\n      undefined,\n      false,\n    );",
+                    'const selected = await this.store.get("meta", "selected-model"); const configurations = selected ? [selected] : [];',
+                  ],
+                  "stale-installed-auth": [
+                    "!same(this.#installedModelConfiguration ?? null, selected) ||",
+                    "",
+                  ],
+                  "historical-auth": [
+                    "const configurations = [...catalog.values()];",
+                    'const configurations = [...catalog.values()]; for (const config of (await store.get<D.ModelConfig[]>("meta", "model-catalog", tx)) ?? []) { if (!catalog.has(config.providerId)) { catalog.set(config.providerId, config); configurations.push(config); } }',
+                  ],
+                  "cold-stored-selection": ["\n      false,\n    );", "\n      true,\n    );"],
+                };
+                const [needle, replacement] = mutations[fault];
+                assert.ok(needle !== undefined && replacement !== undefined);
+                assert.equal(contents.split(needle).length, 2);
+                contents = contents.replace(needle, replacement);
+                changes++;
+                return { contents, loader: "ts" };
+              },
+            );
           },
         },
       ],
     });
     assert.equal(changes, 1);
-    const args = [
-      "--test",
-      `--test-name-pattern=${fault === "provider-only" ? "first real" : "cross-provider"}`,
-      "apps/worker/test/models/agent-auth.test.ts",
-    ];
+    const [pattern, suite, evidence] = {
+      "provider-only": [
+        "first real",
+        "agent-auth.test.ts",
+        '"reachedProvider":false,"correctBoundCredential":false',
+      ],
+      "latest-only": [
+        "cross-provider",
+        "agent-auth.test.ts",
+        '"canarySurvived":true,"oldProviderReached":false,"oldCredentialCorrect":false',
+      ],
+      "stale-installed-auth": [
+        "postcommit",
+        "registry-recovery.test.ts",
+        '"selectionCommitted":true,"finalAuthorityRejected":true,"oauthUsed":false,"staleApiKeyReused":true',
+      ],
+      "historical-auth": [
+        "finished historical",
+        "registry-recovery.test.ts",
+        '"currentProviderReady":false,"missingBoundCredential":true',
+      ],
+      "cold-stored-selection": [
+        "cold CP",
+        "registry-recovery.test.ts",
+        '"localSelectionStillA":true,"coldReady":false,"missingBoundCredential":true',
+      ],
+    }[fault];
+    assert.ok(pattern && suite && evidence);
+    const args = ["--test", `--test-name-pattern=${pattern}`, `apps/worker/test/models/${suite}`];
     let code = 0,
       output = "";
     try {
@@ -70,17 +116,10 @@ try {
       output = (failed.stdout ?? "") + (failed.stderr ?? "");
     }
     assert.equal(code, 1, `${fault}: actual behavioral oracle must fail`);
-    assert.ok(
-      output.includes(
-        fault === "provider-only"
-          ? '"reachedProvider":false,"correctBoundCredential":false'
-          : '"canarySurvived":true,"oldProviderReached":false,"oldCredentialCorrect":false',
-      ),
-      output,
-    );
+    assert.ok(output.includes(evidence), output);
     assert.ok(
       output.includes("AssertionError"),
-      "Compiler/startup failures are not sensitivity evidence",
+      "Each fault must reach its named behavioral assertion",
     );
     console.log(JSON.stringify({ fault, actualBehavioralFailure: true }));
   }

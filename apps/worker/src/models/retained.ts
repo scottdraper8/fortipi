@@ -7,24 +7,21 @@ import type * as D from "../boundary/dto.js";
 export async function retainedModelConfigurations(
   store: Store,
   selected?: D.ModelConfig,
+  includeStoredSelection = true,
 ): Promise<{
   catalog: D.ModelConfig[];
   configurations: D.ModelConfig[];
+  selected: D.ModelConfig | undefined;
 }> {
   return store.transaction(async (tx) => {
-    const saved = (await store.get<D.ModelConfig[]>("meta", "model-catalog", tx)) ?? [];
-    check(
-      Array.isArray(saved) && saved.length <= 4,
-      "conflict",
-      "Retained provider catalog is invalid",
-    );
+    // Historical catalog entries are not requirements. Only the current
+    // selection and persisted unfinished work may require provider auth.
     const catalog = new Map<string, D.ModelConfig>();
-    for (const config of saved) {
-      validate<D.ModelConfig>("ModelConfig", config);
-      check(!catalog.has(config.providerId), "conflict", "Duplicate retained provider selection");
-      catalog.set(config.providerId, config);
-    }
-    const current = selected ?? (await store.get<D.ModelConfig>("meta", "selected-model", tx));
+    const current =
+      selected ??
+      (includeStoredSelection
+        ? await store.get<D.ModelConfig>("meta", "selected-model", tx)
+        : undefined);
     if (current) {
       validate<D.ModelConfig>("ModelConfig", current);
       catalog.set(current.providerId, current);
@@ -35,6 +32,7 @@ export async function retainedModelConfigurations(
       `SELECT json_extract(data,'$.model') AS model FROM fp_records_v1
        WHERE (kind='admission' AND json_extract(data,'$.state') IN ('pending','accepted','settlement_pending'))
           OR (kind='creation' AND json_extract(data,'$.state') IN ('pending','allocated'))
+          OR (kind='admission-intent' AND json_extract(data,'$.state')='pending' AND json_extract(data,'$.model') IS NOT NULL)
        GROUP BY model LIMIT 33`,
     );
     const configurations = [...catalog.values()];
@@ -60,6 +58,6 @@ export async function retainedModelConfigurations(
       "conflict",
       "Retained model configuration bound exceeded",
     );
-    return { catalog: [...catalog.values()], configurations };
+    return { catalog: [...catalog.values()], configurations, selected: current };
   });
 }

@@ -1,11 +1,14 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { AgentSession } from "../../src/agent/agent-session.js";
+import type { Admission } from "../../src/agent/conversations.js";
 import type { ConversationRow } from "../../src/agent/store.js";
 import { routeRequest } from "../../src/api/router.js";
+import type * as D from "../../src/boundary/dto.js";
 import type { Env } from "../../src/boundary/env.js";
+import { ControlPlane as RealControlPlane } from "../../src/control/control-plane.js";
+import { retainedModelConfigurations } from "../../src/models/retained.js";
 
 export { WorkspaceProxy } from "@cloudflare/computer";
-export { ControlPlane } from "../../src/control/control-plane.js";
 export { WorkspaceObject } from "../../src/workspace/workspace-object.js";
 
 const fixtureKeys = {
@@ -13,9 +16,36 @@ const fixtureKeys = {
   anthropic: "synthetic-first-admission-anthropic",
 };
 const facts = {
-  openai: { calls: 0, authorized: false },
+  openai: { calls: 0, authorized: false, apiKeyCalls: 0, oauthCalls: 0 },
   anthropic: { calls: 0, authorized: false },
 };
+const modelAuthKey = btoa("m".repeat(32));
+let omitOpenai = false;
+/** Used only by a generated fixture entry after a real process restart. */
+export function omitOpenaiBinding() {
+  omitOpenai = true;
+}
+export class ControlPlane extends RealControlPlane {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, {
+      ...env,
+      FORTIPI_MODEL_AUTH_KEY: modelAuthKey,
+      FORTIPI_CONFIG: {
+        ...env.FORTIPI_CONFIG,
+        workspace: { kind: "local", executorId: "executor", rootBindingId: "root" },
+        execution: { kind: "native", executorId: "executor", trust: "host" },
+        routing: { kind: "explicit", targetIds: ["executor"] },
+        models: [
+          {
+            providerId: "openai",
+            modelId: "gpt-5.4",
+            auth: { kind: "oauth", providerId: "openai" },
+          },
+        ],
+      },
+    });
+  }
+}
 let held = false;
 let release = Promise.withResolvers<void>();
 function sse(events: Record<string, unknown>[]) {
@@ -35,8 +65,11 @@ globalThis.fetch = async (input, init) => {
     body = (await request.json()) as { model: string };
   if (url.hostname === "api.openai.com" && url.pathname === "/v1/responses") {
     facts.openai.calls++;
-    facts.openai.authorized =
-      request.headers.get("Authorization") === `Bearer ${fixtureKeys.openai}`;
+    const apiKey = request.headers.get("Authorization") === `Bearer ${fixtureKeys.openai}`,
+      oauth = request.headers.get("Authorization") === "Bearer synthetic-registry-oauth-access";
+    facts.openai.authorized = apiKey || oauth;
+    facts.openai.apiKeyCalls += Number(apiKey);
+    facts.openai.oauthCalls += Number(oauth);
     if (held) {
       const aborted = Promise.withResolvers<void>();
       const onAbort = () => aborted.reject(new Error("Synthetic model request aborted"));
@@ -124,12 +157,31 @@ globalThis.fetch = async (input, init) => {
 
 /** No alternate model builder; credentials go through the real service factory. */
 export class TestAgentSession extends AgentSession {
+  #expireFinalSelection = false;
+  #expiredAfterCommit = false;
   constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, {
+    const modelEnv: Env = {
       ...env,
       OPENAI_API_KEY: fixtureKeys.openai,
       ANTHROPIC_API_KEY: fixtureKeys.anthropic,
-    });
+      FORTIPI_MODEL_AUTH_KEY: modelAuthKey,
+    };
+    if (omitOpenai) delete modelEnv.OPENAI_API_KEY;
+    super(ctx, modelEnv);
+    const current = this.authority.current.bind(this.authority);
+    this.authority.current = async (auth, resources, tx) => {
+      // The production selection really commits. Expire exactly its later
+      // request check through the real Authority, never replace the factory.
+      if (this.#expireFinalSelection && !tx) {
+        const selected = await this.store.get<D.ModelConfig>("meta", "selected-model");
+        if (selected && "auth" in selected && selected.auth.kind === "oauth") {
+          this.#expireFinalSelection = false;
+          this.#expiredAfterCommit = true;
+          return current({ ...auth, deadline: 0 }, resources);
+        }
+      }
+      return current(auth, resources, tx);
+    };
   }
   override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -149,6 +201,41 @@ export class TestAgentSession extends AgentSession {
       return Response.json({ held });
     }
     await this.lifecycle.start();
+    if (action === "pending-model-intents") {
+      await this.store.put("admission-intent", "fixture-selected", {
+        state: "pending",
+        model: {
+          providerId: "openai",
+          modelId: "gpt-5.4",
+          auth: { kind: "secretRef", secretRef: "OPENAI_API_KEY" },
+        },
+      });
+      await this.store.put("admission-intent", "fixture-unselected", { state: "pending" });
+      await this.store.put("admission-intent", "fixture-null", { state: "pending", model: null });
+      return Response.json({ saved: true });
+    }
+    if (action === "retained-models") {
+      const retained = await retainedModelConfigurations(this.store);
+      return Response.json({
+        providers: retained.configurations.map((model) => model.providerId).sort(),
+      });
+    }
+    if (action === "expire-final-selection") {
+      this.#expireFinalSelection = true;
+      return Response.json({ armed: true });
+    }
+    if (action === "state") {
+      const admissions = await this.store.page<Admission>("admission"),
+        selected = await this.store.get<D.ModelConfig>("meta", "selected-model");
+      return Response.json({
+        settled: admissions.every((row) => row.value.state === "settled"),
+        selectedAuth: selected && "auth" in selected ? selected.auth.kind : null,
+        selectedProvider: selected?.providerId ?? null,
+        expiredAfterCommit: this.#expiredAfterCommit,
+        openaiBindingPresent: !!this.env.OPENAI_API_KEY,
+        ready: this.lifecycle.isStarted(),
+      });
+    }
     if (action === "canary") {
       if (request.method === "PUT")
         await this.store.put("auth-fixture", "canary", { committed: true });
@@ -172,10 +259,23 @@ export class TestAgentSession extends AgentSession {
 }
 
 export default {
-  fetch(request: Request, env: Env) {
+  async fetch(request: Request, env: Env) {
     if (new URL(request.url).pathname === "/__test/ping") return new Response("ready");
     const match = /^\/__models\/([A-Za-z0-9_-]+)\//.exec(new URL(request.url).pathname);
-    if (match) return env.AGENT_SESSIONS.getByName(match[1]!).fetch(request);
+    if (match?.[1]) {
+      const response = await env.AGENT_SESSIONS.getByName(match[1]).fetch(request);
+      if (!response.ok && !response.headers.get("Content-Type")?.includes("application/json")) {
+        const failure = await response.text();
+        return Response.json(
+          {
+            ready: false,
+            missingBoundCredential: failure.includes("Selected model secret is missing"),
+          },
+          { status: response.status },
+        );
+      }
+      return response;
+    }
     return routeRequest(request, env);
   },
 };
