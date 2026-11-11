@@ -2,6 +2,18 @@ import { createHash } from "node:crypto";
 import { requireThat } from "./errors.js";
 
 export const chunkBytes = 256 * 1024;
+/** Preserve the runtime's known-length body through authorization/range transforms. */
+export function fixedLengthStream(
+  source: ReadableStream<Uint8Array>,
+  length: number,
+): ReadableStream<Uint8Array> {
+  requireThat(
+    Number.isSafeInteger(length) && length >= 0,
+    "invalid_request",
+    "Invalid stream length",
+  );
+  return source.pipeThrough(new FixedLengthStream(length));
+}
 export async function hashInventory(
   stream: ReadableStream<Uint8Array>,
   size: number,

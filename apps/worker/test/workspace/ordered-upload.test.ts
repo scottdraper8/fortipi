@@ -121,10 +121,16 @@ test("ordered superseded puts, same-upload equal hashes and empty files retain e
     for (const path of ["tree/new", "tree/copy"]) {
       const response = await server.fetch(`/read?revision=${receipt.body.revision}&path=${path}`);
       assert.equal(response.status, 200);
+      assert.equal(
+        response.headers.get("Content-Length"),
+        String(bytes.length),
+        "Committed file lost declared Content-Length",
+      );
       assert.equal(hash(new Uint8Array(await response.arrayBuffer())), sha256);
     }
     const empty = await server.fetch(`/read?revision=${receipt.body.revision}&path=empty`);
     assert.equal(empty.status, 200);
+    assert.equal(empty.headers.get("Content-Length"), "0");
     assert.equal((await empty.arrayBuffer()).byteLength, 0);
     assert.equal(
       (
@@ -145,6 +151,7 @@ test("ordered superseded puts, same-upload equal hashes and empty files retain e
       headers: { Range: "bytes=262130-262160" },
     });
     assert.equal(ranged.status, 206);
+    assert.equal(ranged.headers.get("Content-Length"), "31");
     const part = new Uint8Array(await ranged.arrayBuffer());
     assert.equal(hash(part), hash(bytes.slice(262130, 262161)));
     assert.equal(ranged.headers.get("X-Content-SHA256"), hash(part));

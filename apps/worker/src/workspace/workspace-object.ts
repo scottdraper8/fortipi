@@ -46,6 +46,7 @@ import {
   boundedBytes,
   bytesStream,
   chunkBytes,
+  fixedLengthStream,
   hashInventory,
   hashStream,
   limitedStream,
@@ -3121,16 +3122,17 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       await response.body?.cancel().catch(() => {});
       throw error;
     }
-    return new Response(
-      response.body
-        ? this.authorizedBytes(
-            auth,
-            "artifacts.read",
-            limitedStream(response.body, size ?? maximum, auth.deadline, size !== undefined),
-          )
-        : null,
-      { status: response.status, headers: exposed },
-    );
+    const body = response.body
+      ? this.authorizedBytes(
+          auth,
+          "artifacts.read",
+          limitedStream(response.body, size ?? maximum, auth.deadline, size !== undefined),
+        )
+      : null;
+    return new Response(body && size !== undefined ? fixedLengthStream(body, size) : body, {
+      status: response.status,
+      headers: exposed,
+    });
   }
   private async transferRequest(request: Request, auth: D.AuthContext): Promise<Response> {
     const action = new URL(request.url).pathname.split("/").at(-1);
@@ -3376,15 +3378,19 @@ async function byteResponse(
     ? await hashStream(sliceStream(await open(), range.start, length), length, deadline)
     : sha256;
   const stream = await open();
-  return new Response(range ? sliceStream(stream, range.start, length) : stream, {
-    status: range ? 206 : 200,
-    headers: {
-      "Content-Length": String(length),
-      "X-Content-SHA256": hash,
-      "Cache-Control": "no-store",
-      ...(range ? { "Content-Range": `bytes ${range.start}-${range.end}/${size}` } : {}),
+  return new Response(
+    fixedLengthStream(range ? sliceStream(stream, range.start, length) : stream, length),
+    {
+      status: range ? 206 : 200,
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(length),
+        "X-Content-SHA256": hash,
+        "Cache-Control": "no-store",
+        ...(range ? { "Content-Range": `bytes ${range.start}-${range.end}/${size}` } : {}),
+      },
     },
-  });
+  );
 }
 function requestRange(request: Request, size: number): { start: number; end: number } | undefined {
   const url = new URL(request.url);

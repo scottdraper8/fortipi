@@ -16,6 +16,7 @@ const paths = [
   resolve(tests, ".sensitivity-local-upload-worker.ts"),
   resolve(source, "../container/.sensitivity-host-transport.ts"),
   resolve(tests, "../backends/.sensitivity-host-rpc-worker.ts"),
+  resolve(source, ".sensitivity-streams.ts"),
 ];
 async function run(
   file: string,
@@ -57,6 +58,7 @@ const local = await readFile(resolve(source, "local-upload.ts"), "utf8");
 const localFixture = await readFile(resolve(tests, "local-upload-worker.ts"), "utf8");
 const hostTransport = await readFile(resolve(source, "../container/host-transport.ts"), "utf8");
 const hostFixture = await readFile(resolve(tests, "../backends/host-rpc-worker.ts"), "utf8");
+const streams = await readFile(resolve(source, "streams.ts"), "utf8");
 await mkdir(resolve(root, "apps/worker/dist"), { recursive: true });
 try {
   for (const mutant of [
@@ -70,12 +72,20 @@ try {
     "host-allocation",
     "host-image",
     "host-start-order",
+    "byte-length",
   ] as const) {
     let changedAuthority = authority;
     let changedComputer = computer;
     let changedWorkspace = workspace;
     let changedLocal = local;
     let changedHost = hostTransport;
+    const changedStreams =
+      mutant === "byte-length"
+        ? streams.replace(
+            "return source.pipeThrough(new FixedLengthStream(length));",
+            "return source;",
+          )
+        : streams;
     if (mutant === "host-allocation")
       changedHost = hostTransport.replace("current?.runtimeId === runtimeId &&", "current &&");
     if (mutant === "host-image")
@@ -113,7 +123,8 @@ try {
         changedComputer !== computer ||
         changedWorkspace !== workspace ||
         changedLocal !== local ||
-        changedHost !== hostTransport,
+        changedHost !== hostTransport ||
+        changedStreams !== streams,
       `Mutation ${mutant} did not apply`,
     );
     await writeFile(paths[0] ?? "", changedAuthority);
@@ -124,6 +135,7 @@ try {
         .replace('from "./authority.js"', 'from "./.sensitivity-authority.js"')
         .replace('from "./computer.js"', 'from "./.sensitivity-computer.js"')
         .replace('from "./local-upload.js"', 'from "./.sensitivity-local-upload.js"')
+        .replace('from "./streams.js"', 'from "./.sensitivity-streams.js"')
         .replace('from "./terminal-proof.js"', 'from "./.sensitivity-terminal-proof.js"'),
     );
     await writeFile(
@@ -149,6 +161,7 @@ try {
       ),
     );
     await writeFile(paths[7] ?? "", changedHost);
+    await writeFile(paths[9] ?? "", changedStreams);
     await writeFile(
       paths[8] ?? "",
       hostFixture.replace(
@@ -159,13 +172,15 @@ try {
     const result = await run(
       mutant.startsWith("host-")
         ? "../backends/host-rpc.test.ts"
-        : mutant === "empty-announcement" || mutant === "local-upload-digest"
-          ? "local-upload.test.ts"
-          : mutant === "generation"
-            ? "workspace.test.ts"
-            : mutant === "expiry" || mutant === "seal"
-              ? "isolation.test.ts"
-              : "terminal-proof.test.ts",
+        : mutant === "byte-length"
+          ? "artifact-forward.test.ts"
+          : mutant === "empty-announcement" || mutant === "local-upload-digest"
+            ? "local-upload.test.ts"
+            : mutant === "generation"
+              ? "workspace.test.ts"
+              : mutant === "expiry" || mutant === "seal"
+                ? "isolation.test.ts"
+                : "terminal-proof.test.ts",
       mutant === "expiry" || mutant === "seal" ? "sealed children" : undefined,
     );
     await writeFile(resolve(root, `apps/worker/dist/sensitivity-${mutant}.log`), result.output);
@@ -174,23 +189,25 @@ try {
       result.output.includes(
         mutant === "host-allocation"
           ? "Container ownership check failed: stale-runtime"
-          : mutant === "host-image"
-            ? "Container ownership check failed: changed-image"
-            : mutant === "host-start-order"
-              ? "Container replacement crossed an active native HTTP acquisition"
-              : mutant === "empty-announcement"
-                ? "Local empty upload raced its transfer settlement"
-                : mutant === "local-upload-digest"
-                  ? "Local receipt omitted its retained upload identity"
-                  : mutant === "seal"
-                    ? "Sealed-store mutation was accepted"
-                    : mutant === "expiry"
-                      ? "Expired lease published a revision"
-                      : mutant === "generation"
-                        ? "Revoked generation published a revision"
-                        : mutant === "writer-receipt"
-                          ? "Workspace grant required"
-                          : "Wrong conversation received a terminal proof",
+          : mutant === "byte-length"
+            ? "Native artifact lost declared Content-Length"
+            : mutant === "host-image"
+              ? "Container ownership check failed: changed-image"
+              : mutant === "host-start-order"
+                ? "Container replacement crossed an active native HTTP acquisition"
+                : mutant === "empty-announcement"
+                  ? "Local empty upload raced its transfer settlement"
+                  : mutant === "local-upload-digest"
+                    ? "Local receipt omitted its retained upload identity"
+                    : mutant === "seal"
+                      ? "Sealed-store mutation was accepted"
+                      : mutant === "expiry"
+                        ? "Expired lease published a revision"
+                        : mutant === "generation"
+                          ? "Revoked generation published a revision"
+                          : mutant === "writer-receipt"
+                            ? "Workspace grant required"
+                            : "Wrong conversation received a terminal proof",
       ),
       `Mutation failed for an unintended reason: ${result.output.slice(-3000)}`,
     );

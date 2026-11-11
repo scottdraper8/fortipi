@@ -93,6 +93,12 @@ export class ControlFixture extends DurableObject {
     const url = new URL(request.url);
     if (url.pathname === "/__test/artifact-observation")
       return Response.json((await this.ctx.storage.get("artifact-observation")) ?? null);
+    if (url.pathname === "/__test/artifact-stream")
+      return Response.json((await this.ctx.storage.get("artifact-stream")) ?? { cancelled: false });
+    if (url.pathname === "/__test/artifact-release") {
+      await this.ctx.storage.put("artifact-release", true);
+      return new Response(null, { status: 204 });
+    }
     const artifact = /^\/internal\/artifacts\/workspace\/([A-Za-z0-9_-]+)$/.exec(url.pathname)?.[1];
     if (!artifact) return new Response(null, { status: 404 });
     const auth = JSON.parse(request.headers.get("X-Fortipi-Context") ?? "null") as D.AuthContext;
@@ -108,14 +114,23 @@ export class ControlFixture extends DurableObject {
       untrustedHeader: request.headers.has("x-untrusted"),
     });
     if (artifact === "absent") return Response.json({ code: "not_found" }, { status: 404 });
-    const bytes = Uint8Array.from({ length: 393217 }, (_, i) => i % 251);
+    const bytes = Uint8Array.from({ length: artifact === "empty" ? 0 : 393217 }, (_, i) => i % 251);
     const range = request.headers.get("Range");
     const start = range ? Number(/^bytes=(\d+)-/.exec(range)?.[1]) : 0;
     const end = range ? Number(/-(\d+)$/.exec(range)?.[1]) : bytes.length - 1;
     const selected = bytes.slice(start, end + 1);
     let offset = 0;
+    let cancelled = false;
     const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
+      pull: async (controller) => {
+        while (
+          artifact === "stream" &&
+          offset > 0 &&
+          !cancelled &&
+          !(await this.ctx.storage.get("artifact-release"))
+        )
+          await new Promise<void>((resolve) => setTimeout(resolve, 5));
+        if (cancelled) return;
         if (offset === selected.length) return controller.close();
         const next = selected.slice(offset, offset + 65536);
         offset += next.length;
@@ -123,10 +138,16 @@ export class ControlFixture extends DurableObject {
           artifact === "truncated" && offset === selected.length ? next.slice(1) : next,
         );
       },
+      cancel: async () => {
+        cancelled = true;
+        if (artifact === "stream")
+          await this.ctx.storage.put("artifact-stream", { cancelled: true, offset });
+      },
     });
     return new Response(body, {
       status: range ? 206 : 200,
       headers: {
+        "Content-Type": "application/octet-stream",
         "Content-Length": String(artifact === "oversized" ? 16777217 : selected.length),
         "X-Content-SHA256": createHash("sha256").update(selected).digest("hex"),
         "X-Fortipi-Context": "must-never-be-public",
@@ -315,6 +336,79 @@ export default {
     if (request.headers.get("x-test-other-conversation") === "1")
       for (const grant of ctx.grants) grant.resources.conversationIds = ["other"];
     const authority = env.WORKSPACES.getByName("workspace");
+    if (url.pathname === "/artifact-stream-control") {
+      const response = await authority.fetch(
+        new Request(
+          "https://workspace.internal/v1/workspaces/workspace/artifacts/stream?revision=original-base",
+          { headers: { [internalHeader]: JSON.stringify({ auth: ctx }) } },
+        ),
+      );
+      if (!response.body) throw new Error("Missing artifact stream");
+      const reader = response.body.getReader();
+      let firstBytes = 0;
+      while (firstBytes < 65536) {
+        const next = await reader.read();
+        if (next.done) throw new Error("Artifact ended before its first chunk");
+        firstBytes += next.value.length;
+      }
+      let rejected = false;
+      let afterFloorBytes = 0;
+      if (url.searchParams.get("mode") === "cancel") {
+        await reader.cancel();
+        await env.CONTROL_PLANE.getByName("control").fetch(
+          new Request("https://control.internal/__test/artifact-release"),
+        );
+      } else {
+        const revoked = await authority.invalidateGeneration(
+          {
+            kind: "control-recovery",
+            deploymentId: ctx.deploymentId,
+            revocationId: "stream-reader-revoked",
+            recipient: { kind: "workspace", id: "workspace" },
+            actions: ["invalidate"],
+            deadline: ctx.deadline,
+          },
+          {
+            revocationId: "stream-reader-revoked",
+            subject: { kind: "credential", credentialId: ctx.credentialId, minimumGeneration: 2 },
+          },
+        );
+        if (!revoked.ok) throw new Error("Stream revocation failed");
+        await env.CONTROL_PLANE.getByName("control").fetch(
+          new Request("https://control.internal/__test/artifact-release"),
+        );
+        try {
+          for (;;) {
+            const next = await reader.read();
+            if (next.done) break;
+            afterFloorBytes += next.value.length;
+          }
+        } catch {
+          rejected = true;
+        }
+        await reader.cancel().catch(() => {});
+      }
+      let cancelled = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const state = await (
+          await env.CONTROL_PLANE.getByName("control").fetch(
+            new Request("https://control.internal/__test/artifact-stream"),
+          )
+        ).json<{ cancelled: boolean }>();
+        if (state.cancelled) {
+          cancelled = true;
+          break;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      }
+      return Response.json({
+        length: response.headers.get("Content-Length"),
+        firstBytes,
+        afterFloorBytes,
+        rejected,
+        cancelled,
+      });
+    }
     if (url.pathname === "/terminal-proof")
       return authority.fetch(
         new Request("https://workspace.internal/__fortipi/terminal-proof", {
