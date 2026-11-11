@@ -866,6 +866,7 @@ async function sourceKit(sources: NamedSource[], pruning: PrunePolicy): Promise<
     "inputs.ts",
     "image-archive.ts",
     "image-prune.ts",
+    "recipient.ts",
     "rootfs.ts",
     "debian-freeze.json",
     "debian-licenses.json",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, readlink, writeFile } from "node:fs/promises";
+import { mkdir, readlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
@@ -9,12 +9,12 @@ import {
   verifyApplicationNamespace,
   verifyGatewayEgress,
 } from "../../../../tools/unstale/verify-app-network.ts";
+import { verifyRecipientFixture } from "../../container/recipient.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const directory = resolve(root, "apps/worker/dist/container");
-const metadata = JSON.parse(await readFile(resolve(directory, "image-metadata.json"), "utf8")) as {
-  imageId: string;
-};
+// No fallback to the builder's already-loaded image: import receipt is mandatory.
+const metadata = { imageId: await verifyRecipientFixture() };
 assert.match(metadata.imageId, /^sha256:[a-f0-9]{64}$/);
 function checkLoadedImage(): void {
   assert.equal(
@@ -99,8 +99,9 @@ try {
   assert.equal(body.skipped, 0);
   if (process.argv.includes("--require-fuse")) assert.equal(body.fuse, true);
   checkLoadedImage();
+  assert.equal(await verifyRecipientFixture(), metadata.imageId);
   process.stdout.write(
-    `${JSON.stringify({ imageId: metadata.imageId, localExecution: true, realFuse: body.fuse, cloudVerified: false })}\n`,
+    `${JSON.stringify({ imageId: metadata.imageId, recipientImported: true, localExecution: true, realFuse: body.fuse, cloudVerified: false })}\n`,
   );
   const parentNamespace = await readlink("/proc/self/ns/net");
   const observation = observeHarnessFetch();
