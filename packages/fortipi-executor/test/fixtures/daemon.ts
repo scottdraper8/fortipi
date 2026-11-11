@@ -9,6 +9,7 @@ import type { Assignment, LocalPrepare } from "fortipi-contract/executor";
 import { assignmentDigest, operationDigest } from "fortipi-contract/executor";
 import type { Profile } from "../../dist/config.js";
 import { adapter, defaults, secureDirectory } from "../../dist/config.js";
+import type { ExecutorRuntime } from "../../dist/daemon.js";
 import { Guard, Ledger } from "../../dist/ledger.js";
 import type { LocalPolicy } from "../../dist/policy.js";
 import type { HttpTransport } from "../../dist/transport.js";
@@ -104,7 +105,9 @@ export async function fixture() {
 export const quote = (s: string) =>
   process.platform === "win32" ? `'${s.replaceAll("'", "''")}'` : `'${s.replaceAll("'", `'\\''`)}'`;
 export function nodeCommand(...args: string[]): string {
-  return `${process.platform === "win32" ? "& " : ""}${[process.execPath, ...args].map(quote).join(" ")}`;
+  const native = (s: string) =>
+    quote(process.platform === "win32" ? s.replace(/(\\*)"/g, '$1$1\\"') : s);
+  return `${process.platform === "win32" ? "& " : ""}${[process.execPath, ...args].map(native).join(" ")}`;
 }
 export async function assignment(
   command: string,
@@ -236,6 +239,45 @@ export function authenticateFixture(http: HttpTransport): void {
     role: "executor",
     credential: http.profile.credential,
     credentialExpiresAt: null,
+  };
+}
+/** Actual parsed executor lease-update frames; no TTL extension beyond the protocol's 30s window. */
+export function jobRenewals(runtime: ExecutorRuntime, a: Assignment) {
+  runtime.ledger.admit(a, "lease-renewal-fixture");
+  let pending = Promise.resolve(),
+    failure: unknown;
+  const renew = () => {
+    pending = pending
+      .then(async () => {
+        const row = runtime.ledger.existing(a.identity);
+        if (!row) throw new Error("renewal attempt missing");
+        const expiresAt = Math.min(a.identity.deadline, Date.now() + 30000);
+        if (expiresAt <= row.assignment.identity.lease.expiresAt) return;
+        await runtime.receive({
+          type: "job.lease_update",
+          requestId: randomUUID(),
+          payload: {
+            identity: a.identity,
+            leaseVersion: row.assignment.identity.lease.leaseVersion + 1,
+            expiresAt,
+          },
+        });
+      })
+      .catch((error) => {
+        failure = error;
+      });
+    return pending;
+  };
+  const timer = setInterval(() => {
+    void renew();
+  }, 10000);
+  return {
+    renew,
+    async stop() {
+      clearInterval(timer);
+      await pending;
+      if (failure) throw failure;
+    },
   };
 }
 export async function eventually(

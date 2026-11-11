@@ -88,6 +88,8 @@ async function prepareDatabase(
     try {
       await platform.verifyProtection(`${path}${suffix}`, false);
     } catch (error) {
+      if (error instanceof Error && error.message.startsWith("unsafe executor DACL"))
+        throw new Error(`SQLite ${suffix} protection failed: ${error.message}`);
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
@@ -378,6 +380,26 @@ export class Ledger {
     return !pin || (!pin.quarantine && pin.operation === operation);
   }
   saveLocal(row: LocalRow): void {
+    const old = this.local(row.request.operationId);
+    if (old) {
+      const immutable = (r: LocalRow) => {
+        const { expiresAt: _expiry, leaseVersion: _version, ...lease } = r.request.lease;
+        return canonicalJson({ ...r.request, lease });
+      };
+      if (
+        immutable(old) !== immutable(row) ||
+        old.prepared.preparationId !== row.prepared.preparationId
+      )
+        throw new Error("immutable local journal conflict");
+      if (old.request.lease.leaseVersion > row.request.lease.leaseVersion) {
+        row.request.lease = old.request.lease;
+        row.prepared.expiresAt = old.prepared.expiresAt;
+      } else if (
+        old.request.lease.leaseVersion === row.request.lease.leaseVersion &&
+        old.request.lease.expiresAt !== row.request.lease.expiresAt
+      )
+        throw new Error("local lease observation conflict");
+    }
     this.db
       .prepare(
         "INSERT INTO local_ops VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",

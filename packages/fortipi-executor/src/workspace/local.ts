@@ -18,6 +18,7 @@ import {
   commitDigest,
   manifestDigest,
   validateLocalLease,
+  workspaceLeaseDigest,
 } from "fortipi-contract/executor";
 import type { Binding, Limits, Profile } from "../config.js";
 import type { Ledger, LocalRow } from "../ledger.js";
@@ -74,6 +75,7 @@ export class LocalWorkspace {
   staging: Staging;
   limits: Limits;
   private queue: Promise<void> = Promise.resolve();
+  private activeApply: string | undefined;
   constructor(
     root: SafeRoot,
     binding: Binding,
@@ -250,6 +252,32 @@ export class LocalWorkspace {
     if (Buffer.byteLength(canonicalJson(request)) > this.staging.http.jsonBytes)
       throw new Error("payload_too_large: local request");
     validate("workspaces.schema.json", "LocalWorkspaceRequest", request);
+    if (
+      "lease" in request &&
+      request.lease.ownerKind === "workspace-operation" &&
+      request.operationDigest !==
+        (await workspaceLeaseDigest({
+          deploymentId: this.profile.deploymentId,
+          operationId: request.operationId,
+          workspaceId: request.workspaceId,
+          bindingVersion: request.bindingVersion,
+          baseRevision: request.baseRevision,
+          target: {
+            kind: "executor",
+            executorId: request.executorId,
+            generation: request.executorGeneration,
+          },
+          credential: request.credential,
+          deadline: request.deadline,
+        }))
+    )
+      throw new Error("local operation digest mismatch");
+    // An exact active preparation may receive an authoritative renewal while filesystem work awaits.
+    if (request.kind === "prepare" && this.activeApply === request.operationId) {
+      this.authorize(request);
+      await this.root.verify();
+      return this.prepare(request);
+    }
     return this.serialized(async () => {
       this.authorize(request);
       await this.root.verify();
@@ -294,6 +322,21 @@ export class LocalWorkspace {
     row.request.lease = next;
     row.prepared.expiresAt = Math.min(next.expiresAt, row.request.deadline);
     this.ledger.saveLocal(row);
+  }
+  private authorizeActive(row: LocalRow, request: LocalApply): void {
+    const current = this.ledger.local(request.operationId);
+    if (
+      !current ||
+      scopeKey(current.request) !== scopeKey(request) ||
+      current.prepared.preparationId !== row.prepared.preparationId ||
+      current.closed
+    )
+      throw new Error("active preparation identity changed");
+    if (current.request.lease.leaseVersion > row.request.lease.leaseVersion) {
+      row.request.lease = current.request.lease;
+      row.prepared.expiresAt = current.prepared.expiresAt;
+    }
+    this.authorize({ ...request, lease: row.request.lease });
   }
   async prepare(request: LocalPrepare): Promise<LocalPrepared> {
     const old = this.ledger.local(request.operationId);
@@ -405,10 +448,11 @@ export class LocalWorkspace {
       throw new Error("root quarantined");
     row.observation = { ...row.observation, state: "applying", observationSeq: 1 };
     this.ledger.transaction(() => this.ledger.saveLocal(row));
+    this.activeApply = request.operationId;
     try {
       const stage = this.staging.get(row.request);
       const effect = async (path: string, fn: () => Promise<void>) => {
-        this.authorize(request);
+        this.authorizeActive(row, request);
         row.journal.push({ path, state: "intent" });
         this.ledger.saveLocal(row);
         await fn();
@@ -421,7 +465,7 @@ export class LocalWorkspace {
           await effect(target, () => this.root.delete(target));
       };
       for (const mutation of stage.mutations) {
-        this.authorize(request);
+        this.authorizeActive(row, request);
         const path = mutation.kind === "put" ? mutation.entry.path : mutation.path;
         if (mutation.kind === "put") {
           let directory = false;
@@ -452,11 +496,14 @@ export class LocalWorkspace {
       };
       this.ledger.saveLocal(row);
       return row.observation;
-    } catch {
+    } catch (error) {
       row.observation = {
         ...row.observation,
         state: "partial",
-        reason: "apply interrupted or post-state differs",
+        reason:
+          error instanceof Error && error.message.includes("expired_lease")
+            ? "apply interrupted: expired_lease"
+            : `apply interrupted: ${["EPERM", "EACCES", "EBUSY", "ENOENT"].includes((error as NodeJS.ErrnoException).code ?? "") ? (error as NodeJS.ErrnoException).code : "post-state-or-path-check"}`,
         observationSeq: 2,
       };
       this.ledger.transaction(() => {
@@ -464,6 +511,8 @@ export class LocalWorkspace {
         this.ledger.quarantine(this.root.key);
       });
       return row.observation;
+    } finally {
+      this.activeApply = undefined;
     }
   }
   async observe(request: LocalObserve): Promise<LocalObservation> {

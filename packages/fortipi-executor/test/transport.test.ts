@@ -208,6 +208,13 @@ test("real HTTP transfer slots bound concurrency and negotiated grid capacity re
     server.setDelay(100);
     assert.equal(http.limits.fileBytes, 256);
     assert.equal(http.limits.artifactBytes, 256);
+    assert.deepEqual(http.transferLimits(), {
+      chunkBytes: 1,
+      fileBytes: 256,
+      snapshotBytes: http.limits.snapshotBytes,
+      artifactBytes: 256,
+      manifestEntries: http.limits.manifestEntries,
+    });
     assert.throws(() => inventoryFor(Buffer.alloc(257), http.chunkBytes), /negotiated chunk grid/);
     assert.equal(server.requests.length, 0);
     const read = () =>

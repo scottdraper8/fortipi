@@ -142,7 +142,10 @@ export class Snapshots {
     commitId: string,
   ): Promise<{ uploadId: string; commitId: string; manifestHash: string; stageId: string }> {
     const id = assignment.identity;
-    if (Date.now() >= Math.min(id.deadline, id.lease.expiresAt))
+    const lease = () =>
+      this.ledger.existing(assignment.identity)?.assignment.identity.lease ??
+      assignment.identity.lease;
+    if (Date.now() >= Math.min(id.deadline, lease().expiresAt))
       throw new Error("expired staging lease");
     const { before, after } = await this.diff(assignment, root);
     const mutations = mutationsFor(before.manifest, after.manifest).map((m) =>
@@ -184,7 +187,7 @@ export class Snapshots {
     const begin = previous?.body ?? {
       requestId,
       baseRevision: id.baseRevision,
-      lease: id.lease,
+      lease: lease(),
       operationId: id.lease.operationId,
       commitId,
       manifestHash: after.manifestHash,
@@ -241,7 +244,7 @@ export class Snapshots {
         if (plan.chunks.chunkBytes > Math.min(this.http.chunkBytes, this.http.limits.chunkBytes))
           throw new Error("upload chunk grid no longer eligible");
         checkManifest(after.manifest, this.http.limits, root.identity.caseBehavior);
-        if (Date.now() >= Math.min(id.deadline, id.lease.expiresAt))
+        if (Date.now() >= Math.min(id.deadline, lease().expiresAt))
           throw new Error("expired upload");
         const chunk = bytes.subarray(offset, offset + plan.chunks.chunkBytes);
         const r = await this.http.withTransfer(() =>
@@ -249,7 +252,7 @@ export class Snapshots {
             `${base}/${uploadId}/blobs/${mutation.sha256}/chunks/${index}?length=${chunk.length}&sha256=${hash(chunk)}`,
             { method: "PUT", body: chunk, headers: { "Content-Type": "application/octet-stream" } },
             true,
-            Math.min(id.deadline, id.lease.expiresAt),
+            Math.min(id.deadline, lease().expiresAt),
           ),
         );
         if (r.status !== 204) throw new Error("upload chunk not acknowledged");

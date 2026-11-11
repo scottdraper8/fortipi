@@ -3,12 +3,18 @@ import type { ValidateFunction } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type {
   ExecutorFrame,
+  ExecutorTransferLimits,
   TicketIdentity,
   TicketReceipt,
   TransferDescriptor,
   TransferStatus,
 } from "fortipi-contract/executor";
-import { canonicalJson, executorSchemaRegistry, validateTransfer } from "fortipi-contract/executor";
+import {
+  canonicalJson,
+  executorSchemaRegistry,
+  validateExecutorTransferLimits,
+  validateTransfer,
+} from "fortipi-contract/executor";
 import type { Limits, Profile } from "./config.js";
 import { effectiveLimits, validateOrigin } from "./config.js";
 import { hash } from "./policy.js";
@@ -74,6 +80,19 @@ export class HttpTransport {
   authority?: TicketIdentity;
   revoked = false;
   private activeTransfers = 0;
+  transferLimits(): ExecutorTransferLimits {
+    const chunkBytes = Math.min(this.chunkBytes, this.limits.chunkBytes);
+    const limits = {
+      chunkBytes,
+      fileBytes: Math.min(this.limits.fileBytes, chunkBytes * 256),
+      snapshotBytes: this.limits.snapshotBytes,
+      artifactBytes: Math.min(this.limits.artifactBytes, chunkBytes * 256),
+      manifestEntries: this.limits.manifestEntries,
+    };
+    validate("administration.schema.json", "ExecutorTransferLimits", limits);
+    validateExecutorTransferLimits(limits);
+    return limits;
+  }
   async withTransfer<T>(fn: () => Promise<T>): Promise<T> {
     if (this.activeTransfers >= this.limits.transferConcurrency)
       throw new Error("local transfer concurrency exhausted");
@@ -345,6 +364,10 @@ export class SessionTransport {
     registration: Extract<ExecutorFrame, { type: "executor.register" }>,
   ): Promise<void> {
     await this.http.discover();
+    registration = {
+      ...registration,
+      payload: { ...registration.payload, transferLimits: this.http.transferLimits() },
+    };
     if (Buffer.byteLength(canonicalJson(frame(registration))) > this.http.jsonBytes)
       throw new Error("registration exceeds negotiated control limit");
     const ticket = await this.http.ticket();

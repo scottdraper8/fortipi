@@ -16,6 +16,7 @@ import {
   localStageDigest,
   manifestDigest,
   validateUploadBlobs,
+  workspaceLeaseDigest,
 } from "fortipi-contract/executor";
 import { adapter, defaults } from "../dist/config.js";
 import { ExecutorRuntime } from "../dist/daemon.js";
@@ -32,6 +33,7 @@ import {
   credential,
   fixture,
   importRoot,
+  jobRenewals,
   prepare,
   receiptScope,
   requestScope,
@@ -441,6 +443,7 @@ test("full manifest binds revision reads; excluded bytes and historical mismatch
 });
 test("ordered put then directory deletion/recreation applies actual mutations once using the public stage digest", async () => {
   const f = await fixture();
+  let renewals: ReturnType<typeof jobRenewals> | undefined;
   try {
     await f.root.mkdir("tree");
     await f.root.write("tree/existing", Buffer.from("before"), 420);
@@ -465,6 +468,16 @@ test("ordered put then directory deletion/recreation applies actual mutations on
         entries: [{ path: "tree", type: "directory", mode: 493 }],
       },
       uploadId = randomUUID();
+    authenticateFixture(staging.http);
+    const runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http: staging.http,
+    });
+    renewals = jobRenewals(runtime, a);
+    await renewals.renew();
     const mutations = [
         { kind: "put" as const, path: "tree/old", sha256, size: bytes.length, mode: 420 as const },
         { kind: "delete" as const, path: "tree" },
@@ -523,6 +536,7 @@ test("ordered put then directory deletion/recreation applies actual mutations on
     };
     const prepared = await local.request(prepareRequest);
     assert.ok("preparationId" in prepared);
+    await renewals.renew();
     const apply = {
       ...requestScope(prepareRequest),
       kind: "apply" as const,
@@ -530,9 +544,20 @@ test("ordered put then directory deletion/recreation applies actual mutations on
     };
     const result = await local.request(apply);
     assert.ok("state" in result);
-    assert.equal(result.state, "applied");
+    assert.equal(
+      result.state,
+      "applied",
+      JSON.stringify({
+        reason: "reason" in result ? result.reason : undefined,
+        journal: f.ledger.local(request.operationId)?.journal,
+        remainingLeaseMs:
+          (f.ledger.local(request.operationId)?.request.lease.expiresAt ?? 0) - Date.now(),
+      }),
+    );
     assert.deepEqual(await f.root.entries("tree"), []);
-    assert.equal(f.ledger.get(a.identity.jobId), undefined);
+    assert.equal(f.ledger.get(a.identity.jobId)?.state, "pending");
+    assert.equal(runtime.children.size, 0, "workspace apply never spawns native execution");
+    assert.ok((f.ledger.local(request.operationId)?.request.lease.leaseVersion ?? 0) > 1);
     assert.equal(
       f.ledger.local(request.operationId)?.journal.filter((j) => j.path === "tree/old").length,
       2,
@@ -540,7 +565,11 @@ test("ordered put then directory deletion/recreation applies actual mutations on
     );
     assert.deepEqual(await local.request(apply), result);
   } finally {
-    await f.cleanup();
+    try {
+      await renewals?.stop();
+    } finally {
+      await f.cleanup();
+    }
   }
 });
 test("a stored preparation cannot be revived after expiry; observational closure releases only an unstarted pin", async () => {
@@ -579,12 +608,23 @@ test("cloud snapshot bytes materialize and a lost upload acknowledgment retries 
     },
     baseHash = await manifestDigest(manifest),
     server = await snapshotFixture(manifest, baseHash, new Map([[originalSha, original]]));
+  let renewals: ReturnType<typeof jobRenewals> | undefined;
   try {
     f.profile.origin = server.origin;
     const http = new HttpTransport(f.profile, fetch, true),
       snapshots = new Snapshots(join(f.directory, "scratch"), f.ledger, http, adapter()),
-      a = await assignment("never spawned"),
-      root = await snapshots.materialize(a);
+      a = await assignment("never spawned");
+    authenticateFixture(http);
+    const runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http,
+    });
+    renewals = jobRenewals(runtime, a);
+    await renewals.renew();
+    const root = await snapshots.materialize(a);
     assert.equal((await root.read("file", 100)).toString(), "immutable original bytes");
     const changed = Buffer.alloc(600000, 0x61);
     await root.write("file", changed, 420);
@@ -613,12 +653,14 @@ test("cloud snapshot bytes materialize and a lost upload acknowledgment retries 
       "zero bytes need no public PUT",
     );
     assert.equal(original.toString(), "immutable original bytes");
-    assert.equal(
-      f.ledger.get(a.identity.jobId),
-      undefined,
-      "snapshot/staging cannot create a native execution",
-    );
+    assert.equal(runtime.children.size, 0, "snapshot/staging cannot spawn a native execution");
     await assert.rejects(snapshots.cleanup(a, result.manifestHash), /terminal evidence/);
+    await renewals.stop();
+    renewals = undefined;
+    const expired = f.ledger.existing(a.identity);
+    if (!expired) throw new Error("attempt absent");
+    expired.assignment.identity.lease.expiresAt = 0;
+    f.ledger.put(expired);
     await assert.rejects(
       snapshots.stage(
         { ...a, identity: { ...a.identity, lease: { ...a.identity.lease, expiresAt: 0 } } },
@@ -630,8 +672,12 @@ test("cloud snapshot bytes materialize and a lost upload acknowledgment retries 
     );
     assert.equal(original.toString(), "immutable original bytes");
   } finally {
-    await server.close();
-    await f.cleanup();
+    try {
+      await renewals?.stop();
+    } finally {
+      await server.close();
+      await f.cleanup();
+    }
   }
 });
 test("two-phase local read returns real negotiated-grid inventory and concurrent body-bound retries produce bytes once", async () => {
@@ -778,6 +824,139 @@ test("two-phase local read returns real negotiated-grid inventory and concurrent
     );
   } finally {
     await relay.close();
+    await f.cleanup();
+  }
+});
+test("exact metadata renewal reaches an active apply before expiry without losing its durable filesystem journal", async () => {
+  const f = await setup(),
+    entered = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>(),
+    mkdir = f.root.mkdir.bind(f.root);
+  let applying: Promise<unknown> | undefined;
+  try {
+    const base = prepare(await assignment("never executed"), f.initial.manifestHash);
+    if (base.lease.ownerKind !== "job") throw new Error("fixture job missing");
+    const { jobId: _job, ownerKind: _kind, ...identity } = base.lease;
+    const lease = {
+        ...identity,
+        ownerKind: "workspace-operation" as const,
+        expiresAt: Date.now() + 10000,
+      },
+      manifest: Manifest = {
+        version: 1,
+        entries: [
+          { path: "a", type: "directory", mode: 493 },
+          { path: "b", type: "directory", mode: 493 },
+        ],
+      },
+      mutations = [
+        { kind: "mkdir" as const, path: "a", mode: 493 as const },
+        { kind: "mkdir" as const, path: "b", mode: 493 as const },
+      ],
+      uploadId = "active_renewal_stage";
+    const request: LocalPrepare = {
+      ...base,
+      lease,
+      operationDigest: await workspaceLeaseDigest({
+        deploymentId: f.profile.deploymentId,
+        operationId: base.operationId,
+        workspaceId: base.workspaceId,
+        bindingVersion: base.bindingVersion,
+        baseRevision: base.baseRevision,
+        target: {
+          kind: "executor",
+          executorId: base.executorId,
+          generation: base.executorGeneration,
+        },
+        credential: base.credential,
+        deadline: base.deadline,
+      }),
+      mode: {
+        kind: "staged-change",
+        uploadId,
+        manifest,
+        mutations,
+        postManifestHash: await manifestDigest(manifest),
+        stagedDigest: await localStageDigest({ uploadId, manifest, mutations }),
+      },
+    };
+    const prepared = await f.local.request(request);
+    if (!("preparationId" in prepared)) throw new Error("preparation absent");
+    f.root.mkdir = async (path) => {
+      await mkdir(path);
+      if (path === "a") {
+        entered.resolve();
+        await release.promise;
+      }
+    };
+    applying = f.local.request({
+      ...requestScope(request),
+      kind: "apply",
+      preparationId: prepared.preparationId,
+    });
+    await Promise.race([
+      entered.promise,
+      applying.then(() => {
+        throw new Error("apply ended before the first filesystem barrier");
+      }),
+    ]);
+    const renewed = {
+      ...request,
+      lease: {
+        ...lease,
+        leaseVersion: lease.leaseVersion + 1,
+        expiresAt: Math.min(request.deadline, Date.now() + 30000),
+      },
+    };
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const ack = await Promise.race([
+      f.local.request(renewed),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("active metadata renewal blocked behind filesystem apply")),
+          5000,
+        );
+      }),
+    ]).finally(() => clearTimeout(timeout));
+    assert.ok(
+      "preparationId" in ack &&
+        "expiresAt" in ack &&
+        ack.preparationId === prepared.preparationId &&
+        ack.expiresAt === renewed.lease.expiresAt,
+    );
+    if (renewed.mode.kind !== "staged-change") throw new Error("staged renewal missing");
+    await assert.rejects(
+      f.local.request({ ...renewed, mode: { ...renewed.mode, postManifestHash: "0".repeat(64) } }),
+      /conflict/,
+    );
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, Math.max(0, lease.expiresAt - Date.now() + 20)),
+    );
+    release.resolve();
+    const result = await applying;
+    assert.ok(
+      typeof result === "object" &&
+        result !== null &&
+        "state" in result &&
+        result.state === "applied",
+    );
+    assert.deepEqual(await f.root.entries(), ["a", "b"]);
+    const row = f.ledger.local(request.operationId);
+    assert.deepEqual(row?.journal, [
+      { path: "a", state: "done" },
+      { path: "b", state: "done" },
+    ]);
+    assert.equal(row?.request.lease.leaseVersion, renewed.lease.leaseVersion);
+    assert.equal(row?.request.lease.expiresAt, renewed.lease.expiresAt);
+    assert.equal(
+      f.ledger.rootAvailable(f.root.key),
+      false,
+      "renewal and apply remain separate from receipt commit",
+    );
+  } finally {
+    release.resolve();
+    await applying?.catch(() => {});
+    f.root.mkdir = mkdir;
     await f.cleanup();
   }
 });

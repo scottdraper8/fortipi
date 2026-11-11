@@ -7,6 +7,7 @@ import {
   validateLocalStage,
   validateRelativePath,
   validateTransfer,
+  workspaceLeaseDigest,
 } from "fortipi-contract/executor";
 import type { Limits, Profile } from "../config.js";
 import { privateBytes, privateWrite, secureDirectory } from "../config.js";
@@ -87,6 +88,15 @@ export class Staging {
       (descriptor.purpose === "local-read" && binding.revision !== descriptor.baseRevision)
     )
       throw new Error("transfer binding mismatch");
+    if (descriptor.lease) {
+      const floor = this.ledger.db
+        .prepare("SELECT value FROM meta WHERE key=?")
+        .get(`fence_${binding.rootBindingId}_${binding.bindingVersion}`) as
+        | { value: string }
+        | undefined;
+      if (floor && BigInt(descriptor.lease.fence) < BigInt(floor.value))
+        throw new Error("transfer stale_fence");
+    }
     if (descriptor.jobId) {
       const job = this.ledger.get(descriptor.jobId);
       if (
@@ -117,6 +127,25 @@ export class Staging {
     this.check(descriptor);
     if (descriptor.direction !== "to-executor" || descriptor.content.kind !== "workspace-file")
       throw new Error("invalid input transfer");
+    if (
+      descriptor.lease.ownerKind === "workspace-operation" &&
+      descriptor.operationDigest !==
+        (await workspaceLeaseDigest({
+          deploymentId: this.profile.deploymentId,
+          operationId: descriptor.operationId,
+          workspaceId: descriptor.workspaceId,
+          bindingVersion: descriptor.bindingVersion,
+          baseRevision: descriptor.baseRevision,
+          target: {
+            kind: "executor",
+            executorId: descriptor.executorId,
+            generation: descriptor.executorGeneration,
+          },
+          credential: descriptor.credential,
+          deadline: descriptor.deadline,
+        }))
+    )
+      throw new Error("local stage operation digest mismatch");
     const proof = fileProof(descriptor);
     this.ledger.capacity(Buffer.byteLength(canonicalJson(proof)) * 2, true);
     this.ledger.saveRecord("stages", `input_plan_${proof.uploadId}_${proof.sha256}`, proof);

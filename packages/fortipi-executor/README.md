@@ -95,6 +95,11 @@ The original caller credential and lease identity remain part of that journal;
 the CP authenticates a newly authorized reader separately. Rewriting historical
 scope or changing the executor generation cannot recover or apply that operation.
 Current bytes are never silently substituted for unavailable historical content.
+An exact repeated preparation can carry a newer authoritative lease observation
+while apply awaits filesystem work. It returns the same preparation ID and updated
+expiry, preserves the effect journal, and cannot revive an already expired lease.
+Subsequent effects use the persisted renewal; changing scope or staged metadata
+still conflicts.
 
 File bytes travel through bounded authenticated HTTPS chunk transfers. The relay
 contains transient bytes only; no bytes travel in WebSocket frames and local
@@ -129,6 +134,8 @@ Windows permission utilities use typed SID ACL operations from .NET Framework
 and direct filesystem attributes, without cmdlet module autoload or account-name
 translation. The native diagnostic emits bounded stage timings without identities
 or paths; it retains the same per-process protection timeout.
+Rejected DACLs report bounded owner-category/rule-mask diagnostics without SIDs or
+paths. A rejected SQLite sidecar is never silently repaired or accepted.
 
 ## Reproduction and evidence limits
 
@@ -139,6 +146,8 @@ node packages/fortipi-contract/scripts/generate.ts --check
 pnpm exec tsc -p packages/fortipi-contract/tsconfig.json
 pnpm run build:executor
 pnpm run typecheck:executor
+pnpm exec tsc -p packages/fortipi-client/tsconfig.json
+pnpm exec tsc -p packages/fortipi-tui/tsconfig.json
 pnpm exec tsc -p tsconfig.tools.json --noEmit
 pnpm run test:executor
 node packages/fortipi-executor/test/mutations.ts

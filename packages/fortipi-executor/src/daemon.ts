@@ -1100,6 +1100,7 @@ export async function runDaemon(
               : "sensitive",
             confinement: "host",
             capabilities: ["shell", "local-workspace", "snapshots"],
+            transferLimits: runtime.http.transferLimits(),
             rootBindingIds: profile.bindings.map((b) => b.rootBindingId),
           },
         };

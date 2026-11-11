@@ -88,11 +88,12 @@ export function windows(): PlatformAdapter {
       await this.verifyEntry(path, stat);
       const result = JSON.parse(
         await ps(
-          `$a=[System.IO.${directory ? "Directory" : "File"}]::GetAccessControl(${literal(path)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');$me=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value;$b=[System.Text.StringBuilder]::new();[void]$b.Append('{"owner":"'+$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value+'","me":"'+$me+'","protected":'+$a.AreAccessRulesProtected.ToString().ToLowerInvariant()+',"rules":[');$sep='';foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){[void]$b.Append($sep+'{"sid":"'+$r.IdentityReference.Value+'","allow":'+($r.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow).ToString().ToLowerInvariant()+',"rights":'+([int64]$r.FileSystemRights).ToString([System.Globalization.CultureInfo]::InvariantCulture)+'}');$sep=','};[void]$b.Append(']}');[Console]::Out.Write($b.ToString())`,
+          `$a=[System.IO.${directory ? "Directory" : "File"}]::GetAccessControl(${literal(path)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');$identity=[System.Security.Principal.WindowsIdentity]::GetCurrent();$me=$identity.User.Value;$b=[System.Text.StringBuilder]::new();[void]$b.Append('{"owner":"'+$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value+'","me":"'+$me+'","tokenOwner":"'+$identity.Owner.Value+'","protected":'+$a.AreAccessRulesProtected.ToString().ToLowerInvariant()+',"rules":[');$sep='';foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){[void]$b.Append($sep+'{"sid":"'+$r.IdentityReference.Value+'","allow":'+($r.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow).ToString().ToLowerInvariant()+',"rights":'+([int64]$r.FileSystemRights).ToString([System.Globalization.CultureInfo]::InvariantCulture)+'}');$sep=','};[void]$b.Append(']}');[Console]::Out.Write($b.ToString())`,
         ),
       ) as {
         owner: string;
         me: string;
+        tokenOwner: string;
         protected: boolean;
         rules: { sid: string; allow: boolean; rights: number }[];
       };
@@ -104,7 +105,9 @@ export function windows(): PlatformAdapter {
         ) ||
         result.rules.some((r) => !r.allow || ![result.me, "S-1-5-18"].includes(r.sid))
       )
-        throw new Error("unsafe executor DACL");
+        throw new Error(
+          `unsafe executor DACL: ${JSON.stringify({ directory, ownerIsCurrentUser: result.owner === result.me, ownerIsProcessDefault: result.owner === result.tokenOwner, protected: result.protected, ruleCount: result.rules.length, rules: result.rules.slice(0, 8).map((r) => ({ subject: r.sid === result.me ? "current-user" : r.sid === "S-1-5-18" ? "system" : "other", allow: r.allow, rights: r.rights })) })}`,
+        );
       // SQLite creates sidecars with the directory's restrictive inheritable DACL.
       // An unprotected file is allowed only under an independently verified protected parent.
       if (!directory && !result.protected) await this.verifyProtection(win32.dirname(path), true);

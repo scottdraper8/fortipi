@@ -71,6 +71,7 @@ try {
               protocolVersion: "1.0",
               schemaVersion: "1.0.0",
               capabilities: [],
+              transferLimits: http.transferLimits(),
               platform: process.platform,
               caseBehavior: process.platform === "linux" ? "sensitive" : "insensitive",
               rootBindingIds: [],
