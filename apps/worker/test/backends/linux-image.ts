@@ -4,7 +4,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
-import { verifyApplicationNamespace } from "../../../../tools/unstale/verify-app-network.ts";
+import {
+  verifyApplicationNamespace,
+  verifyGatewayEgress,
+} from "../../../../tools/unstale/verify-app-network.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const directory = resolve(root, "apps/worker/dist/container");
@@ -98,7 +101,26 @@ try {
   process.stdout.write(
     `${JSON.stringify({ imageId: metadata.imageId, localExecution: true, realFuse: body.fuse, cloudVerified: false })}\n`,
   );
-  await verifyApplicationNamespace(metadata.imageId);
+  const network = await verifyApplicationNamespace(metadata.imageId);
+  verifyGatewayEgress(harness.getLogs(), network);
+  process.stdout.write(
+    `${JSON.stringify({
+      probe: "application-namespace-https",
+      client: "host Node client in actual application network namespace",
+      path: "Cloudflare sidecar -> Computer HTTP gateway -> protected worker egress",
+      imageId: metadata.imageId,
+      appPid: network.appPid,
+      authorityVerifiedBeforeAfter: true,
+      allowedBefore: network.allowedBefore,
+      deniedStatus: network.deniedStatus,
+      allowedAfter: network.allowedAfter,
+      tlsAuthorized: true,
+      applicationDns: "pinned-sidecar-synthetic",
+      stepSecurityGatewayUpstreamSinkhole: true,
+      gatewayForwardingVerified: true,
+      providerDenialLogRequired: true,
+    })}\n`,
+  );
 } finally {
   try {
     const allowed = new Set(

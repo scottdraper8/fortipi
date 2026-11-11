@@ -1,13 +1,13 @@
 // Observes the real app network namespace with the existing host Node client.
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { X509Certificate } from "node:crypto";
 import { Resolver, resolve4 } from "node:dns/promises";
 import { lstat, readFile, readlink } from "node:fs/promises";
 import { request } from "node:https";
 import { isIP } from "node:net";
 import { delimiter, dirname, resolve } from "node:path";
-import { rootCertificates } from "node:tls";
+import { rootCertificates, TLSSocket } from "node:tls";
 import { promisify } from "node:util";
 import { repository } from "../../scripts/build-workspaces.ts";
 import { hash } from "./review-supply-chain.ts";
@@ -37,6 +37,75 @@ interface Container {
 interface Authority {
   app: Container;
   sidecar: Container;
+}
+export interface ApplicationNetworkEvidence {
+  imageId: string;
+  appPid: number;
+  authorityVerifiedBeforeAfter: boolean;
+  allowedBefore: number | null;
+  deniedStatus: number | null;
+  deniedTransportFailure: boolean;
+  allowedAfter: number | null;
+  tlsAuthorized: boolean;
+  syntheticDns: boolean;
+  upstreamStepSecurityBeforeAfter: boolean;
+}
+
+/** Gateway failure is meaningful only with the actual client and protected final-hop route. */
+export function verifyGatewayEgress(
+  messages: readonly { message: string }[],
+  evidence: ApplicationNetworkEvidence,
+): void {
+  const events = messages
+    .filter(({ message }) => message.startsWith("fortipi-gateway:"))
+    .map(({ message }) => {
+      assert.ok(message.length <= 256, "Gateway evidence exceeds its bound");
+      let value: unknown;
+      try {
+        value = JSON.parse(message.slice("fortipi-gateway:".length));
+      } catch {
+        throw new Error("Malformed gateway evidence");
+      }
+      assert.ok(value && typeof value === "object", "Invalid gateway evidence");
+      const event = value as Record<string, unknown>;
+      assert.ok(
+        Object.keys(event).length === 4 &&
+          Object.keys(event).every((key) =>
+            ["target", "forwarded", "outcome", "status"].includes(key),
+          ) &&
+          ["allowed-registry", "denied-example"].includes(String(event.target)) &&
+          event.forwarded === true &&
+          ["response", "upstream-error", "aborted"].includes(String(event.outcome)) &&
+          (event.status === null ||
+            (Number.isInteger(event.status) &&
+              Number(event.status) >= 100 &&
+              Number(event.status) <= 599)),
+        "Invalid gateway evidence fields",
+      );
+      return event;
+    });
+  assert.equal(events.length, 3, "Each application HTTPS leg must reach the gateway exactly once");
+  for (const [index, event] of events.entries()) {
+    assert.equal(event.target, index === 1 ? "denied-example" : "allowed-registry");
+    assert.equal(event.outcome, index === 1 ? "upstream-error" : "response");
+    assert.equal(event.status, index === 1 ? null : 200);
+  }
+  assert.match(evidence.imageId, /^sha256:[a-f0-9]{64}$/);
+  assert.ok(Number.isSafeInteger(evidence.appPid) && evidence.appPid > 1);
+  assert.ok(
+    evidence.authorityVerifiedBeforeAfter === true &&
+      evidence.tlsAuthorized === true &&
+      evidence.syntheticDns === true,
+  );
+  assert.equal(evidence.allowedBefore, 200);
+  assert.equal(evidence.allowedAfter, 200);
+  assert.equal(evidence.deniedStatus, 502);
+  assert.equal(evidence.deniedTransportFailure, false);
+  assert.equal(
+    evidence.upstreamStepSecurityBeforeAfter,
+    true,
+    "Gateway failure without the protected StepSecurity DNS route is UNKNOWN",
+  );
 }
 async function docker(file: string, args: string[]): Promise<string> {
   assert.match(
@@ -121,41 +190,50 @@ async function head(
   resolver: Resolver,
   ca: Buffer,
 ) {
-  return new Promise<{ status: number | null; transportFailure: boolean }>((accept) => {
-    const req = request(
-      {
-        hostname,
-        port: 443,
-        path: hostname === "registry.npmjs.org" ? "/pnpm/12.18.0" : "/",
-        method: "HEAD",
-        family: 4,
-        agent: false,
-        rejectUnauthorized: true,
-        ca: [...rootCertificates, ca],
-        signal: AbortSignal.timeout(5000),
-        lookup: (host, _options, callback) => {
-          resolver.resolve4(host).then(
-            (addresses) => {
-              const address = addresses[0];
-              if (address) callback(null, address, 4);
-              else callback(new Error("No app DNS address"), "", 4);
-            },
-            () => callback(new Error("App DNS unavailable"), "", 4),
-          );
+  return new Promise<{ status: number | null; transportFailure: boolean; tlsAuthorized: boolean }>(
+    (accept) => {
+      let tlsAuthorized = false;
+      const req = request(
+        {
+          hostname,
+          port: 443,
+          path: hostname === "registry.npmjs.org" ? "/pnpm/12.18.0" : "/",
+          method: "HEAD",
+          family: 4,
+          agent: false,
+          rejectUnauthorized: true,
+          ca: [...rootCertificates, ca],
+          signal: AbortSignal.timeout(5000),
+          lookup: (host, _options, callback) => {
+            resolver.resolve4(host).then(
+              (addresses) => {
+                const address = addresses[0];
+                if (address) callback(null, address, 4);
+                else callback(new Error("No app DNS address"), "", 4);
+              },
+              () => callback(new Error("App DNS unavailable"), "", 4),
+            );
+          },
         },
-      },
-      (response) => {
-        const status = response.statusCode ?? null;
-        response.destroy();
-        req.destroy();
-        accept({ status, transportFailure: false });
-      },
-    );
-    req.once("error", () => accept({ status: null, transportFailure: true }));
-    req.end();
-  });
+        (response) => {
+          const status = response.statusCode ?? null;
+          response.destroy();
+          req.destroy();
+          accept({ status, transportFailure: false, tlsAuthorized });
+        },
+      );
+      req.once("socket", (socket) => {
+        if (socket instanceof TLSSocket)
+          socket.once("secureConnect", () => {
+            tlsAuthorized = socket.authorized;
+          });
+      });
+      req.once("error", () => accept({ status: null, transportFailure: true, tlsAuthorized }));
+      req.end();
+    },
+  );
 }
-async function observeApplicationNamespace(imageId: string): Promise<void> {
+async function observeApplicationNamespace(imageId: string): Promise<ApplicationNetworkEvidence> {
   assert.equal(process.platform, "linux");
   assert.match(imageId, /^sha256:[a-f0-9]{64}$/);
   const directory = (process.env.PATH ?? "")
@@ -188,32 +266,30 @@ async function observeApplicationNamespace(imageId: string): Promise<void> {
   ];
   if (!rootless)
     args.unshift("-n", "--preserve-env=HOME,DOCKER_HOST,DOCKER_CONFIG", "--", "/usr/bin/nsenter");
-  const child = spawn(rootless ? "/usr/bin/nsenter" : "/usr/bin/sudo", args, {
+  const child = await execute(rootless ? "/usr/bin/nsenter" : "/usr/bin/sudo", args, {
     cwd: repository,
     env,
-    stdio: "inherit",
+    timeout: 30000,
+    killSignal: "SIGKILL",
+    maxBuffer: 16384,
+    encoding: "utf8",
   });
-  const timer = setTimeout(() => child.kill("SIGKILL"), 30000);
-  await new Promise<void>((accept, reject) => {
-    child.once("error", () => {
-      clearTimeout(timer);
-      reject(new Error("Application namespace client unavailable"));
-    });
-    child.once("exit", (code) => {
-      clearTimeout(timer);
-      if (code === 0) accept();
-      else reject(new Error("Application namespace measurement failed or unknown"));
-    });
-  });
+  const evidence = JSON.parse(child.stdout) as ApplicationNetworkEvidence;
+  assert.equal(evidence.imageId, imageId);
+  assert.equal(evidence.appPid, before.app.pid);
   assert.equal(
     hash(Buffer.from(JSON.stringify(await authority(file, imageId, before.app.id)))),
     hash(Buffer.from(JSON.stringify(before))),
   );
+  assert.ok(isStepSecuritySinkhole(await resolve4("example.com")));
+  return { ...evidence, upstreamStepSecurityBeforeAfter: true };
 }
 
-export async function verifyApplicationNamespace(imageId: string): Promise<void> {
+export async function verifyApplicationNamespace(
+  imageId: string,
+): Promise<ApplicationNetworkEvidence> {
   try {
-    await observeApplicationNamespace(imageId);
+    return await observeApplicationNamespace(imageId);
   } catch {
     console.log(JSON.stringify({ probe: "application-namespace-https", client, unknown: true }));
     throw new Error("Application namespace measurement failed or unknown");
@@ -251,16 +327,24 @@ if (import.meta.main) {
     const denied = await head("example.com", resolver, inputs.ca);
     stage = "allow-after";
     const last = await head("registry.npmjs.org", resolver, inputs.ca);
+    stage = "synthetic-dns";
+    const addresses = await Promise.all(
+      ["registry.npmjs.org", "example.com"].map((host) => resolver.resolve4(host)),
+    );
+    // Pinned proxy-everything internet=false synthesizes this route for BOTH targets.
+    const syntheticDns = addresses.every(
+      (values) => values.length === 1 && values[0] === "11.0.0.1",
+    );
     stage = "authority-after";
     const after = await authority(file, imageId, appId);
     const final = await publicInputs(after);
     assert.equal(inputs.fingerprint, final.fingerprint);
-    stage = "vendor-attribution";
-    const appSinkhole = isStepSecuritySinkhole(await resolver.resolve4("example.com"));
+    assert.equal(first.status, 200);
+    assert.equal(last.status, 200);
+    assert.ok(first.tlsAuthorized && denied.tlsAuthorized && last.tlsAuthorized);
+    assert.ok(syntheticDns, "Actual gateway application DNS route changed");
     console.log(
       JSON.stringify({
-        probe: "application-namespace-https",
-        client,
         imageId,
         appPid: before.app.pid,
         authorityVerifiedBeforeAfter: true,
@@ -268,21 +352,11 @@ if (import.meta.main) {
         deniedStatus: denied.status,
         deniedTransportFailure: denied.transportFailure,
         allowedAfter: last.status,
-        applicationDnsSinkhole: appSinkhole,
-        unknown: !(
-          first.status === 200 &&
-          last.status === 200 &&
-          denied.transportFailure &&
-          denied.status === null &&
-          appSinkhole
-        ),
+        tlsAuthorized: true,
+        syntheticDns,
+        upstreamStepSecurityBeforeAfter: false,
       }),
     );
-    assert.equal(first.status, 200);
-    assert.equal(last.status, 200);
-    assert.ok(denied.transportFailure && denied.status === null);
-    // If the app DNS uses a synthetic route, provider attribution needs a further reviewed oracle.
-    assert.ok(appSinkhole, "Actual app DNS denial attribution remains unproved");
   } catch {
     console.log(
       JSON.stringify({ probe: "application-namespace-https", client, stage, unknown: true }),
