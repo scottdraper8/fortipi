@@ -33,6 +33,39 @@ export type WorkspaceStorageSample = {
   | { kind: "child"; lookup: StoreLookup; registryVersion: number }
 );
 
+/** Private SDK launch assertions; the owned Host strips context before calling the original SDK. */
+export const runtimeHostContextEnv = "FORTIPI_RUNTIME_HOST_CONTEXT";
+export const runtimeHostOwnershipLabel = "fortipi_owner";
+/** Private pool member retained before native Host contact; it outlives Computer child deletion. */
+export interface RuntimeHostContext {
+  /** Canonical linuxHostId using the actual child DO object ID; not a public identifier. */
+  hostId: string;
+  authorityId: string;
+  allocationId: string;
+  childId: string;
+  imageDigest: string;
+  /** Authority-issued 32-byte CSPRNG value encoded as 64 lowercase hexadecimal characters. */
+  ownershipNonce: string;
+}
+/** Private LinuxContainerHost.fetch POST /__fortipi/storage-sample; closed JSON <=64KiB. */
+export interface RuntimeHostStorageSampleInput {
+  sampleId: string;
+  policyVersion: number;
+  context: RuntimeHostContext;
+  /** Actual acknowledged SDK identity; unknown allocations retain prospective coverage. */
+  runtimeId: string;
+  registryVersion: number;
+}
+export interface RuntimeHostStorageSample {
+  sampleId: string;
+  context: RuntimeHostContext;
+  runtimeId: string;
+  registryVersion: number;
+  /** Only this Host's public SQL database size; never its Computer child's size or an estimate. */
+  bytes: number;
+  observedAt: number;
+}
+
 export type {
   CapabilityStatus,
   CapacityReservation,

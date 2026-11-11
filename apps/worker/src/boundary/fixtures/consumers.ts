@@ -33,6 +33,9 @@ import type {
 } from "../env.js";
 import type { ExecutionBackend } from "../execution-backend.js";
 import type {
+  RuntimeHostContext,
+  RuntimeHostStorageSample,
+  RuntimeHostStorageSampleInput,
   StorageSampleInput,
   WorkspaceStorageSample,
   WorkspaceStorageSampleInput,
@@ -88,6 +91,37 @@ export function runtimeQuiescencePort(input: D.RuntimeQuiesceRequest): D.Runtime
   const unbound: D.RuntimeQuiesceRequest = { requestId: input.requestId };
   void [pending, unbound];
   return stopped;
+}
+
+export function runtimeHostStoragePort(
+  context: RuntimeHostContext,
+  runtimeId: string,
+): RuntimeHostStorageSample {
+  const input: RuntimeHostStorageSampleInput = {
+    sampleId: "host_sample",
+    policyVersion: 1,
+    context,
+    runtimeId,
+    registryVersion: 1,
+  };
+  const sample: RuntimeHostStorageSample = {
+    sampleId: input.sampleId,
+    context,
+    runtimeId,
+    registryVersion: input.registryVersion,
+    bytes: 4096,
+    observedAt: 1000,
+  };
+  // @ts-expect-error An unacknowledged runtime cannot select a Host to observe.
+  const unknown: RuntimeHostStorageSampleInput = { ...input, runtimeId: undefined };
+  // @ts-expect-error A physical sample must retain its exact registry observation.
+  const unversioned: RuntimeHostStorageSample = { ...sample, registryVersion: undefined };
+  // @ts-expect-error Host ownership cannot be inferred from an image or child alone.
+  const unowned: RuntimeHostContext = { ...context, ownershipNonce: undefined };
+  // @ts-expect-error A separate Host measurement is never a Computer child measurement.
+  const child: WorkspaceStorageSample = { ...sample, kind: "child" };
+  void [unknown, unversioned, unowned, child];
+  return sample;
 }
 
 export async function adminExportPorts(
