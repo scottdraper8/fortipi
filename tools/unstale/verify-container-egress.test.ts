@@ -14,6 +14,27 @@ import {
   verifyControls,
 } from "./verify-container-egress.ts";
 
+const refusedTrace = (): ReturnType<ReturnType<typeof observeHarnessFetch>["stop"]> & {
+  namespaceStable: boolean;
+} => ({
+  probe: "harness-node-fetch",
+  complete: true,
+  namespaceStable: true,
+  events: [
+    { role: "allowed-before", phase: "START" },
+    { role: "allowed-before", phase: "RESPONSE", status: 200 },
+    { role: "denied-example", phase: "START" },
+    {
+      role: "denied-example",
+      phase: "FAILURE",
+      causeCode: "ECONNREFUSED",
+      stepSecurityEndpoint: true,
+    },
+    { role: "allowed-after", phase: "START" },
+    { role: "allowed-after", phase: "RESPONSE", status: 200 },
+  ],
+});
+
 test("an allowed target on both sides is required to distinguish refusal from broken networking", () => {
   verifyControls(0, 1, 0);
   verifyControls(0, 124, 0);
@@ -119,9 +140,14 @@ test("bounded gateway status diagnostics keep generic responses red and omit tai
       });
     }
     const valid = [registry, receipt("denied-example", "upstream-error", null), registry];
-    verifyGatewayEgress(valid, evidence);
+    verifyGatewayEgress(valid, evidence, refusedTrace());
+    assert.throws(() => verifyGatewayEgress(valid, evidence));
     assert.throws(() =>
-      verifyGatewayEgress(valid, { ...evidence, upstreamStepSecurityBeforeAfter: false }),
+      verifyGatewayEgress(
+        valid,
+        { ...evidence, upstreamStepSecurityBeforeAfter: false },
+        refusedTrace(),
+      ),
     );
     logs.length = 0;
     const tainted = {
@@ -395,6 +421,17 @@ test("only an original connect refusal to the verified policy endpoint permits t
         );
         if (expected) {
           verifyGatewayEgress(receipts, evidence, trace);
+          verifyGatewayEgress(
+            [
+              registry,
+              {
+                message: `fortipi-gateway:${JSON.stringify({ target: "denied-example", forwarded: true, outcome: "upstream-error", status: null })}`,
+              },
+              registry,
+            ],
+            { ...evidence, deniedStatus: 502 },
+            trace,
+          );
           for (const changed of [
             { ...evidence, deniedStatus: 502 },
             { ...evidence, deniedTransportFailure: true },

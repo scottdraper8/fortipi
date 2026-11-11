@@ -253,7 +253,7 @@ export function verifyGatewayEgress(
       })),
     }),
   );
-  const conversion =
+  const refusal =
     trace?.complete === true &&
     trace.namespaceStable === true &&
     trace.events.length === 6 &&
@@ -268,9 +268,9 @@ export function verifyGatewayEgress(
               event.causeCode === "ECONNREFUSED" &&
               event.stepSecurityEndpoint === true
             : event.phase === "RESPONSE" && event.status === 200),
-    ) &&
-    events[1]?.outcome === "response" &&
-    events[1].status === 500;
+    );
+  assert.ok(refusal, "Original host-fetch policy endpoint is UNKNOWN");
+  const conversion = events[1]?.outcome === "response" && events[1].status === 500;
   for (const [index, event] of events.entries()) {
     assert.equal(event.target, index === 1 ? "denied-example" : "allowed-registry");
     assert.equal(event.outcome, index === 1 && !conversion ? "upstream-error" : "response");
