@@ -2,7 +2,10 @@ import { DurableObject } from "cloudflare:workers";
 import { Workspace, WorkspaceProxy } from "@cloudflare/computer";
 import { CodemodeBackend } from "@cloudflare/computer/backends/codemode";
 import { ContainerBackend, withWorkspaceContainer } from "@cloudflare/computer/backends/container";
-import { FencedContainerAPI } from "../../src/container/host-adapter.js";
+import {
+  containerRequestFailureStage,
+  FencedContainerAPI,
+} from "../../src/container/host-adapter.js";
 
 export { WorkspaceProxy };
 
@@ -80,16 +83,24 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
     const source = linux
       ? "set -eu\ncat /workspace/input.txt\nprintf 'fortipi-result' > /workspace/result.txt\ncat /workspace/result.txt\ncat /proc/self/mountinfo\n"
       : "import { readFile, writeFile } from 'node:fs/promises'; export default async function () { console.log(await readFile('/workspace/input.txt','utf8')); await writeFile('/workspace/result.txt','fortipi-result'); console.log(await readFile('/workspace/result.txt','utf8')); }";
-    const handle = await ws.runtime.exec(source, {
-      id: "probe-execution",
-      backend: "probe",
-      cwd: "/workspace",
-      encoding: "utf8",
-      onInterrupt: "fail",
-      sync: "wait",
-      timeoutMs: 10_000,
+    const result = await (async () => {
+      const handle = await ws.runtime.exec(source, {
+        id: "probe-execution",
+        backend: "probe",
+        cwd: "/workspace",
+        encoding: "utf8",
+        onInterrupt: "fail",
+        sync: "wait",
+        timeoutMs: 10_000,
+      });
+      return handle.result();
+    })().catch((error: unknown) => {
+      if (linux)
+        console.error(
+          `fortipi-container-request-stage:${containerRequestFailureStage(error) ?? "unclassified"}`,
+        );
+      throw error;
     });
-    const result = await handle.result();
     const content = await ws.fs.readFile("/workspace/result.txt", "utf8");
     const fuse = /\s\/workspace\s.* - fuse(?:\.|\s)/.test(result.stdout);
     if (this.env.REQUIRE_FUSE === "true" && !fuse)
