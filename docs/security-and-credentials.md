@@ -74,7 +74,17 @@ the CP handoff, not the Agent/Pi implementation.
 An executor's application credential generation, execution generation and socket
 connection epoch are separate. Reconnect increments only the epoch. Restoring a
 lost execution ledger requires explicit new-generation authorization. The
-upgrade and registration transactions recheck current credential authority;
+private outbound lease/terminal delivery envelope may omit its epoch: CP captures
+the actual epoch once after current dispatch authorization, rechecks that same
+epoch after awaited proofs/hash/alarm scheduling and before persistence, and
+stores a concrete epoch with the command. Supplied epochs remain strict and
+executor ingress always requires its explicit current epoch. Deferred drain
+cannot send a retained command on a replacement connection; it retains the
+receipt without futile wakeups. A fresh authorized retry may capture the new
+epoch while retaining the same immutable payload/digest and receipt. Persisted
+transport acknowledgment still does not certify socket delivery.
+
+Upgrade and registration transactions recheck current credential authority;
 registration also rechecks the executor generation and connection epoch after
 asynchronous alarm scheduling, so a pending registration cannot restore a revoked
 generation or superseded connection. The platform owns WebSockets and hibernation;
