@@ -35,6 +35,7 @@ declared put, including puts superseded by later ordered mutations. Local
 uploads require it (explicit `[]` when no put); Computer uploads may omit it.
 `validateUploadBlobs(input,{required})` checks exact coverage, shared-hash size
 consistency, the chunk inventory and the complete 1 MiB control-body cap.
+Puts sharing a SHA must agree on size even when optional Computer plans are absent.
 `validateChunkInventory(chunks,size)` supplements exact schema parsing; actors
 also enforce real limits/floors and verify file SHA, chunk SHA and length before
 forwarding/applying. Plans use sizes from puts rather than assuming every put

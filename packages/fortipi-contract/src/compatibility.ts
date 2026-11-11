@@ -371,10 +371,6 @@ export function validateChunkInventory(chunks: ChunkInventory, size: number): vo
 /** Validate all declared puts, including ones superseded by later ordered mutations. */
 export function validateUploadBlobs(input: UploadBegin, options: { required: boolean }): void {
   assertUtf8Bytes(canonicalJson(input), wireLimits.jsonBytes);
-  if (input.blobs === undefined) {
-    if (options.required) throw new Error("upload.invalid: missing_blobs");
-    return;
-  }
   const puts = new Map<string, number>();
   for (const mutation of input.mutations) {
     if (mutation.kind !== "put") continue;
@@ -382,6 +378,10 @@ export function validateUploadBlobs(input: UploadBegin, options: { required: boo
     if (prior !== undefined && prior !== mutation.size)
       throw new Error("upload.invalid: inconsistent_file_size");
     puts.set(mutation.sha256, mutation.size);
+  }
+  if (input.blobs === undefined) {
+    if (options.required) throw new Error("upload.invalid: missing_blobs");
+    return;
   }
   const seen = new Set<string>();
   for (const blob of input.blobs) {

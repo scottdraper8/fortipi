@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import type * as Client from "fortipi-contract/client";
+import type * as Executor from "fortipi-contract/executor";
 import type { UploadBegin } from "../dist/index.js";
 import {
   freeInfrastructurePolicy,
@@ -38,7 +40,8 @@ test("local upload and read metadata announce complete chunk grids before any by
   const chunks = {
     chunkBytes: 262144,
     chunkHashes: [digest(bytes.subarray(0, 262144)), digest(bytes.subarray(262144))],
-  };
+  } satisfies Client.ChunkInventory & Executor.ChunkInventory;
+  const plan = { sha256, chunks } satisfies Client.UploadBlobPlan & Executor.UploadBlobPlan;
   const empty = digest(Buffer.alloc(0));
   const removedBytes = Buffer.from("superseded");
   const removed = digest(removedBytes);
@@ -65,11 +68,11 @@ test("local upload and read metadata announce complete chunk grids before any by
       { kind: "put", path: "empty.txt", mode: 420, size: 0, sha256: empty },
     ],
     blobs: [
-      { sha256, chunks },
+      plan,
       { sha256: removed, chunks: { chunkBytes: 262144, chunkHashes: [removed] } },
       { sha256: empty, chunks: { chunkBytes: 262144, chunkHashes: [] } },
     ],
-  } satisfies UploadBegin;
+  } satisfies UploadBegin & Client.UploadBegin & Executor.UploadBegin;
   accepted("UploadBegin", input);
   validateUploadBlobs(input, { required: true });
   const reference = {
@@ -80,7 +83,7 @@ test("local upload and read metadata announce complete chunk grids before any by
     endpoint: "/v1/workspaces/workspace_1/read",
     owner: { kind: "local", executorId: "executor_1" },
     chunks,
-  };
+  } satisfies Client.ByteReference & Executor.ByteReference;
   accepted("ByteReference", reference);
   accepted("LocalReadResult", { kind: "read", result: reference });
   validateChunkInventory(reference.chunks, reference.size);
@@ -128,18 +131,17 @@ test("local upload and read metadata announce complete chunk grids before any by
     () => validateUploadBlobs({ ...input, blobs: [{ sha256: hash, chunks }] }, { required: true }),
     /unexpected_blob/,
   );
+  const inconsistent = {
+    ...legacy,
+    mutations: [...input.mutations, { kind: "put", path: "bad.bin", mode: 420, sha256, size: 1 }],
+  } satisfies UploadBegin;
+  accepted("UploadBegin", inconsistent);
   assert.throws(
-    () =>
-      validateUploadBlobs(
-        {
-          ...input,
-          mutations: [
-            ...input.mutations,
-            { kind: "put", path: "bad.bin", mode: 420, sha256, size: 1 },
-          ],
-        },
-        { required: true },
-      ),
+    () => validateUploadBlobs(inconsistent, { required: false }),
+    /inconsistent_file_size/,
+  );
+  assert.throws(
+    () => validateUploadBlobs({ ...inconsistent, blobs: input.blobs }, { required: true }),
     /inconsistent_file_size/,
   );
   validateUploadBlobs(
