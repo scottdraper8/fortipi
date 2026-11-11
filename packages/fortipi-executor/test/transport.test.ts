@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import type { ErrorBody, ExecutorFrame, TransferDescriptor } from "fortipi-contract/executor";
+import type {
+  ErrorBody,
+  ExecutorFrame,
+  LocalReadRequest,
+  TransferDescriptor,
+} from "fortipi-contract/executor";
 import { commitDigest, validateTransfer } from "fortipi-contract/executor";
 import { adapter, privateWrite } from "../dist/config.js";
 import { ExecutorRuntime } from "../dist/daemon.js";
@@ -20,7 +25,7 @@ import {
   readBounded,
   SessionTransport,
 } from "../dist/transport.js";
-import { inventoryFor } from "../dist/workspace/manifest.js";
+import { inventoryFor, scan } from "../dist/workspace/manifest.js";
 import { Staging } from "../dist/workspace/staging.js";
 import {
   assignment,
@@ -35,7 +40,516 @@ import {
   receiptScope,
   resources,
 } from "./fixtures/daemon.ts";
-import { relayFixture } from "./fixtures/transport.ts";
+import { relayFixture, sessionFixture } from "./fixtures/transport.ts";
+
+for (const mode of ["protocol", "binary", "registration", "heartbeat"] as const)
+  test(`native WebSocket closes ${mode} failure without escaping cleanup and reconnects`, {
+    timeout: 70000,
+  }, async () => {
+    const f = await fixture();
+    const server = await sessionFixture(f.profile, {
+      register: mode !== "registration",
+      ...(mode === "protocol" || mode === "binary" ? { fault: mode } : {}),
+    });
+    const controller = new AbortController();
+    const watchdog = setTimeout(
+      () => controller.abort(),
+      mode === "heartbeat" ? 65000 : mode === "registration" ? 20000 : 3000,
+    );
+    try {
+      f.profile.origin = server.origin;
+      const http = new HttpTransport(f.profile, fetch, true);
+      const frames: ExecutorFrame[] = [];
+      let disconnected = 0;
+      const session = new SessionTransport(http, {
+        async receive(value) {
+          frames.push(value);
+        },
+        async disconnected() {
+          disconnected++;
+        },
+        reconnectFrames() {
+          return [];
+        },
+      });
+      const registration: Extract<ExecutorFrame, { type: "executor.register" }> = {
+        type: "executor.register",
+        requestId: randomUUID(),
+        payload: {
+          executorId: f.profile.executorId,
+          generation: f.profile.executorGeneration,
+          protocolVersion: "1.0",
+          schemaVersion: "1.0.0",
+          capabilities: [],
+          platform: process.platform as "linux" | "darwin" | "win32",
+          caseBehavior: "sensitive",
+          rootBindingIds: [],
+          confinement: "host",
+          transferLimits: http.transferLimits(),
+        },
+      };
+      const started = Date.now();
+      await session.connect(controller.signal, registration);
+      clearTimeout(watchdog);
+      assert.equal(controller.signal.aborted, false, "actual failure must close before watchdog");
+      assert.deepEqual(server.closes, [
+        {
+          code: { protocol: 4007, binary: 4009, registration: 4008, heartbeat: 4001 }[mode],
+          reason: {
+            protocol: "invalid executor protocol",
+            binary: "frame bound",
+            registration: "register timeout",
+            heartbeat: "heartbeat timeout",
+          }[mode],
+        },
+      ]);
+      assert.equal(disconnected, 1);
+      assert.equal(session.registered, false);
+      assert.equal(session.queueBytes, 0);
+      assert.equal(session.send(registration), false, "closed transport cannot send work");
+      assert.equal(server.received[0]?.type, "executor.register");
+      assert.equal(frames.length, mode === "registration" ? 0 : 1);
+      if (mode === "registration")
+        assert.ok(Date.now() - started >= 15000, "real registration deadline");
+      if (mode === "heartbeat") assert.ok(Date.now() - started >= 45000, "real heartbeat deadline");
+      server.options.register = true;
+      delete server.options.fault;
+      const reconnect = session.connect(controller.signal, {
+        ...registration,
+        requestId: randomUUID(),
+      });
+      await eventually(() => session.registered, "real native reconnect missing");
+      controller.abort();
+      await reconnect;
+      assert.equal(disconnected, 2);
+      assert.equal(session.registered, false);
+      assert.equal(server.closes[1]?.code, 1000);
+      assert.equal(frames.at(-1)?.type, "executor.registered");
+    } finally {
+      clearTimeout(watchdog);
+      controller.abort();
+      await server.close();
+      await f.cleanup();
+    }
+  });
+
+for (const mode of ["assignment", "workspace", "authority", "ack"] as const)
+  test(`native WebSocket daemon ${mode} rejection closes without a detached failure`, async () => {
+    const f = await fixture();
+    const a = await assignment("must never start");
+    let retainedDelivery: string | undefined;
+    if (mode === "ack") {
+      f.ledger.admit(a, "approval");
+      new Output(f.ledger, a.identity, f.ledger.limits).append("stdout", Buffer.from("retained"));
+      retainedDelivery = f.ledger.outbox()[0]?.requestId;
+      assert.ok(retainedDelivery);
+    }
+    const pending: ExecutorFrame[] =
+      mode === "assignment"
+        ? [
+            {
+              type: "job.assign",
+              requestId: randomUUID(),
+              payload: { ...a, identity: { ...a.identity, assignmentDigest: "0".repeat(64) } },
+            },
+          ]
+        : mode === "workspace"
+          ? [
+              {
+                type: "workspace.request",
+                requestId: randomUUID(),
+                payload: {
+                  requestId: randomUUID(),
+                  correlationId: randomUUID(),
+                  request: { ...prepare(a, f.initial.manifestHash), rootBindingId: "unregistered" },
+                },
+              },
+            ]
+          : mode === "ack"
+            ? [
+                {
+                  type: "job.output_ack",
+                  requestId: retainedDelivery ?? "missing",
+                  payload: { deliveryId: "unrelated_cp_delivery", sequence: 1, persisted: true },
+                },
+              ]
+            : [];
+    const server = await sessionFixture(f.profile, { register: true, afterRegister: pending });
+    const controller = new AbortController();
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    let runtime: ExecutorRuntime | undefined;
+    try {
+      f.profile.origin = server.origin;
+      const http = new HttpTransport(f.profile, fetch, true);
+      runtime = new ExecutorRuntime({
+        profile: f.profile,
+        ledger: f.ledger,
+        directory: f.directory,
+        roots: new Map([["root", f.root]]),
+        http,
+      });
+      await runtime.initialize();
+      watchdog = setTimeout(() => controller.abort(), 3000);
+      const session = new SessionTransport(http, runtime);
+      runtime.session = session;
+      const connected = session.connect(controller.signal, {
+        type: "executor.register",
+        requestId: randomUUID(),
+        payload: {
+          executorId: f.profile.executorId,
+          generation: f.profile.executorGeneration,
+          protocolVersion: "1.0",
+          schemaVersion: "1.0.0",
+          capabilities: [],
+          platform: process.platform as "linux" | "darwin" | "win32",
+          caseBehavior: "sensitive",
+          rootBindingIds: ["root"],
+          confinement: "host",
+          transferLimits: http.transferLimits(),
+        },
+      });
+      if (mode === "authority") {
+        await eventually(
+          () => session.registered && runtime?.connected === true,
+          "actual daemon registration missing",
+        );
+        http.revoked = true;
+        await runtime.tick();
+      }
+      await connected;
+      clearTimeout(watchdog);
+      assert.equal(
+        controller.signal.aborted,
+        false,
+        "daemon error path must settle before watchdog",
+      );
+      assert.equal(session.registered, false);
+      assert.equal(runtime.connected, false);
+      assert.deepEqual(server.closes, [
+        {
+          code: mode === "ack" ? 4007 : 4008,
+          reason: {
+            assignment: "assignment rejected",
+            workspace: "workspace request identity conflict",
+            authority: "executor authority expired",
+            ack: "invalid executor protocol",
+          }[mode],
+        },
+      ]);
+      assert.equal(runtime.children.size, 0);
+      if (mode === "ack")
+        assert.ok(
+          f.ledger.outbox().some((value) => value.requestId === retainedDelivery),
+          "wrong wire delivery id cannot acknowledge native output",
+        );
+    } finally {
+      clearTimeout(watchdog);
+      controller.abort();
+      await runtime?.shutdown();
+      await server.close();
+      await f.cleanup();
+    }
+  });
+
+test("local-stage status waits for actual empty or multichunk durable consumer proof and current authority", async () => {
+  for (const mode of ["empty", "multichunk", "revoked", "fenced"] as const) {
+    const f = await fixture();
+    const bytes = mode === "empty" ? Buffer.alloc(0) : Buffer.alloc(393217, 0x71);
+    const server = await relayFixture(bytes);
+    const release = Promise.withResolvers<void>(),
+      entered = Promise.withResolvers<void>();
+    let runtime: ExecutorRuntime | undefined, pending: Promise<void> | undefined;
+    try {
+      f.profile.origin = server.origin;
+      const http = new HttpTransport(f.profile, fetch, true);
+      authenticateFixture(http);
+      http.chunkBytes = 65536;
+      server.setGrid(http.chunkBytes);
+      runtime = new ExecutorRuntime({
+        profile: f.profile,
+        ledger: f.ledger,
+        directory: f.directory,
+        roots: new Map([["root", f.root]]),
+        http,
+      });
+      await runtime.initialize();
+      const a = await assignment("must never start"),
+        row = f.ledger.admit(a, "approval");
+      const sha = createHash("sha256").update(bytes).digest("hex");
+      const chunkHashes: string[] = [];
+      for (let offset = 0; offset < bytes.length; offset += http.chunkBytes)
+        chunkHashes.push(
+          createHash("sha256")
+            .update(bytes.subarray(offset, offset + http.chunkBytes))
+            .digest("hex"),
+        );
+      const descriptor: Extract<TransferDescriptor, { purpose: "local-stage" }> = {
+        transferId: `input_${mode}`,
+        attemptId: "actual_attempt",
+        deploymentId: f.profile.deploymentId,
+        direction: "to-executor",
+        purpose: "local-stage",
+        workspaceId: "workspace",
+        bindingVersion: 1,
+        operationId: a.identity.lease.operationId,
+        operationDigest: a.identity.operationDigest,
+        jobId: a.identity.jobId,
+        executionId: a.identity.executionId,
+        executorId: "executor",
+        executorGeneration: 7,
+        credential,
+        consumer: resources,
+        baseRevision: "r0",
+        lease: a.identity.lease,
+        content: {
+          kind: "workspace-file",
+          path: "payload",
+          manifestHash: f.initial.manifestHash,
+          uploadId: `upload_${mode}`,
+        },
+        fileSha256: sha,
+        size: bytes.length,
+        chunkBytes: http.chunkBytes,
+        chunkHashes,
+        expiresAt: Date.now() + 20000,
+        deadline: a.identity.deadline,
+      };
+      const captured: ExecutorFrame[] = [],
+        session = new SessionTransport(http, runtime);
+      session.send = (value) => {
+        captured.push(frame(value));
+        return true;
+      };
+      runtime.session = session;
+      const receive = runtime.staging.receive.bind(runtime.staging),
+        chunk = http.chunk.bind(http);
+      let delayed = true;
+      if (mode === "empty")
+        runtime.staging.receive = async (value) => {
+          if (delayed) {
+            entered.resolve();
+            await release.promise;
+          }
+          await receive(value);
+        };
+      else
+        http.chunk = async (value, index, data) => {
+          const result = await chunk(value, index, data);
+          // Actual HTTP body has completed, but the consumer has not returned to persist bytes/proof.
+          if (delayed && index === chunkHashes.length - 1) {
+            entered.resolve();
+            await release.promise;
+          }
+          return result;
+        };
+      pending = runtime.transfer(descriptor, "same_open_request");
+      const unexpected = pending.then(() => {
+        throw new Error("consumer completed before actual barrier");
+      });
+      await Promise.race([entered.promise, unexpected]);
+      const proofKey = `verified_blob_${descriptor.content.uploadId}_${sha}`;
+      assert.equal(f.ledger.record("stages", proofKey), undefined);
+      assert.equal(captured.length, 0, "no acknowledgment before actual consumer persistence");
+      await assert.rejects(readFile(join(runtime.staging.directory, sha)), { code: "ENOENT" });
+      assert.equal(server.requests.length, chunkHashes.length);
+      if (mode === "revoked") http.revoked = true;
+      if (mode === "fenced")
+        f.ledger.db.prepare("INSERT INTO meta(key,value) VALUES('fence_root_1','2')").run();
+      delayed = false;
+      release.resolve();
+      if (mode === "revoked" || mode === "fenced")
+        await assert.rejects(
+          pending,
+          mode === "revoked" ? /current executor transport authority required/ : /stale_fence/,
+        );
+      else await pending;
+      const status = captured[0];
+      if (status?.type !== "transfer.status") throw new Error("durable consumer receipt missing");
+      assert.equal(status.requestId, "same_open_request");
+      assert.equal(status.payload.transferId, descriptor.transferId);
+      assert.equal(status.payload.attemptId, descriptor.attemptId);
+      if (mode === "revoked" || mode === "fenced") {
+        assert.equal(status.payload.state, "interrupted");
+        assert.deepEqual(status.payload.verifiedChunks, []);
+        assert.equal(status.payload.bytes, 0);
+      } else {
+        assert.equal(status.payload.state, "verified");
+        assert.deepEqual(
+          status.payload.verifiedChunks,
+          chunkHashes.map((_, i) => i),
+        );
+        assert.equal(status.payload.bytes, bytes.length);
+        const reopened = await Ledger.open(f.directory, "ledger", f.ledger.limits);
+        try {
+          assert.ok(
+            reopened.record("stages", proofKey),
+            "receipt requires independently reopened durable proof",
+          );
+        } finally {
+          reopened.close();
+        }
+        const path = join(runtime.staging.directory, sha),
+          before = await stat(path);
+        assert.equal(
+          createHash("sha256")
+            .update(await readFile(path))
+            .digest("hex"),
+          sha,
+        );
+        await runtime.transfer(descriptor, "same_open_request");
+        assert.deepEqual(captured[1], status, "exact retry retains correlated immutable receipt");
+        const after = await stat(path);
+        assert.equal(after.ino, before.ino);
+        assert.equal(after.mtimeMs, before.mtimeMs);
+        const wrong = { ...descriptor, attemptId: "wrong_whole_hash", fileSha256: "0".repeat(64) };
+        await assert.rejects(runtime.transfer(wrong, "bad_open"), /file integrity/);
+        const rejected = captured.at(-1);
+        assert.equal(rejected?.type, "transfer.status");
+        if (rejected?.type === "transfer.status") {
+          assert.equal(rejected.payload.state, "interrupted");
+          assert.equal(rejected.payload.bytes, 0);
+        }
+      }
+      assert.equal(runtime.children.size, 0);
+      assert.equal(f.ledger.get(a.identity.jobId)?.state, "pending");
+      assert.equal(f.ledger.get(a.identity.jobId)?.bodyHash, row.bodyHash);
+      assert.equal(f.profile.bindings[0]?.revision, "r0");
+    } finally {
+      release.resolve();
+      await pending?.catch(() => {});
+      await runtime?.shutdown();
+      await server.close();
+      await f.cleanup();
+    }
+  }
+});
+
+test("zero local-read open proves the actual retained owner file, rejecting a missing owner despite empty metadata", async () => {
+  const f = await fixture(),
+    server = await relayFixture(Buffer.alloc(0));
+  let runtime: ExecutorRuntime | undefined;
+  try {
+    await f.root.write("empty.bin", Buffer.alloc(0), 420);
+    const actual = await scan(f.root, f.ledger.limits),
+      binding = f.profile.bindings[0];
+    if (!binding) throw new Error("binding missing");
+    binding.manifestHash = actual.manifestHash;
+    f.profile.origin = server.origin;
+    const http = new HttpTransport(f.profile, fetch, true);
+    authenticateFixture(http);
+    runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http,
+    });
+    await runtime.initialize();
+    const local = runtime.locals.get("root");
+    if (!local) throw new Error("local missing");
+    await importRoot(local);
+    const request: Extract<LocalReadRequest, { kind: "read" }> = {
+      kind: "read",
+      operationId: "read_empty",
+      workspaceId: "workspace",
+      bindingVersion: 1,
+      rootBindingId: "root",
+      executorId: f.profile.executorId,
+      executorGeneration: f.profile.executorGeneration,
+      credential,
+      revision: "r0",
+      deadline: Date.now() + 60000,
+      path: "empty.bin",
+    };
+    const metadata = await runtime.handleWorkspaceFrame({
+      type: "workspace.request",
+      requestId: "read_metadata_outer",
+      payload: { requestId: "read_metadata", correlationId: "read_metadata_corr", request },
+    });
+    const response = metadata.payload.response;
+    assert.ok("kind" in response && response.kind === "read");
+    assert.equal(response.result.size, 0);
+    assert.ok(response.result.chunks);
+    assert.deepEqual(response.result.chunks.chunkHashes, []);
+    const descriptor: TransferDescriptor = {
+      transferId: "zero_read",
+      attemptId: "owner_attempt",
+      deploymentId: f.profile.deploymentId,
+      direction: "from-executor",
+      purpose: "local-read",
+      workspaceId: "workspace",
+      bindingVersion: 1,
+      operationId: request.operationId,
+      operationDigest: "a".repeat(64),
+      executorId: f.profile.executorId,
+      executorGeneration: f.profile.executorGeneration,
+      credential,
+      consumer: f.profile.resources,
+      baseRevision: "r0",
+      content: { kind: "workspace-file", path: request.path, manifestHash: actual.manifestHash },
+      fileSha256: createHash("sha256").update(Buffer.alloc(0)).digest("hex"),
+      size: 0,
+      chunkBytes: response.result.chunks.chunkBytes,
+      chunkHashes: [],
+      expiresAt: Date.now() + 20000,
+      deadline: request.deadline,
+    };
+    const captured: ExecutorFrame[] = [],
+      session = new SessionTransport(http, runtime);
+    session.send = (value) => {
+      captured.push(frame(value));
+      return true;
+    };
+    runtime.session = session;
+    await rm(join(f.rootPath, request.path));
+    await assert.rejects(runtime.transfer(descriptor, "missing_owner_open"), /local_drift/);
+    const missing = captured.at(-1);
+    assert.equal(missing?.type, "transfer.status");
+    if (missing?.type === "transfer.status") {
+      assert.equal(missing.requestId, "missing_owner_open");
+      assert.equal(missing.payload.state, "interrupted");
+      assert.equal(missing.payload.bytes, 0);
+      assert.deepEqual(missing.payload.verifiedChunks, []);
+    }
+    await f.root.write(request.path, Buffer.alloc(0), 420);
+    await runtime.transfer(descriptor, "actual_owner_open");
+    const verified = captured.at(-1);
+    assert.equal(verified?.type, "transfer.status");
+    if (verified?.type === "transfer.status") {
+      assert.equal(verified.requestId, "actual_owner_open");
+      assert.equal(verified.payload.state, "verified");
+      assert.equal(verified.payload.bytes, 0);
+      assert.deepEqual(verified.payload.verifiedChunks, []);
+    }
+    const producerKey = `producer_${descriptor.transferId}_${descriptor.attemptId}`;
+    const reopened = await Ledger.open(f.directory, "ledger", f.ledger.limits);
+    try {
+      const proof = reopened.db.prepare("SELECT value FROM meta WHERE key=?").get(producerKey) as {
+        value: string;
+      };
+      assert.equal(JSON.parse(proof.value).state, "done");
+    } finally {
+      reopened.close();
+    }
+    const produced = await runtime.handleWorkspaceFrame({
+      type: "workspace.request",
+      requestId: "later_produce_outer",
+      payload: {
+        requestId: "later_produce",
+        correlationId: "later_produce_corr",
+        request: { ...request, transfers: [descriptor] },
+      },
+    });
+    assert.ok("kind" in produced.payload.response && produced.payload.response.kind === "read");
+    assert.equal(server.requests.length, 0, "zero proof needs no invented HTTP chunk");
+    assert.equal(runtime.children.size, 0);
+    assert.equal(binding.revision, "r0");
+  } finally {
+    await runtime?.shutdown();
+    await server.close();
+    await f.cleanup();
+  }
+});
 
 test("real HTTP scoped relay validates length/hash/direction, blocks redirects and coalesces pressure", async () => {
   const f = await fixture(),

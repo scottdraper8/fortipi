@@ -1,9 +1,181 @@
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { ErrorBody, LocalPrepare, TicketIdentity } from "fortipi-contract/executor";
+import type { Duplex } from "node:stream";
+import { freeInfrastructurePolicy } from "fortipi-contract";
+import type {
+  ErrorBody,
+  ExecutorFrame,
+  LocalPrepare,
+  TicketIdentity,
+} from "fortipi-contract/executor";
+import type { Profile } from "../../dist/config.js";
 import { hash } from "../../dist/policy.js";
 import { validate } from "../../dist/transport.js";
 import type { Manifest } from "../../dist/workspace/manifest.js";
+
+/** Actual Node WebSocket peer; synthetic HTTP authority, no Worker/CP substitute. */
+export async function sessionFixture(
+  profile: Profile,
+  options: { register: boolean; fault?: "protocol" | "binary"; afterRegister?: ExecutorFrame[] },
+) {
+  const peers = new Set<Duplex>(),
+    tickets = new Set<string>();
+  const received: ExecutorFrame[] = [],
+    closes: { code: number; reason: string }[] = [];
+  let epoch = 0,
+    serial = 0;
+  function send(socket: Duplex, bytes: Buffer, opcode = 1) {
+    if (bytes.length > 65535) throw new Error("fixture frame bound");
+    const header = Buffer.alloc(bytes.length < 126 ? 2 : 4);
+    header[0] = 128 | opcode;
+    if (bytes.length < 126) header[1] = bytes.length;
+    else {
+      header[1] = 126;
+      header.writeUInt16BE(bytes.length, 2);
+    }
+    socket.write(Buffer.concat([header, bytes]));
+  }
+  const server = createServer((req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    if (req.url === "/v1/protocol") {
+      res.end(
+        JSON.stringify({
+          protocolVersion: "1.0",
+          schemaVersion: "1.0.0",
+          deploymentId: profile.deploymentId,
+          infrastructure: freeInfrastructurePolicy,
+          limits: { jsonBytes: 1048576, chunkBytes: 262144, outputFrameBytes: 16384 },
+        }),
+      );
+    } else if (req.method === "POST" && req.url === "/v1/connections/tickets") {
+      req.resume();
+      const ticket = `synthetic_ticket_${++serial}`;
+      tickets.add(ticket);
+      res.writeHead(201);
+      res.end(
+        JSON.stringify({
+          ticket,
+          audience: "executor-session",
+          expiresAt: Date.now() + 30000,
+          identity: {
+            deploymentId: profile.deploymentId,
+            principalId: "synthetic_executor",
+            role: "executor",
+            credential: profile.credential,
+            credentialExpiresAt: null,
+          },
+        }),
+      );
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  server.on("upgrade", (req, socket, head) => {
+    const url = new URL(req.url ?? "/", "http://fixture");
+    if (
+      url.pathname !== "/v1/executor/session" ||
+      !tickets.delete(url.searchParams.get("ticket") ?? "")
+    ) {
+      socket.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+      return;
+    }
+    const accept = createHash("sha1")
+      .update(`${req.headers["sec-websocket-key"]}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest("base64");
+    socket.write(
+      `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`,
+    );
+    peers.add(socket);
+    socket.on("error", () => {});
+    socket.once("close", () => peers.delete(socket));
+    let buffer = Buffer.from(head);
+    socket.on("data", (data: Buffer) => {
+      buffer = Buffer.concat([buffer, data]);
+      if (buffer.length > 1048576) {
+        socket.destroy();
+        return;
+      }
+      while (buffer.length >= 2) {
+        const first = buffer[0] ?? 0,
+          second = buffer[1] ?? 0;
+        let length = second & 127,
+          offset = 2;
+        if (length === 126) {
+          if (buffer.length < 4) return;
+          length = buffer.readUInt16BE(2);
+          offset = 4;
+        }
+        if (length === 127 || !(first & 128) || !(second & 128)) {
+          socket.destroy();
+          return;
+        }
+        if (buffer.length < offset + 4 + length) return;
+        const mask = buffer.subarray(offset, offset + 4);
+        offset += 4;
+        const bytes = Buffer.from(buffer.subarray(offset, offset + length));
+        for (let i = 0; i < bytes.length; i++) bytes[i] = (bytes[i] ?? 0) ^ (mask[i % 4] ?? 0);
+        buffer = buffer.subarray(offset + length);
+        if ((first & 15) === 8) {
+          closes.push({
+            code: bytes.length >= 2 ? bytes.readUInt16BE(0) : 1005,
+            reason: bytes.subarray(2).toString(),
+          });
+          send(socket, bytes, 8);
+          socket.end();
+          return;
+        }
+        if ((first & 15) !== 1) {
+          socket.destroy();
+          return;
+        }
+        const value = validate<ExecutorFrame>(
+          "executor-messages.schema.json",
+          "ExecutorFrame",
+          JSON.parse(bytes.toString()),
+        );
+        received.push(value);
+        if (value.type === "executor.register" && options.register) {
+          send(
+            socket,
+            Buffer.from(
+              JSON.stringify({
+                type: "executor.registered",
+                requestId: value.requestId,
+                payload: {
+                  executorId: profile.executorId,
+                  generation: profile.executorGeneration,
+                  connectionEpoch: ++epoch,
+                  heartbeatMs: 15000,
+                },
+              }),
+            ),
+          );
+          if (options.fault === "protocol")
+            send(socket, Buffer.from('{"type":"invalid-protocol"}'));
+          if (options.fault === "binary") send(socket, Buffer.from([1]), 2);
+          for (const pending of options.afterRegister ?? [])
+            send(socket, Buffer.from(JSON.stringify(pending)));
+        }
+      }
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    options,
+    received,
+    closes,
+    async close() {
+      for (const socket of peers) socket.destroy();
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    },
+  };
+}
 
 /** Real HTTP byte transport, synthetic authority. This does not stand in for CP/workerd durability. */
 export async function relayFixture(data: Buffer) {

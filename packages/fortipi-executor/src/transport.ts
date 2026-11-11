@@ -500,7 +500,8 @@ export class SessionTransport {
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
-          socket.close(1008, "register timeout");
+          // WHATWG clients permit 1000 or application codes 3000..4999, unlike server APIs.
+          socket.close(4008, "register timeout");
         }, 15000);
         socket.addEventListener("open", () => socket.send(canonicalJson(frame(registration))));
         socket.addEventListener("message", (event) => {
@@ -510,7 +511,7 @@ export class SessionTransport {
             Buffer.byteLength(data) > this.http.jsonBytes ||
             this.queueBytes + Buffer.byteLength(data) > 1048576
           ) {
-            socket.close(1009, "frame bound");
+            socket.close(4009, "frame bound");
             return;
           }
           this.queueBytes += Buffer.byteLength(data);
@@ -534,7 +535,7 @@ export class SessionTransport {
                 for (const pending of this.handler.reconnectFrames()) this.send(pending);
                 heartbeat = setInterval(() => {
                   if (Date.now() - this.lastHeard >= 45000) {
-                    socket.close(1001, "heartbeat timeout");
+                    socket.close(4001, "heartbeat timeout");
                     return;
                   }
                   this.send({
@@ -552,7 +553,7 @@ export class SessionTransport {
               } else await this.handler.receive(value);
             })
             .catch(() => {
-              socket.close(1007, "invalid executor protocol");
+              socket.close(4007, "invalid executor protocol");
             })
             .finally(() => {
               this.queueBytes -= Buffer.byteLength(data);

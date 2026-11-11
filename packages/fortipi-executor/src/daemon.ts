@@ -9,6 +9,7 @@ import type {
   ExecutorFrame,
   JobCommitted,
   LeaseUpdate,
+  LocalReadRequest,
   LocalWorkspaceResponse,
   PreparedResult,
   TransferDescriptor,
@@ -776,7 +777,7 @@ export class ExecutorRuntime implements FrameHandler {
             });
           })
           .catch(() => {
-            this.session?.socket?.close(1008, "assignment rejected");
+            this.session?.socket?.close(4008, "assignment rejected");
           }),
       );
       return;
@@ -821,7 +822,7 @@ export class ExecutorRuntime implements FrameHandler {
       this.track(
         this.handleWorkspaceFrame(value)
           .then((response) => this.session?.send(response))
-          .catch(() => this.session?.socket?.close(1008, "workspace request identity conflict")),
+          .catch(() => this.session?.socket?.close(4008, "workspace request identity conflict")),
       );
       return;
     }
@@ -933,7 +934,12 @@ export class ExecutorRuntime implements FrameHandler {
       verifiedChunks: number[] = [];
     let active = false;
     const reply = (state: "verified" | "interrupted") => {
-      if (requestId && descriptor.purpose === "output")
+      if (
+        requestId &&
+        (descriptor.size === 0 ||
+          descriptor.purpose === "output" ||
+          (descriptor.purpose === "local-stage" && descriptor.direction === "to-executor"))
+      )
         this.session?.send({
           type: "transfer.status",
           requestId,
@@ -949,7 +955,12 @@ export class ExecutorRuntime implements FrameHandler {
               0,
             ),
             ...(state === "interrupted"
-              ? { reason: "Native artifact source unavailable or transfer interrupted" }
+              ? {
+                  reason:
+                    descriptor.purpose === "output"
+                      ? "Native artifact source unavailable or transfer interrupted"
+                      : "Native staging unavailable or transfer interrupted",
+                }
               : {}),
           },
         });
@@ -977,6 +988,53 @@ export class ExecutorRuntime implements FrameHandler {
     this.staging.check(descriptor);
     if (descriptor.purpose === "local-stage") {
       await this.staging.receive(descriptor);
+      // GET completion alone precedes private-file fsync and durable verified_blob storage.
+      // Acknowledge the existing open only after both and current authority still hold.
+      this.staging.check(descriptor);
+      this.http.assertExecutorAuthority();
+      for (let index = 0; index < descriptor.chunkHashes.length; index++)
+        verifiedChunks.push(index);
+      return;
+    }
+    if (descriptor.purpose === "local-read" && descriptor.size === 0) {
+      const binding = this.profile.bindings.find(
+        (b) =>
+          b.workspaceId === descriptor.workspaceId &&
+          b.bindingVersion === descriptor.bindingVersion,
+      );
+      const local = binding && this.locals.get(binding.rootBindingId);
+      if (!binding || !local) throw new Error("empty read owner unavailable");
+      // The metadata phase already retained this exact read scope. Reuse the actual
+      // owner read/producer checks now: waiting for the later workspace request
+      // would deadlock openTransfer, and a zero descriptor alone proves no file.
+      const request: Extract<LocalReadRequest, { kind: "read" }> = {
+        kind: "read",
+        operationId: descriptor.operationId,
+        workspaceId: descriptor.workspaceId,
+        bindingVersion: descriptor.bindingVersion,
+        rootBindingId: binding.rootBindingId,
+        executorId: descriptor.executorId,
+        executorGeneration: descriptor.executorGeneration,
+        credential: descriptor.credential,
+        revision: descriptor.baseRevision,
+        deadline: descriptor.deadline,
+        path: descriptor.content.path,
+        transfers: [descriptor],
+      };
+      const result = await local.request(request);
+      if (
+        !("kind" in result) ||
+        result.kind !== "read" ||
+        result.result.size !== 0 ||
+        result.result.sha256 !== descriptor.fileSha256 ||
+        result.result.owner.kind !== "local" ||
+        result.result.owner.executorId !== descriptor.executorId ||
+        result.result.chunks?.chunkBytes !== descriptor.chunkBytes ||
+        result.result.chunks.chunkHashes.length !== 0
+      )
+        throw new Error("empty read owner proof mismatch");
+      this.staging.check(descriptor);
+      this.http.assertExecutorAuthority();
       return;
     }
     if (descriptor.purpose !== "output" || descriptor.content.kind !== "job-output")
@@ -1028,7 +1086,7 @@ export class ExecutorRuntime implements FrameHandler {
         for (const identity of this.ledger.identities())
           if (this.children.has(identity.jobId))
             await this.cancel(identity, "executor credential expired");
-        this.session?.socket?.close(1008, "executor authority expired");
+        this.session?.socket?.close(4008, "executor authority expired");
       }
     }
     for (const identity of this.ledger.identities())

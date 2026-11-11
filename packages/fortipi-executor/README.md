@@ -114,6 +114,15 @@ retries while retaining operation identity. Effective limits are the minimum of
 local and discovered bounds. A paid account raises no limit or enables a backend
 automatically. There are no model-provider token/hour/week budgets.
 
+Local-stage completion is acknowledged only after actual whole-file verification,
+private-file persistence and the durable verified-blob record, with current
+authority checked again. Receiving the final HTTP body is not that receipt.
+Empty transfers require the same explicit owner or consumer proof: an empty
+local read reopens the actual retained file under its original read scope and
+current binding before acknowledging. Missing owner bytes remain unavailable.
+Existing `transfer.status` replies retain the open request/transfer/attempt IDs;
+no synthetic HTTP chunk is used for an empty file.
+
 Native output references record the actual stdout/stderr collector stream and
 its complete hash/grid. Retained artifact reads use the current authorized
 reader's credential separately from the immutable original job identity. An
