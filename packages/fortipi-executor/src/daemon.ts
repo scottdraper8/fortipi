@@ -141,9 +141,13 @@ export class ExecutorRuntime implements FrameHandler {
     const p = await this.reloadProfile();
     if (
       p.executorId !== this.profile.executorId ||
+      p.deploymentId !== this.profile.deploymentId ||
+      p.ledgerId !== this.profile.ledgerId ||
       p.executorGeneration !== this.profile.executorGeneration ||
       canonicalJson(p.credential) !== canonicalJson(this.profile.credential) ||
       p.origin !== this.profile.origin ||
+      canonicalJson(p.resources) !== canonicalJson(this.profile.resources) ||
+      canonicalJson(p.limits) !== canonicalJson(this.profile.limits) ||
       canonicalJson(p.bindings.map((b) => [b.rootBindingId, b.path, b.bindingVersion])) !==
         canonicalJson(this.profile.bindings.map((b) => [b.rootBindingId, b.path, b.bindingVersion]))
     )
@@ -779,6 +783,7 @@ export class ExecutorRuntime implements FrameHandler {
   async handleWorkspaceFrame(
     value: Extract<ExecutorFrame, { type: "workspace.request" }>,
   ): Promise<Extract<ExecutorFrame, { type: "workspace.response" }>> {
+    await this.currentPolicy();
     this.http.assertExecutorAuthority();
     if (Buffer.byteLength(canonicalJson(value)) > this.http.jsonBytes)
       throw new Error("payload_too_large: encoded frame");
@@ -858,6 +863,7 @@ export class ExecutorRuntime implements FrameHandler {
     };
   }
   async transfer(descriptor: TransferDescriptor): Promise<void> {
+    await this.currentPolicy();
     this.http.assertExecutorAuthority();
     const key = `${descriptor.transferId}:${descriptor.attemptId}`;
     if (this.transfers.has(key) || this.transfers.size >= this.http.limits.transferConcurrency)
@@ -901,6 +907,14 @@ export class ExecutorRuntime implements FrameHandler {
     }
   }
   async tick(): Promise<void> {
+    if (this.reloadProfile) {
+      try {
+        await this.currentPolicy();
+      } catch {
+        this.revoked = true;
+        this.http.revoked = true;
+      }
+    }
     if (this.connected) {
       try {
         this.http.assertExecutorAuthority();

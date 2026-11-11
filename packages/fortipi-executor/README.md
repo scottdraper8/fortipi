@@ -112,6 +112,9 @@ file/artifact caps also respect the grid's 256-chunk metadata bound. Staged writ
 verify all ordered puts, including superseded and empty files. Empty files send
 no public PUT. A verified SHA can serve multiple declared paths only inside the
 same validated upload scope. Oversize control metadata fails before effects.
+Identity, resource or capacity profile edits require a restart and reconciliation;
+the running daemon fails closed when it observes such an edit. Local consent and
+approval policy are reloaded before admissions. Byte loops recheck current caps.
 
 Paths are NFC relative POSIX names. Reserved Windows aliases, ADS, traversal,
 case collisions, secrets/build caches, links, junctions/reparse points, externally

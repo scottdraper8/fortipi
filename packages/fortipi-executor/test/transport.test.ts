@@ -57,6 +57,15 @@ test("real HTTP scoped relay validates length/hash/direction, blocks redirects a
     };
     await staging.receive(descriptor);
     assert.deepEqual(await staging.bytes(hash(bytes)), bytes);
+    const requestsBeforeLimit = server.requests.length;
+    http.limits.fileBytes = bytes.length - 1;
+    await assert.rejects(http.chunk(descriptor, 0), /bound/);
+    assert.equal(
+      server.requests.length,
+      requestsBeforeLimit,
+      "newly lowered live file cap blocks bytes before network",
+    );
+    http.limits.fileBytes = 4194304;
     assert.equal(server.requests[0]?.authorization, "Bearer synthetic-executor-token");
     assert.match(server.requests[0]?.path ?? "", /attemptId=attempt/);
     assert.throws(

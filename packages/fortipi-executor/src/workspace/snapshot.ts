@@ -97,6 +97,7 @@ export class Snapshots {
       await root.mkdir(directory);
     for (const entry of response.manifest.entries) {
       if (entry.type !== "file") continue;
+      checkManifest(response.manifest, this.http.limits, root.identity.caseBehavior);
       const { r, bytes } = await this.http.withTransfer(async () => {
         const r = await this.http.request(
           `${base}/blobs/${entry.sha256}?revision=${encodeURIComponent(id.baseRevision)}`,
@@ -114,6 +115,7 @@ export class Snapshots {
         r.headers.get("X-Content-SHA256") !== entry.sha256
       )
         throw new Error("snapshot file integrity");
+      checkManifest(response.manifest, this.http.limits, root.identity.caseBehavior);
       await root.write(entry.path, bytes, entry.mode);
     }
     const actual = await scan(root, this.limits);
@@ -236,6 +238,9 @@ export class Snapshots {
         offset < bytes.length;
         offset += plan.chunks.chunkBytes, index++
       ) {
+        if (plan.chunks.chunkBytes > Math.min(this.http.chunkBytes, this.http.limits.chunkBytes))
+          throw new Error("upload chunk grid no longer eligible");
+        checkManifest(after.manifest, this.http.limits, root.identity.caseBehavior);
         if (Date.now() >= Math.min(id.deadline, id.lease.expiresAt))
           throw new Error("expired upload");
         const chunk = bytes.subarray(offset, offset + plan.chunks.chunkBytes);

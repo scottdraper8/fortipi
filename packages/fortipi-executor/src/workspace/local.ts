@@ -468,6 +468,16 @@ export class LocalWorkspace {
   }
   async observe(request: LocalObserve): Promise<LocalObservation> {
     const row = this.correlated(request);
+    // A later committed revision does not rewrite this historical receipt/observation.
+    if (row.observation.receipt) {
+      try {
+        await this.current(this.binding.manifestHash);
+      } catch (error) {
+        this.ledger.quarantine(this.root.key);
+        throw error;
+      }
+      return row.observation;
+    }
     if (row.observation.state === "applied" || row.observation.state === "prepared") {
       try {
         await this.current(row.observation.postManifestHash ?? row.observation.preManifestHash);

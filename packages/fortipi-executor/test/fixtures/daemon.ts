@@ -106,7 +106,11 @@ export const quote = (s: string) =>
 export function nodeCommand(...args: string[]): string {
   return `${process.platform === "win32" ? "& " : ""}${[process.execPath, ...args].map(quote).join(" ")}`;
 }
-export async function assignment(command: string, jobId = randomUUID()): Promise<Assignment> {
+export async function assignment(
+  command: string,
+  jobId = randomUUID(),
+  baseRevision = "r0",
+): Promise<Assignment> {
   const deadline = Date.now() + 60000,
     target = { kind: "executor" as const, executorId: "executor", generation: 7 };
   const operation = {
@@ -116,7 +120,7 @@ export async function assignment(command: string, jobId = randomUUID()): Promise
     tool: "shell",
     arguments: { command },
     workspaceId: "workspace",
-    baseRevision: "r0",
+    baseRevision,
     target,
     policyVersion: 1,
     grantVersion: 3,
@@ -142,7 +146,7 @@ export async function assignment(command: string, jobId = randomUUID()): Promise
       operationDigest: operationHash,
       assignmentDigest: digest,
       target,
-      baseRevision: "r0",
+      baseRevision,
       deadline,
       lease: {
         leaseId,
@@ -154,7 +158,7 @@ export async function assignment(command: string, jobId = randomUUID()): Promise
         executorId: "executor",
         executorGeneration: 7,
         fence: "1",
-        baseRevision: "r0",
+        baseRevision,
         expiresAt: Date.now() + 30000,
         ownerKind: "job",
         jobId,
@@ -178,7 +182,7 @@ export async function assignment(command: string, jobId = randomUUID()): Promise
       tool: "shell",
       arguments: { command },
       workspaceId: "workspace",
-      baseRevision: "r0",
+      baseRevision,
       target,
       trust: "host",
       capabilities: ["shell"],
@@ -199,7 +203,7 @@ export function prepare(a: Assignment, manifestHash: string): LocalPrepare {
     executorId: "executor",
     executorGeneration: 7,
     credential,
-    baseRevision: "r0",
+    baseRevision: a.identity.baseRevision,
     lease: a.identity.lease,
     deadline: a.identity.deadline,
     commitId: randomUUID(),

@@ -49,10 +49,14 @@ async function setup() {
   await importRoot(local);
   return { ...f, staging, local };
 }
-async function staged(f: Awaited<ReturnType<typeof setup>>, name = "alpha"): Promise<LocalPrepare> {
-  const a = await assignment("not executed"),
-    base = prepare(a, f.initial.manifestHash),
-    bytes = Buffer.from("expected committed content"),
+async function staged(
+  f: Awaited<ReturnType<typeof setup>>,
+  name = "alpha",
+  content = "expected committed content",
+): Promise<LocalPrepare> {
+  const a = await assignment("not executed", undefined, f.local.binding.revision),
+    base = prepare(a, f.local.binding.manifestHash),
+    bytes = Buffer.from(content),
     sha256 = hash(bytes),
     uploadId = randomUUID();
   const manifest: Manifest = {
@@ -111,7 +115,7 @@ async function staged(f: Awaited<ReturnType<typeof setup>>, name = "alpha"): Pro
     operationDigest: base.operationDigest,
     workspaceId: "workspace",
     bindingVersion: 1,
-    baseRevision: "r0",
+    baseRevision: base.baseRevision,
     manifest,
     mutations,
   });
@@ -130,6 +134,7 @@ async function staged(f: Awaited<ReturnType<typeof setup>>, name = "alpha"): Pro
 async function receipt(
   request: LocalPrepare,
   observation: LocalObservation,
+  revision = "r1",
 ): Promise<CommitReceipt> {
   if (observation.state !== "applied") throw new Error("applied observation required");
   const commitHash = await commitDigest({
@@ -154,7 +159,7 @@ async function receipt(
     operationId: request.operationId,
     workspaceId: request.workspaceId,
     baseRevision: request.baseRevision,
-    revision: "r1",
+    revision,
     manifestHash: observation.postManifestHash,
     sourceFactId: "fact",
     committedAt: Date.now(),
@@ -255,6 +260,34 @@ test("prepare changes no canonical bytes; apply once, lost ack observes; receipt
     assert.equal(
       f.ledger.local(request.operationId)?.observation.receipt?.commitDigest,
       proof.commitDigest,
+    );
+    const next = await staged(f, "alpha", "next committed bytes"),
+      nextPrepared = await f.local.request(next);
+    if (!("preparationId" in nextPrepared)) throw new Error("next preparation absent");
+    const nextApplied = (await f.local.request({
+      ...requestScope(next),
+      kind: "apply",
+      preparationId: nextPrepared.preparationId,
+    })) as LocalObservation;
+    const nextReceipt = await receipt(next, nextApplied, "r2");
+    await f.local.request({
+      ...receiptScope(next),
+      kind: "receipt",
+      preparationId: nextPrepared.preparationId,
+      receipt: nextReceipt,
+    });
+    const history = await f.local.request({
+      ...requestScope(expired),
+      kind: "observe",
+      preparationId,
+    });
+    assert.ok("state" in history && history.state === "applied");
+    assert.ok("receipt" in history && history.receipt?.commitDigest === proof.commitDigest);
+    assert.equal(f.local.binding.revision, "r2");
+    assert.equal(
+      f.ledger.rootAvailable(f.root.key),
+      true,
+      "historical observation must not quarantine a later valid revision",
     );
   } finally {
     await f.cleanup();

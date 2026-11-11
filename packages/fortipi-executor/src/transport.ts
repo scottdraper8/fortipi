@@ -8,7 +8,7 @@ import type {
   TransferDescriptor,
   TransferStatus,
 } from "fortipi-contract/executor";
-import { canonicalJson, executorSchemaRegistry } from "fortipi-contract/executor";
+import { canonicalJson, executorSchemaRegistry, validateTransfer } from "fortipi-contract/executor";
 import type { Limits, Profile } from "./config.js";
 import { effectiveLimits, validateOrigin } from "./config.js";
 import { hash } from "./policy.js";
@@ -239,12 +239,16 @@ export class HttpTransport {
     index: number,
     data?: Uint8Array,
   ): Promise<Uint8Array | undefined> {
+    validate("transfers.schema.json", "TransferDescriptor", descriptor);
+    validateTransfer(descriptor, Date.now());
     const size = Math.min(descriptor.chunkBytes, descriptor.size - index * descriptor.chunkBytes);
     if (
       !Number.isInteger(index) ||
       index < 0 ||
       index >= descriptor.chunkHashes.length ||
-      descriptor.chunkBytes > this.chunkBytes
+      descriptor.chunkBytes > Math.min(this.chunkBytes, this.limits.chunkBytes) ||
+      descriptor.size >
+        (descriptor.purpose === "output" ? this.limits.artifactBytes : this.limits.fileBytes)
     )
       throw new Error("chunk index/bound");
     const base = `/v1/executor/transfers/${encodeURIComponent(descriptor.transferId)}`;
@@ -341,6 +345,8 @@ export class SessionTransport {
     registration: Extract<ExecutorFrame, { type: "executor.register" }>,
   ): Promise<void> {
     await this.http.discover();
+    if (Buffer.byteLength(canonicalJson(frame(registration))) > this.http.jsonBytes)
+      throw new Error("registration exceeds negotiated control limit");
     const ticket = await this.http.ticket();
     const url = new URL("/v1/executor/session", this.http.profile.origin);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
