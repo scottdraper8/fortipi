@@ -31,6 +31,7 @@ import {
 } from "./authority.js";
 import { ComputerStore } from "./computer.js";
 import { outcome, requireThat, unwrap, WorkspaceError } from "./errors.js";
+import { WorkspaceExports } from "./export.js";
 import { LocalProvider } from "./local.js";
 import { LocalReads } from "./local-read.js";
 import { LocalUploads } from "./local-upload.js";
@@ -74,6 +75,7 @@ interface InternalContext {
   hash?: string;
   length?: number;
   artifact?: { path: string; offset: number; size: number };
+  exportId?: string;
 }
 interface ArtifactRecord {
   reference: D.ByteReference;
@@ -88,7 +90,7 @@ interface ArtifactRecord {
 }
 interface DueRecord {
   at: number;
-  kind: "upload" | "artifact" | "local-upload";
+  kind: "upload" | "artifact" | "local-upload" | "export";
   id: string;
 }
 interface FactRow {
@@ -106,14 +108,16 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   readonly execution: ExecutionLedger;
   readonly localUploads: LocalUploads;
   readonly localReads: LocalReads;
-  private child: ComputerStore | undefined;
-  private deleted = false;
+  readonly #exports: WorkspaceExports;
+  #child: ComputerStore | undefined;
+  #deleted = false;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.state = new State(ctx.storage);
     this.execution = new ExecutionLedger(this, env);
     this.localUploads = new LocalUploads(this);
     this.localReads = new LocalReads(this);
+    this.#exports = new WorkspaceExports(this);
   }
   trackLocalRead(completion: Promise<unknown>): void {
     this.ctx.waitUntil(completion);
@@ -365,7 +369,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       requireThat(record.workspaceId === workspaceId, "unauthorized", "Workspace mismatch");
       return record;
     });
-    if (action === "workspace.write") await this.maintain(ctx);
+    if (action === "workspace.write") await this.#maintain(ctx);
     return record;
   }
   current(): AuthorityRecord {
@@ -373,7 +377,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     requireThat(record, "not_found", "Workspace not initialized");
     return record;
   }
-  private async checkLocalSnapshot(
+  async #checkLocalSnapshot(
     ctx: D.AuthContext,
     authority: AuthorityRecord,
     revision: string,
@@ -403,10 +407,10 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     });
     return record;
   }
-  private childStore(): ComputerStore {
+  #childStore(): ComputerStore {
     requireThat(!this.state.get("authority"), "unauthorized", "Authority contains no Computer");
-    this.child ??= new ComputerStore(this.state, this.mutex, this.policy);
-    return this.child;
+    this.#child ??= new ComputerStore(this.state, this.mutex, this.policy);
+    return this.#child;
   }
   async registry(ctx: D.AuthContext, input: D.StoreLookup): Promise<AllocationRecord> {
     const result = unwrap(await this.stub(input.authorityId).describeStore(ctx, input));
@@ -657,7 +661,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const digest = await digestJson("operation", { kind: "lease-renew", input });
       return this.mutex.run(() =>
         this.state.transaction(() => {
-          this.authorizeLeaseReceipt(ctx, input.lease);
+          this.#authorizeLeaseReceipt(ctx, input.lease);
           requireThat(
             this.current().lease?.leaseId === input.lease.leaseId &&
               !this.state.get(`release:${input.lease.leaseId}`),
@@ -692,7 +696,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       return this.mutex.run(() =>
         this.state.transaction(() => {
           const record = this.current();
-          this.authorizeLeaseReceipt(ctx, input.lease);
+          this.#authorizeLeaseReceipt(ctx, input.lease);
           const requestKey = `lease-release:${ctx.credentialId}:${input.requestId}`;
           const previousRequest = this.state.get<{ digest: string; receipt: D.ReleaseReceipt }>(
             requestKey,
@@ -734,7 +738,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       );
     }, ctx.requestId);
   }
-  private authorizeLeaseReceipt(ctx: D.AuthContext, lease: D.Lease): void {
+  #authorizeLeaseReceipt(ctx: D.AuthContext, lease: D.Lease): void {
     const record = this.current();
     const reservation = this.state.get<D.TargetReservation>(`reservation:${lease.leaseId}`);
     authorize(this.state, ctx, record.workspaceId, "workspace.write");
@@ -969,7 +973,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         "Allocation retired or sealed",
         { reason: "retired_allocation" },
       );
-      return this.childStore().initialize(input);
+      return this.#childStore().initialize(input);
     }, ctx.requestId);
   }
   sealStore(ctx: D.AuthContext, input: D.StoreSeal): Promise<D.Outcome<D.SealedStore>> {
@@ -984,7 +988,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       );
       const manifest = this.state.get<D.Manifest>("staged-manifest");
       requireThat(manifest, "conflict", "Snapshot not complete");
-      return this.childStore().seal(input, manifest);
+      return this.#childStore().seal(input, manifest);
     }, ctx.requestId);
   }
   retireStore(ctx: D.AuthContext, input: D.StoreLookup): Promise<D.Outcome<D.StoreRetirement>> {
@@ -1094,11 +1098,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         "unauthorized",
         "Confirmed authority tombstone required",
       );
-      if (!this.deleted) {
+      if (!this.#deleted) {
         await this.execution.stopChild();
-        await this.childStore().dispose();
-        this.child = undefined;
-        this.deleted = true;
+        await this.#childStore().dispose();
+        this.#child = undefined;
+        this.#deleted = true;
       }
       return {
         allocationId: input.allocationId,
@@ -1129,7 +1133,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   ): Promise<D.Outcome<D.OperationResponse<"getWorkspaceManifest">>> {
     return outcome(async () => {
       const authority = await this.authority(ctx, input.path.workspaceId);
-      await this.checkLocalSnapshot(ctx, authority, input.query.revision);
+      await this.#checkLocalSnapshot(ctx, authority, input.query.revision);
       return this.mutex.run(() => {
         authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
         const revision = this.revision(input.query.revision);
@@ -1151,7 +1155,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   ): Promise<D.Outcome<D.OperationResponse<"listWorkspaceFiles">>> {
     return outcome(async () => {
       const authority = await this.authority(ctx, input.path.workspaceId);
-      await this.checkLocalSnapshot(ctx, authority, input.query.revision);
+      await this.#checkLocalSnapshot(ctx, authority, input.query.revision);
       if (input.query.path) validateRelativePath(input.query.path);
       return this.mutex.run(() => {
         authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
@@ -1160,7 +1164,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             (entry) => !input.query.path || entry.path.startsWith(`${input.query.path}/`),
           )
           .sort((a, b) => (a.path < b.path ? -1 : 1));
-        const page = this.page(
+        const page = this.#page(
           ctx,
           all,
           input.query.pageToken,
@@ -1171,7 +1175,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       });
     }, ctx.requestId);
   }
-  private page<T>(
+  #page<T>(
     ctx: D.AuthContext,
     all: T[],
     token: string | undefined,
@@ -1209,7 +1213,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   ): Promise<D.Outcome<D.OperationResponse<"statWorkspaceFile">>> {
     return outcome(async () => {
       const authority = await this.authority(ctx, input.path.workspaceId);
-      await this.checkLocalSnapshot(ctx, authority, input.query.revision);
+      await this.#checkLocalSnapshot(ctx, authority, input.query.revision);
       validateRelativePath(input.query.path);
       return this.mutex.run(() => {
         authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
@@ -1320,7 +1324,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   ): Promise<D.Outcome<D.OperationResponse<"snapshotWorkspace">>> {
     return outcome(async () => {
       const authority = await this.authority(ctx, input.path.workspaceId);
-      await this.checkLocalSnapshot(ctx, authority, input.body.baseRevision);
+      await this.#checkLocalSnapshot(ctx, authority, input.body.baseRevision);
       return this.mutex.run(() => {
         validateLease(this.state, this.current(), input.body.lease, ctx);
         const record = this.revision(input.body.baseRevision);
@@ -1347,8 +1351,8 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   ): Promise<D.Outcome<D.OperationResponse<"diffWorkspace">>> {
     return outcome(async () => {
       const authority = await this.authority(ctx, input.path.workspaceId);
-      await this.checkLocalSnapshot(ctx, authority, input.query.revision);
-      await this.checkLocalSnapshot(ctx, authority, input.query.otherRevision);
+      await this.#checkLocalSnapshot(ctx, authority, input.query.revision);
+      await this.#checkLocalSnapshot(ctx, authority, input.query.otherRevision);
       return this.mutex.run(() => {
         authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
         const before = new Map(
@@ -1372,7 +1376,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           body: {
             revision: input.query.revision,
             otherRevision: input.query.otherRevision,
-            ...this.page(
+            ...this.#page(
               ctx,
               changes,
               input.query.pageToken,
@@ -1417,7 +1421,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
               } satisfies DueRecord,
             ),
           );
-          await this.armDue(response.body.expiresAt + 60_000);
+          await this.#armDue(response.body.expiresAt + 60_000);
         }
         return response;
       }
@@ -1560,11 +1564,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         }),
       );
       unwrap(await this.stub(allocation.childId).initializeStore(ctx, allocation));
-      await this.armDue(upload.status.expiresAt + 60_000);
+      await this.#armDue(upload.status.expiresAt + 60_000);
       return { status: 201 as const, body: upload.status };
     }, ctx.requestId);
   }
-  private upload(
+  #upload(
     ctx: D.AuthContext,
     workspaceId: string,
     uploadId: string,
@@ -1599,7 +1603,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       await this.authority(ctx, input.path.workspaceId, "workspace.write");
       return this.mutex.run(() => ({
         status: 200 as const,
-        body: this.upload(ctx, input.path.workspaceId, input.path.uploadId, false).status,
+        body: this.#upload(ctx, input.path.workspaceId, input.path.uploadId, false).status,
       }));
     }, ctx.requestId);
   }
@@ -1611,7 +1615,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       if (this.localUploads.has(input.path.uploadId)) return this.localUploads.put(ctx, input);
 
       const row = await this.mutex.run(() =>
-        this.upload(ctx, input.path.workspaceId, input.path.uploadId),
+        this.#upload(ctx, input.path.workspaceId, input.path.uploadId),
       );
       const entry = uploadEntries(row.request).find((item) => item.sha256 === input.path.sha256);
       requireThat(
@@ -1647,7 +1651,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         input.query.sha256,
         ctx.deadline,
       );
-      const index = this.chunkIndex(row.request, entry.sha256, input.path.chunkIndex);
+      const index = this.#chunkIndex(row.request, entry.sha256, input.path.chunkIndex);
       const response = await this.childFetch(ctx, row.allocation, `/chunk/${index}`, {
         method: "PUT",
         body: bytes,
@@ -1656,7 +1660,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       });
       requireThat(response.ok, "interrupted", "Chunk write interrupted");
       await this.mutex.run(() => {
-        const current = this.upload(ctx, input.path.workspaceId, input.path.uploadId);
+        const current = this.#upload(ctx, input.path.workspaceId, input.path.uploadId);
         requireThat(current.status.state === "open", "conflict", "Upload already validated");
         if (!current.status.receivedChunks.includes(index))
           current.status.receivedChunks.push(index);
@@ -1665,7 +1669,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       return { status: 204 as const, body: undefined };
     }, ctx.requestId);
   }
-  private chunkIndex(request: D.UploadBegin, hash: string, offset: number): number {
+  #chunkIndex(request: D.UploadBegin, hash: string, offset: number): number {
     let index = 0;
     const seen = new Set<string>();
     for (const entry of uploadEntries(request))
@@ -1687,6 +1691,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       hash?: string;
       length?: number;
       artifact?: { path: string; offset: number; size: number };
+      exportId?: string;
     } = {},
   ): Promise<Response> {
     const auth: InternalContext = {
@@ -1696,6 +1701,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       ...(init.hash ? { hash: init.hash } : {}),
       ...(init.length === undefined ? {} : { length: init.length }),
       ...(init.artifact ? { artifact: init.artifact } : {}),
+      ...(init.exportId ? { exportId: init.exportId } : {}),
     };
     return this.stub(allocation.childId).fetch(
       new Request(`https://workspace.internal/__fortipi/store${path}`, {
@@ -1713,7 +1719,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       if (this.localUploads.has(input.path.uploadId)) return this.localUploads.validate(ctx, input);
 
       const row = await this.mutex.run(() =>
-        this.upload(ctx, input.path.workspaceId, input.path.uploadId),
+        this.#upload(ctx, input.path.workspaceId, input.path.uploadId),
       );
       if (row.stage)
         return {
@@ -1734,7 +1740,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             entry,
             chunks: Array.from(
               { length: Math.ceil(entry.size / uploadGrid(row.request, entry.sha256)) },
-              (_, offset) => this.chunkIndex(row.request, entry.sha256, offset),
+              (_, offset) => this.#chunkIndex(row.request, entry.sha256, offset),
             ),
           }),
         });
@@ -1756,7 +1762,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
                 entry,
                 chunks: Array.from(
                   { length: Math.ceil(entry.size / uploadGrid(row.request, entry.sha256)) },
-                  (_, offset) => this.chunkIndex(row.request, entry.sha256, offset),
+                  (_, offset) => this.#chunkIndex(row.request, entry.sha256, offset),
                 ),
               }),
             });
@@ -1805,7 +1811,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const evidence = unwrap(seal);
       await this.mutex.run(() =>
         this.state.transaction(() => {
-          const current = this.upload(ctx, input.path.workspaceId, input.path.uploadId);
+          const current = this.#upload(ctx, input.path.workspaceId, input.path.uploadId);
           const registered = this.state.get<AllocationRecord>(
             `allocation:${row.allocation.allocationId}`,
           );
@@ -1851,7 +1857,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
 
       await this.mutex.run(() =>
         this.state.transaction(() => {
-          const row = this.upload(ctx, input.path.workspaceId, input.path.uploadId, false);
+          const row = this.#upload(ctx, input.path.workspaceId, input.path.uploadId, false);
           requireThat(
             row.status.state !== "committed",
             "conflict",
@@ -1859,7 +1865,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           );
           if (row.status.state !== "aborted" && row.status.state !== "expired") {
             row.status.state = "aborted";
-            this.closeUpload(row);
+            this.#closeUpload(row);
             this.state.put(`upload:${row.status.uploadId}`, row);
           }
         }),
@@ -1867,7 +1873,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       return { status: 204 as const, body: undefined };
     }, ctx.requestId);
   }
-  private closeUpload(row: UploadRecord): void {
+  #closeUpload(row: UploadRecord): void {
     this.state.put(
       "active-uploads",
       Math.max(0, (this.state.get<number>("active-uploads") ?? 0) - 1),
@@ -1894,7 +1900,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         "Upload route mismatch",
       );
       const proof = await this.mutex.run(() => {
-        const row = this.upload(ctx, input.path.workspaceId, input.path.uploadId, false);
+        const row = this.#upload(ctx, input.path.workspaceId, input.path.uploadId, false);
         requireThat(
           row.stage &&
             row.stage.stageId === input.body.stageId &&
@@ -1937,7 +1943,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   commit(ctx: D.AuthContext, input: D.CommitInput): Promise<D.Outcome<D.CommitReceipt>> {
     return outcome(async () => {
       await this.authority(ctx, input.workspaceId, "workspace.write");
-      const prior = await this.mutex.run(() => this.receipt(ctx, input, "workspace.write"));
+      const prior = await this.mutex.run(() => this.#receipt(ctx, input, "workspace.write"));
       if (prior) return prior;
       if (input.providerKind === "local") return this.localUploads.publishObserved(ctx, input);
       const digest = await commitDigest({
@@ -1956,11 +1962,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       );
       return this.mutex.run(() =>
         this.state.transaction(() => {
-          const repeated = this.receipt(ctx, input, "workspace.write");
+          const repeated = this.#receipt(ctx, input, "workspace.write");
           if (repeated) return repeated;
           const authority = this.current();
           validateLease(this.state, authority, input.lease, ctx);
-          const upload = this.upload(ctx, input.workspaceId, input.uploadId);
+          const upload = this.#upload(ctx, input.workspaceId, input.uploadId);
           const allocation = this.state.get<AllocationRecord>(
             `allocation:${input.storeRef.allocationId}`,
           );
@@ -1985,7 +1991,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             "Commit ownership mismatch",
           );
           const receipt: D.CommitReceipt = {
-            ...this.publication(ctx, input, upload.request.manifest),
+            ...this.#publication(ctx, input, upload.request.manifest),
             providerKind: "computer",
             storeRef: input.storeRef,
           };
@@ -1997,16 +2003,16 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             manifestHash: receipt.manifestHash,
             store: input.storeRef,
           } satisfies RevisionRecord);
-          this.finishPublication(receipt, input.lease);
+          this.#finishPublication(receipt, input.lease);
           upload.status.state = "committed";
-          this.closeUpload(upload);
+          this.#closeUpload(upload);
           this.state.put(`upload:${input.uploadId}`, upload);
           return receipt;
         }),
       );
     }, ctx.requestId);
   }
-  private receipt(
+  #receipt(
     ctx: D.AuthContext,
     input: D.CommitLookup,
     action: "workspace.read" | "workspace.write" = "workspace.read",
@@ -2014,7 +2020,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     authorize(this.state, ctx, input.workspaceId, action);
     const prior = this.state.get<D.CommitReceipt>(`receipt:${input.commitId}`);
     if (prior) {
-      if (action === "workspace.write") this.receiptReservation(ctx, prior);
+      if (action === "workspace.write") this.#receiptReservation(ctx, prior);
       requireThat(
         prior.commitDigest === input.commitDigest,
         "conflict",
@@ -2023,7 +2029,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     }
     return prior;
   }
-  private receiptReservation(ctx: D.AuthContext, receipt: D.CommitReceipt): D.TargetReservation {
+  #receiptReservation(ctx: D.AuthContext, receipt: D.CommitReceipt): D.TargetReservation {
     const upload =
       receipt.providerKind === "computer"
         ? this.state.get<UploadRecord>(`upload:${receipt.storeRef.uploadId}`)
@@ -2045,7 +2051,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     return authorizeReservedAction(this.state, ctx, lease, "workspace.write");
   }
   /** Receipt recovery may use write authority, but never grants a public read capability. */
-  private receiptReadAction(
+  #receiptReadAction(
     ctx: D.AuthContext,
     workspaceId: string,
   ): "workspace.read" | "workspace.write" {
@@ -2058,12 +2064,12 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       return "workspace.write";
     }
   }
-  private lookupReceipt(
+  #lookupReceipt(
     ctx: D.AuthContext,
     input: D.CommitLookup,
     action: "workspace.read" | "workspace.write",
   ): D.CommitReceipt {
-    const receipt = this.receipt(ctx, input, action);
+    const receipt = this.#receipt(ctx, input, action);
     requireThat(
       !this.state.get("child") &&
         this.isSelf(input.workspaceId) &&
@@ -2074,7 +2080,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     requireThat(receipt, "not_found", "Receipt not found");
     return receipt;
   }
-  private publication(
+  #publication(
     _ctx: D.AuthContext,
     input: {
       commitId: string;
@@ -2121,7 +2127,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       committedAt: Date.now(),
     };
   }
-  private finishPublication(receipt: D.CommitReceipt, lease: D.Lease): void {
+  #finishPublication(receipt: D.CommitReceipt, lease: D.Lease): void {
     const authority = this.current();
     this.state.put("authority", {
       ...authority,
@@ -2158,7 +2164,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     return outcome(
       () =>
         this.mutex.run(() =>
-          this.lookupReceipt(ctx, input, this.receiptReadAction(ctx, input.workspaceId)),
+          this.#lookupReceipt(ctx, input, this.#receiptReadAction(ctx, input.workspaceId)),
         ),
       ctx.requestId,
     );
@@ -2172,7 +2178,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         this.mutex.run(() => ({
           status: 200 as const,
           body: publicCommitReceipt(
-            this.lookupReceipt(
+            this.#lookupReceipt(
               ctx,
               {
                 workspaceId: input.path.workspaceId,
@@ -2191,7 +2197,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const row = await this.mutex.run(() =>
         this.localUploads.has(input.commit.uploadId)
           ? this.localUploads.get(ctx, input.commit.workspaceId, input.commit.uploadId, false)
-          : this.upload(ctx, input.commit.workspaceId, input.commit.uploadId, false),
+          : this.#upload(ctx, input.commit.workspaceId, input.commit.uploadId, false),
       );
       requireThat(
         same(row.request.mutations, input.mutations),
@@ -2209,7 +2215,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       await this.mutex.run(() => {
         const staged = this.localUploads.has(input.body.commit.uploadId)
           ? this.localUploads.get(ctx, input.path.workspaceId, input.body.commit.uploadId, false)
-          : this.upload(ctx, input.path.workspaceId, input.body.commit.uploadId, false);
+          : this.#upload(ctx, input.path.workspaceId, input.body.commit.uploadId, false);
         requireThat(
           same(staged.request.mutations, input.body.mutations),
           "conflict",
@@ -2348,7 +2354,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       });
       return this.mutex.run(() =>
         this.state.transaction(() => {
-          const previous = this.receipt(
+          const previous = this.#receipt(
             ctx,
             {
               workspaceId: intent.scope.workspaceId,
@@ -2375,7 +2381,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             { reason: "local_drift" },
           );
           const receipt: D.CommitReceipt = {
-            ...this.publication(
+            ...this.#publication(
               ctx,
               {
                 commitId: intent.commitId,
@@ -2400,7 +2406,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             manifest,
           } satisfies RevisionRecord);
           this.state.put(`local-observation:${intent.commitId}`, observation);
-          this.finishPublication(receipt, intent.scope.lease);
+          this.#finishPublication(receipt, intent.scope.lease);
           return receipt;
         }),
       );
@@ -2411,7 +2417,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       () =>
         this.mutex.run(() => {
           const authority = this.current();
-          this.receiptReadAction(ctx, authority.workspaceId);
+          this.#receiptReadAction(ctx, authority.workspaceId);
           requireThat(
             input.recipient.kind === "agent" &&
               ctx.grants.some(
@@ -2437,7 +2443,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             items: rows
               .filter(
                 (row) =>
-                  this.canReadFact(ctx, row.value.fact, input.recipient) &&
+                  this.#canReadFact(ctx, row.value.fact, input.recipient) &&
                   !row.value.acknowledgments.some((ack) => same(ack.recipient, input.recipient)),
               )
               .map((row) => row.value.fact),
@@ -2453,7 +2459,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         this.mutex.run(() =>
           this.state.transaction(() => {
             const authority = this.current();
-            this.receiptReadAction(ctx, authority.workspaceId);
+            this.#receiptReadAction(ctx, authority.workspaceId);
             requireThat(
               input.recipient.kind === "agent" &&
                 input.eventSeq > 0 &&
@@ -2464,7 +2470,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             const row = this.state.get<FactRow>(`fact:${input.factId}`);
             requireThat(row, "not_found", "Fact absent");
             requireThat(
-              this.canReadFact(ctx, row.fact, input.recipient),
+              this.#canReadFact(ctx, row.fact, input.recipient),
               "unauthorized",
               "Fact scope or recipient grant required",
             );
@@ -2486,7 +2492,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       ctx.requestId,
     );
   }
-  private canReadFact(ctx: D.AuthContext, fact: D.Fact, recipient: D.Recipient): boolean {
+  #canReadFact(ctx: D.AuthContext, fact: D.Fact, recipient: D.Recipient): boolean {
     const authority = this.current();
     if (
       this.state.get("child") ||
@@ -2521,7 +2527,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     )
       return false;
     try {
-      const reservation = this.receiptReservation(ctx, receipt);
+      const reservation = this.#receiptReservation(ctx, receipt);
       return (
         reservation.agentId === recipient.id && reservation.conversationId === fact.conversationId
       );
@@ -2531,43 +2537,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     }
   }
   exportData(ctx: D.AuthContext, input: D.ExportRequest): Promise<D.Outcome<D.ExportDescriptor>> {
-    return outcome(async () => {
-      const authority = this.current();
-      await this.authority(ctx, authority.workspaceId);
-      requireThat(
-        permitsResource(input.resources.workspaceIds, authority.workspaceId) &&
-          input.deadline > Date.now() &&
-          input.maxBytes <= this.policy.bounds.snapshotBytes,
-        "unauthorized",
-        "Export scope mismatch",
-      );
-      const revision = this.revision(authority.binding.revision);
-      const artifacts: D.ByteReference[] = [];
-      let size = 0;
-      for (const entry of revision.manifest.entries)
-        if (entry.type === "file") {
-          size += entry.size;
-          if (size > input.maxBytes) break;
-          artifacts.push(
-            unwrap(
-              await this.read(ctx, {
-                operationId: "readWorkspaceFile",
-                path: { workspaceId: authority.workspaceId },
-                query: { revision: revision.revision, path: entry.path },
-                body: undefined,
-              }),
-            ),
-          );
-          if (artifacts.length === 100) break;
-        }
-      return {
-        exportId: input.exportId,
-        state: size > input.maxBytes || artifacts.length === 100 ? "partial" : "ready",
-        artifacts,
-        unavailableWorkspaceIds: [],
-        credentialsExcluded: true,
-      };
-    }, ctx.requestId);
+    return outcome(() => this.#exports.create(ctx, input), ctx.requestId);
   }
   async captureArtifacts(
     ctx: D.AuthContext,
@@ -2670,10 +2640,10 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         return references;
       }),
     );
-    if (records[0]) await this.armDue(records[0].expiresAt);
+    if (records[0]) await this.#armDue(records[0].expiresAt);
     return references;
   }
-  private async armDue(at: number): Promise<void> {
+  async #armDue(at: number): Promise<void> {
     const current = await this.ctx.storage.getAlarm();
     if (current === null || at < current) await this.ctx.storage.setAlarm(at);
   }
@@ -2720,6 +2690,22 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const envelope = JSON.parse(raw) as InternalContext;
       const { auth } = envelope;
       const url = new URL(request.url);
+      if (url.pathname.startsWith("/v1/admin/")) {
+        const match = /^\/v1\/admin\/artifacts\/([A-Za-z0-9_-]{1,128})$/.exec(url.pathname);
+        requireThat(
+          match && request.method === "GET" && !url.search,
+          "invalid_request",
+          "Exact private export artifact GET required",
+        );
+        const peer = await this.#exports.peer(auth, match[1] ?? "", request.signal);
+        return byteResponse(
+          request,
+          peer.reference.size,
+          peer.reference.sha256,
+          auth.deadline,
+          async () => peer.open(),
+        );
+      }
       if (url.pathname === "/__fortipi/operational-metadata") {
         requireThat(
           request.method === "GET",
@@ -2839,13 +2825,13 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           ),
         );
       if (url.pathname.startsWith("/__fortipi/transfer/"))
-        return this.transferRequest(request, auth);
+        return this.#transferRequest(request, auth);
       if (url.pathname === "/__fortipi/execution/permit")
         return this.execution.permit(request, envelope.auth);
       if (url.pathname === "/__fortipi/execution/observed")
         return this.execution.observed(request, envelope.allocation);
       if (url.pathname.startsWith("/__fortipi/execution/"))
-        return this.execution.fetch(request, envelope, this.childStore());
+        return this.execution.fetch(request, envelope, this.#childStore());
       if (!url.pathname.startsWith("/__fortipi/store/")) {
         const authority = this.current();
         const publicWorkspace = /^\/v1\/workspaces\/([^/]+)\//.exec(url.pathname)?.[1];
@@ -2863,7 +2849,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         if (artifactId) {
           const artifact = this.state.get<ArtifactRecord>(`artifact:${artifactId}`);
           if (!artifact)
-            return this.nativeArtifact(request, auth, authority.workspaceId, artifactId);
+            return this.#nativeArtifact(request, auth, authority.workspaceId, artifactId);
           requireThat(
             artifact.state === "ready" &&
               artifact.expiresAt > Date.now() &&
@@ -2871,7 +2857,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             "not_found",
             "Artifact unavailable",
           );
-          this.authorizeArtifact(auth, artifact);
+          this.#authorizeArtifact(auth, artifact);
           const open = async () => {
             const response = await this.childFetch(auth, artifact.allocation, "/artifact-read", {
               artifact: {
@@ -2888,7 +2874,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             artifact.reference.size,
             artifact.reference.sha256,
             auth.deadline,
-            async () => this.authorizedBytes(auth, "artifacts.read", await open(), artifact),
+            async () => this.#authorizedBytes(auth, "artifacts.read", await open(), artifact),
           );
         }
         const path = url.searchParams.get("path");
@@ -2907,7 +2893,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         requireThat(entry?.type === "file", "not_found", "File absent from revision");
         if (!revision.store && authority.binding.config.kind === "local")
           return byteResponse(request, entry.size, entry.sha256, auth.deadline, async () =>
-            this.authorizedBytes(
+            this.#authorizedBytes(
               auth,
               "workspace.read",
               await this.localReads.open(
@@ -2921,7 +2907,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             ),
           );
         return byteResponse(request, entry.size, entry.sha256, auth.deadline, async () =>
-          this.authorizedBytes(
+          this.#authorizedBytes(
             auth,
             "workspace.read",
             await this.readStored(auth, revision, entry),
@@ -2930,6 +2916,19 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       }
       const { allocation } = envelope;
       const path = url.pathname.slice("/__fortipi/store".length);
+      if (
+        path === "/read" &&
+        request.method === "POST" &&
+        envelope.exportId &&
+        envelope.entry &&
+        allocation &&
+        this.isSelf(allocation.authorityId)
+      ) {
+        const entry = envelope.entry;
+        return this.mutex.run(() =>
+          Response.json(this.#exports.member(auth, envelope.exportId ?? "", allocation, entry)),
+        );
+      }
       // Reuse the private store fetch lane for an exact output-member observation.
       // A current artifacts.read consumer never receives workspace.read authority.
       if (
@@ -2969,7 +2968,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
                 record.reference.size === envelope.artifact?.size,
             );
           requireThat(artifact, "unauthorized", "Exact output member required");
-          this.authorizeArtifact(auth, artifact);
+          this.#authorizeArtifact(auth, artifact);
           return Response.json(row.state);
         });
       requireThat(
@@ -2978,9 +2977,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         "Child identity required",
       );
       const registry =
-        path === "/artifact-read" && request.method === "GET"
-          ? await this.artifactRegistry(envelope)
-          : await this.registry(auth, lookup(allocation));
+        path === "/read" && request.method === "GET" && envelope.exportId
+          ? await this.#exportRegistry(envelope)
+          : path === "/artifact-read" && request.method === "GET"
+            ? await this.#artifactRegistry(envelope)
+            : await this.registry(auth, lookup(allocation));
       requireThat(
         same(registry.state.allocation, allocation) &&
           registry.state.state !== "retiring" &&
@@ -2988,7 +2989,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         "conflict",
         "Allocation unavailable",
       );
-      const child = this.childStore();
+      const child = this.#childStore();
       if (path.startsWith("/chunk/") && request.method === "PUT") {
         const index = Number(path.slice(7));
         requireThat(
@@ -3096,11 +3097,13 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             const upload = this.state.get<UploadRecord>(`upload:${value.id}`);
             if (upload && (upload.status.state === "open" || upload.status.state === "validated")) {
               upload.status.state = "expired";
-              this.closeUpload(upload);
+              this.#closeUpload(upload);
               this.state.put(`upload:${value.id}`, upload);
             }
           } else if (value.kind === "local-upload") {
             this.localUploads.expire(value.id);
+          } else if (value.kind === "export") {
+            this.#exports.expire(value.id);
           } else {
             const artifact = this.state.get<ArtifactRecord>(`artifact:${value.id}`);
             if (artifact?.state === "ready") {
@@ -3122,7 +3125,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     );
     if (next !== undefined) await this.ctx.storage.setAlarm(Math.max(Date.now() + 1000, next));
   }
-  private async maintain(ctx: D.AuthContext): Promise<void> {
+  async #maintain(ctx: D.AuthContext): Promise<void> {
     const candidate = await this.mutex.run(() => {
       const after = this.state.get<string>("gc-cursor") ?? "";
       const rows = this.state.page<AllocationRecord>(
@@ -3147,7 +3150,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     const retirement = await this.retireStore(ctx, lookup(candidate.state.allocation));
     if (retirement.ok) await this.deleteStore(ctx, retirement.value);
   }
-  private authorizedBytes(
+  #authorizedBytes(
     ctx: D.AuthContext,
     action: string,
     stream: ReadableStream<Uint8Array>,
@@ -3171,7 +3174,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           const next = await reader.read();
           await this.mutex.run(() => {
             authorize(this.state, ctx, this.current().workspaceId, action);
-            if (artifact) this.authorizeArtifact(ctx, artifact);
+            if (artifact) this.#authorizeArtifact(ctx, artifact);
             if (!next.done) controller.enqueue(next.value);
           });
           if (next.done) {
@@ -3186,7 +3189,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       cancel: finish,
     });
   }
-  private authorizeArtifact(ctx: D.AuthContext, artifact: ArtifactRecord): void {
+  #authorizeArtifact(ctx: D.AuthContext, artifact: ArtifactRecord): void {
     authorize(this.state, ctx, artifact.reference.workspaceId, "artifacts.read");
     requireThat(
       artifact.state === "ready" && artifact.expiresAt > Date.now(),
@@ -3206,7 +3209,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       "Job output owner grant required",
     );
   }
-  private async artifactRegistry(envelope: InternalContext): Promise<AllocationRecord> {
+  async #artifactRegistry(envelope: InternalContext): Promise<AllocationRecord> {
     const observation = await this.stub(envelope.allocation.authorityId).describeStore(
       envelope.auth,
       lookup(envelope.allocation),
@@ -3222,7 +3225,17 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     requireThat(response.ok, "unauthorized", "Output member authority required");
     return { state: await response.json<D.StoreState>(), referenced: false, pins: 0 };
   }
-  private async nativeArtifact(
+  async #exportRegistry(envelope: InternalContext): Promise<AllocationRecord> {
+    const response = await this.stub(envelope.allocation.authorityId).fetch(
+      new Request("https://workspace.internal/__fortipi/store/read", {
+        method: "POST",
+        headers: { [internalHeader]: JSON.stringify(envelope) },
+      }),
+    );
+    requireThat(response.ok, "unauthorized", "Retained export member authority required");
+    return { state: await response.json<D.StoreState>(), referenced: true, pins: 0 };
+  }
+  async #nativeArtifact(
     request: Request,
     auth: D.AuthContext,
     workspaceId: string,
@@ -3275,7 +3288,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       throw error;
     }
     const body = response.body
-      ? this.authorizedBytes(
+      ? this.#authorizedBytes(
           auth,
           "artifacts.read",
           limitedStream(response.body, size ?? maximum, auth.deadline, size !== undefined),
@@ -3286,7 +3299,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       headers: exposed,
     });
   }
-  private async transferRequest(request: Request, auth: D.AuthContext): Promise<Response> {
+  async #transferRequest(request: Request, auth: D.AuthContext): Promise<Response> {
     const action = new URL(request.url).pathname.split("/").at(-1);
     if (action === "materialize") {
       const plan = await boundedJson<D.SnapshotPlan>(request);
@@ -3342,7 +3355,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           body: undefined,
         }),
       );
-      const row = this.upload(auth, input.workspaceId, input.uploadId, false);
+      const row = this.#upload(auth, input.workspaceId, input.uploadId, false);
       const retirement = unwrap(await this.retireStore(auth, lookup(row.allocation)));
       return Response.json(unwrap(await this.deleteStore(auth, retirement)));
     }
@@ -3357,7 +3370,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         : (JSON.parse(request.headers.get("x-fortipi-upload") ?? "null") as D.UploadLookup);
     requireThat(input, "invalid_request", "Upload scope required");
     const workspaceId = "scratch" in input ? input.scratch.workspaceId : input.workspaceId;
-    const row = this.upload(auth, workspaceId, input.uploadId);
+    const row = this.#upload(auth, workspaceId, input.uploadId);
     if ("scratch" in input) {
       requireThat(
         input.lease.leaseId === row.request.lease.leaseId &&
@@ -3455,7 +3468,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       }),
     );
     requireThat(validated.status === 200, "interrupted", "Stage not validated");
-    const stage = this.upload(auth, workspaceId, input.uploadId).stage;
+    const stage = this.#upload(auth, workspaceId, input.uploadId).stage;
     requireThat(stage, "interrupted", "Seal evidence missing");
     return Response.json({
       uploadId: input.uploadId,

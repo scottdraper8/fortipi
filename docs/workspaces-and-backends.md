@@ -43,6 +43,11 @@ across a runtime wait. Only an active scratch backend accepts upstream transport
 callbacks, through Computer's authentication checks. No generic Computer proxy or
 raw Workspace stub is a public API.
 
+WorkspaceObject's implementation helpers and export/child backing fields use
+ECMAScript `#private`. TypeScript `private` alone erases at runtime and would leave
+helper methods callable through Durable Object RPC outside the declared port.
+The existing WorkspaceObjectRpc operations retain their signatures and guards.
+
 The service uses flat RPC ports where their platform types compile. For recursive
 execution DTOs it uses the existing authenticated private fetch lane:
 `POST /__fortipi/authority/{prepare,start,query,collect}` with the exact respective
@@ -58,6 +63,46 @@ workspace action and the saved allocation/lease/reservation scope. A writer can
 copy retained bytes into a full new revision and recover its publication receipt
 without receiving public read permission. Public file/stat/manifest/receipt reads
 still require `workspace.read`.
+
+Private workspace exports use the initiating `exports.create` or `backups.create`
+action and one current registered grant covering all concrete requested resources,
+including this workspace. They do not call public read methods or borrow write or
+capacity permissions. The first request durably captures the committed revision,
+manifest, exact sealed allocation and member list. The export ID binds principal,
+action, scope and byte budget; a transport retry cannot select a newer revision or
+extend the original retention deadline. Missing local retained bytes return
+`unavailable`; size/reference overflow returns `partial`, with no ready artifacts.
+
+Before advertising ready, exports copy and verify actual member size/SHA into the
+authority's own `fp_ws_export_chunk` BLOB table. The first admin artifact contains
+canonical UTF8 JSON `{version:1,workspaceId,revision,manifestHash,manifest,files}`;
+each file lists `{path,parts:[{artifactId,offset,size,sha256}]}`. Remaining artifacts
+are raw file parts. All references use the real workspace/revision scope; at most
+16 include the index, and every part obeys the effective artifact bound. The
+retained manifest preserves directories, modes and file membership for recovery.
+No host paths, auth context or credential tables enter the payload.
+Index artifact IDs identify source-local peers. CP creates distinct public copy
+IDs; recipients match retained parts by SHA/size and exact workspace/revision
+scope. The immutable index payload is not rewritten to refer to public IDs.
+
+The existing service-only `GET /v1/admin/artifacts/{peerId}` with the server-created
+workspace context supplies these retained bytes to CP under the saved logical
+action/scope. Public admin downloads remain CP's separately authorized path.
+Private source acquisition uses the existing store `/read` path with exact retained
+export membership proof; ordinary child/public read authority is unchanged. Peer
+full/range/empty bodies preserve known length, backpressure, deadline, cancellation
+and current credential floors. No live device/root fallback is attempted.
+
+Copies reserve bounded local retained bytes/count and check actual SQLite size
+against the configured object, workspace and install ceilings plus headroom before
+and after transactional writes. This is an own-object physical limit, not evidence
+of remaining aggregate installation capacity. Existing capacity calls require
+other actions; global accounting remains a separate integration prerequisite.
+The existing bounded Workspace alarm deletes expired BLOBs and artifact indexes,
+releases retention accounting, and retains a discriminated compact intent/ID
+tombstone. Expired rows release captured manifests, member layouts and descriptor
+payloads; they cannot acquire a newer cut under the same export ID. SQLite page
+reuse is not a claim that allocated database pages shrink.
 
 Private `getReceipt` can also recover an exact known commit with the current
 registered writer's retained reservation scope. It verifies the saved upload or

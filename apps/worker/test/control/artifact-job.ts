@@ -9,7 +9,7 @@ export async function assignedJob(
     cp: Pick<ControlPlaneRpc, "reserveTarget" | "recordDispatchIntent" | "assignOnce">;
   },
   actor: D.AuthContext,
-  options: { leaseExpiresAt?: number } = {},
+  options: { leaseExpiresAt?: number; actions?: string[] } = {},
 ) {
   const operation: D.OperationDigestInput = {
     deploymentId: h.deploymentId,
@@ -36,7 +36,7 @@ export async function assignedJob(
       workspaceId: "workspace",
       bindingVersion: 1,
       target: operation.target,
-      actions: ["jobs.dispatch", "workspace.write"],
+      actions: options.actions ?? ["jobs.dispatch", "workspace.write"],
       deadline: operation.deadline,
       expiresAt: options.leaseExpiresAt ?? Date.now() + 30000,
     }),
