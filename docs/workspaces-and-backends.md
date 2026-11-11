@@ -157,12 +157,16 @@ authority after each awaited read before exposing another chunk.
 Scratch materialization retries verify an existing file's type, mode, size and
 full hash against the committed input; they never overwrite a mismatching file.
 
-Container HTTP resolves the host's existing native TCP-port Fetcher before
-calling `fetch(Request)`. Pipelining that fetch or sending `RequestInit.signal`
-through custom JavaScript RPC fails in the pinned runtime. The resolved Fetcher
-preserves request bytes, cancellation and deadlines without experimental signal
-serialization. Recorded start identity and running/exit checks fence the request
-before and after HTTP; query-only mode never starts or restarts a replacement.
+Container HTTP uses the existing Durable Object `fetch(Request)` transport.
+The owning host calls its native TCP-port Fetcher inside that same object;
+neither the TCP capability nor a Request's signal crosses custom JavaScript RPC.
+The host persists the actual successful SDK start identity and prepared image
+before acknowledgment. It checks the private expected identity, current allocation,
+selected Linux configuration and running/exit state around HTTP, and removes the
+private header before contacting computerd. Start and HTTP acquisition share a
+queue through response headers so a pending connection cannot target a later
+owned start. Native bodies, streams and WebSocket upgrades pass through without
+buffering. Query-only mode never starts or restarts a replacement.
 The upstream observation API does not expose a remote runtime UUID independently
 of start. Exit/eviction and known recorded-identity changes fail closed; external
 replacement identity remains an explicit runtime-proof limit.

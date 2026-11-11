@@ -9,6 +9,11 @@ import {
   containerRequestFailureStage,
   FencedContainerAPI,
 } from "../../src/container/host-adapter.js";
+import {
+  ContainerHostTransport,
+  containerRuntimeHeader,
+} from "../../src/container/host-transport.js";
+import { requireThat } from "../../src/workspace/errors.js";
 
 interface ProbeEnv {
   HOST: DurableObjectNamespace<HostProbe>;
@@ -18,8 +23,8 @@ interface ProbeEnv {
 class PortAPI extends RpcTarget implements IWorkspaceContainerAPI {
   readonly portFetcher: Fetcher;
   readonly storage: DurableObjectStorage;
-  readonly fault: string | undefined;
-  private statusCalls = 0;
+  fault: string | undefined;
+  statusCalls = 0;
   constructor(portFetcher: Fetcher, storage: DurableObjectStorage, fault?: string) {
     super();
     this.portFetcher = portFetcher;
@@ -27,9 +32,10 @@ class PortAPI extends RpcTarget implements IWorkspaceContainerAPI {
     this.fault = fault;
   }
   async start(_spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
-    await this.storage.put("starts", ((await this.storage.get<number>("starts")) ?? 0) + 1);
+    const starts = ((await this.storage.get<number>("starts")) ?? 0) + 1;
+    await this.storage.put("starts", starts);
     return {
-      runtimeId: "transport-runtime",
+      runtimeId: `transport-runtime-${starts}`,
       clientSecret: "synthetic-test-only",
       outcome: "launched",
     };
@@ -39,10 +45,12 @@ class PortAPI extends RpcTarget implements IWorkspaceContainerAPI {
   }
   async interceptOutboundHttp(_host: string, _workspace: WorkspaceRef) {}
   async interceptAllOutboundHttp(_workspace: WorkspaceRef, _token: string) {}
-  async setInactivityTimeout(_ms: number) {}
+  async setInactivityTimeout(_ms: number) {
+    await this.storage.put("timeouts", ((await this.storage.get<number>("timeouts")) ?? 0) + 1);
+  }
   async status() {
     this.statusCalls++;
-    if (this.fault === "before-status" || (this.fault === "after-status" && this.statusCalls === 2))
+    if (this.fault === "before-status" || (this.fault === "after-status" && this.statusCalls === 4))
       throw new Error("Intentional status fault");
     const exited = await this.storage.get<boolean>("exited");
     return {
@@ -62,15 +70,40 @@ class PortAPI extends RpcTarget implements IWorkspaceContainerAPI {
   }
 }
 export class HostProbe extends DurableObject<ProbeEnv> {
+  #native: PortAPI | undefined;
+  #transport: ContainerHostTransport | undefined;
+  #image = "fixture-image";
+  #selected = true;
+  #host(): ContainerHostTransport {
+    this.#native ??= new PortAPI(this.env.PORT, this.ctx.storage);
+    this.#transport ??= new ContainerHostTransport(this.ctx.storage, this.#native, () => {
+      requireThat(this.#selected, "unsupported", "Fixture Linux selection disabled");
+      return this.#image;
+    });
+    return this.#transport;
+  }
   async getWorkspaceContainer() {
-    return new PortAPI(
-      this.env.PORT,
-      this.ctx.storage,
-      await this.ctx.storage.get<string>("fault"),
-    );
+    return this.#host().getWorkspaceContainer();
   }
   async setFault(fault: string) {
-    await this.ctx.storage.put("fault", fault);
+    this.#host();
+    if (this.#native) {
+      this.#native.fault = fault;
+      this.#native.statusCalls = 0;
+    }
+  }
+  override fetch(request: Request) {
+    return this.#host().fetch(request);
+  }
+  setConfiguration(selected: boolean, image: string) {
+    this.#selected = selected;
+    this.#image = image;
+  }
+  async timeouts() {
+    return (await this.ctx.storage.get<number>("timeouts")) ?? 0;
+  }
+  async rawFetchPort(port: number, input: RequestInfo | URL, init?: RequestInit) {
+    return this.#host().native.fetchPort(port, input, init);
   }
   async markExit() {
     await this.ctx.storage.put("exited", true);
@@ -86,7 +119,7 @@ let started = 0;
 let aborted = 0;
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 export default {
-  async fetch(request: Request, env: ProbeEnv): Promise<Response> {
+  async fetch(request: Request, env: ProbeEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/state") return Response.json({ started, aborted });
     if (url.pathname === "/echo")
@@ -94,7 +127,28 @@ export default {
         method: request.method,
         header: request.headers.get("x-canary"),
         body: await request.text(),
+        privateHeader: request.headers.has(containerRuntimeHeader),
       });
+    if (url.pathname === "/upgrade") {
+      const pair = new WebSocketPair();
+      pair[1].accept();
+      pair[1].addEventListener("message", (event) => pair[1].send(event.data));
+      return new Response(null, { status: 101, webSocket: pair[0] });
+    }
+    if (url.pathname === "/stream")
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("first"));
+            ctx.waitUntil(
+              pause(500).then(() => {
+                controller.enqueue(new TextEncoder().encode("second"));
+                controller.close();
+              }),
+            );
+          },
+        }),
+      );
     if (url.pathname === "/delayed") {
       started++;
       await pause(50);
@@ -115,11 +169,12 @@ export default {
       return new Response("settled");
     }
     const hostObject = env.HOST.getByName(url.pathname);
-    if (url.pathname.startsWith("/stage-")) await hostObject.setFault(url.pathname.slice(7));
     const host = await hostObject.getWorkspaceContainer();
     if (url.pathname === "/raw-rpc") {
       try {
-        await host.fetchPort(8080, "https://port/echo", { signal: AbortSignal.timeout(1000) });
+        await hostObject.rawFetchPort(8080, "https://port/echo", {
+          signal: AbortSignal.timeout(1000),
+        });
         return Response.json({ rejected: false });
       } catch (error) {
         return Response.json({
@@ -128,9 +183,95 @@ export default {
         });
       }
     }
-    const adapter = new FencedContainerAPI(host);
+    const adapter = new FencedContainerAPI(host, hostObject);
+    if (url.pathname === "/query-unknown") {
+      adapter.runtime = {
+        runtimeId: "unknown-runtime",
+        clientSecret: "synthetic-test-only",
+        outcome: "adopted",
+      };
+      adapter.queryOnly = true;
+      let rejected = false;
+      try {
+        await adapter.fetchPort(8080, "https://port/echo");
+      } catch {
+        rejected = true;
+      }
+      return Response.json({ rejected, starts: await hostObject.starts() });
+    }
     await adapter.start({ env: {}, enableInternet: false });
+    if (
+      ["/missing-runtime", "/stale-runtime", "/changed-image", "/unselected"].includes(url.pathname)
+    ) {
+      if (url.pathname === "/stale-runtime") {
+        const replacement = await hostObject.getWorkspaceContainer();
+        await replacement.start({ env: {}, enableInternet: false });
+      }
+      if (url.pathname === "/changed-image")
+        await hostObject.setConfiguration(true, "changed-image");
+      if (url.pathname === "/unselected") await hostObject.setConfiguration(false, "fixture-image");
+      let rejected = false;
+      try {
+        if (url.pathname === "/missing-runtime")
+          await hostObject.fetch(new Request("https://port/echo"));
+        else await adapter.fetchPort(8080, "https://port/echo");
+      } catch {
+        rejected = true;
+      }
+      let staleMutationRejected = true;
+      if (url.pathname === "/stale-runtime") {
+        try {
+          await host.setInactivityTimeout(1);
+          staleMutationRejected = false;
+        } catch {}
+      }
+      return Response.json({
+        rejected,
+        staleMutationRejected,
+        starts: await hostObject.starts(),
+        timeouts: await hostObject.timeouts(),
+      });
+    }
+    if (url.pathname === "/queue-replacement") {
+      const controller = new AbortController();
+      const before = await (await env.PORT.fetch("https://port/state")).json<{ started: number }>();
+      const pending = adapter
+        .fetchPort(8080, "https://port/slow", { signal: controller.signal })
+        .then(
+          () => false,
+          () => true,
+        );
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const state = await (await env.PORT.fetch("https://port/state")).json<{
+          started: number;
+        }>();
+        if (state.started > before.started) break;
+        await pause(5);
+      }
+      const replacement = await hostObject.getWorkspaceContainer();
+      const starting = replacement.start({ env: {}, enableInternet: false });
+      await pause(20);
+      const startsDuringRequest = await hostObject.starts();
+      controller.abort(new Error("Synthetic queued cancellation"));
+      const rejected = await pending;
+      await starting;
+      return Response.json({ rejected, startsDuringRequest, starts: await hostObject.starts() });
+    }
+    if (url.pathname === "/run-upgrade")
+      return adapter.fetchPort(8080, "https://port/upgrade", { headers: { Upgrade: "websocket" } });
+    if (url.pathname === "/run-stream" || url.pathname === "/baseline-stream") {
+      const response =
+        url.pathname === "/run-stream"
+          ? await adapter.fetchPort(8080, "https://port/stream")
+          : await env.PORT.fetch("https://port/stream");
+      requireThat(response.body, "internal", "Fixture stream body missing");
+      const reader = response.body.getReader();
+      const first = new TextDecoder().decode((await reader.read()).value);
+      const second = new TextDecoder().decode((await reader.read()).value);
+      return Response.json({ first, second, done: (await reader.read()).done });
+    }
     if (url.pathname.startsWith("/stage-")) {
+      await hostObject.setFault(url.pathname.slice(7));
       try {
         await adapter.fetchPort(8080, "https://port/echo");
         return Response.json({ rejected: false });
@@ -215,9 +356,7 @@ export default {
         started: number;
         aborted: number;
       }>();
-      const direct = url.pathname.startsWith("/baseline-")
-        ? await adapter.host.port(8080)
-        : undefined;
+      const direct = url.pathname.startsWith("/baseline-") ? env.PORT : undefined;
       const fetching = direct
         ? direct.fetch(new Request("https://port/slow", { signal }))
         : adapter.fetchPort(8080, "https://port/slow", { signal });

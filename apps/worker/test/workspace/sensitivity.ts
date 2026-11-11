@@ -14,6 +14,8 @@ const paths = [
   resolve(source, ".sensitivity-terminal-proof.ts"),
   resolve(source, ".sensitivity-local-upload.ts"),
   resolve(tests, ".sensitivity-local-upload-worker.ts"),
+  resolve(source, "../container/.sensitivity-host-transport.ts"),
+  resolve(tests, "../backends/.sensitivity-host-rpc-worker.ts"),
 ];
 async function run(
   file: string,
@@ -24,7 +26,12 @@ async function run(
     ["--test", ...(pattern ? [`--test-name-pattern=${pattern}`] : []), resolve(tests, file)],
     {
       cwd: root,
-      env: { ...process.env, FORTIPI_TEST_ENTRY: paths[3], FORTIPI_LOCAL_TEST_ENTRY: paths[6] },
+      env: {
+        ...process.env,
+        FORTIPI_TEST_ENTRY: paths[3],
+        FORTIPI_LOCAL_TEST_ENTRY: paths[6],
+        FORTIPI_HOST_TEST_ENTRY: paths[8],
+      },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -48,6 +55,8 @@ const fixture = await readFile(resolve(tests, "runtime-worker.ts"), "utf8");
 const terminal = await readFile(resolve(source, "terminal-proof.ts"), "utf8");
 const local = await readFile(resolve(source, "local-upload.ts"), "utf8");
 const localFixture = await readFile(resolve(tests, "local-upload-worker.ts"), "utf8");
+const hostTransport = await readFile(resolve(source, "../container/host-transport.ts"), "utf8");
+const hostFixture = await readFile(resolve(tests, "../backends/host-rpc-worker.ts"), "utf8");
 await mkdir(resolve(root, "apps/worker/dist"), { recursive: true });
 try {
   for (const mutant of [
@@ -58,11 +67,21 @@ try {
     "terminal-scope",
     "empty-announcement",
     "local-upload-digest",
+    "host-allocation",
+    "host-image",
+    "host-start-order",
   ] as const) {
     let changedAuthority = authority;
     let changedComputer = computer;
     let changedWorkspace = workspace;
     let changedLocal = local;
+    let changedHost = hostTransport;
+    if (mutant === "host-allocation")
+      changedHost = hostTransport.replace("current?.runtimeId === runtimeId &&", "current &&");
+    if (mutant === "host-image")
+      changedHost = hostTransport.replace("current.image === image &&", "true &&");
+    if (mutant === "host-start-order")
+      changedHost = hostTransport.replace("await previous;", "void previous;");
     if (mutant === "empty-announcement")
       changedLocal = local.replace("if (mutation.size !== 0) continue;", "continue;");
     if (mutant === "local-upload-digest")
@@ -93,7 +112,8 @@ try {
       changedAuthority !== authority ||
         changedComputer !== computer ||
         changedWorkspace !== workspace ||
-        changedLocal !== local,
+        changedLocal !== local ||
+        changedHost !== hostTransport,
       `Mutation ${mutant} did not apply`,
     );
     await writeFile(paths[0] ?? "", changedAuthority);
@@ -128,33 +148,49 @@ try {
         'from "./.sensitivity-runtime-worker.ts"',
       ),
     );
+    await writeFile(paths[7] ?? "", changedHost);
+    await writeFile(
+      paths[8] ?? "",
+      hostFixture.replace(
+        'from "../../src/container/host-transport.js"',
+        'from "../../src/container/.sensitivity-host-transport.js"',
+      ),
+    );
     const result = await run(
-      mutant === "empty-announcement" || mutant === "local-upload-digest"
-        ? "local-upload.test.ts"
-        : mutant === "generation"
-          ? "workspace.test.ts"
-          : mutant === "expiry" || mutant === "seal"
-            ? "isolation.test.ts"
-            : "terminal-proof.test.ts",
+      mutant.startsWith("host-")
+        ? "../backends/host-rpc.test.ts"
+        : mutant === "empty-announcement" || mutant === "local-upload-digest"
+          ? "local-upload.test.ts"
+          : mutant === "generation"
+            ? "workspace.test.ts"
+            : mutant === "expiry" || mutant === "seal"
+              ? "isolation.test.ts"
+              : "terminal-proof.test.ts",
       mutant === "expiry" || mutant === "seal" ? "sealed children" : undefined,
     );
     await writeFile(resolve(root, `apps/worker/dist/sensitivity-${mutant}.log`), result.output);
     assert.notEqual(result.code, 0, `The ${mutant} regression escaped the real runtime oracle`);
     assert.ok(
       result.output.includes(
-        mutant === "empty-announcement"
-          ? "Local empty upload raced its transfer settlement"
-          : mutant === "local-upload-digest"
-            ? "Local receipt omitted its retained upload identity"
-            : mutant === "seal"
-              ? "Sealed-store mutation was accepted"
-              : mutant === "expiry"
-                ? "Expired lease published a revision"
-                : mutant === "generation"
-                  ? "Revoked generation published a revision"
-                  : mutant === "writer-receipt"
-                    ? "Workspace grant required"
-                    : "Wrong conversation received a terminal proof",
+        mutant === "host-allocation"
+          ? "Container ownership check failed: stale-runtime"
+          : mutant === "host-image"
+            ? "Container ownership check failed: changed-image"
+            : mutant === "host-start-order"
+              ? "Container replacement crossed an active native HTTP acquisition"
+              : mutant === "empty-announcement"
+                ? "Local empty upload raced its transfer settlement"
+                : mutant === "local-upload-digest"
+                  ? "Local receipt omitted its retained upload identity"
+                  : mutant === "seal"
+                    ? "Sealed-store mutation was accepted"
+                    : mutant === "expiry"
+                      ? "Expired lease published a revision"
+                      : mutant === "generation"
+                        ? "Revoked generation published a revision"
+                        : mutant === "writer-receipt"
+                          ? "Workspace grant required"
+                          : "Wrong conversation received a terminal proof",
       ),
       `Mutation failed for an unintended reason: ${result.output.slice(-3000)}`,
     );

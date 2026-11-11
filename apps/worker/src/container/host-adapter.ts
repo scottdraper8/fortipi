@@ -5,6 +5,7 @@ import type {
   WorkspaceRef,
 } from "@cloudflare/computer/backends/container";
 import { requireThat } from "../workspace/errors.js";
+import { containerRuntimeHeader } from "./host-transport.js";
 
 type RequestStage = "before-status" | "port-capability" | "native-fetch" | "after-status";
 const failedRequestStages = new WeakMap<object, RequestStage>();
@@ -25,10 +26,12 @@ export function containerRequestFailureStage(error: unknown): RequestStage | und
 /** Typed delegation of the exact 0.10.0 API. Query/cancel cannot launch or replace a runtime. */
 export class FencedContainerAPI implements IWorkspaceContainerAPI {
   readonly host: IWorkspaceContainerAPI;
+  readonly transport: Fetcher;
   queryOnly = false;
   runtime: ContainerRuntimeInfo | undefined;
-  constructor(host: IWorkspaceContainerAPI) {
+  constructor(host: IWorkspaceContainerAPI, transport: Fetcher) {
     this.host = host;
+    this.transport = transport;
   }
   async start(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
     requireThat(!this.queryOnly, "interrupted", "Query cannot start a container");
@@ -62,12 +65,12 @@ export class FencedContainerAPI implements IWorkspaceContainerAPI {
         "interrupted",
         "Recorded container is no longer available",
       );
-      // Resolve the native capability before fetch: pipelining .fetch on the RPC promise
-      // still serializes Request.signal through custom RPC in the pinned runtime.
-      stage = "port-capability";
-      const portFetcher = await this.host.port(port);
+      requireThat(port === 8080, "unsupported", "Only the configured computerd port is supported");
+      const request = new Request(input, init);
+      const headers = new Headers(request.headers);
+      headers.set(containerRuntimeHeader, expected);
       stage = "native-fetch";
-      const response = await portFetcher.fetch(new Request(input, init));
+      const response = await this.transport.fetch(new Request(request, { headers }));
       stage = "after-status";
       try {
         const after = await this.host.status();
