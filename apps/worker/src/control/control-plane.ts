@@ -11,6 +11,7 @@ import { Capacity } from "./capacity.js";
 import { Delivery } from "./delivery.js";
 import { Directory, valid } from "./directory.js";
 import { Dispatch } from "./dispatch.js";
+import { ExecutorWorkspace } from "./executor-workspace.js";
 import { Executors } from "./executors.js";
 import { Identities } from "./identity.js";
 import { LocalWorkspace } from "./local-workspace.js";
@@ -42,6 +43,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
   readonly bindings: Bindings;
   readonly leases: WorkspaceLeases;
   readonly #admin: AdminCoordinator;
+  readonly #executorWorkspace: ExecutorWorkspace;
   private readonly initialized: Promise<void>;
   private readonly origins = new Map<string, { value: string; deadline: number }>();
   constructor(ctx: DurableObjectState, env: Env, providerTransport: typeof fetch = fetch) {
@@ -98,6 +100,14 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       this.directory,
       this.tickets,
       this.capacity,
+      env,
+    );
+    this.#executorWorkspace = new ExecutorWorkspace(
+      this.store,
+      this.identities,
+      this.bindings,
+      this.executors,
+      this.directory,
       env,
     );
     this.initialized = ctx.blockConcurrencyWhile(async () => {
@@ -1007,8 +1017,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       );
       const modelMatch = /^\/internal\/agents\/([a-zA-Z0-9_-]+)\/model$/.exec(url.pathname);
       const adminMatch = /^\/v1\/admin\/artifacts\/([a-zA-Z0-9_-]+)$/.exec(url.pathname);
+      const executorWorkspace = url.pathname.startsWith("/v1/executor/jobs/");
       check(
-        match || statusMatch || artifactMatch || modelMatch || adminMatch,
+        match || statusMatch || artifactMatch || modelMatch || adminMatch || executorWorkspace,
         "not_found",
         "Control route unavailable",
       );
@@ -1041,6 +1052,10 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
           deadline: Date.now() + 30000,
         });
         check(auth.role === "executor", "unauthorized", "Executor credential required");
+      }
+      if (executorWorkspace) {
+        this.capacity.admitRequest(auth.principalId);
+        return this.#executorWorkspace.fetch(auth, request, headers);
       }
       if (adminMatch) {
         const result = await this.#call(auth, () =>
