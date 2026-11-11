@@ -10,6 +10,7 @@ import {
   publicCommitReceipt,
   validateUploadBlobs,
   wireLimits,
+  workspaceLeaseDigest,
 } from "fortipi-contract";
 import { ExecutionLedger } from "../backends/ledger.js";
 import type * as D from "../boundary/dto.js";
@@ -46,6 +47,7 @@ import {
   chunkBytes,
   hashInventory,
   hashStream,
+  limitedStream,
   sliceStream,
 } from "./streams.js";
 
@@ -513,6 +515,22 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   acquireLease(ctx: D.AuthContext, reservation: D.TargetReservation): Promise<D.Outcome<D.Lease>> {
     return outcome(async () => {
       await this.authority(ctx, reservation.workspaceId, "workspace.write");
+      if (reservation.ownerKind === "workspace-operation")
+        requireThat(
+          reservation.operationDigest ===
+            (await workspaceLeaseDigest({
+              deploymentId: ctx.deploymentId,
+              operationId: reservation.operationId,
+              workspaceId: reservation.workspaceId,
+              bindingVersion: reservation.bindingVersion,
+              baseRevision: reservation.baseRevision,
+              target: reservation.target,
+              credential: reservation.credential,
+              deadline: reservation.deadline,
+            })),
+          "conflict",
+          "Canonical workspace lease digest mismatch",
+        );
       const digest = await digestJson("operation", { kind: "lease-acquire", reservation });
       const replay = () => {
         authorize(this.state, ctx, reservation.workspaceId, "workspace.write");
@@ -556,6 +574,29 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           if (prior) return prior;
           const record = this.current();
           authorize(this.state, ctx, record.workspaceId, "workspace.write");
+          requireThat(
+            record.binding.config.kind !== "local" || record.binding.availability === "available",
+            "unavailable_executor",
+            "Local lease acquisition requires an explicitly imported verified binding",
+          );
+          if (reservation.ownerKind === "workspace-operation") {
+            requireThat(
+              reservation.baseRevision === record.binding.revision,
+              "workspace.conflict",
+              "Workspace lease expected base changed",
+              { reason: "expected_revision" },
+            );
+            requireThat(
+              record.binding.config.kind === "computer"
+                ? reservation.target.kind === "backend" &&
+                    reservation.target.backendId === record.workspaceId &&
+                    reservation.target.generation === record.binding.bindingVersion
+                : reservation.target.kind === "executor" &&
+                    reservation.target.executorId === record.binding.config.executorId,
+              "conflict",
+              "Workspace lease target differs from the bound storage authority",
+            );
+          }
           requireThat(
             reservation.expiresAt > Date.now() &&
               reservation.deadline > Date.now() &&
@@ -621,7 +662,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             "Released or superseded lease cannot renew",
             { reason: "stale_fence" },
           );
-          const key = `lease-renew:${ctx.credentialId}:${ctx.requestId}`;
+          const key = `lease-renew:${ctx.credentialId}:${input.requestId}`;
           const prior = this.state.get<{ digest: string; lease: D.Lease }>(key);
           if (prior) {
             requireThat(prior.digest === digest, "conflict", "Lease renewal request changed");
@@ -649,6 +690,18 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         this.state.transaction(() => {
           const record = this.current();
           this.authorizeLeaseReceipt(ctx, input.lease);
+          const requestKey = `lease-release:${ctx.credentialId}:${input.requestId}`;
+          const previousRequest = this.state.get<{ digest: string; receipt: D.ReleaseReceipt }>(
+            requestKey,
+          );
+          if (previousRequest) {
+            requireThat(
+              previousRequest.digest === digest,
+              "conflict",
+              "Lease release request ID reused",
+            );
+            return previousRequest.receipt;
+          }
           const prior = this.state.get<{ digest: string; receipt: D.ReleaseReceipt }>(
             `release:${input.lease.leaseId}`,
           );
@@ -672,6 +725,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             tombstoneId: crypto.randomUUID(),
           };
           this.state.put(`release:${receipt.leaseId}`, { digest, receipt });
+          this.state.put(requestKey, { digest, receipt });
           return receipt;
         }),
       );
@@ -777,7 +831,10 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
               input.generation === active.executorGeneration &&
               input.operationDigest === target.operationDigest &&
               (input.role !== "scratch" ||
-                (active.ownerKind === "job" && input.jobId === active.jobId)),
+                (active.ownerKind === "job" &&
+                  input.jobId === active.jobId &&
+                  target.ownerKind === "job" &&
+                  target.executionId === input.executionId)),
             "conflict",
             "Allocation operation, job or generation mismatch",
           );
@@ -2078,6 +2135,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           validateLease(this.state, authority, input.scope.lease, ctx);
           requireThat(
             authority.binding.config.kind === "local" &&
+              authority.binding.availability === "available" &&
               input.scope.bindingVersion === authority.binding.bindingVersion &&
               input.scope.executorId === authority.binding.config.executorId &&
               input.scope.rootBindingId === authority.binding.config.rootBindingId &&
@@ -2545,9 +2603,10 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         );
         if (artifactId) {
           const artifact = this.state.get<ArtifactRecord>(`artifact:${artifactId}`);
+          if (!artifact)
+            return this.nativeArtifact(request, auth, authority.workspaceId, artifactId);
           requireThat(
-            artifact &&
-              artifact.state === "ready" &&
+            artifact.state === "ready" &&
               artifact.expiresAt > Date.now() &&
               artifact.reference.revision === url.searchParams.get("revision"),
             "not_found",
@@ -2827,6 +2886,69 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       },
       cancel: finish,
     });
+  }
+  private async nativeArtifact(
+    request: Request,
+    auth: D.AuthContext,
+    workspaceId: string,
+    artifactId: string,
+  ): Promise<Response> {
+    requireThat(request.method === "GET", "invalid_request", "Artifact reads require GET");
+    const incoming = new URL(request.url);
+    const url = new URL(`https://control.internal/internal/artifacts/${workspaceId}/${artifactId}`);
+    for (const key of ["revision", "range[start]", "range[end]"])
+      for (const value of incoming.searchParams.getAll(key)) url.searchParams.append(key, value);
+    const headers = new Headers({ "X-Fortipi-Context": JSON.stringify(auth) });
+    const range = request.headers.get("Range");
+    if (range) headers.set("Range", range);
+    // CP owns the immutable native result index and performs current job/resource/floor checks.
+    // No historical job credential/lease is reconstructed here and no artifact bytes are retained.
+    const response = await this.control().fetch(
+      new Request(url, { headers, signal: request.signal }),
+    );
+    const exposed = new Headers({ "Cache-Control": "no-store" });
+    for (const key of [
+      "Content-Type",
+      "Content-Length",
+      "Content-Range",
+      "X-Content-SHA256",
+      "Retry-After",
+    ])
+      if (response.headers.has(key)) exposed.set(key, response.headers.get(key) ?? "");
+    const maximum = response.ok
+      ? Math.min(this.policy.bounds.artifactBytes, wireLimits.artifactBytes)
+      : wireLimits.jsonBytes;
+    const declared = response.headers.get("Content-Length");
+    const size = declared !== null && /^\d+$/.test(declared) ? Number(declared) : undefined;
+    try {
+      requireThat(
+        size === undefined || (Number.isSafeInteger(size) && size <= maximum),
+        "payload_too_large",
+        "Artifact response exceeds the reader bound",
+      );
+      if (response.ok)
+        requireThat(
+          (response.status === 200 || response.status === 206) &&
+            size !== undefined &&
+            /^[a-f0-9]{64}$/.test(response.headers.get("X-Content-SHA256") ?? "") &&
+            response.body,
+          "interrupted",
+          "Artifact response metadata missing",
+        );
+    } catch (error) {
+      await response.body?.cancel().catch(() => {});
+      throw error;
+    }
+    return new Response(
+      response.body
+        ? this.authorizedBytes(
+            auth,
+            "artifacts.read",
+            limitedStream(response.body, size ?? maximum, auth.deadline, size !== undefined),
+          )
+        : null,
+      { status: response.status, headers: exposed },
+    );
   }
   private async transferRequest(request: Request, auth: D.AuthContext): Promise<Response> {
     const action = new URL(request.url).pathname.split("/").at(-1);

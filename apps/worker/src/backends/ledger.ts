@@ -152,7 +152,8 @@ export class ExecutionLedger {
           request.identity.lease.ownerKind === "job" &&
           request.identity.lease.jobId === request.identity.jobId &&
           request.reservation.ownerKind === "job" &&
-          request.reservation.jobId === request.identity.jobId,
+          request.reservation.jobId === request.identity.jobId &&
+          request.reservation.executionId === request.identity.executionId,
         "conflict",
         "Backend, workspace or job mismatch",
       );

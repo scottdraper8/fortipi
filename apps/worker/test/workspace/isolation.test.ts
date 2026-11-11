@@ -5,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { manifestDigest } from "fortipi-contract";
 import type * as D from "../../src/boundary/dto.js";
 import { harness } from "./harness.ts";
+import { workspaceTarget } from "./target.ts";
 
 test("sealed children reject mutation and authority-clock expiry rejects publication", {
   timeout: 60_000,
@@ -23,17 +24,7 @@ test("sealed children reject mutation and authority-clock expiry rejects publica
     const initialRevision = seeded.value.revision;
     const lease = await call<D.Lease>({
       kind: "acquire",
-      input: {
-        ownerKind: "workspace-operation",
-        operationId: "expiry",
-        operationDigest: "a".repeat(64),
-        workspaceId: "workspace",
-        bindingVersion: 1,
-        target: { kind: "executor", executorId: "executor", generation: 1 },
-        actions: ["workspace.write"],
-        expiresAt: Date.now() + 2000,
-        deadline: Date.now() + 30_000,
-      },
+      input: await workspaceTarget("expiry", initialRevision, { expiresAt: Date.now() + 2000 }),
     });
     const bytes = new TextEncoder().encode("immutable");
     const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -174,6 +165,7 @@ test("supported child deleteAll reduces observed storage and permanent registry 
         ownerKind: "job",
         operationId: "gc-operation",
         jobId: "gc-job",
+        executionId: "gc-execution",
         agentId: "agent",
         conversationId: "conversation",
         operationDigest: "b".repeat(64),

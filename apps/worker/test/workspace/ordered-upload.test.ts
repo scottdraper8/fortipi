@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { manifestDigest } from "fortipi-contract";
 import type * as D from "../../src/boundary/dto.js";
 import { harness } from "./harness.ts";
+import { workspaceTarget } from "./target.ts";
 
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 test("ordered superseded puts, same-upload equal hashes and empty files retain exact authority", {
@@ -18,20 +19,11 @@ test("ordered superseded puts, same-upload equal hashes and empty files retain e
   }
   try {
     await server.listen();
-    await server.fetch("/seed");
+    const seeded = (await (await server.fetch("/seed")).json()) as D.Outcome<D.WorkspaceBinding>;
+    if (!seeded.ok) assert.fail(JSON.stringify(seeded));
     const lease = await call<D.Lease>({
       kind: "acquire",
-      input: {
-        ownerKind: "workspace-operation",
-        operationId: "ordered-operation",
-        operationDigest: "a".repeat(64),
-        workspaceId: "workspace",
-        bindingVersion: 1,
-        target: { kind: "executor", executorId: "executor", generation: 1 },
-        actions: ["workspace.write"],
-        deadline: Date.now() + 30_000,
-        expiresAt: Date.now() + 30_000,
-      },
+      input: await workspaceTarget("ordered-operation", seeded.value.revision),
     });
     const old = new TextEncoder().encode("superseded bytes still require verification");
     const bytes = Uint8Array.from({ length: 300013 }, (_, index) => index % 239);

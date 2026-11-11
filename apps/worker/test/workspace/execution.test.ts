@@ -40,6 +40,7 @@ async function runFixture(source?: string, denied = false): Promise<void> {
       deadline,
     };
     const digest = await operationDigest(operation);
+    const executionId = "cloud-execution";
     const target: D.TargetRequest = {
       ownerKind: "job",
       operationId: "cloud-operation",
@@ -49,6 +50,7 @@ async function runFixture(source?: string, denied = false): Promise<void> {
       target: operation.target,
       actions: ["workspace.write"],
       jobId: "cloud-job",
+      executionId,
       agentId: "agent",
       conversationId: "conversation",
       deadline,
@@ -58,11 +60,11 @@ async function runFixture(source?: string, denied = false): Promise<void> {
     const lease = await call<D.Lease>({ kind: "acquire", input: target });
     const identity: D.ExecutionIdentity = {
       jobId: "cloud-job",
-      executionId: "cloud-execution",
+      executionId,
       operationDigest: digest,
       assignmentDigest: await assignmentDigest({
         operation,
-        executionId: "cloud-execution",
+        executionId,
         reservationId: reservation.reservationId,
         leaseId: lease.leaseId,
         fence: lease.fence,

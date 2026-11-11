@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { manifestDigest } from "fortipi-contract";
 import type * as D from "../../src/boundary/dto.js";
 import { RecoveryProcess } from "./recovery-process.ts";
+import { workspaceTarget } from "./target.ts";
 
 test("persistent Wrangler reopens committed bytes and receipt after death before response", {
   timeout: 120_000,
@@ -27,20 +28,13 @@ test("persistent Wrangler reopens committed bytes and receipt after death before
   }
   try {
     await runtime.start();
-    assert.equal((await fetch(`${runtime.url}/seed`)).status, 200);
+    const seeded = (await (
+      await fetch(`${runtime.url}/seed`)
+    ).json()) as D.Outcome<D.WorkspaceBinding>;
+    if (!seeded.ok) assert.fail(JSON.stringify(seeded));
     const lease = await call<D.Lease>({
       kind: "acquire",
-      input: {
-        ownerKind: "workspace-operation",
-        operationId: "recovery-operation",
-        operationDigest: "a".repeat(64),
-        workspaceId: "workspace",
-        bindingVersion: 1,
-        target: { kind: "executor", executorId: "executor", generation: 1 },
-        actions: ["workspace.write"],
-        deadline: Date.now() + 30_000,
-        expiresAt: Date.now() + 30_000,
-      },
+      input: await workspaceTarget("recovery-operation", seeded.value.revision),
     });
     const bytes = new TextEncoder().encode("independent-persistent-canary");
     const sha256 = createHash("sha256").update(bytes).digest("hex");

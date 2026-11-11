@@ -16,6 +16,17 @@ Receipt lookup and exact commit retries work after the historical lease expires.
 Public receipts contain an opaque stage; private allocation and seal proof remain
 at the authority. Facts retain the actual recipient-assigned event coordinates.
 
+Public workspace operations acquire, renew and release explicit leases through
+ControlPlane. Acquisition binds the expected base and canonical `workspace-lease`
+digest. Computer's non-job holder is the logical workspace ID at its binding
+version; it does not require an execution backend. Private records retain the
+target kind so an unrelated executor with the same ID cannot revoke that holder.
+Renew/release receipts bind their business request IDs, independently of the
+transport request ID. A renewal can extend beyond initial reservation admission
+expiry, within the original deadline, current credential/grant expiry and 30-second
+lease bound. Exact acknowledgments remain historical observations; released or
+superseded leases cannot regain authority through a cached response.
+
 Paths must be normalized relative POSIX paths and portable across supported
 platforms. Links, special files, aliases, traversal, private `.fortipi` paths,
 credentials, Git metadata and excluded dependency/build trees cannot enter a
@@ -56,6 +67,14 @@ separate identities. Prepare/apply/observe and receipt delivery retain their
 original operation identity; a lost apply acknowledgment never authorizes another
 mutation. A metadata conflict cannot undo native host effects.
 
+Before local upload allocation, the authority requires the keyed executor's actual
+numeric transfer limits. It checks the complete proposed manifest, ordered
+mutations, every put including later superseded puts, announced chunk grids and
+aggregate staging bytes. Missing observations fail admission. Equal file hashes
+may share a verified blob only within that upload; final paths retain separate
+membership. Empty files have no public PUT. Job transfers use the execution ID
+retained in their actual reservation.
+
 Local read metadata contains an owner-computed chunk inventory on its announced
 grid. The authority opens the matched private consumer before requesting the
 producer, verifies each bounded chunk and the whole-file hash, and stores no byte
@@ -66,6 +85,16 @@ attempt. Actual owner4 testing found that Wrangler's local HTTP proxy can lose
 that signal; its bounded timeout is a fallback, and immediate integrated
 cancellation remains an open transport gate. Public `read()` returns
 metadata, while the endpoint opens the stream; neither recursively calls itself.
+
+Cloud output is retained in the workspace's artifact ledger. If that ledger has
+no matching artifact, the authority delegates to the existing private ControlPlane
+fetch lane: `GET /internal/artifacts/{workspaceId}/{artifactId}`, with the current
+registered reader's `AuthContext` in server-constructed `X-Fortipi-Context`.
+Revision/range metadata and the cancellation signal are preserved; internal
+authority headers are never exposed. The response remains bounded streaming data.
+ControlPlane owns native artifact membership and current job/executor/resource
+authorization. Reads use current reader authority and immutable original job
+identity, without reconstructing a historical lease or restarting a process.
 
 The same-process transfer stream is the concatenation of changed file bytes in
 the enclosing manifest's order, with exact declared lengths. It carries no paths
@@ -143,6 +172,9 @@ publication supplies an observed registry digest. This uses Docker's documented
 
 `sources-and-notices.tar` contains the exact frozen source archives, embedded npm
 archives, Computer source, licenses and recipe, with an internal hash inventory.
+Descriptor filenames and every referenced sibling are checked against the shipped
+canonical source names. The kit includes the complete tracked FortiPi source and
+its commit, exact platform metadata, manifest/lock and tooling setup instructions.
 The actual image metadata binds the kit hash, final installed source inventory
 and copied-license inventory. The release owner must ship and maintain equivalent
 access to that kit alongside the image. See

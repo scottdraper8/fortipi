@@ -1,6 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
+import { createHash } from "node:crypto";
 import type * as D from "../../src/boundary/dto.js";
 import type { Env } from "../../src/boundary/env.js";
+import { outcome } from "../../src/workspace/errors.js";
+import { admitLocalUpload } from "../../src/workspace/local-admission.js";
 import { hashInventory } from "../../src/workspace/streams.js";
 import {
   internalHeader,
@@ -63,6 +66,51 @@ export class WorkspaceObject extends WorkspaceBase {
   }
 }
 export class ControlFixture extends DurableObject {
+  override async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === "/__test/artifact-observation")
+      return Response.json((await this.ctx.storage.get("artifact-observation")) ?? null);
+    const artifact = /^\/internal\/artifacts\/workspace\/([A-Za-z0-9_-]+)$/.exec(url.pathname)?.[1];
+    if (!artifact) return new Response(null, { status: 404 });
+    const auth = JSON.parse(request.headers.get("X-Fortipi-Context") ?? "null") as D.AuthContext;
+    const prior = await this.ctx.storage.get<{ count: number }>("artifact-observation");
+    await this.ctx.storage.put("artifact-observation", {
+      count: (prior?.count ?? 0) + 1,
+      credentialId: auth.credentialId,
+      registrationId: auth.registrationId,
+      method: request.method,
+      search: url.search,
+      range: request.headers.get("Range"),
+      rawAuthority: request.headers.has(internalHeader),
+      untrustedHeader: request.headers.has("x-untrusted"),
+    });
+    if (artifact === "absent") return Response.json({ code: "not_found" }, { status: 404 });
+    const bytes = Uint8Array.from({ length: 393217 }, (_, i) => i % 251);
+    const range = request.headers.get("Range");
+    const start = range ? Number(/^bytes=(\d+)-/.exec(range)?.[1]) : 0;
+    const end = range ? Number(/-(\d+)$/.exec(range)?.[1]) : bytes.length - 1;
+    const selected = bytes.slice(start, end + 1);
+    let offset = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset === selected.length) return controller.close();
+        const next = selected.slice(offset, offset + 65536);
+        offset += next.length;
+        controller.enqueue(
+          artifact === "truncated" && offset === selected.length ? next.slice(1) : next,
+        );
+      },
+    });
+    return new Response(body, {
+      status: range ? 206 : 200,
+      headers: {
+        "Content-Length": String(artifact === "oversized" ? 16777217 : selected.length),
+        "X-Content-SHA256": createHash("sha256").update(selected).digest("hex"),
+        "X-Fortipi-Context": "must-never-be-public",
+        ...(range ? { "Content-Range": `bytes ${start}-${end}/${bytes.length}` } : {}),
+      },
+    });
+  }
   async reserveTarget(
     ctx: D.AuthContext,
     request: D.TargetRequest,
@@ -150,6 +198,18 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/ready") return new Response("ready");
+    if (url.pathname === "/admit") {
+      const input = (await request.json()) as {
+        upload: D.UploadBegin;
+        limits: D.ExecutorTransferLimits | null;
+      };
+      return Response.json(
+        await outcome(() => {
+          admitLocalUpload(input.upload, input.limits);
+          return { admitted: true };
+        }),
+      );
+    }
     if (url.pathname === "/inventory" && request.body)
       return Response.json(
         await hashInventory(
@@ -213,6 +273,10 @@ export default {
     }
     if (request.headers.get("x-test-no-grants") === "1") ctx.grants = [];
     const authority = env.WORKSPACES.getByName("workspace");
+    if (url.pathname === "/artifact-observation")
+      return env.CONTROL_PLANE.getByName("control").fetch(
+        new Request("https://control.internal/__test/artifact-observation"),
+      );
     if (url.pathname === "/seed")
       return Response.json(
         await authority.applyBinding(

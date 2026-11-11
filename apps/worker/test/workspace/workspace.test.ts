@@ -31,6 +31,7 @@ test("Computer snapshots preserve independently hashed old bytes across CAS loss
         agentId: "agent",
         conversationId: "conversation",
         jobId: operationId,
+        executionId: `${operationId}-execution`,
         deadline: Date.now() + 30_000,
         expiresAt: Date.now() + 30_000,
       },
@@ -179,7 +180,10 @@ test("Computer snapshots preserve independently hashed old bytes across CAS loss
     };
     await call(coordinates);
     assert.deepEqual(await call(coordinates), { ...coordinates.input, persisted: true });
-    await call({ kind: "release", input: { lease: firstLease, reason: "completed" } });
+    await call({
+      kind: "release",
+      input: { requestId: "release-first", lease: firstLease, reason: "completed" },
+    });
     const raceLease = await lease("race");
     const left = await stage(new TextEncoder().encode("left"), raceLease, "left-upload");
     const right = await stage(new TextEncoder().encode("right"), raceLease, "right-upload");
@@ -194,7 +198,10 @@ test("Computer snapshots preserve independently hashed old bytes across CAS loss
     );
     assert.equal(race.filter((result) => result.ok).length, 1);
     assert.equal(sha(await read(receipt.revision)), sha(old));
-    await call({ kind: "release", input: { lease: raceLease, reason: "completed" } });
+    await call({
+      kind: "release",
+      input: { requestId: "release-race", lease: raceLease, reason: "completed" },
+    });
     const revoked = await lease("revoked");
     const pending = await stage(
       new TextEncoder().encode("must-not-publish"),

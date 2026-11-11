@@ -93,6 +93,7 @@ export function limitedStream(
   source: ReadableStream<Uint8Array>,
   size: number,
   deadline: number,
+  exactLength = true,
 ): ReadableStream<Uint8Array> {
   const reader = source.getReader();
   let seen = 0;
@@ -120,7 +121,7 @@ export function limitedStream(
       try {
         const next = await reader.read();
         if (next.done) {
-          requireThat(seen === size, "invalid_request", "Truncated file stream");
+          requireThat(!exactLength || seen === size, "invalid_request", "Truncated file stream");
           clearTimeout(timer);
           await finish();
           controller.close();

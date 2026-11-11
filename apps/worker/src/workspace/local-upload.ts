@@ -9,6 +9,7 @@ import {
 import type * as D from "../boundary/dto.js";
 import { authorize, permitsResource, same, transferConsumer, validateLease } from "./authority.js";
 import { requireThat, unwrap, WorkspaceError } from "./errors.js";
+import { admitLocalUpload } from "./local-admission.js";
 import { applyMutations, checkedManifest, manifestDigest } from "./manifest.js";
 import type { WorkspaceObject } from "./workspace-object.js";
 
@@ -69,7 +70,7 @@ export class LocalUploads {
   ): Promise<D.OperationResponse<"beginUpload">> {
     const authority = this.owner.current();
     requireThat(
-      authority.binding.config.kind === "local",
+      authority.binding.config.kind === "local" && authority.binding.availability === "available",
       "invalid_request",
       "Local binding required",
     );
@@ -102,14 +103,10 @@ export class LocalUploads {
       }),
     );
     const puts = uniquePuts(input.body);
+    admitLocalUpload(input.body, generation.transferLimits);
     requireThat(
-      puts.reduce(
-        (sum, entry) =>
-          sum +
-          (input.body.blobs?.find((plan) => plan.sha256 === entry.sha256)?.chunks.chunkHashes
-            .length ?? 0),
-        0,
-      ) <= 1024,
+      (input.body.blobs?.reduce((sum, plan) => sum + plan.chunks.chunkHashes.length, 0) ?? 0) <=
+        1024,
       "payload_too_large",
       "Local upload exceeds chunk receipt capacity",
     );
@@ -290,6 +287,14 @@ export class LocalUploads {
           const active = await this.owner.mutex.run(() =>
             validateLease(this.owner.state, this.owner.current(), row.scope.lease, ctx),
           );
+          const target = this.owner.state.get<D.TargetReservation>(`reservation:${active.leaseId}`);
+          requireThat(
+            target &&
+              (active.ownerKind !== "job" ||
+                (target.ownerKind === "job" && target.jobId === active.jobId)),
+            "conflict",
+            "Local transfer reservation/job identity missing",
+          );
           const grant = ctx.grants.find(
             (grant) =>
               (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
@@ -307,7 +312,9 @@ export class LocalUploads {
               bindingVersion: row.scope.bindingVersion,
               operationId: row.scope.operationId,
               operationDigest: row.scope.operationDigest,
-              ...(active.ownerKind === "job" ? { jobId: active.jobId } : {}),
+              ...(target.ownerKind === "job"
+                ? { jobId: target.jobId, executionId: target.executionId }
+                : {}),
               executorId: row.scope.executorId,
               executorGeneration: row.scope.executorGeneration,
               credential: row.scope.credential,
