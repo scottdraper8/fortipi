@@ -8,29 +8,54 @@ interface Symbol {
   version: string;
   undefined: boolean;
   weak: boolean;
+  visibility: "default" | "protected" | "hidden" | "internal";
 }
-/** Both GNU and LLVM objdump print section, size, optional version, then name. */
+/** GNU BFD prints optional version then st_other visibility; LLVM can omit Base. */
 export function dynamicSymbols(text: string): Symbol[] {
   check(
     text.includes("file format elf64-x86-64") && text.includes("DYNAMIC SYMBOL TABLE:"),
     "Expected amd64 ELF dynamic symbols",
   );
   const symbols: Symbol[] = [];
-  for (const line of text.split("\n")) {
-    if (!/^\s*[a-f0-9]{16}\s/.test(line)) continue;
+  const table = text.slice(text.indexOf("DYNAMIC SYMBOL TABLE:") + "DYNAMIC SYMBOL TABLE:".length);
+  for (const line of table.split("\n")) {
+    if (!line.trim()) continue;
+    check(/^\s*[a-f0-9]{16}\s/.test(line), "Unsupported ELF symbol row");
     const fields = line.trim().split(/\s+/);
     const section =
       fields.findIndex((field, index) => index > 0 && /^[a-f0-9]{16}$/.test(field)) - 1;
     const tail = fields.slice(section + 1);
-    check(section > 0 && (tail.length === 2 || tail.length === 3), "Unsupported ELF symbol row");
-    const name = tail.at(-1);
+    const name = tail.pop();
     check(name, "Unnamed ELF symbol");
-    const version = tail.length === 3 ? (tail[1] ?? "").replace(/[()]/g, "") : "";
+    let visibility: Symbol["visibility"] = "default";
+    switch (tail.at(-1)) {
+      case ".protected":
+        visibility = "protected";
+        tail.pop();
+        break;
+      case ".hidden":
+        visibility = "hidden";
+        tail.pop();
+        break;
+      case ".internal":
+        visibility = "internal";
+        tail.pop();
+        break;
+    }
+    check(section > 0 && (tail.length === 1 || tail.length === 2), "Unsupported ELF symbol row");
+    const printedVersion = tail.length === 2 ? (tail[1] ?? "") : "";
+    check(
+      !printedVersion ||
+        /^(?:[A-Za-z_][A-Za-z0-9_.-]*|\([A-Za-z_][A-Za-z0-9_.-]*\))$/.test(printedVersion),
+      "Unsupported ELF symbol version or visibility",
+    );
+    const version = printedVersion.replace(/[()]/g, "");
     symbols.push({
       name,
       version: version === "Base" ? "" : version,
       undefined: fields[section] === "*UND*",
       weak: fields.slice(1, section).includes("w"),
+      visibility,
     });
   }
   check(symbols.length > 0, "No ELF symbols inspected");
@@ -39,7 +64,11 @@ export function dynamicSymbols(text: string): Symbol[] {
 export function assertResolved(consumer: Symbol[], providers: Symbol[]): string[] {
   const exported = new Set(
     providers
-      .filter((symbol) => !symbol.undefined)
+      .filter(
+        (symbol) =>
+          !symbol.undefined &&
+          (symbol.visibility === "default" || symbol.visibility === "protected"),
+      )
       .flatMap((symbol) => [symbol.name, `${symbol.name}@${symbol.version}`]),
   );
   const required = consumer
