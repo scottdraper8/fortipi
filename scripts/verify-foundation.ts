@@ -171,7 +171,8 @@ export async function egressChecks(): Promise<void> {
   try {
     const response = await fetch("https://example.com", { signal: AbortSignal.timeout(10_000) });
     deniedResponseStatus = response.status;
-    await response.body?.cancel();
+    // Cleanup failure must not turn a received HTTP response into evidence of blocking.
+    await response.body?.cancel().catch(() => {});
   } catch (error) {
     blocked = true;
     const cause = (error as { cause?: { code?: unknown } }).cause?.code;
