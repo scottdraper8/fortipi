@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
+import type { TestControlPlane } from "./fixtures/enforcer-provider.ts";
 import { harness, request, uuid, value } from "./harness.ts";
 
 test("redirected or oversized refresh never exposes auth or blindly retries a rotating token", async () => {
@@ -232,7 +233,9 @@ test("all supported Worker adapters use their distinct pinned refresh protocols;
 });
 
 test("cancelled resolver wait does not release a rotating refresh or let stale ingest overwrite it", async () => {
-  const h = await harness();
+  const h = await harness<TestControlPlane>({
+    fixturePath: "apps/worker/test/control/fixtures/enforcer-provider.ts",
+  });
   try {
     const admin = await h.auth();
     const credential: D.OAuthCredential = {
@@ -252,39 +255,19 @@ test("cancelled resolver wait does not release a rotating refresh or let stale i
         ),
       ),
     );
-    const deadline = Date.now() + 5;
-    const context: D.ModelResolutionContext = {
-      kind: "model-resolution",
-      action: "resolve-provider-auth",
-      deploymentId: h.deploymentId,
-      agentId: "agent",
-      factoryId: "factory",
-      providerId: "openai",
-      modelId: "gpt-5.4",
-      deadline,
-    };
+    const observed = await h.cp.cancelledRefresh(admin, credential);
     assert.equal(
-      (await h.cp.providerProbe(context, { providerId: "openai", modelId: "gpt-5.4", deadline }))
-        .ok,
-      false,
+      observed.blockedWhileRefreshing,
+      true,
+      "ingest remains queued after caller abort while the actual token exchange is held",
     );
-    const stale = await h.cp.putProviderAuth(
-      admin,
-      request(
-        "putProviderAuth",
-        { requestId: uuid(), expectedVersion: 1, credential },
-        { providerId: "openai" },
-      ),
+    assert.equal(
+      observed.staleRejected,
+      true,
+      "ingest waits for active refresh then sees advanced version",
     );
-    assert.equal(stale.ok, false, "ingest waits for active refresh then sees advanced version");
-    const status = value(
-      await h.cp.getProviderAuthStatus(
-        admin,
-        request("getProviderAuthStatus", undefined, { providerId: "openai" }),
-      ),
-    );
-    assert.equal(status.status, 200);
-    if (status.status === 200) assert.equal(status.body.version, 2);
+    assert.equal(observed.state.version, 2);
+    assert.equal(observed.state.state, "configured");
   } finally {
     await h.close();
   }
