@@ -197,6 +197,14 @@ export class Dispatch {
         "unauthorized",
         "Unknown target reservation",
       );
+      if (r.target.kind === "executor") {
+        const executor = this.store.get<ExecutorState>("executor", r.target.executorId);
+        check(
+          executor && executor.status !== "revoked" && executor.generation === r.target.generation,
+          "unavailable_executor",
+          "Dispatch target generation is no longer current",
+        );
+      }
       const grantResources = {
         ...emptyScope(),
         workspaceIds: [r.workspaceId],
@@ -207,6 +215,7 @@ export class Dispatch {
           ? { executorIds: [r.target.executorId] }
           : { backendIds: [r.target.backendId] }),
       };
+      requireGrant(ctx, "jobs.dispatch", grantResources);
       for (const action of r.actions) requireGrant(ctx, action, grantResources);
       check(
         r.ownerKind === "job" &&
@@ -256,7 +265,11 @@ export class Dispatch {
       return receipt;
     });
   }
-  record(ctx: D.AuthContext, identity: D.ExecutionIdentity): DispatchRecord {
+  record(
+    ctx: D.AuthContext,
+    identity: D.ExecutionIdentity,
+    action: "jobs.read" | "jobs.dispatch" | "jobs.cancel" = "jobs.read",
+  ): DispatchRecord {
     this.identities.current(ctx);
     const record = this.store.get<DispatchRecord>("dispatch", identity.executionId);
     check(
@@ -264,26 +277,52 @@ export class Dispatch {
       "conflict",
       "Execution identity mismatch",
     );
-    requireGrant(ctx, "jobs.read", {
+    const assignment = record.intent.assignment;
+    if (action !== "jobs.read") {
+      const credential = record.intent.reservation.credential;
+      const owner = this.store.get<import("./identity.js").CredentialRecord>(
+        "credential",
+        credential.credentialId,
+      );
+      check(
+        owner?.status === "active" &&
+          owner.generation === credential.generation &&
+          owner.grantVersion === credential.grantVersion &&
+          (owner.expiresAt === null || Date.now() < owner.expiresAt),
+        "unauthenticated",
+        "Execution owner authority is no longer current",
+      );
+      if (identity.target.kind === "executor") {
+        const executor = this.store.get<ExecutorState>("executor", identity.target.executorId);
+        check(
+          executor &&
+            executor.status !== "revoked" &&
+            executor.generation === identity.target.generation,
+          "unavailable_executor",
+          "Execution target generation is no longer current",
+        );
+      }
+    }
+    requireGrant(ctx, action, {
       ...emptyScope(),
       agentIds: [record.intent.reservation.agentId],
       conversationIds: [record.intent.reservation.conversationId],
       workspaceIds: [record.intent.reservation.workspaceId],
+      ...(action === "jobs.read"
+        ? {}
+        : {
+            tools: [assignment.tool],
+            ...(identity.target.kind === "executor"
+              ? { executorIds: [identity.target.executorId] }
+              : { backendIds: [identity.target.backendId] }),
+          }),
     });
     return record;
   }
   assign(ctx: D.AuthContext, input: D.Assignment): D.DispatchAck {
-    const record = this.record(ctx, input.identity);
+    const record = this.record(ctx, input.identity, "jobs.dispatch");
     check(same(record.intent.assignment, input), "conflict", "Assignment changed");
     const identity = input.identity;
-    requireGrant(ctx, "jobs.dispatch", {
-      ...emptyScope(),
-      workspaceIds: [input.workspaceId],
-      tools: [input.tool],
-      ...(identity.target.kind === "executor"
-        ? { executorIds: [identity.target.executorId] }
-        : { backendIds: [identity.target.backendId] }),
-    });
     check(
       identity.target.kind === "executor",
       "unsupported",
@@ -378,8 +417,7 @@ export class Dispatch {
     return { identity, state: "unknown" };
   }
   async cancel(ctx: D.AuthContext, input: D.CancelRequest): Promise<D.CancelDisposition> {
-    const record = this.record(ctx, input.identity);
-    requireGrant(ctx, "jobs.cancel");
+    const record = this.record(ctx, input.identity, "jobs.cancel");
     if (record.cancel) {
       check(
         record.cancel.requestId === input.requestId && record.cancel.reason === input.reason,
