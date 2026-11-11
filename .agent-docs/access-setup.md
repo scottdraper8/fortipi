@@ -9,16 +9,17 @@ Select production and add secrets:
 - CLOUDFLARE_ACCOUNT_ID: target account's 32-character ID.
 - CLOUDFLARE_API_TOKEN: custom account-scoped token.
 
-Restrict the token to the one target account. Account permissions:
+Restrict the token to the one target account. For the initial deployment, grant **Admin at the Workers product scope** in that account. Cloudflare's current roles require product-level Admin to create a new Worker; Editor and per-Worker grants apply to existing Workers. After bootstrap, a replacement token can use Editor scoped to the deployed FortiPi Worker for updates, secrets and observability; keep product-level Admin only for operations that actually create additional Workers. Durable Objects inherit the implementing Worker's role and do not need a separate role.
+
+Additional account permissions:
 - Account Settings: Read
-- Workers Scripts: Edit (Worker deployment, bindings, Durable Object migrations and secrets)
-- Workers R2 Storage: Edit (optional future R2 backend; unused by the initial release)
-- Workers Tail: Read (deployment diagnosis)
 - Workers AI: Edit (model discovery/testing and optional direct API use)
-- Containers: Edit (optional native Linux executor deployment/testing)
+- Containers: Edit (when deploying/testing the cloud Linux execution backend)
+
+Older permission lists may still show Workers Scripts Edit and Workers Tail Read. Use the current Workers roles above rather than assuming an older edit permission proves first-deployment authority. Read-only access checks cannot establish creation rights; the actual deployment must do that.
 
 No zone permissions are needed for the initial workers.dev origin.
-The initial Computer workspace uses Durable Object storage and does not require R2 activation. R2 permissions are optional for later large-artifact storage. Both Dynamic Workers/Loader (cloud JavaScript execution) and native Containers require Workers Paid. Free/unknown configurations omit unavailable paid bindings; full cloud execution acceptance needs existing paid entitlements. Do not change subscription plans without an explicit user decision.
+The initial Computer workspace uses Durable Object storage and requires neither R2 activation nor R2 permissions. Both Dynamic Workers/Loader (cloud JavaScript execution) and native Containers require Workers Paid. Free/unknown configurations omit unavailable paid bindings; full cloud execution acceptance needs existing paid entitlements. Do not change subscription plans without an explicit user decision.
 Workers AI uses a binding at runtime; no third-party model key is required for the first live smoke test.
 External model-provider credentials remain configurable server-side; request one only if the user chooses that provider.
 
@@ -26,6 +27,8 @@ The parent provisioned `production` secret `FORTIPI_ADMIN_TOKEN` using random ma
 
 Primary references:
 https://developers.cloudflare.com/fundamentals/api/reference/permissions/
+https://developers.cloudflare.com/workers/authorization/workers/
+https://developers.cloudflare.com/workers/authorization/durable-objects/
 https://developers.cloudflare.com/agents/harnesses/pi/
 https://developers.cloudflare.com/containers/
 https://developers.cloudflare.com/dynamic-workers/pricing/
