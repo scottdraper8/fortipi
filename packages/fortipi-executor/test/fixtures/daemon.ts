@@ -244,6 +244,12 @@ export function authenticateFixture(http: HttpTransport): void {
 /** Actual parsed executor lease-update frames; no TTL extension beyond the protocol's 30s window. */
 export function jobRenewals(runtime: ExecutorRuntime, a: Assignment) {
   runtime.ledger.admit(a, "lease-renewal-fixture");
+  const observations: {
+    at: number;
+    leaseVersion: number;
+    remainingLeaseMs: number;
+    remainingDeadlineMs: number;
+  }[] = [];
   let pending = Promise.resolve(),
     failure: unknown;
   const renew = () => {
@@ -262,6 +268,14 @@ export function jobRenewals(runtime: ExecutorRuntime, a: Assignment) {
             expiresAt,
           },
         });
+        const current = runtime.ledger.existing(a.identity);
+        if (!current) throw new Error("renewed attempt missing");
+        observations.push({
+          at: Date.now(),
+          leaseVersion: current.assignment.identity.lease.leaseVersion,
+          remainingLeaseMs: current.assignment.identity.lease.expiresAt - Date.now(),
+          remainingDeadlineMs: a.identity.deadline - Date.now(),
+        });
       })
       .catch((error) => {
         failure = error;
@@ -273,10 +287,63 @@ export function jobRenewals(runtime: ExecutorRuntime, a: Assignment) {
   }, 10000);
   return {
     renew,
+    observations,
     async stop() {
       clearInterval(timer);
       await pending;
       if (failure) throw failure;
+    },
+  };
+}
+
+/** Observe real adapter calls without substituting filesystem or permission behavior. */
+export function nativeTimeline(root: SafeRoot) {
+  const start = performance.now(),
+    verifyEntry = root.platform.verifyEntry,
+    phases: {
+      phase: string;
+      at: number;
+      elapsedMs: number;
+      entryChecks: number;
+      entryMs: number;
+    }[] = [];
+  let entryChecks = 0,
+    entryMs = 0,
+    maxEntryMs = 0;
+  root.platform.verifyEntry = async function (path, stat) {
+    const before = performance.now();
+    entryChecks++;
+    try {
+      await verifyEntry.call(this, path, stat);
+    } finally {
+      const elapsed = performance.now() - before;
+      entryMs += elapsed;
+      maxEntryMs = Math.max(maxEntryMs, elapsed);
+    }
+  };
+  return {
+    async measure<T>(phase: string, work: () => Promise<T>): Promise<T> {
+      const before = performance.now(),
+        checks = entryChecks,
+        cost = entryMs,
+        at = Date.now();
+      try {
+        return await work();
+      } finally {
+        phases.push({
+          phase,
+          at,
+          elapsedMs: performance.now() - before,
+          entryChecks: entryChecks - checks,
+          entryMs: entryMs - cost,
+        });
+      }
+    },
+    summary() {
+      return { elapsedMs: performance.now() - start, entryChecks, entryMs, maxEntryMs, phases };
+    },
+    restore() {
+      root.platform.verifyEntry = verifyEntry;
     },
   };
 }

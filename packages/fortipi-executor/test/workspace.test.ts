@@ -34,6 +34,7 @@ import {
   fixture,
   importRoot,
   jobRenewals,
+  nativeTimeline,
   prepare,
   receiptScope,
   requestScope,
@@ -441,8 +442,9 @@ test("full manifest binds revision reads; excluded bytes and historical mismatch
     await f.cleanup();
   }
 });
-test("ordered put then directory deletion/recreation applies actual mutations once using the public stage digest", async () => {
-  const f = await fixture();
+test("ordered put then directory deletion/recreation applies actual mutations once using the public stage digest", async (t) => {
+  const f = await fixture(),
+    timeline = nativeTimeline(f.root);
   let renewals: ReturnType<typeof jobRenewals> | undefined;
   try {
     await f.root.mkdir("tree");
@@ -488,37 +490,39 @@ test("ordered put then directory deletion/recreation applies actual mutations on
       oldOrigin = f.profile.origin;
     f.profile.origin = relay.origin;
     try {
-      await staging.receive({
-        transferId: randomUUID(),
-        attemptId: randomUUID(),
-        deploymentId: f.profile.deploymentId,
-        direction: "to-executor",
-        purpose: "local-stage",
-        workspaceId: "workspace",
-        bindingVersion: 1,
-        operationId: request.operationId,
-        operationDigest: request.operationDigest,
-        jobId: a.identity.jobId,
-        executionId: a.identity.executionId,
-        executorId: f.profile.executorId,
-        executorGeneration: f.profile.executorGeneration,
-        credential: request.credential,
-        consumer: f.profile.resources,
-        baseRevision: "r0",
-        lease: request.lease,
-        content: {
-          kind: "workspace-file",
-          path: "tree/old",
-          manifestHash: postManifestHash,
-          uploadId,
-        },
-        fileSha256: sha256,
-        size: bytes.length,
-        chunkBytes: bytes.length,
-        chunkHashes: [sha256],
-        expiresAt: Date.now() + 10000,
-        deadline: request.deadline,
-      });
+      await timeline.measure("stage_receive", () =>
+        staging.receive({
+          transferId: randomUUID(),
+          attemptId: randomUUID(),
+          deploymentId: f.profile.deploymentId,
+          direction: "to-executor",
+          purpose: "local-stage",
+          workspaceId: "workspace",
+          bindingVersion: 1,
+          operationId: request.operationId,
+          operationDigest: request.operationDigest,
+          jobId: a.identity.jobId,
+          executionId: a.identity.executionId,
+          executorId: f.profile.executorId,
+          executorGeneration: f.profile.executorGeneration,
+          credential: request.credential,
+          consumer: f.profile.resources,
+          baseRevision: "r0",
+          lease: request.lease,
+          content: {
+            kind: "workspace-file",
+            path: "tree/old",
+            manifestHash: postManifestHash,
+            uploadId,
+          },
+          fileSha256: sha256,
+          size: bytes.length,
+          chunkBytes: bytes.length,
+          chunkHashes: [sha256],
+          expiresAt: Date.now() + 10000,
+          deadline: request.deadline,
+        }),
+      );
     } finally {
       f.profile.origin = oldOrigin;
       await relay.close();
@@ -535,7 +539,7 @@ test("ordered put then directory deletion/recreation applies actual mutations on
         stagedDigest: await localStageDigest({ uploadId, manifest, mutations }),
       },
     };
-    const prepared = await local.request(prepareRequest);
+    const prepared = await timeline.measure("prepare", () => local.request(prepareRequest));
     assert.ok("preparationId" in prepared);
     await renewals.renew();
     const apply = {
@@ -544,7 +548,7 @@ test("ordered put then directory deletion/recreation applies actual mutations on
       kind: "apply" as const,
       preparationId: prepared.preparationId,
     };
-    const result = await local.request(apply);
+    const result = await timeline.measure("apply", () => local.request(apply));
     assert.ok("state" in result);
     assert.equal(
       result.state,
@@ -554,6 +558,7 @@ test("ordered put then directory deletion/recreation applies actual mutations on
         journal: f.ledger.local(request.operationId)?.journal,
         remainingLeaseMs:
           (f.ledger.local(request.operationId)?.request.lease.expiresAt ?? 0) - Date.now(),
+        remainingDeadlineMs: request.deadline - Date.now(),
       }),
     );
     assert.deepEqual(await f.root.entries("tree"), []);
@@ -577,6 +582,14 @@ test("ordered put then directory deletion/recreation applies actual mutations on
     try {
       await renewals?.stop();
     } finally {
+      t.diagnostic(
+        JSON.stringify({
+          nativeCase: "ordered_apply",
+          ...timeline.summary(),
+          renewals: renewals?.observations,
+        }),
+      );
+      timeline.restore();
       await f.cleanup();
     }
   }

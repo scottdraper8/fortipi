@@ -35,6 +35,7 @@ import {
   fixture,
   fixtureChild,
   importRoot,
+  nativeTimeline,
   nodeCommand,
   prepare,
   receiptScope,
@@ -549,9 +550,10 @@ test("local-stage status waits for actual empty or multichunk durable consumer p
   }
 });
 
-test("zero local-read open proves the actual retained owner file, rejecting a missing owner despite empty metadata", async () => {
+test("zero local-read open proves the actual retained owner file, rejecting a missing owner despite empty metadata", async (t) => {
   const f = await fixture(),
-    server = await relayFixture(Buffer.alloc(0));
+    server = await relayFixture(Buffer.alloc(0)),
+    timeline = nativeTimeline(f.root);
   let runtime: ExecutorRuntime | undefined;
   try {
     await f.root.write("empty.bin", Buffer.alloc(0), 420);
@@ -586,11 +588,14 @@ test("zero local-read open proves the actual retained owner file, rejecting a mi
       deadline: Date.now() + 60000,
       path: "empty.bin",
     };
-    const metadata = await runtime.handleWorkspaceFrame({
-      type: "workspace.request",
-      requestId: "read_metadata_outer",
-      payload: { requestId: "read_metadata", correlationId: "read_metadata_corr", request },
-    });
+    const activeRuntime = runtime;
+    const metadata = await timeline.measure("metadata", () =>
+      activeRuntime.handleWorkspaceFrame({
+        type: "workspace.request",
+        requestId: "read_metadata_outer",
+        payload: { requestId: "read_metadata", correlationId: "read_metadata_corr", request },
+      }),
+    );
     const response = metadata.payload.response;
     assert.ok("kind" in response && response.kind === "read");
     assert.equal(response.result.size, 0);
@@ -627,7 +632,9 @@ test("zero local-read open proves the actual retained owner file, rejecting a mi
     };
     runtime.session = session;
     await rm(join(f.rootPath, request.path));
-    await assert.rejects(runtime.transfer(descriptor, "missing_owner_open"), /local_drift/);
+    await timeline.measure("missing_owner_proof", () =>
+      assert.rejects(activeRuntime.transfer(descriptor, "missing_owner_open"), /local_drift/),
+    );
     const missing = captured.at(-1);
     assert.equal(missing?.type, "transfer.status");
     if (missing?.type === "transfer.status") {
@@ -636,8 +643,15 @@ test("zero local-read open proves the actual retained owner file, rejecting a mi
       assert.equal(missing.payload.bytes, 0);
       assert.deepEqual(missing.payload.verifiedChunks, []);
     }
-    await f.root.write(request.path, Buffer.alloc(0), 420);
-    await runtime.transfer(descriptor, "actual_owner_open");
+    await timeline.measure("restore_owner", () => f.root.write(request.path, Buffer.alloc(0), 420));
+    const proofStart = performance.now();
+    await timeline.measure("actual_owner_proof", () =>
+      activeRuntime.transfer(descriptor, "actual_owner_open"),
+    );
+    assert.ok(
+      performance.now() - proofStart < 10000,
+      "actual owner proof must finish within the existing relay's 10s open bound",
+    );
     const verified = captured.at(-1);
     assert.equal(verified?.type, "transfer.status");
     if (verified?.type === "transfer.status") {
@@ -647,7 +661,30 @@ test("zero local-read open proves the actual retained owner file, rejecting a mi
       assert.deepEqual(verified.payload.verifiedChunks, []);
     }
     const producerKey = `producer_${descriptor.transferId}_${descriptor.attemptId}`;
-    const reopened = await Ledger.open(f.directory, "ledger", f.ledger.limits);
+    // The service asks the producer immediately after its ACK. Independent reopen
+    // evidence follows that flow rather than consuming this attempt's live expiry.
+    const produced = await timeline.measure("later_producer", () =>
+      activeRuntime.handleWorkspaceFrame({
+        type: "workspace.request",
+        requestId: "later_produce_outer",
+        payload: {
+          requestId: "later_produce",
+          correlationId: "later_produce_corr",
+          request: { ...request, transfers: [descriptor] },
+        },
+      }),
+    );
+    assert.ok(
+      "kind" in produced.payload.response && produced.payload.response.kind === "read",
+      JSON.stringify({
+        response: produced.payload.response,
+        remainingAttemptMs: descriptor.expiresAt - Date.now(),
+        remainingDeadlineMs: request.deadline - Date.now(),
+      }),
+    );
+    const reopened = await timeline.measure("ledger_reopen", () =>
+      Ledger.open(f.directory, "ledger", f.ledger.limits),
+    );
     try {
       const proof = reopened.db.prepare("SELECT value FROM meta WHERE key=?").get(producerKey) as {
         value: string;
@@ -656,20 +693,12 @@ test("zero local-read open proves the actual retained owner file, rejecting a mi
     } finally {
       reopened.close();
     }
-    const produced = await runtime.handleWorkspaceFrame({
-      type: "workspace.request",
-      requestId: "later_produce_outer",
-      payload: {
-        requestId: "later_produce",
-        correlationId: "later_produce_corr",
-        request: { ...request, transfers: [descriptor] },
-      },
-    });
-    assert.ok("kind" in produced.payload.response && produced.payload.response.kind === "read");
     assert.equal(server.requests.length, 0, "zero proof needs no invented HTTP chunk");
     assert.equal(runtime.children.size, 0);
     assert.equal(binding.revision, "r0");
   } finally {
+    t.diagnostic(JSON.stringify({ nativeCase: "zero_local_read", ...timeline.summary() }));
+    timeline.restore();
     await runtime?.shutdown();
     await server.close();
     await f.cleanup();
