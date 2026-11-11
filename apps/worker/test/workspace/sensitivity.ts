@@ -12,6 +12,8 @@ const paths = [
   resolve(source, ".sensitivity-workspace-object.ts"),
   resolve(tests, ".sensitivity-runtime-worker.ts"),
   resolve(source, ".sensitivity-terminal-proof.ts"),
+  resolve(source, ".sensitivity-local-upload.ts"),
+  resolve(tests, ".sensitivity-local-upload-worker.ts"),
 ];
 async function run(
   file: string,
@@ -22,7 +24,7 @@ async function run(
     ["--test", ...(pattern ? [`--test-name-pattern=${pattern}`] : []), resolve(tests, file)],
     {
       cwd: root,
-      env: { ...process.env, FORTIPI_TEST_ENTRY: paths[3] },
+      env: { ...process.env, FORTIPI_TEST_ENTRY: paths[3], FORTIPI_LOCAL_TEST_ENTRY: paths[6] },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -44,6 +46,8 @@ const computer = await readFile(resolve(source, "computer.ts"), "utf8");
 const workspace = await readFile(resolve(source, "workspace-object.ts"), "utf8");
 const fixture = await readFile(resolve(tests, "runtime-worker.ts"), "utf8");
 const terminal = await readFile(resolve(source, "terminal-proof.ts"), "utf8");
+const local = await readFile(resolve(source, "local-upload.ts"), "utf8");
+const localFixture = await readFile(resolve(tests, "local-upload-worker.ts"), "utf8");
 await mkdir(resolve(root, "apps/worker/dist"), { recursive: true });
 try {
   for (const mutant of [
@@ -52,10 +56,17 @@ try {
     "seal",
     "writer-receipt",
     "terminal-scope",
+    "empty-announcement",
+    "local-upload-digest",
   ] as const) {
     let changedAuthority = authority;
     let changedComputer = computer;
     let changedWorkspace = workspace;
+    let changedLocal = local;
+    if (mutant === "empty-announcement")
+      changedLocal = local.replace("if (mutation.size !== 0) continue;", "continue;");
+    if (mutant === "local-upload-digest")
+      changedWorkspace = workspace.replace("...(uploadId ? { uploadId } : {}),", "...{},");
     if (mutant === "generation")
       changedAuthority = authority.replace(
         /active\.executorGeneration\s*>=\s*\(state\.get<number>\(`floor:executor:\$\{active\.executorId\}`\) \?\? 0\)/,
@@ -81,7 +92,8 @@ try {
     assert.ok(
       changedAuthority !== authority ||
         changedComputer !== computer ||
-        changedWorkspace !== workspace,
+        changedWorkspace !== workspace ||
+        changedLocal !== local,
       `Mutation ${mutant} did not apply`,
     );
     await writeFile(paths[0] ?? "", changedAuthority);
@@ -91,6 +103,7 @@ try {
       changedWorkspace
         .replace('from "./authority.js"', 'from "./.sensitivity-authority.js"')
         .replace('from "./computer.js"', 'from "./.sensitivity-computer.js"')
+        .replace('from "./local-upload.js"', 'from "./.sensitivity-local-upload.js"')
         .replace('from "./terminal-proof.js"', 'from "./.sensitivity-terminal-proof.js"'),
     );
     await writeFile(
@@ -104,27 +117,44 @@ try {
         'from "../../src/workspace/.sensitivity-workspace-object.js"',
       ),
     );
+    await writeFile(
+      paths[5] ?? "",
+      changedLocal.replace('from "./authority.js"', 'from "./.sensitivity-authority.js"'),
+    );
+    await writeFile(
+      paths[6] ?? "",
+      localFixture.replaceAll(
+        'from "./runtime-worker.ts"',
+        'from "./.sensitivity-runtime-worker.ts"',
+      ),
+    );
     const result = await run(
-      mutant === "generation"
-        ? "workspace.test.ts"
-        : mutant === "expiry" || mutant === "seal"
-          ? "isolation.test.ts"
-          : "terminal-proof.test.ts",
+      mutant === "empty-announcement" || mutant === "local-upload-digest"
+        ? "local-upload.test.ts"
+        : mutant === "generation"
+          ? "workspace.test.ts"
+          : mutant === "expiry" || mutant === "seal"
+            ? "isolation.test.ts"
+            : "terminal-proof.test.ts",
       mutant === "expiry" || mutant === "seal" ? "sealed children" : undefined,
     );
     await writeFile(resolve(root, `apps/worker/dist/sensitivity-${mutant}.log`), result.output);
     assert.notEqual(result.code, 0, `The ${mutant} regression escaped the real runtime oracle`);
     assert.ok(
       result.output.includes(
-        mutant === "seal"
-          ? "Sealed-store mutation was accepted"
-          : mutant === "expiry"
-            ? "Expired lease published a revision"
-            : mutant === "generation"
-              ? "Revoked generation published a revision"
-              : mutant === "writer-receipt"
-                ? "Workspace grant required"
-                : "Wrong conversation received a terminal proof",
+        mutant === "empty-announcement"
+          ? "Local empty upload raced its transfer settlement"
+          : mutant === "local-upload-digest"
+            ? "Local receipt omitted its retained upload identity"
+            : mutant === "seal"
+              ? "Sealed-store mutation was accepted"
+              : mutant === "expiry"
+                ? "Expired lease published a revision"
+                : mutant === "generation"
+                  ? "Revoked generation published a revision"
+                  : mutant === "writer-receipt"
+                    ? "Workspace grant required"
+                    : "Wrong conversation received a terminal proof",
       ),
       `Mutation failed for an unintended reason: ${result.output.slice(-3000)}`,
     );

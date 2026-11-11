@@ -2294,8 +2294,10 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         "conflict",
         "Local intent digest mismatch",
       );
+      const uploadId = this.localUploads.uploadForIntent(intent);
       const finalDigest = await commitDigest({
         commitId: intent.commitId,
+        ...(uploadId ? { uploadId } : {}),
         operationId: intent.scope.operationId,
         workspaceId: intent.scope.workspaceId,
         baseRevision: intent.scope.baseRevision,

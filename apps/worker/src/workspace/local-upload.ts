@@ -45,6 +45,20 @@ export class LocalUploads {
   has(uploadId: string): boolean {
     return this.owner.state.get(`local-upload:${uploadId}`) !== undefined;
   }
+  uploadForIntent(intent: D.LocalCommitIntent): string | undefined {
+    const uploadId = this.owner.state.get<string>(`local-upload-intent:${intent.intentDigest}`);
+    if (!uploadId) return;
+    const row = this.owner.state.get<LocalUpload>(`local-upload:${uploadId}`);
+    requireThat(
+      row?.intent &&
+        same(row.intent, intent) &&
+        row.request.commitId === intent.commitId &&
+        row.preparation?.preparationId === intent.preparationId,
+      "conflict",
+      "Retained local upload intent mismatch",
+    );
+    return uploadId;
+  }
   get(ctx: D.AuthContext, workspaceId: string, uploadId: string, writable = true): LocalUpload {
     authorize(this.owner.state, ctx, workspaceId, "workspace.write");
     const row = this.owner.state.get<LocalUpload>(`local-upload:${uploadId}`);
@@ -275,8 +289,45 @@ export class LocalUploads {
       "invalid_request",
       "Local chunk does not match its exact announced grid",
     );
+    const descriptor = await this.transfer(ctx, row, mutation);
+    const { boundedBytes, bytesStream } = await import("./streams.js");
+    const bytes = await boundedBytes(
+      bytesStream(input.body),
+      input.query.length,
+      input.query.sha256,
+      ctx.deadline,
+    );
+    const peer = new URL(
+      `https://control.internal/internal/transfers/${descriptor.transferId}/peer/chunks/${input.path.chunkIndex}`,
+    );
+    peer.searchParams.set("attemptId", descriptor.attemptId);
+    peer.searchParams.set("length", String(input.query.length));
+    peer.searchParams.set("sha256", input.query.sha256);
+    const delivered = await this.owner.control().fetch(
+      new Request(peer, {
+        method: "PUT",
+        headers: { "X-Fortipi-Context": JSON.stringify(ctx) },
+        body: bytes,
+      }),
+    );
+    requireThat(delivered.status === 204, "interrupted", "Local chunk peer delivery incomplete");
+    await this.owner.mutex.run(() => {
+      const current = this.get(ctx, input.path.workspaceId, input.path.uploadId);
+      const index = localChunkIndex(current.request, mutation.sha256, input.path.chunkIndex);
+      if (!current.status.receivedChunks.includes(index)) current.status.receivedChunks.push(index);
+      this.owner.state.put(`local-upload:${input.path.uploadId}`, current);
+    });
+    return { status: 204, body: undefined };
+  }
+  private async transfer(
+    ctx: D.AuthContext,
+    row: LocalUpload,
+    mutation: Extract<D.Mutation, { kind: "put" }>,
+  ): Promise<D.TransferDescriptor> {
+    const plan = row.request.blobs?.find((entry) => entry.sha256 === mutation.sha256);
+    requireThat(plan, "conflict", "Local transfer blob plan missing");
     let descriptor = await this.owner.mutex.run(
-      () => this.get(ctx, input.path.workspaceId, input.path.uploadId).transfers[mutation.sha256],
+      () => this.get(ctx, row.scope.workspaceId, row.status.uploadId).transfers[mutation.sha256],
     );
     if (!descriptor || descriptor.expiresAt <= Date.now()) {
       const key = `${row.status.uploadId}:${mutation.sha256}`;
@@ -347,9 +398,9 @@ export class LocalUploads {
             }),
           );
           await this.owner.mutex.run(() => {
-            const current = this.get(ctx, input.path.workspaceId, input.path.uploadId);
+            const current = this.get(ctx, row.scope.workspaceId, row.status.uploadId);
             current.transfers[mutation.sha256] = opened;
-            this.owner.state.put(`local-upload:${input.path.uploadId}`, current);
+            this.owner.state.put(`local-upload:${row.status.uploadId}`, current);
           });
           return opened;
         })();
@@ -361,34 +412,7 @@ export class LocalUploads {
         }
       }
     }
-    const { boundedBytes, bytesStream } = await import("./streams.js");
-    const bytes = await boundedBytes(
-      bytesStream(input.body),
-      input.query.length,
-      input.query.sha256,
-      ctx.deadline,
-    );
-    const peer = new URL(
-      `https://control.internal/internal/transfers/${descriptor.transferId}/peer/chunks/${input.path.chunkIndex}`,
-    );
-    peer.searchParams.set("attemptId", descriptor.attemptId);
-    peer.searchParams.set("length", String(input.query.length));
-    peer.searchParams.set("sha256", input.query.sha256);
-    const delivered = await this.owner.control().fetch(
-      new Request(peer, {
-        method: "PUT",
-        headers: { "X-Fortipi-Context": JSON.stringify(ctx) },
-        body: bytes,
-      }),
-    );
-    requireThat(delivered.status === 204, "interrupted", "Local chunk peer delivery incomplete");
-    await this.owner.mutex.run(() => {
-      const current = this.get(ctx, input.path.workspaceId, input.path.uploadId);
-      const index = localChunkIndex(current.request, mutation.sha256, input.path.chunkIndex);
-      if (!current.status.receivedChunks.includes(index)) current.status.receivedChunks.push(index);
-      this.owner.state.put(`local-upload:${input.path.uploadId}`, current);
-    });
-    return { status: 204, body: undefined };
+    return descriptor;
   }
   async validate(
     ctx: D.AuthContext,
@@ -419,6 +443,27 @@ export class LocalUploads {
       "conflict",
       "Local staged chunks are incomplete",
     );
+    // Empty blobs have no PUT chunk call to announce them. The existing transfer must
+    // settle at its native consumer before prepare can use its durable byte proof.
+    for (const mutation of uniquePuts(row.request)) {
+      if (mutation.size !== 0) continue;
+      const descriptor = await this.transfer(ctx, row, mutation);
+      const status = unwrap(
+        await this.owner.control().observeTransfer(ctx, {
+          transferId: descriptor.transferId,
+          attemptId: descriptor.attemptId,
+        }),
+      );
+      requireThat(
+        status.transferId === descriptor.transferId &&
+          status.attemptId === descriptor.attemptId &&
+          status.state === "verified" &&
+          status.bytes === 0 &&
+          status.verifiedChunks.length === 0,
+        "interrupted",
+        "Empty local transfer has not settled at its consumer",
+      );
+    }
     const mode: Extract<D.LocalPrepare["mode"], { kind: "staged-change" }> = {
       kind: "staged-change",
       uploadId: row.status.uploadId,
@@ -469,6 +514,14 @@ export class LocalUploads {
       const current = this.get(ctx, input.path.workspaceId, input.path.uploadId);
       current.preparation = prepared;
       current.intent = intent;
+      const index = `local-upload-intent:${intent.intentDigest}`;
+      const prior = this.owner.state.get<string>(index);
+      requireThat(
+        !prior || prior === current.status.uploadId,
+        "conflict",
+        "Local upload intent reused",
+      );
+      this.owner.state.put(index, current.status.uploadId);
       current.stageId ??= crypto.randomUUID();
       current.status.state = "validated";
       this.owner.state.put(`local-upload:${input.path.uploadId}`, current);
@@ -646,6 +699,7 @@ export class LocalUploads {
     );
     const digest = await commitDigest({
       commitId: input.commitId,
+      uploadId: row.status.uploadId,
       operationId: input.operationId,
       workspaceId: input.workspaceId,
       baseRevision: input.baseRevision,
