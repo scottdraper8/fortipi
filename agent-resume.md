@@ -1,4 +1,5 @@
 # Resume FortiPi
+
 Goal active: v0.1.0 completes only after actual Cloudflare deployment, publication and required verification.
 Read .agent-docs/initial-prompt.md after compaction, then AGENTS.md. Canonical source hashes: .agent-docs/source-integrity.sha256.
 Sources: .agent-docs/reference/; testing policy: .agent-docs/testing-policy.md; full reviewed corpus: .agent-docs/tmp/reference/.
