@@ -217,6 +217,7 @@ type Call =
   | { kind: "validate"; input: D.OperationRequest<"validateUpload"> }
   | { kind: "commit"; input: D.OperationRequest<"commitUpload"> }
   | { kind: "receipt"; input: D.CommitLookup }
+  | { kind: "public-receipt"; input: D.OperationRequest<"getCommitReceipt"> }
   | { kind: "manifest"; input: D.OperationRequest<"getWorkspaceManifest"> }
   | { kind: "list"; input: D.OperationRequest<"listWorkspaceFiles"> }
   | { kind: "stat"; input: D.OperationRequest<"statWorkspaceFile"> }
@@ -333,8 +334,39 @@ export default {
       ctx.registrationId = "recovery-registration";
     }
     if (request.headers.get("x-test-unregistered") === "1") delete ctx.registrationId;
+    if (request.headers.get("x-test-expired") === "1") ctx.credentialExpiresAt = Date.now() - 1;
+    if (request.headers.get("x-test-other-agent") === "1")
+      for (const grant of ctx.grants) grant.resources.agentIds = ["other"];
+    if (request.headers.get("x-test-other-target") === "1")
+      for (const grant of ctx.grants) {
+        grant.resources.executorIds = ["other"];
+        grant.resources.backendIds = ["other"];
+      }
     if (request.headers.get("x-test-other-conversation") === "1")
       for (const grant of ctx.grants) grant.resources.conversationIds = ["other"];
+    if (request.headers.get("x-test-split-scope") === "1") {
+      const grant = ctx.grants[0];
+      if (!grant) throw new Error("Split grant missing");
+      ctx.grants.push({
+        ...grant,
+        grantId: "scope-only",
+        resources: { ...grant.resources, actions: [] },
+      });
+      grant.resources = { ...grant.resources, conversationIds: ["other"] };
+    }
+    if (request.headers.get("x-test-mixed-read") === "1") {
+      const grant = ctx.grants[0];
+      if (!grant) throw new Error("Mixed grant missing");
+      ctx.grants.push({
+        ...grant,
+        grantId: "unrelated-reader",
+        resources: {
+          ...grant.resources,
+          actions: ["workspace.read"],
+          conversationIds: ["other"],
+        },
+      });
+    }
     const authority = env.WORKSPACES.getByName("workspace");
     if (url.pathname === "/artifact-stream-control") {
       const response = await authority.fetch(
@@ -487,6 +519,8 @@ export default {
         return Response.json(await authority.commitUpload(ctx, call.input));
       case "receipt":
         return Response.json(await authority.getReceipt(ctx, call.input));
+      case "public-receipt":
+        return Response.json(await authority.getCommitReceipt(ctx, call.input));
       case "manifest":
         return Response.json(await authority.manifest(ctx, call.input));
       case "list":
