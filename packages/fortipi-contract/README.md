@@ -50,7 +50,7 @@ Canonical JSON sorts object keys by UTF-16 code-unit order, preserves array orde
 uses JSON string/number encoding and maps -0 to 0. It rejects nonfinite numbers,
 lone surrogates, accessors, cycles and non-JSON values. SHA-256 input is UTF-8 of
 `fortipi:<domain>:v1\n` followed by canonical JSON. Domains are `manifest`,
-`operation`, `assignment`, `commit`; they are not interchangeable. Manifest hashing
+`operation`, `assignment`, `commit`, `local-stage`, `local-intent`; they are not interchangeable. Manifest hashing
 sorts normalized paths by UTF-8 bytes and hashes `{version:1,entries:[...]}`.
 Files carry path/type/mode(420 or493)/size/hash; directories carry path/type/mode493.
 No timestamps, native roots or secrets enter a manifest digest.
@@ -68,6 +68,18 @@ Digest helpers project their named preimages even when a structurally typed inpu
 contains a complete renewed lease. Native local commits may omit uploadId: their
 preparation and observation identify the effect without inventing an upload.
 Computer commit digests require the actual upload and immutable seal.
+
+Every wire Assignment requires closed `operationContext` with exactly deploymentId,
+agentId, conversationId and safe nonnegative policyVersion. Private ExecutionRequest
+requires that same context type, including for cloud backends. After exact schema
+parsing, `operationForAssignment` reconstructs OperationDigestInput from context,
+tool/arguments/workspace, identity base/target/deadline, and the lease credential's
+grantVersion. Principal identity is not part of this v1 preimage. Await
+`validateAssignment` before ledger admission/spawn: it rejects incoherent job/lease/
+workspace/base/executor-generation identity, backend wire targets and either wrong
+digest. Lease renewal expiry/version remains excluded. Current grants/floors,
+lease/deadline eligibility, bindingVersion/rootBindingId and approval/local-policy
+correlation remain actor checks; hashes do not grant authority.
 
 Job transitions are created → awaiting_approval/authorized → queued or
 waiting_for_executor → leased → dispatch_attempted → running →
@@ -130,6 +142,15 @@ redemption wins; failed upgrade consumes it. Forward the resulting nonsecret
 SocketIdentity once, then recheck local floors before attach and every command.
 Redact ticket queries in all proxy/request logs; never use reusable URL bearers.
 
+TicketReceipt now requires redacted `identity: TicketIdentity` with exactly
+deploymentId, principalId, role (`admin|client|executor`), CredentialRef and
+credentialExpiresAt (UTC ms or null). CP constructs it from the validated current
+AuthContext, never by decoding or inferring an opaque bearer. TicketReceipt.expiresAt
+still describes only the short ticket TTL. Identity has no grants, raw bearer,
+token hash, email, provider secret or internal routing IDs. SDK/TUI cursor scope
+binds origin, deployment, principal and credential generation/grantVersion; a new
+ticket's TTL does not change credential expiry. No new identity endpoint is added.
+
 Validate OriginMode structurally and use `validateBrowserOrigin` for canonical
 HTTP(S) origin syntax, then check the exact configured allowlist and HTTP Origin.
 
@@ -181,6 +202,11 @@ retain full seal evidence. Private CommitReceipt carries that proof; wire
 CommitReceipt carries only opaque storeRef.stageId for computer revisions. Use
 `publicCommitReceipt` for HTTP, event and executor delivery, including nested job
 evidence; schema validation rejects leaked child/allocation/authority fields.
+
+Mutation.put is closed `{kind:"put",path,sha256,size,mode}`: uploadId is forbidden
+on individual puts. Puts use the single enclosing upload/stage. UploadBegin allocates
+that ID after receiving manifest/mutations, so initial input never predicts a server
+ID; transactions use commit.uploadId and local preparation uses mode.uploadId.
 
 Decode URL input exactly once (`decodeWorkspacePath`), then validate valid UTF-8,
 NFC relative POSIX paths, ≤1024 encoded bytes. Reject empty/dot/dot-dot segments,
@@ -239,6 +265,55 @@ Lost commit ack recovers the matching receipt; lost receipt delivery retries onl
 receipt. Persist receipt before releasing root pin. Never rebuild a missing ledger,
 repair a stale fence or repeat execution on retry. Retained local revision reads
 verify complete manifest before/after; never read current bytes as history.
+
+Only LocalPrepare's staged-change mode adds required `manifest:Manifest` and
+`mutations:Mutation[]` alongside uploadId/stagedDigest/postManifestHash; native-execution
+mode is unchanged. The daemon receives the complete proposed metadata before its
+prepared acknowledgment. Omission never means deletion: deletes and mkdir are
+explicit. `localStageDigest({uploadId,manifest,mutations})` hashes
+`fortipi:local-stage:v1\n` plus canonical JSON of
+`{uploadId,manifestHash:await manifestDigest(manifest),mutations}`. Array order is
+preserved; existing operation/assignment/commit digest recipes are unchanged.
+After exact schema parsing, `validateLocalStage(mode)` checks postManifestHash,
+stagedDigest and final explicit put hash/size/mode, mkdir and delete metadata claims,
+respecting later replacement/deletion. It does not apply mutations to a real base
+or prove any filesystem effect. At write admission call `validateLocalLease` and
+recheck operation/digest/base/lease/fence/binding/deadline and current actor authority.
+Actors verify the real pre-manifest, apply-once ledger, complete post-manifest and
+local bytes. Metadata contains no file bytes and creates no cloud byte store or
+endpoint. Bound the complete encoded request/frame to 1MiB before effects; an
+oversized proposal fails payload_too_large/413, never split or inferred deletion.
+The metadata helper's byte check supplements the final transport-envelope cap.
+
+LocalCommitIntent uses `intentDigest`, never a premature commitDigest. The portable
+`localIntentDigest` named preimage is `{commitId,scope,preparationId,preManifestHash,
+expectedPostManifestHash?}` in domain `local-intent`. Scope keeps every LocalScope
+field; its lease excludes only leaseVersion/expiresAt. An absent expected post hash
+is omitted. Renewals do not change intent identity. Final CommitReceipt.commitDigest
+still uses the existing `commitDigest(local)` recipe, computed only after the actual
+applied observation supplies observationSeq and postManifestHash. Recover receipts
+with that final digest, never the intent digest; no digest proves local filesystem effects.
+
+Private WorkspaceObjectRpc.applyBinding takes ResourceAuthContext and
+`{requestId,binding:{workspaceId,bindingVersion,config},expectedVersion,import?,executor?}`.
+Null expectedVersion means first initialization without prior authority; rebind
+requires import. Executor identity/generation is required iff config is local and
+must match its executorId. CP durably records the stable pending request and
+registration before RPC. Authority checks registered credential floors, exact request
+digest and durable CAS, recovering a matching prior acknowledgment before considering
+the current version. CP publishes only the actual returned WorkspaceBinding revision/
+manifest, never invented metadata. The existing retained LocalRead.snapshot supports
+pending-binding validation; no new bootstrap route or service is added.
+
+Private CP.resolveExecutorGeneration takes `{workspaceId,bindingVersion,executorId}`
+and returns `{executorId,executorGeneration}` after validating binding/pending binding,
+grants and the keyed current executor. Unknown/revoked fails. Local reads use this
+authoritative execution generation, never socket epoch, a scan or default0. Private
+instance naming is CONTROL_PLANE.getByName("control") and WORKSPACES.getByName(workspaceId)
+for authorities; child names remain server-reserved. Runtime DO classes expose version
+through a prototype getter, `get contractVersion(){return "1.0" as const}`, since
+instance fields are not RPC-visible. Boundary interfaces describe the value;
+consumers must implement the getter on their actual classes.
 
 Local bytes use the three executor transfer routes, with mandatory nonsecret
 attemptId. Derive relative chunk/status paths from route metadata and descriptor
@@ -310,6 +385,14 @@ fileExists false and scoped env resolution. No ambient ~/.pi files. External mod
 factories use the private port; runtime gets no deployment credentials. Real Pi
 login/AuthInteraction is CLI-owned. Upstream refresh followed by death before local
 persistence can require re-login; exactly-once OAuth is not claimed.
+
+CredentialReceipt is a closed union: state issued requires the one-time raw token;
+state already-issued carries the same credential reference/role/expiry metadata and
+forbids token. RotationReceipt.replacement uses this same union. Identical issuance/
+rotation retries retain status201 but never recover the token; CP never persists it.
+The separate optional Env.FORTIPI_ALLOWED_ORIGINS is deployment-owned, at most16
+exact HTTPS origins with no paths, null or wildcard. Owners5/7 validate this binding;
+it does not add a field to public Configuration or replace request-time Origin checks.
 
 ## Evidence scope
 

@@ -1,10 +1,13 @@
 import { knownEventTypes } from "./generated/schemas.js";
 import type {
+  Assignment,
   AssignmentDigestInput,
   ClientEvent,
   CommitDigestInput,
   CommitReceipt,
   InfrastructurePolicy,
+  LocalCommitIntent,
+  LocalPrepare,
   LocalScope,
   Manifest,
   OperationDigestInput,
@@ -168,7 +171,13 @@ export function canonicalJson(value: unknown): string {
   }
   return visit(value);
 }
-export type DigestDomain = "manifest" | "operation" | "assignment" | "commit";
+export type DigestDomain =
+  | "manifest"
+  | "operation"
+  | "assignment"
+  | "commit"
+  | "local-stage"
+  | "local-intent";
 export async function digestJson(domain: DigestDomain, value: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(`fortipi:${domain}:v1\n${canonicalJson(value)}`);
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
@@ -212,6 +221,136 @@ export const assignmentDigest = (input: AssignmentDigestInput): Promise<string> 
     fence: input.fence,
     executorGeneration: input.executorGeneration,
   });
+/** Reconstruct the v1 preimage from an exactly schema-validated received assignment. */
+export function operationForAssignment(input: Assignment): OperationDigestInput {
+  return {
+    deploymentId: input.operationContext.deploymentId,
+    agentId: input.operationContext.agentId,
+    conversationId: input.operationContext.conversationId,
+    policyVersion: input.operationContext.policyVersion,
+    tool: input.tool,
+    arguments: input.arguments,
+    workspaceId: input.workspaceId,
+    baseRevision: input.identity.baseRevision,
+    target: input.identity.target,
+    deadline: input.identity.deadline,
+    grantVersion: input.identity.lease.credential.grantVersion,
+  };
+}
+/** Requires exact schema parsing first. Await before ledger admission/spawn; current authority checks remain separate. */
+export async function validateAssignment(input: Assignment): Promise<void> {
+  const { identity } = input;
+  const { lease, target } = identity;
+  if (
+    lease.ownerKind !== "job" ||
+    lease.jobId !== identity.jobId ||
+    lease.workspaceId !== input.workspaceId ||
+    lease.baseRevision !== identity.baseRevision ||
+    target.kind !== "executor" ||
+    lease.executorId !== target.executorId ||
+    lease.executorGeneration !== target.generation
+  )
+    throw new Error("assignment.invalid: identity");
+  const operation = operationForAssignment(input);
+  const expectedOperation = await operationDigest(operation);
+  if (identity.operationDigest !== expectedOperation)
+    throw new Error("assignment.invalid: operation_digest");
+  const expectedAssignment = await assignmentDigest({
+    operation,
+    executionId: identity.executionId,
+    reservationId: input.reservationId,
+    leaseId: lease.leaseId,
+    fence: lease.fence,
+    executorGeneration: lease.executorGeneration,
+  });
+  if (identity.assignmentDigest !== expectedAssignment)
+    throw new Error("assignment.invalid: assignment_digest");
+}
+export type LocalStagedChange = Extract<LocalPrepare["mode"], { kind: "staged-change" }>;
+export type LocalStageDigestInput = Pick<LocalStagedChange, "uploadId" | "manifest" | "mutations">;
+async function localStagePreimage(input: LocalStageDigestInput) {
+  return {
+    uploadId: input.uploadId,
+    manifestHash: await manifestDigest(input.manifest),
+    mutations: input.mutations,
+  };
+}
+export async function localStageDigest(input: LocalStageDigestInput): Promise<string> {
+  return digestJson("local-stage", await localStagePreimage(input));
+}
+export type LocalIntentDigestInput = Pick<
+  LocalCommitIntent,
+  "commitId" | "scope" | "preparationId" | "preManifestHash" | "expectedPostManifestHash"
+>;
+/** Immutable pending-apply identity. Final commitDigest additionally needs the actual observation. */
+export async function localIntentDigest(input: LocalIntentDigestInput): Promise<string> {
+  const scope = input.scope;
+  const { leaseVersion: _version, expiresAt: _expiry, ...leaseIdentity } = scope.lease;
+  return digestJson("local-intent", {
+    commitId: input.commitId,
+    scope: {
+      operationId: scope.operationId,
+      operationDigest: scope.operationDigest,
+      workspaceId: scope.workspaceId,
+      bindingVersion: scope.bindingVersion,
+      rootBindingId: scope.rootBindingId,
+      executorId: scope.executorId,
+      executorGeneration: scope.executorGeneration,
+      credential: scope.credential,
+      baseRevision: scope.baseRevision,
+      lease: leaseIdentity,
+      deadline: scope.deadline,
+    },
+    preparationId: input.preparationId,
+    preManifestHash: input.preManifestHash,
+    ...(input.expectedPostManifestHash === undefined
+      ? {}
+      : { expectedPostManifestHash: input.expectedPostManifestHash }),
+  });
+}
+/** Parse the exact schema first; caller also validates LocalScope/lease and the complete encoded frame before effects. */
+export async function validateLocalStage(input: LocalStagedChange): Promise<void> {
+  assertUtf8Bytes(canonicalJson(input), wireLimits.jsonBytes);
+  const preimage = await localStagePreimage(input);
+  if (input.postManifestHash !== preimage.manifestHash)
+    throw new Error("local-stage.invalid: post_manifest_hash");
+  const entries = new Map(input.manifest.entries.map((entry) => [entry.path, entry]));
+  const claimed = new Set<string>();
+  const replaced = new Set<string>();
+  for (const mutation of input.mutations) validateRelativePath(mutation.path);
+  // Check final explicit claims, respecting later replacement/deletion. Applying to the real base is actor-owned.
+  for (const mutation of [...input.mutations].reverse()) {
+    const ancestors = mutation.path.split("/");
+    ancestors.pop();
+    let superseded = claimed.has(mutation.path);
+    while (ancestors.length && !superseded) {
+      superseded = replaced.has(ancestors.join("/"));
+      ancestors.pop();
+    }
+    // Recreating a directory supersedes its own deletion, but that deletion still clears earlier descendants.
+    if (mutation.kind !== "mkdir") replaced.add(mutation.path);
+    if (superseded) continue;
+    claimed.add(mutation.path);
+    if (mutation.kind === "put") {
+      const entry = entries.get(mutation.path);
+      if (
+        entry?.type !== "file" ||
+        entry.sha256 !== mutation.sha256 ||
+        entry.size !== mutation.size ||
+        entry.mode !== mutation.mode
+      )
+        throw new Error("local-stage.invalid: put_metadata");
+    } else if (mutation.kind === "mkdir") {
+      const entry = entries.get(mutation.path);
+      if (entry?.type !== "directory" || entry.mode !== mutation.mode)
+        throw new Error("local-stage.invalid: mkdir_metadata");
+    } else if (entries.has(mutation.path)) {
+      throw new Error("local-stage.invalid: delete_metadata");
+    }
+  }
+  const expectedStage = await digestJson("local-stage", preimage);
+  if (input.stagedDigest !== expectedStage) throw new Error("local-stage.invalid: staged_digest");
+}
 export function commitDigest(input: CommitDigestInput): Promise<string> {
   const lease = input.leaseIdentity;
   return digestJson("commit", {

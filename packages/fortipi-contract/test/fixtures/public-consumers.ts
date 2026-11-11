@@ -1,10 +1,29 @@
-import type { AdmissionReceipt, ClientCommand, ClientEvent } from "fortipi-contract/client";
-import type { ExecutionIdentity, ExecutorFrame } from "fortipi-contract/executor";
+import type {
+  AdmissionReceipt,
+  ClientCommand,
+  ClientEvent,
+  TicketIdentity,
+  TicketReceipt,
+} from "fortipi-contract/client";
+import {
+  type Assignment,
+  type ExecutionIdentity,
+  type ExecutorFrame,
+  type LocalPrepare,
+  localStageDigest,
+  type OperationContext,
+  operationForAssignment,
+  validateAssignment,
+  validateLocalLease,
+  validateLocalStage,
+} from "fortipi-contract/executor";
 // @ts-expect-error Executor publication has no client authority commands.
 export type ExecutorClientAuthority = import("fortipi-contract/executor").ClientCommand;
 
 import type {
   CommitReceipt,
+  CredentialReceipt,
+  Mutation,
   OperationRequest,
   OperationResponse,
   ProviderAuthPut,
@@ -82,4 +101,60 @@ export function publicFlows(
 }
 export function consumeEvent(event: ClientEvent): number | undefined {
   return event.durability === "durable" ? event.eventSeq : undefined;
+}
+export function ticketCursorScope(origin: string, receipt: TicketReceipt) {
+  const identity: TicketIdentity = receipt.identity;
+  // @ts-expect-error The old ticket-only shape cannot identify the authenticated principal.
+  const incomplete: TicketReceipt = {
+    ticket: receipt.ticket,
+    audience: receipt.audience,
+    expiresAt: receipt.expiresAt,
+  };
+  void incomplete;
+  return {
+    origin,
+    deploymentId: identity.deploymentId,
+    principalId: identity.principalId,
+    credentialId: identity.credential.credentialId,
+    generation: identity.credential.generation,
+    grantVersion: identity.credential.grantVersion,
+    credentialExpiresAt: identity.credentialExpiresAt,
+    ticketExpiresAt: receipt.expiresAt,
+  };
+}
+export async function receivedAssignment(input: Assignment) {
+  const context: OperationContext = input.operationContext;
+  await validateAssignment(input);
+  const operation = operationForAssignment(input);
+  const { operationContext: _context, ...missingContext } = input;
+  // @ts-expect-error A received assignment must carry the complete four-field context.
+  const incomplete: Assignment = missingContext;
+  // @ts-expect-error Principal identity is not a field of the canonical operation context.
+  const wrongContext: OperationContext = { ...context, principalId: "principal_1" };
+  void [incomplete, wrongContext];
+  return operation;
+}
+export async function receivedLocalPreparation(input: LocalPrepare, now: number) {
+  validateLocalLease(input, "prepare", now);
+  if (input.mode.kind === "staged-change") {
+    await validateLocalStage(input.mode);
+    const put: Mutation = {
+      kind: "put",
+      path: "result.txt",
+      sha256: "a".repeat(64),
+      size: 3,
+      mode: 420,
+    };
+    // @ts-expect-error Puts use the enclosing upload; a per-put upload ID is forbidden.
+    const otherUpload: Mutation = { ...put, uploadId: "other_upload" };
+    void otherUpload;
+    return localStageDigest(input.mode);
+  }
+  return undefined;
+}
+export function consumeCredentialIssuance(receipt: CredentialReceipt) {
+  if (receipt.state === "issued") return receipt.token;
+  // @ts-expect-error An identical retry carries only public metadata, never a recovered token.
+  void receipt.token;
+  return undefined;
 }

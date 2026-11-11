@@ -27,6 +27,54 @@ import {
 } from "./fixtures/wire.ts";
 
 const { get } = validators();
+test("ticket receipt carries only redacted authenticated identity with independent credential expiry", () => {
+  const identity = {
+    deploymentId: "deployment_1",
+    principalId: "principal_1",
+    role: "client" as const,
+    credential,
+    credentialExpiresAt: 100000,
+  };
+  const ticket = {
+    ticket: "opaque_single_use",
+    audience: "client-stream",
+    expiresAt: 30000,
+    identity,
+  };
+  for (const role of ["admin", "client", "executor"])
+    for (const credentialExpiresAt of [null, 100000])
+      accepted("TicketReceipt", {
+        ...ticket,
+        identity: { ...identity, role, credentialExpiresAt },
+      });
+  for (const field of [
+    "deploymentId",
+    "principalId",
+    "role",
+    "credential",
+    "credentialExpiresAt",
+  ]) {
+    const incomplete = { ...identity };
+    Reflect.deleteProperty(incomplete, field);
+    rejected("TicketIdentity", incomplete);
+  }
+  rejected("TicketReceipt", { ...ticket, identity: undefined });
+  for (const extra of [
+    { grants: [] },
+    { bearer: "synthetic" },
+    { tokenHash: "a".repeat(64) },
+    { providerSecret: "synthetic" },
+    { email: "synthetic@example.test" },
+    { childId: "internal_child" },
+    { registrationId: "internal_registration" },
+  ])
+    rejected("TicketReceipt", { ...ticket, identity: { ...identity, ...extra } });
+  rejected("TicketIdentity", { ...identity, credential: { ...credential, bearer: "synthetic" } });
+  rejected("TicketIdentity", { ...identity, role: "operator" });
+  for (const expiry of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, "100000", false])
+    rejected("TicketIdentity", { ...identity, credentialExpiresAt: expiry });
+  accepted("TicketIdentity", { ...identity, credentialExpiresAt: Number.MAX_SAFE_INTEGER });
+});
 function accepted(name: string, value: unknown) {
   const validate = get(name);
   assert.equal(validate(value), true, `${name}: ${JSON.stringify(validate.errors)}`);
@@ -223,6 +271,8 @@ test("local states retain identity; receipts differ from transport acknowledgeme
       uploadId: "upload_1",
       stagedDigest: hash,
       postManifestHash: hash,
+      manifest: { version: 1, entries: [] },
+      mutations: [],
     },
   });
   accepted("LocalPrepared", prepared);
@@ -549,5 +599,33 @@ test("semantic errors require redacted conflicts, quota pressure and bounded ret
         },
       },
     },
+  });
+});
+test("credential issuance returns a token once and retry/rotation receipts forbid recovery", () => {
+  const metadata = { credential, role: "client", expiresAt: 100000 };
+  accepted("CredentialReceipt", { ...metadata, state: "issued", token: "synthetic_once" });
+  accepted("CredentialReceipt", { ...metadata, state: "already-issued" });
+  rejected("CredentialReceipt", { ...metadata, state: "issued" });
+  rejected("CredentialReceipt", {
+    ...metadata,
+    state: "already-issued",
+    token: "synthetic_forbidden",
+  });
+  rejected("CredentialReceipt", { ...metadata, token: "synthetic_legacy" });
+  rejected("CredentialReceipt", { ...metadata, state: "already-issued", tokenHash: hash });
+  const revocation = {
+    operationId: "operation_1",
+    revocationId: "revoke_1",
+    state: "complete",
+    pendingRecipients: [],
+  };
+  for (const replacement of [
+    { ...metadata, state: "issued", token: "synthetic_once" },
+    { ...metadata, state: "already-issued" },
+  ])
+    accepted("RotationReceipt", { replacement, revocation });
+  rejected("RotationReceipt", {
+    replacement: { ...metadata, state: "already-issued", token: "synthetic_forbidden" },
+    revocation,
   });
 });

@@ -1,7 +1,21 @@
 /** Compile-only consumers. No fake implementation or claim of runtime persistence. */
 
 import type { Models } from "@earendil-works/pi-ai/models";
-import { incrementSafe, manifestDigest, publicCommitReceipt } from "fortipi-contract";
+import {
+  assertUtf8Bytes,
+  assignmentDigest,
+  canonicalJson,
+  incrementSafe,
+  localIntentDigest,
+  localStageDigest,
+  manifestDigest,
+  operationDigest,
+  publicCommitReceipt,
+  validateAssignment,
+  validateLocalLease,
+  validateLocalStage,
+  wireLimits,
+} from "fortipi-contract";
 import type { AgentSessionRpc } from "../agent-session.js";
 import type { ControlPlaneRpc } from "../control-plane.js";
 import type * as D from "../dto.js";
@@ -85,12 +99,34 @@ export async function executionFlow(
   agent: AgentSessionRpc,
   jobs: JobStore,
   ctx: D.AuthContext,
+  operationContext: D.OperationContext,
 ) {
+  if (operationContext.deploymentId !== ctx.deploymentId) throw new Error("Wrong deployment");
+  const credential = {
+    credentialId: ctx.credentialId,
+    generation: ctx.generation,
+    grantVersion: ctx.grantVersion,
+  };
+  const operation: D.OperationDigestInput = {
+    ...operationContext,
+    tool: "shell.exec",
+    arguments: { argv: ["echo", "hello"] },
+    workspaceId: "workspace_1",
+    baseRevision: "revision_1",
+    target,
+    grantVersion: credential.grantVersion,
+    deadline: 50000,
+  };
+  const immutableOperationDigest = await operationDigest(operation);
   const registration = value(
     await cp.registerAuthorityRecipient(ctx, {
       credential,
       recipient: { kind: "workspace", id: "workspace_1" },
-      resources,
+      resources: {
+        ...resources,
+        agentIds: [operationContext.agentId],
+        conversationIds: [operationContext.conversationId],
+      },
       executor: { executorId: "executor_1", generation: 4 },
     }),
   );
@@ -100,9 +136,9 @@ export async function executionFlow(
       ownerKind: "job",
       operationId: "operation_1",
       jobId: "job_1",
-      operationDigest: hash,
-      agentId: "agent_1",
-      conversationId: "conversation_1",
+      operationDigest: immutableOperationDigest,
+      agentId: operationContext.agentId,
+      conversationId: operationContext.conversationId,
       workspaceId: "workspace_1",
       bindingVersion: 1,
       target,
@@ -113,16 +149,51 @@ export async function executionFlow(
   );
   if (reservation.ownerKind !== "job") throw new Error("Expected job reservation");
   const acquired = value(await workspace.acquireLease(registered, reservation));
-  const actualIdentity = { ...identity, lease: acquired };
+  if (
+    acquired.baseRevision !== operation.baseRevision ||
+    acquired.credential.credentialId !== credential.credentialId ||
+    acquired.credential.generation !== credential.generation ||
+    acquired.credential.grantVersion !== credential.grantVersion
+  )
+    throw new Error("Lease no longer matches admitted operation");
+  const actualIdentity: D.ExecutionIdentity = {
+    ...identity,
+    lease: acquired,
+    operationDigest: immutableOperationDigest,
+    assignmentDigest: await assignmentDigest({
+      operation,
+      executionId: identity.executionId,
+      reservationId: reservation.reservationId,
+      leaseId: acquired.leaseId,
+      fence: acquired.fence,
+      executorGeneration: acquired.executorGeneration,
+    }),
+  };
   const assignment: D.Assignment = {
+    operationContext,
     identity: actualIdentity,
     reservationId: reservation.reservationId,
-    tool: "shell.exec",
-    arguments: { argv: ["echo", "hello"] },
-    workspaceId: "workspace_1",
+    tool: operation.tool,
+    arguments: operation.arguments,
+    workspaceId: operation.workspaceId,
     bindingVersion: 1,
     rootBindingId: "root_1",
   };
+  await validateAssignment(assignment);
+  const executionRequest: D.ExecutionRequest = {
+    operationContext: assignment.operationContext,
+    reservation,
+    identity: assignment.identity,
+    tool: assignment.tool,
+    arguments: assignment.arguments,
+    workspaceId: assignment.workspaceId,
+    bindingVersion: assignment.bindingVersion,
+    capabilities: ["shell"],
+  };
+  const { operationContext: _context, ...incompleteRequest } = executionRequest;
+  // @ts-expect-error Native and cloud execution requests both require the same operation context.
+  const missingContext: D.ExecutionRequest = incompleteRequest;
+  void missingContext;
   await cp.recordDispatchIntent(registered, { reservation, assignment, expectedJobVersion: 3 });
   await cp.assignOnce(registered, assignment);
   await cp.queryExecution(registered, actualIdentity);
@@ -264,6 +335,39 @@ export async function ticketAndRevocation(
   agent: AgentSessionRpc,
   ctx: D.AuthContext,
 ) {
+  const fromValidatedContext: D.TicketIdentity = {
+    deploymentId: ctx.deploymentId,
+    principalId: ctx.principalId,
+    role: ctx.role,
+    credential: {
+      credentialId: ctx.credentialId,
+      generation: ctx.generation,
+      grantVersion: ctx.grantVersion,
+    },
+    credentialExpiresAt: ctx.credentialExpiresAt,
+  };
+  void fromValidatedContext;
+  const minted = value(
+    await cp.mintTicket(ctx, {
+      operationId: "mintConnectionTicket",
+      path: {},
+      query: {},
+      body: {
+        requestId: ctx.requestId,
+        audience: "client-stream",
+        resources,
+        originMode: { kind: "native" },
+      },
+    }),
+  );
+  if (minted.status === 201) {
+    const authenticated: D.TicketIdentity = minted.body.identity;
+    void [
+      authenticated.principalId,
+      authenticated.credential.grantVersion,
+      authenticated.credentialExpiresAt,
+    ];
+  }
   const identity = value(
     await cp.consumeTicket({
       ticket: "opaque_single_use",
@@ -307,6 +411,8 @@ export async function localFlow(
   workspace: WorkspaceObjectRpc,
   ctx: D.AuthContext,
   postManifest: D.Manifest,
+  mutations: D.Mutation[],
+  now: number,
 ) {
   const postManifestHash = await manifestDigest(postManifest);
   const scope: D.LocalScope = {
@@ -322,20 +428,47 @@ export async function localFlow(
     lease,
     deadline: 50000,
   };
-  const preparation = value(
-    await cp.requestLocalWorkspace(ctx, {
-      ...scope,
-      kind: "prepare",
-      commitId: "commit_1",
-      expectedManifestHash: hash,
-      mode: {
-        kind: "staged-change",
-        uploadId: "upload_1",
-        stagedDigest: hash,
-        postManifestHash,
+  validateLocalLease(scope, "prepare", now);
+  const begin = value(
+    await workspace.beginUpload(ctx, {
+      operationId: "beginUpload",
+      path: { workspaceId: scope.workspaceId },
+      query: {},
+      body: {
+        requestId: ctx.requestId,
+        baseRevision: scope.baseRevision,
+        lease: scope.lease,
+        operationId: scope.operationId,
+        commitId: "commit_1",
+        manifestHash: postManifestHash,
+        manifest: postManifest,
+        mutations,
       },
     }),
   );
+  if (begin.status !== 201) throw new Error("Upload allocation failed");
+  const staged = {
+    kind: "staged-change" as const,
+    uploadId: begin.body.uploadId,
+    manifest: postManifest,
+    mutations,
+    postManifestHash,
+    stagedDigest: await localStageDigest({
+      uploadId: begin.body.uploadId,
+      manifest: postManifest,
+      mutations,
+    }),
+  };
+  await validateLocalStage(staged);
+  const prepareRequest: D.LocalPrepare = {
+    ...scope,
+    kind: "prepare",
+    commitId: "commit_1",
+    expectedManifestHash: hash,
+    mode: staged,
+  };
+  assertUtf8Bytes(canonicalJson(prepareRequest), wireLimits.jsonBytes);
+  const preparation = value(await cp.requestLocalWorkspace(ctx, prepareRequest));
   if (!("expiresAt" in preparation)) throw new Error("Expected durable local preparation");
   const intent = value(
     await workspace.prepareLocalCommit(ctx, {
@@ -345,6 +478,8 @@ export async function localFlow(
       expectedPostManifestHash: postManifestHash,
     }),
   );
+  if (intent.intentDigest !== (await localIntentDigest(intent)))
+    throw new Error("Wrong pending intent identity");
   await cp.requestLocalWorkspace(ctx, {
     ...scope,
     kind: "apply",
@@ -500,7 +635,7 @@ export async function factories(
   ctx: D.AuthContext,
 ) {
   const controlStub: DurableObjectStub<ControlPlaneObject> = env.CONTROL_PLANE.getByName("control");
-  const workspaceStub: DurableObjectStub<WorkspaceObject> = env.WORKSPACES.getByName("authority");
+  const workspaceStub: DurableObjectStub<WorkspaceObject> = env.WORKSPACES.getByName("workspace_1");
   const agentStub: DurableObjectStub<AgentSessionObject> = env.AGENT_SESSIONS.getByName("agent");
   const control = controlStub;
   const workspace = workspaceStub;
@@ -633,4 +768,85 @@ export async function directWorkspaceAuthority(
   // @ts-expect-error Workspace-only reservation cannot authorize a job dispatch.
   const jobReservation: Extract<D.TargetReservation, { ownerKind: "job" }> = reservation;
   void [executorIdentity, ambiguous, jobReservation];
+}
+/** CP stores the stable pending binding request + registration before this RPC; these are signature consumers only. */
+export async function bindingAndLocalRead(
+  cp: ControlPlaneRpc,
+  workspace: WorkspaceObjectRpc,
+  ctx: D.AuthContext,
+  application: D.WorkspaceBindingApplication,
+  imported: D.WorkspaceBindingPatch["import"],
+) {
+  const registration = value(
+    await cp.registerAuthorityRecipient(ctx, {
+      credential: {
+        credentialId: ctx.credentialId,
+        generation: ctx.generation,
+        grantVersion: ctx.grantVersion,
+      },
+      recipient: { kind: "workspace", id: application.binding.workspaceId },
+      resources: { ...resources, workspaceIds: [application.binding.workspaceId] },
+      ...(application.executor === undefined ? {} : { executor: application.executor }),
+    }),
+  );
+  const registered: D.ResourceAuthContext = { ...ctx, registrationId: registration.registrationId };
+  const acknowledged = value(await workspace.applyBinding(registered, application));
+  // Publication uses the authority's actual revision/manifest acknowledgment, never CP-invented metadata.
+  const published: D.OperationResponse<"createWorkspace"> = { status: 201, body: acknowledged };
+  if (acknowledged.config.kind === "local") {
+    const generation = value(
+      await cp.resolveExecutorGeneration(registered, {
+        workspaceId: acknowledged.workspaceId,
+        bindingVersion: acknowledged.bindingVersion,
+        executorId: acknowledged.config.executorId,
+      }),
+    );
+    if (generation.executorId !== acknowledged.config.executorId) throw new Error("Wrong executor");
+    await cp.requestLocalWorkspace(registered, {
+      kind: "list",
+      operationId: application.requestId,
+      workspaceId: acknowledged.workspaceId,
+      bindingVersion: acknowledged.bindingVersion,
+      rootBindingId: acknowledged.config.rootBindingId,
+      executorId: generation.executorId,
+      executorGeneration: generation.executorGeneration,
+      credential: {
+        credentialId: ctx.credentialId,
+        generation: ctx.generation,
+        grantVersion: ctx.grantVersion,
+      },
+      revision: acknowledged.revision,
+      deadline: ctx.deadline,
+    });
+  }
+  // @ts-expect-error A resource registration is required before applying a binding.
+  await workspace.applyBinding(ctx, application);
+  // @ts-expect-error Generation resolution requires the authoritative binding version.
+  await cp.resolveExecutorGeneration(ctx, {
+    workspaceId: acknowledged.workspaceId,
+    executorId: "executor_1",
+  });
+  const first: D.WorkspaceBindingApplication = {
+    requestId: ctx.requestId,
+    expectedVersion: null,
+    binding: { workspaceId: "workspace_1", bindingVersion: 1, config: { kind: "computer" } },
+  };
+  const rebound: D.WorkspaceBindingApplication = {
+    requestId: ctx.requestId,
+    expectedVersion: acknowledged.bindingVersion,
+    binding: {
+      workspaceId: acknowledged.workspaceId,
+      bindingVersion: incrementSafe(acknowledged.bindingVersion),
+      config: { kind: "local", executorId: "executor_1", rootBindingId: "root_1" },
+    },
+    import: imported,
+    executor: { executorId: "executor_1", generation: 4 },
+  };
+  const fabricated: D.WorkspaceBindingApplication["binding"] = {
+    ...first.binding,
+    // @ts-expect-error Only the authority creates canonical revision metadata.
+    revision: "invented",
+  };
+  void [first, rebound, fabricated];
+  return published;
 }

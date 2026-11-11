@@ -1006,6 +1006,27 @@
           "additionalProperties": false
         }
       ]
+    },
+    "OperationContext": {
+      "title": "OperationContext",
+      "type": "object",
+      "properties": {
+        "deploymentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "agentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "conversationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "policyVersion": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sequence"
+        }
+      },
+      "required": ["deploymentId", "agentId", "conversationId", "policyVersion"],
+      "additionalProperties": false,
+      "description": "Immutable operation preimage context shared by wire assignments and private cloud/native execution requests. Principal identity is not part of the version1 operation preimage."
     }
   }
 }

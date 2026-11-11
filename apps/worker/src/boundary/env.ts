@@ -22,6 +22,8 @@ export interface Env {
   LOADER?: WorkerLoader;
   LINUX_CONTAINERS?: DurableObjectNamespace<LinuxContainerObject>;
   FORTIPI_CONFIG: D.Configuration | { version: 1; infrastructure: D.InfrastructurePolicy };
+  /** Deployment-owned: at most16 exact HTTPS origins, no path/null/wildcard; owners5/7 validate. */
+  FORTIPI_ALLOWED_ORIGINS?: string[];
   FORTIPI_ADMIN_TOKEN: string;
   FORTIPI_MODEL_AUTH_KEY?: string;
   OPENAI_API_KEY?: string;

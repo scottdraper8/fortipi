@@ -529,9 +529,6 @@
             "path": {
               "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/RelativePath"
             },
-            "uploadId": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-            },
             "sha256": {
               "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
             },
@@ -544,7 +541,7 @@
               "enum": [420, 493]
             }
           },
-          "required": ["kind", "path", "uploadId", "sha256", "size", "mode"],
+          "required": ["kind", "path", "sha256", "size", "mode"],
           "additionalProperties": false
         },
         {
@@ -1495,9 +1492,26 @@
                 },
                 "postManifestHash": {
                   "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+                },
+                "manifest": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Manifest"
+                },
+                "mutations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Mutation"
+                  },
+                  "maxItems": 4096
                 }
               },
-              "required": ["kind", "uploadId", "stagedDigest", "postManifestHash"],
+              "required": [
+                "kind",
+                "uploadId",
+                "stagedDigest",
+                "postManifestHash",
+                "manifest",
+                "mutations"
+              ],
               "additionalProperties": false
             },
             {
@@ -1907,9 +1921,6 @@
         "commitId": {
           "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
         },
-        "commitDigest": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
-        },
         "scope": {
           "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LocalScope"
         },
@@ -1924,11 +1935,14 @@
         },
         "state": {
           "const": "pending_apply"
+        },
+        "intentDigest": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
         }
       },
       "required": [
         "commitId",
-        "commitDigest",
+        "intentDigest",
         "scope",
         "preparationId",
         "preManifestHash",
