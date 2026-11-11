@@ -372,14 +372,14 @@ export function buildRegistry(deps: {
           operation,
           binding.bindingVersion,
           intent.deadline,
+          {
+            baseManifestHash: binding.manifestHash,
+            ...(binding.config.kind === "local"
+              ? { rootBindingId: binding.config.rootBindingId }
+              : {}),
+            ...(executorTransferLimits ? { executorTransferLimits } : {}),
+          },
         );
-        {
-          const state = await jobs.state(job.jobId);
-          if (executorTransferLimits) state.executorTransferLimits = executorTransferLimits;
-          state.baseManifestHash = binding.manifestHash;
-          if (binding.config.kind === "local") state.rootBindingId = binding.config.rootBindingId;
-          await dispatch.save(state);
-        }
       }
       // Child allocation and reference share ONE Pi commit. No app SQL or remote call runs inside it.
       const childId = await api.commit(async (tx) => {

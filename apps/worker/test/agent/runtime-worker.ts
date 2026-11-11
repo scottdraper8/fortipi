@@ -270,6 +270,12 @@ export class TestAgentSession extends AgentSession {
       await this.barrier("after-create");
       return created;
     };
+    const seed = this.jobs.seed.bind(this.jobs);
+    this.jobs.seed = async (...args) => {
+      const created = await seed(...args);
+      await this.barrier("after-seed");
+      return created;
+    };
     const create = this.conversations.create.bind(this.conversations);
     this.conversations.create = async (...args) => {
       try {
@@ -580,6 +586,11 @@ export class TestAgentSession extends AgentSession {
           state: row.value.job.state,
           approvalId: row.value.approvalId ?? null,
           hasExecution: !!row.value.job.execution,
+          operationId: row.value.operation.operationId,
+          operationDigest: row.value.job.operationDigest,
+          rootBindingId: row.value.rootBindingId ?? null,
+          baseManifestHash: row.value.baseManifestHash ?? null,
+          executorTransferLimits: row.value.executorTransferLimits ?? null,
         })),
     };
   }
