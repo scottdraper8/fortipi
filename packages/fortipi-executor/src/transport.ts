@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { ValidateFunction } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type {
+  Assignment,
   ErrorBody,
   ExecutorFrame,
+  ExecutorJobQuery,
   ExecutorTransferLimits,
   TicketIdentity,
   TicketReceipt,
@@ -19,7 +21,7 @@ import {
 import type { Limits, Profile } from "./config.js";
 import { effectiveLimits, validateOrigin } from "./config.js";
 import type { Ledger } from "./ledger.js";
-import { hash } from "./policy.js";
+import { assignmentBody, hash } from "./policy.js";
 
 const ajv = new Ajv2020({ strict: true, allErrors: false });
 for (const schema of Object.values(executorSchemaRegistry)) ajv.addSchema(schema);
@@ -88,7 +90,39 @@ export class HttpTransport {
   private pressureStatus = 503;
   private ledger?: Ledger;
   authority?: TicketIdentity;
+  private executorEpoch: number | undefined;
   revoked = false;
+  /** Set only after the current socket's exact executor.registered frame is validated. */
+  setExecutorEpoch(epoch?: number): void {
+    if (epoch !== undefined && (!Number.isSafeInteger(epoch) || epoch < 1))
+      throw new Error("invalid executor connection epoch");
+    this.executorEpoch = epoch;
+  }
+  executorJobQuery(assignment: Assignment, expectedEpoch?: number): ExecutorJobQuery {
+    this.assertExecutorAuthority();
+    const id = assignment.identity,
+      row = this.ledger?.existing(id),
+      epoch = this.executorEpoch;
+    if (
+      epoch === undefined ||
+      (expectedEpoch !== undefined && epoch !== expectedEpoch) ||
+      id.target.kind !== "executor" ||
+      id.target.executorId !== this.profile.executorId ||
+      id.target.generation !== this.profile.executorGeneration ||
+      !row ||
+      row.cancelled ||
+      row.state === "closed" ||
+      row.bodyHash !== hash(assignmentBody(assignment))
+    )
+      throw new Error("current registered assigned-job transport required");
+    if (Date.now() >= Math.min(id.deadline, row.assignment.identity.lease.expiresAt))
+      throw new Error("expired assigned-job transport");
+    return {
+      executionId: id.executionId,
+      assignmentDigest: id.assignmentDigest,
+      connectionEpoch: epoch,
+    };
+  }
   bindLedger(ledger: Ledger): void {
     this.ledger = ledger;
     const saved = ledger.db.prepare("SELECT value FROM meta WHERE key='https_pressure'").get() as
@@ -478,6 +512,7 @@ export class SessionTransport {
     signal: AbortSignal,
     registration: Extract<ExecutorFrame, { type: "executor.register" }>,
   ): Promise<void> {
+    this.http.setExecutorEpoch();
     await this.http.discover();
     registration = {
       ...registration,
@@ -525,10 +560,12 @@ export class SessionTransport {
                   value.requestId !== registration.requestId ||
                   value.payload.executorId !== this.http.profile.executorId ||
                   value.payload.generation !== this.http.profile.executorGeneration ||
+                  this.socket !== socket ||
                   value.payload.connectionEpoch <= this.connectionEpoch
                 )
                   throw new Error("registration identity");
                 this.connectionEpoch = value.payload.connectionEpoch;
+                this.http.setExecutorEpoch(this.connectionEpoch);
                 this.registered = true;
                 clearTimeout(timer);
                 await this.handler.receive(value);
@@ -581,6 +618,7 @@ export class SessionTransport {
       if (heartbeat) clearInterval(heartbeat);
       signal.removeEventListener("abort", abort);
       this.registered = false;
+      if (this.socket === socket) this.http.setExecutorEpoch();
       await this.queue;
       await this.handler.disconnected();
     }

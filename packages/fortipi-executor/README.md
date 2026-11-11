@@ -65,6 +65,12 @@ answers from its existing ledger and never sends query commands or replays assig
 An absent attempt is unknown. Cancellation before
 assignment stores a no-late-start tombstone. A previous start intent or running
 row becomes unknown after restart; PID reuse never authorizes a kill or a rerun.
+Queries report `waiting_for_local_policy` only for this incarnation's durable
+pending decision and exact current approval. After local allow, `preparing`
+covers queued/materializing work before the winning start claim. Both include
+the original approval operation; neither claims a live process or permits replay.
+Reconnect queries recover the durable decision even if its notification was lost.
+An uncertain claim remains unknown; local denial closes the attempt without start.
 
 Output and result deliveries remain in the bounded ledger until their exact
 persisted acknowledgments. Local output artifacts have explicit owner references
@@ -95,6 +101,13 @@ explicit puts/deletes/mkdirs and verifies hashes, lengths and the final manifest
 Only the service can commit a stage. Failed or uncertain transfer retains its
 original request/upload/commit identities; retry performs staging or observation,
 never native execution. Missing scratch is an error, never an empty diff.
+Snapshot manifest/blob reads and upload begin/chunk/validate requests use only
+`/v1/executor/jobs/{jobId}/...`, with the actual execution ID, assignment digest
+and current registered connection epoch. The service derives the assigned
+workspace/owner authority; application credentials and workspace-route fallbacks
+are never used. A changed epoch or lost authority rejects an in-flight response.
+Lost allocation/seal replies recover the same upload intent and sealed stage;
+staging never commits a canonical revision or restarts a command.
 
 Local workspaces use prepare, one durable journaled apply claim, observe, metadata
 commit, receipt delivery and receipt acknowledgment. Root pins survive lost

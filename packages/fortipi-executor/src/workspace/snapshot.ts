@@ -1,6 +1,13 @@
 import { lstat, rmdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { Assignment, UploadBlobPlan } from "fortipi-contract/executor";
+import type {
+  Assignment,
+  ExecutorJobChunkQuery,
+  ManifestResponse,
+  UploadBlobPlan,
+  UploadStatus,
+  UploadValidation,
+} from "fortipi-contract/executor";
 import { manifestDigest, validateUploadBlobs } from "fortipi-contract/executor";
 import type { Limits } from "../config.js";
 import { secureDirectory, syncDirectory } from "../config.js";
@@ -32,21 +39,37 @@ export class Snapshots {
     this.platform = platform;
     this.limits = http.limits;
   }
+  private access(
+    assignment: Assignment,
+    suffix: string,
+    chunk?: Pick<ExecutorJobChunkQuery, "length" | "sha256">,
+  ) {
+    const scope = this.http.executorJobQuery(assignment),
+      query = { ...scope, ...chunk },
+      lease = this.ledger.existing(assignment.identity)?.assignment.identity.lease;
+    if (!lease) throw new Error("assigned snapshot authority unavailable");
+    validate(
+      "executor-messages.schema.json",
+      chunk ? "ExecutorJobChunkQuery" : "ExecutorJobQuery",
+      query,
+    );
+    return {
+      path: `/v1/executor/jobs/${encodeURIComponent(assignment.identity.jobId)}${suffix}?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`,
+      epoch: scope.connectionEpoch,
+      deadline: Math.min(assignment.identity.deadline, lease.expiresAt),
+    };
+  }
   async materialize(assignment: Assignment): Promise<SafeRoot> {
     const id = assignment.identity;
     const previous = this.ledger.record<Scratch>("stages", `scratch_${id.executionId}`);
     if (previous) throw new Error("existing or uncertain scratch is query-only");
-    const base = `/v1/workspaces/${encodeURIComponent(assignment.workspaceId)}`;
-    const response = validate<{
-      workspaceId: string;
-      revision: string;
-      manifest: Manifest;
-      manifestHash: string;
-    }>(
+    const access = this.access(assignment, "/manifest");
+    const response = validate<ManifestResponse>(
       "workspaces.schema.json",
       "ManifestResponse",
-      await this.http.json(`${base}/manifest?revision=${encodeURIComponent(id.baseRevision)}`),
+      await this.http.json(access.path, undefined, "GET", access.deadline),
     );
+    this.http.executorJobQuery(assignment, access.epoch);
     if (
       response.workspaceId !== assignment.workspaceId ||
       response.revision !== id.baseRevision ||
@@ -99,13 +122,10 @@ export class Snapshots {
       if (entry.type !== "file") continue;
       checkManifest(response.manifest, this.http.limits, root.identity.caseBehavior);
       const { r, bytes } = await this.http.withTransfer(async () => {
-        const r = await this.http.request(
-          `${base}/blobs/${entry.sha256}?revision=${encodeURIComponent(id.baseRevision)}`,
-          {},
-          true,
-          Math.min(id.deadline, id.lease.expiresAt),
-        );
+        const blob = this.access(assignment, `/blobs/${entry.sha256}`);
+        const r = await this.http.request(blob.path, {}, true, blob.deadline);
         const bytes = await readBounded(r, entry.size);
+        this.http.executorJobQuery(assignment, blob.epoch);
         return { r, bytes };
       });
       if (
@@ -119,6 +139,7 @@ export class Snapshots {
       await root.write(entry.path, bytes, entry.mode);
     }
     const actual = await scan(root, this.limits);
+    this.http.executorJobQuery(assignment);
     if (actual.manifestHash !== response.manifestHash)
       throw new Error("snapshot materialization mismatch");
     return root;
@@ -161,7 +182,6 @@ export class Snapshots {
           ? { ...m, mode: 493 as const }
           : m,
     );
-    const base = `/v1/workspaces/${encodeURIComponent(assignment.workspaceId)}/uploads`;
     const previous = this.ledger.record<{ requestId: string; commitId: string; body: unknown }>(
       "stages",
       `upload_intent_${id.executionId}`,
@@ -206,13 +226,17 @@ export class Snapshots {
       begin,
     );
     validateUploadBlobs(proposal, { required: false });
-    const opened = validate<{ uploadId: string; manifestHash: string; baseRevision: string }>(
+    const access = this.access(assignment, "/uploads");
+    const opened = validate<UploadStatus>(
       "workspaces.schema.json",
       "UploadStatus",
-      await this.http.json(base, begin),
+      await this.http.json(access.path, begin, "POST", access.deadline),
     );
+    this.http.executorJobQuery(assignment, access.epoch);
     if (opened.manifestHash !== after.manifestHash || opened.baseRevision !== id.baseRevision)
       throw new Error("upload allocation correlation mismatch");
+    if (!["open", "validated"].includes(opened.state) || Date.now() >= opened.expiresAt)
+      throw new Error("upload is no longer eligible for staging");
     const uploadId = opened.uploadId;
     this.ledger.saveRecord("stages", `upload_open_${id.executionId}`, {
       uploadId,
@@ -235,6 +259,7 @@ export class Snapshots {
         JSON.stringify(inventoryFor(bytes, plan.chunks.chunkBytes)) !== JSON.stringify(plan.chunks)
       )
         throw new Error("upload chunk grid/bytes no longer eligible");
+      if (opened.state === "validated") continue;
       if (uploaded.has(mutation.sha256)) continue;
       for (
         let offset = 0, index = 0;
@@ -247,30 +272,33 @@ export class Snapshots {
         if (Date.now() >= Math.min(id.deadline, lease().expiresAt))
           throw new Error("expired upload");
         const chunk = bytes.subarray(offset, offset + plan.chunks.chunkBytes);
+        const upload = this.access(
+          assignment,
+          `/uploads/${encodeURIComponent(uploadId)}/blobs/${mutation.sha256}/chunks/${index}`,
+          { length: chunk.length, sha256: hash(chunk) },
+        );
         const r = await this.http.withTransfer(() =>
           this.http.request(
-            `${base}/${uploadId}/blobs/${mutation.sha256}/chunks/${index}?length=${chunk.length}&sha256=${hash(chunk)}`,
+            upload.path,
             { method: "PUT", body: chunk, headers: { "Content-Type": "application/octet-stream" } },
             true,
-            Math.min(id.deadline, lease().expiresAt),
+            upload.deadline,
           ),
         );
+        this.http.executorJobQuery(assignment, upload.epoch);
         if (r.status !== 204) throw new Error("upload chunk not acknowledged");
       }
       uploaded.add(mutation.sha256);
     }
     if ((await scan(root, this.limits)).manifestHash !== after.manifestHash)
       throw new Error("scratch changed during staging");
-    const sealed = validate<{
-      uploadId: string;
-      manifestHash: string;
-      stageId: string;
-      validated: true;
-    }>(
+    const seal = this.access(assignment, `/uploads/${encodeURIComponent(uploadId)}/validate`);
+    const sealed = validate<UploadValidation>(
       "workspaces.schema.json",
       "UploadValidation",
-      await this.http.json(`${base}/${uploadId}/validate`, undefined, "POST"),
+      await this.http.json(seal.path, undefined, "POST", seal.deadline),
     );
+    this.http.executorJobQuery(assignment, seal.epoch);
     if (sealed.uploadId !== uploadId || sealed.manifestHash !== after.manifestHash)
       throw new Error("validated stage mismatch");
     const result = {
