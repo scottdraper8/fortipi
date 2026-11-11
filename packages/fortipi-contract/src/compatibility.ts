@@ -6,7 +6,9 @@ import type {
   ClientEvent,
   CommitDigestInput,
   CommitReceipt,
+  ExecutorTransferLimits,
   InfrastructurePolicy,
+  Lease,
   LocalCommitIntent,
   LocalPrepare,
   LocalScope,
@@ -15,6 +17,7 @@ import type {
   ProviderAuthPut,
   TransferDescriptor,
   UploadBegin,
+  WorkspaceLeaseDigestInput,
 } from "./generated/types.js";
 export const protocolVersion = "1.0" as const;
 export const schemaVersion = "1.0.0" as const;
@@ -179,11 +182,57 @@ export type DigestDomain =
   | "assignment"
   | "commit"
   | "local-stage"
-  | "local-intent";
+  | "local-intent"
+  | "workspace-lease";
 export async function digestJson(domain: DigestDomain, value: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(`fortipi:${domain}:v1\n${canonicalJson(value)}`);
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, "0")).join("");
+}
+/** Non-job lease identity. No caller-supplied authentication/connection observations enter the named preimage. */
+export function workspaceLeaseDigest(input: WorkspaceLeaseDigestInput): Promise<string> {
+  return digestJson("workspace-lease", {
+    deploymentId: input.deploymentId,
+    operationId: input.operationId,
+    workspaceId: input.workspaceId,
+    bindingVersion: input.bindingVersion,
+    baseRevision: input.baseRevision,
+    target:
+      input.target.kind === "executor"
+        ? {
+            kind: "executor",
+            executorId: input.target.executorId,
+            generation: input.target.generation,
+          }
+        : {
+            kind: "backend",
+            backendId: input.target.backendId,
+            generation: input.target.generation,
+          },
+    credential: {
+      credentialId: input.credential.credentialId,
+      generation: input.credential.generation,
+      grantVersion: input.credential.grantVersion,
+    },
+    deadline: input.deadline,
+  });
+}
+/** Structural correlation after schema validation; current credential/grants/floors remain authority checks. */
+export function validateWorkspaceLeaseSubject(
+  path: { workspaceId: string; leaseId: string },
+  lease: Lease,
+): void {
+  if (
+    lease.ownerKind !== "workspace-operation" ||
+    path.workspaceId !== lease.workspaceId ||
+    path.leaseId !== lease.leaseId
+  )
+    throw new Error("workspace.conflict: lease identity");
+}
+/** Requires exact schema validation first. These numeric observations are not remaining capacity. */
+export function validateExecutorTransferLimits(limits: ExecutorTransferLimits): void {
+  if (limits.fileBytes > limits.chunkBytes * 256 || limits.artifactBytes > limits.chunkBytes * 256)
+    throw new Error("unsupported: executor transfer grid");
 }
 function operationPreimage(input: OperationDigestInput): OperationDigestInput {
   return {

@@ -500,6 +500,81 @@ export interface OperationMap {
       | { status: 409; body: OperationError<"interrupted"> }
       | { status: 503; body: OperationError<"unavailable_executor"> };
   };
+  acquireWorkspaceLease: {
+    request: {
+      operationId: "acquireWorkspaceLease";
+      path: { workspaceId: string };
+      query: T.Empty;
+      body: T.WorkspaceLeaseAcquire;
+    };
+    response:
+      | { status: 201; body: T.WorkspaceOperationLease }
+      | { status: 400; body: OperationError<"invalid_request"> }
+      | { status: 401; body: OperationError<"unauthenticated"> }
+      | { status: 403; body: OperationError<"unauthorized"> }
+      | { status: 404; body: OperationError<"not_found"> }
+      | { status: 429; body: OperationError<"rate_limited"> }
+      | { status: 429; body: OperationError<"quota_exceeded"> }
+      | { status: 500; body: OperationError<"internal"> }
+      | { status: 503; body: OperationError<"unavailable"> }
+      | { status: 503; body: OperationError<"quota_paused"> }
+      | { status: 409; body: OperationError<"conflict"> }
+      | { status: 413; body: OperationError<"payload_too_large"> }
+      | { status: 501; body: OperationError<"unsupported"> }
+      | { status: 409; body: OperationError<"workspace.conflict"> }
+      | { status: 409; body: OperationError<"interrupted"> }
+      | { status: 503; body: OperationError<"unavailable_executor"> };
+  };
+  renewWorkspaceLease: {
+    request: {
+      operationId: "renewWorkspaceLease";
+      path: { workspaceId: string; leaseId: string };
+      query: T.Empty;
+      body: T.WorkspaceLeaseRenew;
+    };
+    response:
+      | { status: 200; body: T.WorkspaceOperationLease }
+      | { status: 400; body: OperationError<"invalid_request"> }
+      | { status: 401; body: OperationError<"unauthenticated"> }
+      | { status: 403; body: OperationError<"unauthorized"> }
+      | { status: 404; body: OperationError<"not_found"> }
+      | { status: 429; body: OperationError<"rate_limited"> }
+      | { status: 429; body: OperationError<"quota_exceeded"> }
+      | { status: 500; body: OperationError<"internal"> }
+      | { status: 503; body: OperationError<"unavailable"> }
+      | { status: 503; body: OperationError<"quota_paused"> }
+      | { status: 409; body: OperationError<"conflict"> }
+      | { status: 413; body: OperationError<"payload_too_large"> }
+      | { status: 501; body: OperationError<"unsupported"> }
+      | { status: 409; body: OperationError<"workspace.conflict"> }
+      | { status: 409; body: OperationError<"interrupted"> }
+      | { status: 503; body: OperationError<"unavailable_executor"> };
+  };
+  releaseWorkspaceLease: {
+    request: {
+      operationId: "releaseWorkspaceLease";
+      path: { workspaceId: string; leaseId: string };
+      query: T.Empty;
+      body: T.WorkspaceLeaseRelease;
+    };
+    response:
+      | { status: 200; body: T.WorkspaceLeaseReleaseReceipt }
+      | { status: 400; body: OperationError<"invalid_request"> }
+      | { status: 401; body: OperationError<"unauthenticated"> }
+      | { status: 403; body: OperationError<"unauthorized"> }
+      | { status: 404; body: OperationError<"not_found"> }
+      | { status: 429; body: OperationError<"rate_limited"> }
+      | { status: 429; body: OperationError<"quota_exceeded"> }
+      | { status: 500; body: OperationError<"internal"> }
+      | { status: 503; body: OperationError<"unavailable"> }
+      | { status: 503; body: OperationError<"quota_paused"> }
+      | { status: 409; body: OperationError<"conflict"> }
+      | { status: 413; body: OperationError<"payload_too_large"> }
+      | { status: 501; body: OperationError<"unsupported"> }
+      | { status: 409; body: OperationError<"workspace.conflict"> }
+      | { status: 409; body: OperationError<"interrupted"> }
+      | { status: 503; body: OperationError<"unavailable_executor"> };
+  };
   getWorkspaceManifest: {
     request: {
       operationId: "getWorkspaceManifest";

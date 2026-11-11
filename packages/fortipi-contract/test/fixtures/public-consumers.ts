@@ -2,8 +2,11 @@ import type {
   AdmissionReceipt,
   ClientCommand,
   ClientEvent,
+  ExecutorTransferLimits,
   TicketIdentity,
   TicketReceipt,
+  WorkspaceLeaseAcquire,
+  WorkspaceOperationLease,
 } from "fortipi-contract/client";
 import {
   type Assignment,
@@ -11,6 +14,7 @@ import {
   type ExecutorFrame,
   type LocalPrepare,
   localStageDigest,
+  manifestDigest,
   type OperationContext,
   operationForAssignment,
   validateAssignment,
@@ -23,11 +27,13 @@ export type ExecutorClientAuthority = import("fortipi-contract/executor").Client
 import type {
   CommitReceipt,
   CredentialReceipt,
+  Manifest,
   Mutation,
   OperationRequest,
   OperationResponse,
   ProviderAuthPut,
   ProviderAuthStatus,
+  WorkspaceBinding,
 } from "fortipi-contract";
 export function publicFlows(
   identity: ExecutionIdentity,
@@ -157,4 +163,127 @@ export function consumeCredentialIssuance(receipt: CredentialReceipt) {
   // @ts-expect-error An identical retry carries only public metadata, never a recovered token.
   void receipt.token;
   return undefined;
+}
+export function executorRegistration(limits: ExecutorTransferLimits) {
+  const frame: Extract<ExecutorFrame, { type: "executor.register" }> = {
+    type: "executor.register",
+    requestId: "registration-business-1",
+    payload: {
+      executorId: "executor_1",
+      generation: 4,
+      protocolVersion: "1.0",
+      schemaVersion: "1.0.0",
+      capabilities: ["workspace"],
+      platform: "linux",
+      caseBehavior: "sensitive",
+      rootBindingIds: ["root_1"],
+      confinement: "host",
+      transferLimits: limits,
+    },
+  };
+  const { transferLimits: _limits, ...legacyPayload } = frame.payload;
+  const legacy = { ...frame, payload: legacyPayload };
+  // @ts-expect-error Numeric observations are mandatory; capability strings cannot replace them.
+  const missingLimits: ExecutorFrame = legacy;
+  void missingLimits;
+  return frame;
+}
+/** Compile-only SDK route flow: every lease/stage value comes from typed public responses. */
+export async function workspaceWriteRoutes(
+  acquired: OperationResponse<"acquireWorkspaceLease">,
+  validated: OperationResponse<"validateUpload">,
+  renewed: OperationResponse<"renewWorkspaceLease">,
+  manifest: Manifest,
+  mutations: Mutation[],
+  binding: WorkspaceBinding,
+) {
+  const body: WorkspaceLeaseAcquire = {
+    requestId: "acquire-business-1",
+    operationId: "workspace-operation-1",
+    bindingVersion: binding.bindingVersion,
+    baseRevision: binding.revision,
+    deadline: 50000,
+  };
+  const acquire: OperationRequest<"acquireWorkspaceLease"> = {
+    operationId: "acquireWorkspaceLease",
+    path: { workspaceId: binding.workspaceId },
+    query: {},
+    body,
+  };
+  if (acquired.status !== 201 || validated.status !== 200 || renewed.status !== 200)
+    return { acquire };
+  const lease: WorkspaceOperationLease = acquired.body;
+  const proposedManifestHash = await manifestDigest(manifest);
+  const begin: OperationRequest<"beginUpload"> = {
+    operationId: "beginUpload",
+    path: { workspaceId: lease.workspaceId },
+    query: {},
+    body: {
+      requestId: "begin-business-1",
+      operationId: lease.operationId,
+      commitId: "commit_1",
+      baseRevision: lease.baseRevision,
+      lease,
+      manifestHash: proposedManifestHash,
+      manifest,
+      mutations,
+    },
+  };
+  const snapshot: OperationRequest<"snapshotWorkspace"> = {
+    operationId: "snapshotWorkspace",
+    path: { workspaceId: lease.workspaceId },
+    query: {},
+    body: {
+      requestId: "snapshot-business-1",
+      baseRevision: lease.baseRevision,
+      lease,
+      manifestHash: validated.body.manifestHash,
+    },
+  };
+  const transaction: OperationRequest<"transactWorkspace"> = {
+    operationId: "transactWorkspace",
+    path: { workspaceId: lease.workspaceId },
+    query: {},
+    body: {
+      requestId: "transaction-business-1",
+      mutations,
+      commit: {
+        requestId: "commit-business-1",
+        stageId: validated.body.stageId,
+        uploadId: validated.body.uploadId,
+        commitId: "commit_1",
+        operationId: lease.operationId,
+        workspaceId: lease.workspaceId,
+        baseRevision: lease.baseRevision,
+        lease,
+        manifestHash: validated.body.manifestHash,
+      },
+    },
+  };
+  const renew: OperationRequest<"renewWorkspaceLease"> = {
+    operationId: "renewWorkspaceLease",
+    path: { workspaceId: lease.workspaceId, leaseId: lease.leaseId },
+    query: {},
+    body: { requestId: "renew-business-1", lease },
+  };
+  const release: OperationRequest<"releaseWorkspaceLease"> = {
+    operationId: "releaseWorkspaceLease",
+    path: { workspaceId: renewed.body.workspaceId, leaseId: renewed.body.leaseId },
+    query: {},
+    body: { requestId: "release-business-1", lease: renewed.body, reason: "completed" },
+  };
+  const jobLease = { ...lease, ownerKind: "job" as const, jobId: "invented" };
+  // @ts-expect-error The public route returns only the non-job Lease variant.
+  const job: WorkspaceOperationLease = jobLease;
+  const leaked: OperationResponse<"releaseWorkspaceLease"> = {
+    status: 200,
+    body: {
+      leaseId: lease.leaseId,
+      released: true,
+      // @ts-expect-error A public release receipt cannot expose its private tombstone.
+      tombstoneId: "internal",
+    },
+  };
+  void [job, leaked];
+  return { acquire, begin, snapshot, transaction, renew, release };
 }

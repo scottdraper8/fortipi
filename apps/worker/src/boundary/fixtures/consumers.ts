@@ -12,9 +12,11 @@ import {
   operationDigest,
   publicCommitReceipt,
   validateAssignment,
+  validateExecutorTransferLimits,
   validateLocalLease,
   validateLocalStage,
   wireLimits,
+  workspaceLeaseDigest,
 } from "fortipi-contract";
 import type { AgentSessionRpc } from "../agent-session.js";
 import type { ControlPlaneRpc } from "../control-plane.js";
@@ -135,7 +137,8 @@ export async function executionFlow(
     await cp.reserveTarget(registered, {
       ownerKind: "job",
       operationId: "operation_1",
-      jobId: "job_1",
+      jobId: identity.jobId,
+      executionId: identity.executionId,
       operationDigest: immutableOperationDigest,
       agentId: operationContext.agentId,
       conversationId: operationContext.conversationId,
@@ -148,6 +151,11 @@ export async function executionFlow(
     }),
   );
   if (reservation.ownerKind !== "job") throw new Error("Expected job reservation");
+  if (reservation.executionId !== identity.executionId || reservation.jobId !== identity.jobId)
+    throw new Error("Reservation does not match the persisted execution identity");
+  const { executionId: _executionId, ...missingExecutionId } = reservation;
+  // @ts-expect-error Every job target reservation requires the pre-persisted execution identity.
+  await cp.reserveTarget(registered, missingExecutionId);
   const acquired = value(await workspace.acquireLease(registered, reservation));
   if (
     acquired.baseRevision !== operation.baseRevision ||
@@ -316,7 +324,8 @@ export async function executionFlow(
   await cp.reserveTarget(registered, {
     ownerKind: "job",
     operationId: "operation_1",
-    jobId: "job_1",
+    jobId: identity.jobId,
+    executionId: identity.executionId,
     operationDigest: hash,
     agentId: "agent_1",
     conversationId: "conversation_1",
@@ -712,45 +721,124 @@ export async function directWorkspaceAuthority(
   cp: ControlPlaneRpc,
   workspace: WorkspaceObjectRpc,
   ctx: D.AuthContext,
+  binding: D.WorkspaceBinding,
+  acquisition: D.WorkspaceLeaseAcquire,
+  persistedExpiresAt: number,
+  persistedRenewalExpiresAt: number,
 ) {
+  const credential = {
+    credentialId: ctx.credentialId,
+    generation: ctx.generation,
+    grantVersion: ctx.grantVersion,
+  };
+  let byteTarget: D.BackendRef;
+  if (binding.config.kind === "computer") {
+    byteTarget = {
+      kind: "backend",
+      backendId: binding.workspaceId,
+      generation: binding.bindingVersion,
+    };
+  } else {
+    const executor = value(
+      await cp.resolveExecutorGeneration(ctx, {
+        workspaceId: binding.workspaceId,
+        bindingVersion: binding.bindingVersion,
+        executorId: binding.config.executorId,
+      }),
+    );
+    if (executor.transferLimits === null) throw new Error("No validated transfer limits");
+    validateExecutorTransferLimits(executor.transferLimits);
+    byteTarget = {
+      kind: "executor",
+      executorId: executor.executorId,
+      generation: executor.executorGeneration,
+    };
+  }
   const registration = value(
     await cp.registerAuthorityRecipient(ctx, {
       credential,
-      recipient: { kind: "workspace", id: "workspace_1" },
-      resources,
-      executor: { executorId: "executor_1", generation: 4 },
+      recipient: { kind: "workspace", id: binding.workspaceId },
+      resources: {
+        agentIds: [],
+        conversationIds: [],
+        workspaceIds: [binding.workspaceId],
+        actions: ["workspace.write"],
+        tools: [],
+        executorIds: [],
+        backendIds: [],
+      },
+      ...(byteTarget.kind === "executor"
+        ? { executor: { executorId: byteTarget.executorId, generation: byteTarget.generation } }
+        : {}),
     }),
   );
   const registered = { ...ctx, registrationId: registration.registrationId };
-  const reservation = value(
-    await cp.reserveTarget(registered, {
-      ownerKind: "workspace-operation",
-      operationId: "workspace_operation_1",
-      operationDigest: hash,
-      workspaceId: "workspace_1",
-      bindingVersion: 1,
-      target,
-      actions: ["workspace.write"],
-      deadline: 50000,
-      expiresAt: 30000,
+  const input: D.TargetRequest = {
+    ownerKind: "workspace-operation",
+    operationId: acquisition.operationId,
+    operationDigest: await workspaceLeaseDigest({
+      deploymentId: ctx.deploymentId,
+      operationId: acquisition.operationId,
+      workspaceId: binding.workspaceId,
+      bindingVersion: acquisition.bindingVersion,
+      baseRevision: acquisition.baseRevision,
+      target: byteTarget,
+      credential,
+      deadline: acquisition.deadline,
     }),
-  );
+    workspaceId: binding.workspaceId,
+    bindingVersion: acquisition.bindingVersion,
+    baseRevision: acquisition.baseRevision,
+    target: byteTarget,
+    actions: ["workspace.write"],
+    deadline: acquisition.deadline,
+    expiresAt: persistedExpiresAt,
+  };
+  const reservation = value(await cp.reserveTarget(registered, input));
   const acquired = value(await workspace.acquireLease(registered, reservation));
   if (acquired.ownerKind !== "workspace-operation") throw new Error("Wrong lease ownership");
-  const local: D.LocalScope = {
-    operationId: acquired.operationId,
-    operationDigest: reservation.operationDigest,
-    workspaceId: acquired.workspaceId,
-    bindingVersion: reservation.bindingVersion,
-    rootBindingId: "root_1",
-    executorId: acquired.executorId,
-    executorGeneration: acquired.executorGeneration,
-    credential: acquired.credential,
-    baseRevision: acquired.baseRevision,
+  // Actor storage must retain this target.kind; a logical backend ID is not an executor revocation subject.
+  const privateRecord = { lease: acquired, target: reservation.target };
+  void privateRecord.target.kind;
+  const renewal: D.LeaseRenewal = {
+    requestId: "workspace-renew-business-1",
     lease: acquired,
-    deadline: reservation.deadline,
+    expectedLeaseVersion: acquired.leaseVersion,
+    expiresAt: persistedRenewalExpiresAt,
   };
-  await cp.requestLocalWorkspace(registered, { ...local, kind: "observe", commitId: "commit_1" });
+  const renewed = value(await workspace.renewLease(registered, renewal));
+  const release: D.LeaseRelease = {
+    requestId: "workspace-release-business-1",
+    lease: renewed,
+    reason: "completed",
+  };
+  await workspace.releaseLease(registered, release);
+  const { requestId: _renewalId, ...missingRenewalId } = renewal;
+  // @ts-expect-error Stable business requestId is mandatory, not a fresh AuthContext request ID.
+  await workspace.renewLease(registered, missingRenewalId);
+  const { requestId: _releaseId, ...missingReleaseId } = release;
+  // @ts-expect-error Release also requires a stable business requestId.
+  await workspace.releaseLease(registered, missingReleaseId);
+  const { baseRevision: _base, ...missingBase } = input;
+  // @ts-expect-error Non-job reservation must carry the actual requested base revision.
+  await cp.reserveTarget(registered, missingBase);
+  if (binding.config.kind === "local") {
+    const local: D.LocalScope = {
+      operationId: acquired.operationId,
+      operationDigest: reservation.operationDigest,
+      workspaceId: acquired.workspaceId,
+      bindingVersion: reservation.bindingVersion,
+      rootBindingId: binding.config.rootBindingId,
+      executorId: acquired.executorId,
+      executorGeneration: acquired.executorGeneration,
+      credential: acquired.credential,
+      baseRevision: acquired.baseRevision,
+      lease: acquired,
+      deadline: reservation.deadline,
+    };
+    // The daemon receives this exact stored reservation digest; metadata alone does not authorize any local effect.
+    void local.operationDigest;
+  }
   const executorIdentity: D.ExecutorIdentity = {
     ...credential,
     executorId: "executor_1",
@@ -801,6 +889,8 @@ export async function bindingAndLocalRead(
         executorId: acknowledged.config.executorId,
       }),
     );
+    if (generation.transferLimits === null) throw new Error("No validated transfer limits");
+    validateExecutorTransferLimits(generation.transferLimits);
     if (generation.executorId !== acknowledged.config.executorId) throw new Error("Wrong executor");
     await cp.requestLocalWorkspace(registered, {
       kind: "list",
@@ -849,4 +939,27 @@ export async function bindingAndLocalRead(
   };
   void [first, rebound, fabricated];
   return published;
+}
+export async function publicLeasePorts(
+  cp: ControlPlaneRpc,
+  ctx: D.AuthContext,
+  acquire: D.OperationRequest<"acquireWorkspaceLease">,
+) {
+  const admitted = value(await cp.acquireWorkspaceLease(ctx, acquire));
+  if (admitted.status !== 201) return admitted;
+  const renewal = value(
+    await cp.renewWorkspaceLease(ctx, {
+      operationId: "renewWorkspaceLease",
+      path: { workspaceId: admitted.body.workspaceId, leaseId: admitted.body.leaseId },
+      query: {},
+      body: { requestId: "renew-business-1", lease: admitted.body },
+    }),
+  );
+  if (renewal.status !== 200) return renewal;
+  return cp.releaseWorkspaceLease(ctx, {
+    operationId: "releaseWorkspaceLease",
+    path: { workspaceId: renewal.body.workspaceId, leaseId: renewal.body.leaseId },
+    query: {},
+    body: { requestId: "release-business-1", lease: renewal.body, reason: "completed" },
+  });
 }

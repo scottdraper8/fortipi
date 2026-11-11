@@ -15,6 +15,7 @@ import {
   validateAssignment,
   validateLocalLease,
   validateLocalStage,
+  workspaceLeaseDigest,
 } from "../dist/index.js";
 import {
   completeAssignment,
@@ -582,4 +583,78 @@ test("local intent and final commit have independent immutable byte oracles", as
     }),
     finalDigest,
   );
+});
+test("workspace lease digest has an independent non-job byte oracle and projects observations", async () => {
+  const input = {
+    deploymentId: "deployment_1",
+    operationId: "workspace_operation_1",
+    workspaceId: "workspace_1",
+    bindingVersion: 1,
+    baseRevision: "revision_1",
+    target: { kind: "backend" as const, backendId: "workspace_1", generation: 1 },
+    credential: { credentialId: "credential_1", generation: 2, grantVersion: 3 },
+    deadline: 50000,
+  };
+  const bytes =
+    '{"baseRevision":"revision_1","bindingVersion":1,"credential":{"credentialId":"credential_1","generation":2,"grantVersion":3},"deadline":50000,"deploymentId":"deployment_1","operationId":"workspace_operation_1","target":{"backendId":"workspace_1","generation":1,"kind":"backend"},"workspaceId":"workspace_1"}';
+  const expected = createHash("sha256")
+    .update(`fortipi:workspace-lease:v1\n${bytes}`)
+    .digest("hex");
+  assert.equal(get("WorkspaceLeaseDigestInput")(input), true);
+  assert.equal(await workspaceLeaseDigest(input), expected);
+  // Structural internal values can carry observations; the named immutable preimage must exclude them explicitly.
+  const observed = {
+    ...input,
+    expiresAt: 30000,
+    leaseVersion: 1,
+    connectionEpoch: 8,
+    principalId: "not-a-preimage-field",
+    agentId: "not-required",
+    conversationId: "not-required",
+    target: { ...input.target, expiresAt: 30000, connectionEpoch: 8 },
+    credential: {
+      ...input.credential,
+      role: "admin",
+      grants: ["not-a-preimage-field"],
+      authenticatedAt: 1,
+    },
+  };
+  assert.equal(
+    await workspaceLeaseDigest(observed),
+    expected,
+    "mutable/auth observations excluded",
+  );
+  const changedObservations = {
+    ...observed,
+    expiresAt: 40000,
+    leaseVersion: 2,
+    connectionEpoch: 9,
+    target: { ...observed.target, expiresAt: 40000, connectionEpoch: 9 },
+  };
+  assert.equal(await workspaceLeaseDigest(changedObservations), expected);
+  assert.equal(
+    get("WorkspaceLeaseDigestInput")(observed),
+    false,
+    "Wire preimages remain closed even though internal structural values are projected",
+  );
+  for (const changed of [
+    { ...input, operationId: "workspace_operation_2" },
+    { ...input, bindingVersion: 2 },
+    { ...input, baseRevision: "revision_2" },
+    { ...input, deadline: 50001 },
+    { ...input, credential: { ...input.credential, credentialId: "credential_2" } },
+    { ...input, credential: { ...input.credential, generation: 3 } },
+    { ...input, credential: { ...input.credential, grantVersion: 4 } },
+    { ...input, target: { ...input.target, generation: 2 } },
+    { ...input, target: { kind: "executor" as const, executorId: "executor_1", generation: 4 } },
+  ])
+    assert.notEqual(await workspaceLeaseDigest(changed), expected);
+  assert.equal(
+    get("WorkspaceLeaseDigestInput")({
+      ...input,
+      target: { kind: "computer", workspaceId: "workspace_1" },
+    }),
+    false,
+  );
+  assert.equal(get("WorkspaceLeaseDigestInput")({ ...input, jobId: "invented" }), false);
 });
