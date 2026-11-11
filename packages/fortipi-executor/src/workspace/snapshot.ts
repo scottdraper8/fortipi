@@ -1,5 +1,6 @@
 import { lstat, rmdir } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type {
   Assignment,
   ExecutorJobChunkQuery,
@@ -15,7 +16,7 @@ import type { Ledger } from "../ledger.js";
 import type { PlatformAdapter } from "../platform/types.js";
 import { hash } from "../policy.js";
 import type { HttpTransport } from "../transport.js";
-import { readBounded, validate } from "../transport.js";
+import { HttpFailure, readBounded, validate } from "../transport.js";
 import type { Manifest } from "./manifest.js";
 import { checkManifest, differences, inventoryFor, mutationsFor, scan } from "./manifest.js";
 import { SafeRoot } from "./paths.js";
@@ -25,6 +26,10 @@ export interface Scratch {
   manifest: Manifest;
   manifestHash: string;
   executionId: string;
+}
+interface Preparation {
+  signal: AbortSignal;
+  check: () => Promise<void>;
 }
 export class Snapshots {
   directory: string;
@@ -59,17 +64,88 @@ export class Snapshots {
       deadline: Math.min(assignment.identity.deadline, lease.expiresAt),
     };
   }
-  async materialize(assignment: Assignment): Promise<SafeRoot> {
+  private async readSnapshot(
+    assignment: Assignment,
+    suffix: string,
+    maximum: number,
+    epoch: number,
+    preparation?: Preparation,
+  ) {
+    for (;;) {
+      preparation?.signal.throwIfAborted();
+      await preparation?.check();
+      preparation?.signal.throwIfAborted();
+      this.http.executorJobQuery(assignment, epoch);
+      const access = this.access(assignment, suffix);
+      try {
+        const result = await this.http.withTransfer(async () => {
+          const r = await this.http.request(
+            access.path,
+            preparation ? { signal: preparation.signal } : {},
+            true,
+            access.deadline,
+          );
+          return { r, bytes: await readBounded(r, maximum) };
+        });
+        preparation?.signal.throwIfAborted();
+        await preparation?.check();
+        this.http.executorJobQuery(assignment, epoch);
+        return result;
+      } catch (error) {
+        preparation?.signal.throwIfAborted();
+        if (
+          !preparation ||
+          !(error instanceof HttpFailure) ||
+          error.status !== 429 ||
+          !error.retryableRead ||
+          error.retryAt === undefined
+        )
+          throw error;
+        for (;;) {
+          preparation.signal.throwIfAborted();
+          await preparation.check();
+          preparation.signal.throwIfAborted();
+          this.http.executorJobQuery(assignment, epoch);
+          const current = this.access(assignment, suffix),
+            until = Math.max(error.retryAt, this.http.pausedUntil),
+            now = Date.now();
+          if (
+            this.http.pressureHeld ||
+            !Number.isSafeInteger(until) ||
+            until >= assignment.identity.deadline
+          )
+            throw error;
+          if (until <= now) break;
+          try {
+            await delay(Math.min(1000, until - now, current.deadline - now), undefined, {
+              signal: preparation.signal,
+            });
+          } catch (error) {
+            preparation.signal.throwIfAborted();
+            throw error;
+          }
+        }
+      }
+    }
+  }
+  async materialize(assignment: Assignment, preparation?: Preparation): Promise<SafeRoot> {
     const id = assignment.identity;
     const previous = this.ledger.record<Scratch>("stages", `scratch_${id.executionId}`);
     if (previous) throw new Error("existing or uncertain scratch is query-only");
-    const access = this.access(assignment, "/manifest");
+    const epoch = this.http.executorJobQuery(assignment).connectionEpoch;
+    const metadata = await this.readSnapshot(
+      assignment,
+      "/manifest",
+      this.http.jsonBytes,
+      epoch,
+      preparation,
+    );
     const response = validate<ManifestResponse>(
       "workspaces.schema.json",
       "ManifestResponse",
-      await this.http.json(access.path, undefined, "GET", access.deadline),
+      JSON.parse(Buffer.from(metadata.bytes).toString("utf8")),
     );
-    this.http.executorJobQuery(assignment, access.epoch);
+    this.http.executorJobQuery(assignment, epoch);
     if (
       response.workspaceId !== assignment.workspaceId ||
       response.revision !== id.baseRevision ||
@@ -121,13 +197,13 @@ export class Snapshots {
     for (const entry of response.manifest.entries) {
       if (entry.type !== "file") continue;
       checkManifest(response.manifest, this.http.limits, root.identity.caseBehavior);
-      const { r, bytes } = await this.http.withTransfer(async () => {
-        const blob = this.access(assignment, `/blobs/${entry.sha256}`);
-        const r = await this.http.request(blob.path, {}, true, blob.deadline);
-        const bytes = await readBounded(r, entry.size);
-        this.http.executorJobQuery(assignment, blob.epoch);
-        return { r, bytes };
-      });
+      const { r, bytes } = await this.readSnapshot(
+        assignment,
+        `/blobs/${entry.sha256}`,
+        entry.size,
+        epoch,
+        preparation,
+      );
       if (
         bytes.byteLength !== entry.size ||
         hash(bytes) !== entry.sha256 ||
@@ -139,7 +215,9 @@ export class Snapshots {
       await root.write(entry.path, bytes, entry.mode);
     }
     const actual = await scan(root, this.limits);
-    this.http.executorJobQuery(assignment);
+    preparation?.signal.throwIfAborted();
+    await preparation?.check();
+    this.http.executorJobQuery(assignment, epoch);
     if (actual.manifestHash !== response.manifestHash)
       throw new Error("snapshot materialization mismatch");
     return root;
