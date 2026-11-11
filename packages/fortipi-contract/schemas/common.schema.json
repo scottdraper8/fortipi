@@ -1,0 +1,1021 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/common.schema.json",
+  "title": "common schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ErrorBody",
+  "$defs": {
+    "Id": {
+      "title": "Id",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "Revision": {
+      "title": "Revision",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "Sha256": {
+      "title": "Sha256",
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "Fence": {
+      "title": "Fence",
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "maxLength": 128
+    },
+    "Sequence": {
+      "title": "Sequence",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "Timestamp": {
+      "title": "Timestamp",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "JsonValue": {
+      "title": "JsonValue",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/JsonValue"
+          }
+        }
+      ]
+    },
+    "JsonObject": {
+      "title": "JsonObject",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/JsonValue"
+      }
+    },
+    "PageQuery": {
+      "title": "PageQuery",
+      "type": "object",
+      "properties": {
+        "pageToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "Empty": {
+      "title": "Empty",
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "CredentialRef": {
+      "title": "CredentialRef",
+      "type": "object",
+      "properties": {
+        "credentialId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "grantVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["credentialId", "generation", "grantVersion"],
+      "additionalProperties": false
+    },
+    "ResourceScope": {
+      "title": "ResourceScope",
+      "type": "object",
+      "properties": {
+        "agentIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+          },
+          "maxItems": 100
+        },
+        "conversationIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+          },
+          "maxItems": 100
+        },
+        "workspaceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+          },
+          "maxItems": 100
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "executorIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+          },
+          "maxItems": 100
+        },
+        "backendIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+          },
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "agentIds",
+        "conversationIds",
+        "workspaceIds",
+        "actions",
+        "tools",
+        "executorIds",
+        "backendIds"
+      ],
+      "additionalProperties": false
+    },
+    "Grant": {
+      "title": "Grant",
+      "type": "object",
+      "properties": {
+        "grantId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "resources": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope"
+        },
+        "expiresAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": ["grantId", "version", "resources"],
+      "additionalProperties": false
+    },
+    "Recipient": {
+      "title": "Recipient",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": ["agent", "workspace"]
+        },
+        "id": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        }
+      },
+      "required": ["kind", "id"],
+      "additionalProperties": false
+    },
+    "Invalidation": {
+      "title": "Invalidation",
+      "type": "object",
+      "properties": {
+        "revocationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "subject": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "credential"
+                },
+                "credentialId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "minimumGeneration": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["kind", "credentialId", "minimumGeneration"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "executor"
+                },
+                "executorId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "minimumGeneration": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["kind", "executorId", "minimumGeneration"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["revocationId", "subject"],
+      "additionalProperties": false
+    },
+    "InvalidationAck": {
+      "title": "InvalidationAck",
+      "type": "object",
+      "properties": {
+        "revocationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "subject": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/InvalidationSubject"
+        },
+        "recipient": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Recipient"
+        },
+        "persistedFloor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["revocationId", "subject", "recipient", "persistedFloor"],
+      "additionalProperties": false
+    },
+    "InvalidationSubject": {
+      "title": "InvalidationSubject",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "credential"
+            },
+            "credentialId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "minimumGeneration": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["kind", "credentialId", "minimumGeneration"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "executor"
+            },
+            "executorId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "minimumGeneration": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["kind", "executorId", "minimumGeneration"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "OriginMode": {
+      "title": "OriginMode",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "browser"
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "pattern": "^https?://[^/]+$"
+            }
+          },
+          "required": ["kind", "value"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "native"
+            }
+          },
+          "required": ["kind"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ErrorCode": {
+      "title": "ErrorCode",
+      "enum": [
+        "invalid_request",
+        "cursor.invalid",
+        "unauthenticated",
+        "unauthorized",
+        "not_found",
+        "conflict",
+        "workspace.conflict",
+        "interrupted",
+        "cursor.expired",
+        "payload_too_large",
+        "range_not_satisfiable",
+        "rate_limited",
+        "quota_exceeded",
+        "quota_paused",
+        "unsupported",
+        "unavailable",
+        "unavailable_executor",
+        "internal"
+      ]
+    },
+    "ConflictReason": {
+      "title": "ConflictReason",
+      "enum": [
+        "busy",
+        "idle",
+        "expected_revision",
+        "digest_mismatch",
+        "stale_generation",
+        "stale_fence",
+        "expired_lease",
+        "revision_unavailable",
+        "local_drift",
+        "version_mismatch",
+        "already_claimed",
+        "retired_allocation",
+        "uncertain_effects"
+      ]
+    },
+    "ErrorDetails": {
+      "title": "ErrorDetails",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ConflictReason"
+        },
+        "retryAfterMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "pressure": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/InfrastructurePressure"
+        },
+        "supportedContinuations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "requiredCapability": {
+          "enum": ["loader", "containers", "model-auth-key"]
+        },
+        "setup": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "ErrorBody": {
+      "title": "ErrorBody",
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ProtocolError"
+        }
+      },
+      "required": ["error"],
+      "additionalProperties": false
+    },
+    "ByteRange": {
+      "title": "ByteRange",
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["start"],
+      "additionalProperties": false
+    },
+    "ByteReference": {
+      "title": "ByteReference",
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "revision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "sha256": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 67108864
+        },
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^/v1/"
+        },
+        "artifactId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": ["cloud", "local"]
+            },
+            "executorId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "expiresAt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            }
+          },
+          "required": ["kind"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["workspaceId", "revision", "sha256", "size", "endpoint", "owner"],
+      "additionalProperties": false
+    },
+    "TransportAck": {
+      "title": "TransportAck",
+      "type": "object",
+      "properties": {
+        "deliveryId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "persisted": {
+          "const": true
+        }
+      },
+      "required": ["deliveryId", "sequence", "persisted"],
+      "additionalProperties": false
+    },
+    "CancellationDisposition": {
+      "title": "CancellationDisposition",
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": ["stopped", "not-started", "already-terminal", "unknown"]
+        },
+        "possibleExternalEffects": {
+          "type": "boolean"
+        }
+      },
+      "required": ["state", "possibleExternalEffects"],
+      "additionalProperties": false
+    },
+    "ControlReceipt": {
+      "title": "ControlReceipt",
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "durableIntent": {
+          "const": true
+        },
+        "disposition": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CancellationDisposition"
+        }
+      },
+      "required": ["operationId", "durableIntent", "disposition"],
+      "additionalProperties": false
+    },
+    "OperationDigestInput": {
+      "title": "OperationDigestInput",
+      "type": "object",
+      "properties": {
+        "deploymentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "agentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "conversationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "arguments": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/JsonObject"
+        },
+        "workspaceId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "baseRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "target": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/BackendRef"
+        },
+        "policyVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "grantVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "deadline": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "deploymentId",
+        "agentId",
+        "conversationId",
+        "tool",
+        "arguments",
+        "workspaceId",
+        "baseRevision",
+        "target",
+        "policyVersion",
+        "grantVersion",
+        "deadline"
+      ],
+      "additionalProperties": false
+    },
+    "AssignmentDigestInput": {
+      "title": "AssignmentDigestInput",
+      "type": "object",
+      "properties": {
+        "operation": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/OperationDigestInput"
+        },
+        "executionId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "reservationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "leaseId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "fence": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence"
+        },
+        "executorGeneration": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "operation",
+        "executionId",
+        "reservationId",
+        "leaseId",
+        "fence",
+        "executorGeneration"
+      ],
+      "additionalProperties": false
+    },
+    "CommitDigestInput": {
+      "title": "CommitDigestInput",
+      "type": "object",
+      "properties": {
+        "commitId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "uploadId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "jobId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "workspaceId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "baseRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "manifestHash": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "leaseIdentity": {
+          "type": "object",
+          "properties": {
+            "leaseId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "ownerKind": {
+              "enum": ["job", "workspace-operation"]
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "credential": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+            },
+            "registrationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "workspaceId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executorId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executorGeneration": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "fence": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence"
+            },
+            "baseRevision": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+            }
+          },
+          "required": [
+            "leaseId",
+            "operationId",
+            "ownerKind",
+            "credential",
+            "registrationId",
+            "workspaceId",
+            "executorId",
+            "executorGeneration",
+            "fence",
+            "baseRevision"
+          ],
+          "additionalProperties": false
+        },
+        "storage": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "local"
+                },
+                "preparationId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "observationSeq": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "preManifestHash": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+                },
+                "postManifestHash": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+                }
+              },
+              "required": [
+                "kind",
+                "preparationId",
+                "observationSeq",
+                "preManifestHash",
+                "postManifestHash"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "computer"
+                },
+                "storeRef": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStore"
+                }
+              },
+              "required": ["kind", "storeRef"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "commitId",
+        "uploadId",
+        "operationId",
+        "workspaceId",
+        "baseRevision",
+        "manifestHash",
+        "leaseIdentity",
+        "storage"
+      ],
+      "additionalProperties": false
+    },
+    "ProtocolError": {
+      "title": "ProtocolError",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "enum": [
+                "invalid_request",
+                "cursor.invalid",
+                "unauthenticated",
+                "unauthorized",
+                "not_found",
+                "cursor.expired",
+                "payload_too_large",
+                "range_not_satisfiable",
+                "unsupported",
+                "internal"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "details": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ErrorDetails"
+            }
+          },
+          "required": ["code", "message", "requestId", "retryable"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "enum": ["rate_limited", "unavailable", "unavailable_executor"]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "details": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ConflictReason"
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 86400000
+                },
+                "pressure": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/InfrastructurePressure"
+                },
+                "supportedContinuations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "maxItems": 100
+                },
+                "requiredCapability": {
+                  "enum": ["loader", "containers", "model-auth-key"]
+                },
+                "setup": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                }
+              },
+              "required": ["retryAfterMs"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["code", "message", "requestId", "retryable", "details"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "enum": ["quota_exceeded", "quota_paused"]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "details": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ConflictReason"
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 86400000
+                },
+                "pressure": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/InfrastructurePressure"
+                },
+                "supportedContinuations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "maxItems": 100
+                },
+                "requiredCapability": {
+                  "enum": ["loader", "containers", "model-auth-key"]
+                },
+                "setup": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                }
+              },
+              "required": ["retryAfterMs", "pressure"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["code", "message", "requestId", "retryable", "details"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "enum": ["conflict", "workspace.conflict", "interrupted"]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "details": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ConflictReason"
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 86400000
+                },
+                "pressure": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/InfrastructurePressure"
+                },
+                "supportedContinuations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "maxItems": 100
+                },
+                "requiredCapability": {
+                  "enum": ["loader", "containers", "model-auth-key"]
+                },
+                "setup": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                }
+              },
+              "required": ["reason"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["code", "message", "requestId", "retryable", "details"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/agents.schema.json",
+  "title": "agents schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/Agent",
+  "$defs": {
+    "Agent": {
+      "title": "Agent",
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "configVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "model": {
+          "type": "object",
+          "properties": {
+            "providerId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "modelId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": ["providerId", "modelId"],
+          "additionalProperties": false
+        },
+        "status": {
+          "enum": ["idle", "active", "waiting", "unavailable"]
+        }
+      },
+      "required": ["agentId", "name", "configVersion", "model", "status"],
+      "additionalProperties": false
+    },
+    "AgentCreate": {
+      "title": "AgentCreate",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "model": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/ModelConfig"
+        }
+      },
+      "required": ["requestId", "name", "model"],
+      "additionalProperties": false
+    },
+    "AgentPatch": {
+      "title": "AgentPatch",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "model": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/ModelConfig"
+        }
+      },
+      "required": ["requestId", "expectedVersion"],
+      "additionalProperties": false
+    },
+    "AgentPage": {
+      "title": "AgentPage",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/Agent"
+          },
+          "maxItems": 100
+        },
+        "nextPageToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": ["items"],
+      "additionalProperties": false
+    }
+  }
+}

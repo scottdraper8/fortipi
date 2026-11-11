@@ -1,0 +1,446 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/client-commands.schema.json",
+  "title": "client-commands schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/client-commands.schema.json#/$defs/ClientCommand",
+  "$defs": {
+    "ClientCommand": {
+      "title": "ClientCommand",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "message.submit"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "operationId": {
+                  "const": "submitMessage"
+                },
+                "path": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                    }
+                  },
+                  "required": ["id"],
+                  "additionalProperties": false
+                },
+                "query": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Empty"
+                },
+                "body": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/MessageSubmit"
+                }
+              },
+              "required": ["operationId", "path", "query", "body"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "input"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "conversation.steer"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "operationId": {
+                  "const": "steerConversation"
+                },
+                "path": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                    }
+                  },
+                  "required": ["id"],
+                  "additionalProperties": false
+                },
+                "query": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Empty"
+                },
+                "body": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/SteerInput"
+                }
+              },
+              "required": ["operationId", "path", "query", "body"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "input"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "task.cancel"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "operationId": {
+                  "const": "cancelTask"
+                },
+                "path": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                    }
+                  },
+                  "required": ["id"],
+                  "additionalProperties": false
+                },
+                "query": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Empty"
+                },
+                "body": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/tasks.schema.json#/$defs/TaskControl"
+                }
+              },
+              "required": ["operationId", "path", "query", "body"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "input"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "task.resume"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "operationId": {
+                  "const": "resumeTask"
+                },
+                "path": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                    }
+                  },
+                  "required": ["id"],
+                  "additionalProperties": false
+                },
+                "query": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Empty"
+                },
+                "body": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/tasks.schema.json#/$defs/TaskResume"
+                }
+              },
+              "required": ["operationId", "path", "query", "body"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "input"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "approval.decide"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "operationId": {
+                  "const": "decideApproval"
+                },
+                "path": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                    }
+                  },
+                  "required": ["id"],
+                  "additionalProperties": false
+                },
+                "query": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Empty"
+                },
+                "body": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalDecision"
+                }
+              },
+              "required": ["operationId", "path", "query", "body"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "input"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.reconcile"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "operationId": {
+                  "const": "reconcileJob"
+                },
+                "path": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                    }
+                  },
+                  "required": ["id"],
+                  "additionalProperties": false
+                },
+                "query": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Empty"
+                },
+                "body": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ReconcileInput"
+                }
+              },
+              "required": ["operationId", "path", "query", "body"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "input"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "conversation.subscribe"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "operationId": {
+                  "const": "replayEvents"
+                },
+                "path": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                    }
+                  },
+                  "required": ["id"],
+                  "additionalProperties": false
+                },
+                "query": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/ReplayQuery"
+                }
+              },
+              "required": ["operationId", "path", "query"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "input"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "conversation.unsubscribe"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            }
+          },
+          "required": ["type", "requestId", "conversationId"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "ping"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            }
+          },
+          "required": ["type", "requestId"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ClientAck": {
+      "title": "ClientAck",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationId": {
+              "enum": ["submitMessage", "steerConversation"]
+            },
+            "receipt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/AdmissionReceipt"
+            }
+          },
+          "required": ["type", "requestId", "operationId", "receipt"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationId": {
+              "enum": ["cancelTask", "resumeTask"]
+            },
+            "receipt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ControlReceipt"
+            }
+          },
+          "required": ["type", "requestId", "operationId", "receipt"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationId": {
+              "const": "decideApproval"
+            },
+            "receipt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/Approval"
+            }
+          },
+          "required": ["type", "requestId", "operationId", "receipt"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationId": {
+              "const": "reconcileJob"
+            },
+            "receipt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ReconcileReceipt"
+            }
+          },
+          "required": ["type", "requestId", "operationId", "receipt"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationId": {
+              "const": "replayEvents"
+            },
+            "receipt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/ReplayPage"
+            }
+          },
+          "required": ["type", "requestId", "operationId", "receipt"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationId": {
+              "enum": ["conversation.unsubscribe", "ping"]
+            }
+          },
+          "required": ["type", "requestId", "operationId"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ClientError": {
+      "title": "ClientError",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "error"
+        },
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "error": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ProtocolError"
+        }
+      },
+      "required": ["type", "requestId", "error"],
+      "additionalProperties": false
+    }
+  }
+}

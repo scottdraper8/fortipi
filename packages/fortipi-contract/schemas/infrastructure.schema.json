@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json",
+  "title": "infrastructure schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/InfrastructurePolicy",
+  "$defs": {
+    "CapabilityStatus": {
+      "title": "CapabilityStatus",
+      "type": "object",
+      "properties": {
+        "capability": {
+          "enum": ["loader", "containers"]
+        },
+        "state": {
+          "enum": ["available", "unavailable", "unknown"]
+        },
+        "accountPlan": {
+          "enum": ["unknown", "free", "paid"]
+        },
+        "deploymentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "observedAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": ["capability", "state", "accountPlan", "deploymentId", "observedAt"],
+      "additionalProperties": false
+    },
+    "InfrastructurePolicy": {
+      "title": "InfrastructurePolicy",
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "profile": {
+          "enum": ["free", "verified"]
+        },
+        "accountPlan": {
+          "enum": ["unknown", "free", "paid"]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/CapabilityStatus"
+          },
+          "maxItems": 2
+        },
+        "bounds": {
+          "type": "object",
+          "properties": {
+            "objectBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "installBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "fileBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 67108864
+            },
+            "snapshotBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 268435456
+            },
+            "stagingBytesPerWorkspace": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "manifestEntries": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            },
+            "retainedVersions": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "workspaceBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "inlineTailBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            },
+            "artifactBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16777216
+            },
+            "outputBytesPerJob": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "conversationEvents": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "conversationBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "activeMutatingJobs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "queuedAdmissions": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "requestsPerPrincipalMinute": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "requestsPerInstallMinute": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "sqlPageRows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "transferConcurrency": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            },
+            "headroomFraction": {
+              "type": "number",
+              "minimum": 0.25,
+              "exclusiveMaximum": 1
+            }
+          },
+          "required": [
+            "objectBytes",
+            "installBytes",
+            "fileBytes",
+            "snapshotBytes",
+            "stagingBytesPerWorkspace",
+            "manifestEntries",
+            "retainedVersions",
+            "workspaceBytes",
+            "inlineTailBytes",
+            "artifactBytes",
+            "outputBytesPerJob",
+            "conversationEvents",
+            "conversationBytes",
+            "activeMutatingJobs",
+            "queuedAdmissions",
+            "requestsPerPrincipalMinute",
+            "requestsPerInstallMinute",
+            "sqlPageRows",
+            "transferConcurrency",
+            "headroomFraction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": ["version", "profile", "accountPlan", "capabilities", "bounds"],
+      "additionalProperties": false
+    },
+    "InfrastructurePressure": {
+      "title": "InfrastructurePressure",
+      "type": "object",
+      "properties": {
+        "resource": {
+          "enum": ["storage", "requests", "sql", "cpu", "transfer", "concurrency", "workers-ai"]
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": ["object", "install", "account"]
+            },
+            "id": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            }
+          },
+          "required": ["kind"],
+          "additionalProperties": false
+        },
+        "source": {
+          "enum": ["policy", "provider"]
+        },
+        "measurement": {
+          "enum": ["observed", "estimated", "unknown"]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "remaining": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "resetAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "retryAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "action": {
+          "enum": ["retry-later", "reclaim-storage", "reduce-work", "configure-capability"]
+        }
+      },
+      "required": ["resource", "scope", "source", "measurement", "reason", "action"],
+      "additionalProperties": false
+    },
+    "CapacityReservation": {
+      "title": "CapacityReservation",
+      "type": "object",
+      "properties": {
+        "reservationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "ownerId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "policyVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "admissionSlots": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "state": {
+          "enum": ["reserved", "settled"]
+        }
+      },
+      "required": [
+        "reservationId",
+        "operationId",
+        "ownerId",
+        "policyVersion",
+        "bytes",
+        "admissionSlots",
+        "state"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

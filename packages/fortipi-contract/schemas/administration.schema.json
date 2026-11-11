@@ -1,0 +1,623 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/administration.schema.json",
+  "title": "administration schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ProviderAuthStatus",
+  "$defs": {
+    "ExecutorDescription": {
+      "title": "ExecutorDescription",
+      "type": "object",
+      "properties": {
+        "executorId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "connectionEpoch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "platform": {
+          "enum": ["darwin", "linux", "win32"]
+        },
+        "caseBehavior": {
+          "enum": ["sensitive", "insensitive"]
+        },
+        "confinement": {
+          "enum": ["host", "isolated"]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "rootBindingIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+          },
+          "maxItems": 100
+        },
+        "state": {
+          "enum": ["online", "offline", "revoking"]
+        }
+      },
+      "required": [
+        "executorId",
+        "generation",
+        "connectionEpoch",
+        "platform",
+        "caseBehavior",
+        "confinement",
+        "capabilities",
+        "rootBindingIds",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "TicketInput": {
+      "title": "TicketInput",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "audience": {
+              "const": "client-stream"
+            },
+            "resources": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope"
+            },
+            "originMode": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/OriginMode"
+            },
+            "ttlMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60000
+            }
+          },
+          "required": ["requestId", "audience", "resources", "originMode"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "audience": {
+              "const": "executor-session"
+            },
+            "resources": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope"
+            },
+            "originMode": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/OriginMode"
+            },
+            "ttlMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60000
+            },
+            "executor": {
+              "type": "object",
+              "properties": {
+                "executorId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["executorId", "generation"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["requestId", "audience", "resources", "originMode", "executor"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TicketReceipt": {
+      "title": "TicketReceipt",
+      "type": "object",
+      "properties": {
+        "ticket": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "audience": {
+          "enum": ["client-stream", "executor-session"]
+        },
+        "expiresAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": ["ticket", "audience", "expiresAt"],
+      "additionalProperties": false
+    },
+    "CredentialMint": {
+      "title": "CredentialMint",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "role": {
+              "const": "executor"
+            },
+            "grants": {
+              "type": "array",
+              "items": {
+                "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Grant"
+              },
+              "maxItems": 100
+            },
+            "expiresAt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "executorId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            }
+          },
+          "required": ["requestId", "role", "grants", "executorId"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "role": {
+              "enum": ["client", "admin"]
+            },
+            "grants": {
+              "type": "array",
+              "items": {
+                "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Grant"
+              },
+              "maxItems": 100
+            },
+            "expiresAt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            }
+          },
+          "required": ["requestId", "role", "grants"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CredentialReceipt": {
+      "title": "CredentialReceipt",
+      "type": "object",
+      "properties": {
+        "credential": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "role": {
+          "enum": ["client", "executor", "admin"]
+        },
+        "expiresAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": ["credential", "token", "role"],
+      "additionalProperties": false
+    },
+    "RevocationInput": {
+      "title": "RevocationInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "expectedGeneration": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["requestId", "expectedGeneration"],
+      "additionalProperties": false
+    },
+    "RevocationReceipt": {
+      "title": "RevocationReceipt",
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "revocationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "state": {
+          "enum": ["complete", "pending"]
+        },
+        "pendingRecipients": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Recipient"
+          },
+          "maxItems": 100
+        }
+      },
+      "required": ["operationId", "revocationId", "state", "pendingRecipients"],
+      "additionalProperties": false
+    },
+    "RotationReceipt": {
+      "title": "RotationReceipt",
+      "type": "object",
+      "properties": {
+        "replacement": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/CredentialReceipt"
+        },
+        "revocation": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationReceipt"
+        }
+      },
+      "required": ["replacement", "revocation"],
+      "additionalProperties": false
+    },
+    "OAuthCredential": {
+      "title": "OAuthCredential",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "oauth"
+        },
+        "refresh": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "access": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "expires": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "providerFields": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/JsonObject",
+          "maxProperties": 32,
+          "type": "object"
+        }
+      },
+      "required": ["type", "refresh", "access", "expires"],
+      "additionalProperties": false
+    },
+    "ProviderAuthPut": {
+      "title": "ProviderAuthPut",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "expectedVersion": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "credential": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/OAuthCredential"
+        }
+      },
+      "required": ["requestId", "expectedVersion", "credential"],
+      "additionalProperties": false
+    },
+    "ProviderAuthDelete": {
+      "title": "ProviderAuthDelete",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "expectedVersion": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["requestId", "expectedVersion"],
+      "additionalProperties": false
+    },
+    "ProviderAuthStatus": {
+      "title": "ProviderAuthStatus",
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "version": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "state": {
+          "enum": ["absent", "configured", "reauth_required"]
+        },
+        "updatedAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": ["providerId", "version", "generation", "state"],
+      "additionalProperties": false
+    },
+    "ProviderAuthReceipt": {
+      "title": "ProviderAuthReceipt",
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "state": {
+          "enum": ["absent", "configured", "reauth_required"]
+        }
+      },
+      "required": ["providerId", "version", "generation", "state"],
+      "additionalProperties": false
+    },
+    "AdminOperation": {
+      "title": "AdminOperation",
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "kind": {
+          "enum": ["export", "backup", "revocation"]
+        },
+        "state": {
+          "enum": ["pending", "running", "completed", "failed", "unavailable"]
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ByteReference"
+          },
+          "maxItems": 16
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": ["operationId", "kind", "state", "artifacts"],
+      "additionalProperties": false
+    },
+    "ExportInput": {
+      "title": "ExportInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "resources": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope"
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        }
+      },
+      "required": ["requestId", "resources", "maxBytes"],
+      "additionalProperties": false
+    },
+    "ModelMetadata": {
+      "title": "ModelMetadata",
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "available": {
+          "type": "boolean"
+        }
+      },
+      "required": ["providerId", "modelId", "capabilities", "available"],
+      "additionalProperties": false
+    },
+    "AdminHealth": {
+      "title": "AdminHealth",
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": ["healthy", "degraded", "unavailable"]
+        },
+        "pressure": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/InfrastructurePressure"
+          },
+          "maxItems": 100
+        }
+      },
+      "required": ["state", "pressure"],
+      "additionalProperties": false
+    },
+    "Usage": {
+      "title": "Usage",
+      "type": "object",
+      "properties": {
+        "policy": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/InfrastructurePolicy"
+        },
+        "pressure": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/InfrastructurePressure"
+          },
+          "maxItems": 100
+        },
+        "reservedBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "observedBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["policy", "pressure", "reservedBytes", "observedBytes"],
+      "additionalProperties": false
+    },
+    "AuditEntry": {
+      "title": "AuditEntry",
+      "type": "object",
+      "properties": {
+        "auditId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "timestamp": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "principalId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "resourceId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "disposition": {
+          "enum": ["allowed", "denied", "pending", "complete"]
+        }
+      },
+      "required": ["auditId", "timestamp", "principalId", "action", "disposition"],
+      "additionalProperties": false
+    },
+    "ExecutorPage": {
+      "title": "ExecutorPage",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorDescription"
+          },
+          "maxItems": 100
+        },
+        "nextPageToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": ["items"],
+      "additionalProperties": false
+    },
+    "ModelPage": {
+      "title": "ModelPage",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ModelMetadata"
+          },
+          "maxItems": 100
+        },
+        "nextPageToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": ["items"],
+      "additionalProperties": false
+    },
+    "AuditPage": {
+      "title": "AuditPage",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/AuditEntry"
+          },
+          "maxItems": 100
+        },
+        "nextPageToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": ["items"],
+      "additionalProperties": false
+    },
+    "TicketQuery": {
+      "title": "TicketQuery",
+      "type": "object",
+      "properties": {
+        "ticket": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": ["ticket"],
+      "additionalProperties": false
+    }
+  }
+}

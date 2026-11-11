@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json",
+  "title": "approvals schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/Approval",
+  "$defs": {
+    "ApprovalOperation": {
+      "title": "ApprovalOperation",
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "operationDigest": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "arguments": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/JsonObject"
+        },
+        "workspaceId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "baseRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "target": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/BackendRef"
+        },
+        "trust": {
+          "enum": ["host", "isolated"]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "policyVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "grantVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expiresAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "operationId",
+        "operationDigest",
+        "tool",
+        "arguments",
+        "workspaceId",
+        "baseRevision",
+        "target",
+        "trust",
+        "capabilities",
+        "policyVersion",
+        "grantVersion",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "Approval": {
+      "title": "Approval",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "approvalId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "agentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "requestingPrincipalId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operation": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "state": {
+              "enum": ["approved", "rejected"]
+            },
+            "decidedBy": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "decidedAt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            }
+          },
+          "required": [
+            "approvalId",
+            "jobId",
+            "agentId",
+            "conversationId",
+            "requestingPrincipalId",
+            "operation",
+            "version",
+            "state",
+            "decidedBy",
+            "decidedAt"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "approvalId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "agentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "requestingPrincipalId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operation": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "state": {
+              "enum": ["pending", "expired", "cancelled"]
+            }
+          },
+          "required": [
+            "approvalId",
+            "jobId",
+            "agentId",
+            "conversationId",
+            "requestingPrincipalId",
+            "operation",
+            "version",
+            "state"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ApprovalDecision": {
+      "title": "ApprovalDecision",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "operationDigest": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "decision": {
+          "enum": ["approve", "reject"]
+        }
+      },
+      "required": ["requestId", "expectedVersion", "operationDigest", "decision"],
+      "additionalProperties": false
+    }
+  }
+}

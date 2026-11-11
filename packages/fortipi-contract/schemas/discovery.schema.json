@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/discovery.schema.json",
+  "title": "discovery schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/discovery.schema.json#/$defs/Protocol",
+  "$defs": {
+    "Health": {
+      "title": "Health",
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "ok"
+        },
+        "protocolVersion": {
+          "const": "1.0"
+        }
+      },
+      "required": ["status", "protocolVersion"],
+      "additionalProperties": false
+    },
+    "Protocol": {
+      "title": "Protocol",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "const": "1.0"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "deploymentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "supportedVersions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "schemas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^/v1/schemas/"
+              }
+            },
+            "required": ["name", "url"],
+            "additionalProperties": false
+          },
+          "maxItems": 15
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ModelMetadata"
+          },
+          "maxItems": 32
+        },
+        "infrastructure": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/InfrastructurePolicy"
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "jsonBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            },
+            "outputFrameBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16384
+            },
+            "chunkBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 262144
+            },
+            "uploadTtlMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 900000
+            },
+            "ticketTtlMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60000
+            },
+            "rpcDeadlineMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30000
+            },
+            "replayPage": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "socketBufferBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            },
+            "socketBufferFrames": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            }
+          },
+          "required": [
+            "jsonBytes",
+            "outputFrameBytes",
+            "chunkBytes",
+            "uploadTtlMs",
+            "ticketTtlMs",
+            "rpcDeadlineMs",
+            "replayPage",
+            "socketBufferBytes",
+            "socketBufferFrames"
+          ],
+          "additionalProperties": false
+        },
+        "retention": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "conversation-lifetime"
+            },
+            "retainedFloor": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["kind", "retainedFloor"],
+          "additionalProperties": false
+        },
+        "backends": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": ["cloud-js", "linux", "native"]
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "confinement": {
+                "enum": ["host", "isolated"]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            },
+            "required": ["kind", "available", "confinement"],
+            "additionalProperties": false
+          },
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "schemaVersion",
+        "deploymentId",
+        "supportedVersions",
+        "features",
+        "schemas",
+        "models",
+        "infrastructure",
+        "limits",
+        "retention",
+        "backends"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

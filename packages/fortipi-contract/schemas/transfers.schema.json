@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/transfers.schema.json",
+  "title": "transfers schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/transfers.schema.json#/$defs/TransferDescriptor",
+  "$defs": {
+    "TransferDescriptor": {
+      "title": "TransferDescriptor",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "transferId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "attemptId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "direction": {
+              "const": "from-executor"
+            },
+            "purpose": {
+              "const": "local-read"
+            },
+            "workspaceId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "bindingVersion": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "operationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationDigest": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executionId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executorId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executorGeneration": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "credential": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+            },
+            "consumer": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope"
+            },
+            "baseRevision": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+            },
+            "lease": false,
+            "content": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "workspace-file"
+                },
+                "path": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/RelativePath"
+                },
+                "manifestHash": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+                },
+                "uploadId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                }
+              },
+              "required": ["kind", "path", "manifestHash"],
+              "additionalProperties": false
+            },
+            "fileSha256": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 67108864
+            },
+            "chunkBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 262144
+            },
+            "chunkHashes": {
+              "type": "array",
+              "items": {
+                "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+              },
+              "maxItems": 256
+            },
+            "expiresAt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "deadline": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            }
+          },
+          "required": [
+            "transferId",
+            "attemptId",
+            "deploymentId",
+            "direction",
+            "purpose",
+            "workspaceId",
+            "bindingVersion",
+            "operationId",
+            "operationDigest",
+            "executorId",
+            "executorGeneration",
+            "credential",
+            "consumer",
+            "baseRevision",
+            "content",
+            "fileSha256",
+            "size",
+            "chunkBytes",
+            "chunkHashes",
+            "expiresAt",
+            "deadline"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "transferId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "attemptId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "direction": {
+              "const": "to-executor"
+            },
+            "purpose": {
+              "const": "local-stage"
+            },
+            "workspaceId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "bindingVersion": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "operationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationDigest": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executionId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executorId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executorGeneration": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "credential": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+            },
+            "consumer": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope"
+            },
+            "baseRevision": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+            },
+            "lease": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Lease"
+            },
+            "content": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "workspace-file"
+                },
+                "path": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/RelativePath"
+                },
+                "manifestHash": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+                },
+                "uploadId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                }
+              },
+              "required": ["kind", "path", "manifestHash", "uploadId"],
+              "additionalProperties": false
+            },
+            "fileSha256": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 67108864
+            },
+            "chunkBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 262144
+            },
+            "chunkHashes": {
+              "type": "array",
+              "items": {
+                "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+              },
+              "maxItems": 256
+            },
+            "expiresAt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "deadline": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            }
+          },
+          "required": [
+            "transferId",
+            "attemptId",
+            "deploymentId",
+            "direction",
+            "purpose",
+            "workspaceId",
+            "bindingVersion",
+            "operationId",
+            "operationDigest",
+            "executorId",
+            "executorGeneration",
+            "credential",
+            "consumer",
+            "baseRevision",
+            "content",
+            "fileSha256",
+            "size",
+            "chunkBytes",
+            "chunkHashes",
+            "expiresAt",
+            "deadline",
+            "lease"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "transferId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "attemptId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "direction": {
+              "const": "from-executor"
+            },
+            "purpose": {
+              "const": "output"
+            },
+            "workspaceId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "bindingVersion": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "operationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationDigest": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executionId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executorId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "executorGeneration": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "credential": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+            },
+            "consumer": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope"
+            },
+            "baseRevision": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+            },
+            "lease": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Lease"
+            },
+            "content": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "job-output"
+                },
+                "artifactId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "stream": {
+                  "enum": ["stdout", "stderr"]
+                }
+              },
+              "required": ["kind", "artifactId", "stream"],
+              "additionalProperties": false
+            },
+            "fileSha256": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 67108864
+            },
+            "chunkBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 262144
+            },
+            "chunkHashes": {
+              "type": "array",
+              "items": {
+                "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+              },
+              "maxItems": 256
+            },
+            "expiresAt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "deadline": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            }
+          },
+          "required": [
+            "transferId",
+            "attemptId",
+            "deploymentId",
+            "direction",
+            "purpose",
+            "workspaceId",
+            "bindingVersion",
+            "operationId",
+            "operationDigest",
+            "executorId",
+            "executorGeneration",
+            "credential",
+            "consumer",
+            "baseRevision",
+            "content",
+            "fileSha256",
+            "size",
+            "chunkBytes",
+            "chunkHashes",
+            "expiresAt",
+            "deadline",
+            "jobId",
+            "executionId"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TransferStatus": {
+      "title": "TransferStatus",
+      "type": "object",
+      "properties": {
+        "transferId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "attemptId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "state": {
+          "enum": ["waiting", "streaming", "verified", "interrupted", "expired"]
+        },
+        "verifiedChunks": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "maxItems": 256
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 67108864
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": ["transferId", "attemptId", "state", "verifiedChunks", "bytes"],
+      "additionalProperties": false
+    },
+    "TransferQuery": {
+      "title": "TransferQuery",
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        }
+      },
+      "required": ["attemptId"],
+      "additionalProperties": false
+    },
+    "TransferChunkQuery": {
+      "title": "TransferChunkQuery",
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 262144
+        },
+        "sha256": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        }
+      },
+      "required": ["attemptId", "length", "sha256"],
+      "additionalProperties": false
+    }
+  }
+}

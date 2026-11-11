@@ -1,0 +1,295 @@
+# FortiPi contract
+
+Protocol **1.0**, schema **1.0.0**. Package versions are independent. The fifteen
+[JSON Schema 2020-12 documents](./schemas/common.schema.json) are authoritative;
+[OpenAPI 3.1](./openapi.yaml) describes all 66 HTTP operations, their exact
+path/query/body, success/error statuses, audience, grant action, and byte limits.
+`src/route-catalog.ts` owns route allocation, not handlers. OpenAPI uses JSON syntax
+(valid YAML 1.2), so the same bytes can serve `/v1/openapi.json`.
+
+Generate with `node packages/fortipi-contract/scripts/generate.ts`, then run the
+same command with `--check`. Generation resolves only local allowlisted schema
+IDs, bundles them before invoking the pinned schema compiler, and emits four
+artifacts without network access, timestamps, or source-schema changes. Check
+mode compares every output and never rewrites it. TypeScript uses the foundation
+Biome formatter; OpenAPI uses compact JSON. No second formatting library is invoked.
+
+Import `fortipi-contract` for resource DTOs, schemas, routes and generated
+`OperationRequest<K>` / `OperationResponse<K>`. Each request has exactly
+`{operationId,path,query,body}`; an absent body is `undefined`. Byte-route PUT
+metadata has no JSON body: the octet stream travels through the owning object's
+`fetch(Request)`, never a hidden RPC field. HTTP byte successes are bytes, and
+101/204 have no body. Private workspace reads return `ByteReference` instead.
+Responses discriminate status and semantic error code; conflict reasons and
+429/503 retry details remain typed. Lists default to 100 and allow 1–100 items;
+opaque page tokens bind principal, resource, filter and view, never authority.
+
+`fortipi-contract/client` exposes client commands/events and the complete client
+schema dependency registry. `fortipi-contract/executor` exposes executor frames,
+shared DTOs and its complete schema dependency registry, without client commands
+or client routes. All entrypoints are portable and have no runtime dependencies,
+Ajv, Node, Pi, Worker or server imports. Consumers own validators: register the
+trusted schema registry with Ajv 2020 at module startup and reuse validators.
+Workers must compile only fixed schemas at startup; downstream workerd startup
+and post-activation evidence remains required. TypeScript represents structural
+unions; schema validation and the named portable helpers enforce numeric/string
+bounds and constraints beyond the type system.
+
+## Identity, state and receipts
+
+IDs are opaque 1–128 ASCII letters/digits/underscore/hyphen. Revision, SHA-256 and
+fence have separate named schemas/types; hashes are lowercase 64-hex, fences are
+positive canonical decimal strings. Sequences/generations/timestamps are safe
+nonnegative integers (durable eventSeq starts at 1); timestamps are UTC ms.
+`incrementSafe` fails at exhaustion. Credential generation, executor execution
+generation, socket connectionEpoch, bindingVersion and leaseVersion are distinct
+fields. Reconnection changes only connectionEpoch; lost executor ledger needs a
+new explicitly authorized execution generation.
+
+Canonical JSON sorts object keys by UTF-16 code-unit order, preserves array order,
+uses JSON string/number encoding and maps -0 to 0. It rejects nonfinite numbers,
+lone surrogates, accessors, cycles and non-JSON values. SHA-256 input is UTF-8 of
+`fortipi:<domain>:v1\n` followed by canonical JSON. Domains are `manifest`,
+`operation`, `assignment`, `commit`; they are not interchangeable. Manifest hashing
+sorts normalized paths by UTF-8 bytes and hashes `{version:1,entries:[...]}`.
+Files carry path/type/mode(420 or493)/size/hash; directories carry path/type/mode493.
+No timestamps, native roots or secrets enter a manifest digest.
+
+`OperationDigestInput` binds deployment/agent/conversation/tool/arguments,
+workspace/base, selected target, policy/grant versions and deadline.
+`AssignmentDigestInput` adds execution/reservation/lease IDs, fence and executor
+generation. `CommitDigestInput` binds commit/upload/operation/job/workspace/base,
+manifest, immutable lease identity, and either sealed store or local observation.
+Lease expiry/renewal version and socket epoch are excluded. Reusing an ID with a
+changed immutable digest conflicts. A stable job mapping is persisted once from
+Pi task identity and operation digest.
+
+Job transitions are created → awaiting_approval/authorized → queued or
+waiting_for_executor → leased → dispatch_attempted → running →
+result_pending_commit → completed. Waiting for local policy, workspace conflict,
+failed/cancelled/interrupted/expired/requires_reconciliation are explicit states.
+Tasks distinguish model/cloud-tool/local-device/human/local-policy/reconciliation/
+workspace-conflict/kept-input waits; client connection state is separate.
+Approval binds exact arguments/digest, base, target/trust/capabilities, policy/grant
+versions and expiry. Revalidate before dispatch; approval cannot broaden a grant
+or the daemon's local policy. Cancellation first acknowledges durable intent and
+later reports stopped/not-started/already-terminal/unknown with possible external
+effects. No rollback is promised. Unsupported resume is 501 with supported
+continuations. Reconciliation verifies existing results/receipts, acknowledges
+failed/unknown effects, discards stale staging, or requests a separately authorized
+new job. It cannot reuse a stale lease or invent success.
+
+A persisted transport ack means receipt, a prepared result means staged outcome,
+and `job.committed` means verified workspace receipt or unchanged-base evidence
+plus durable terminal version/event cursor. Success finalization requires that
+evidence. Persist dispatch intent before sending. After an uncertain send, query
+that execution; do not assign another target. `not_started` requires durable proof
+excluding late start. Query never contains start arguments. After a lost commit
+ack, recover `getReceipt({workspaceId,commitId,commitDigest})` under current grants,
+even if the historical lease expired; never rerun the side effect.
+
+## Authorization, events and tickets
+
+Authenticate and authorize before existence, provider status or cursor disclosure.
+Admin role adds no implicit conversation/tool authority. Grants enumerate agents,
+conversations, workspaces, actions/tools and permitted executor/backend targets.
+Every resource authority is durably registered before attach/acquire/use. Target
+reservations persist agent/workspace recipients and credential authority before
+lease acquisition or send. Releasing one retains a tombstone until delayed starts
+are excluded. Credential and executor invalidation subjects have persisted floors
+at each registered recipient. Revoke is 202 pending until every matching ack is
+durable; only then is it 200 complete. Floors fence delayed attach/acquire, renew,
+result, apply and commit. Internal recovery/fact/model contexts are narrowly scoped
+and cannot be constructed from public headers. Entry strips internal headers.
+
+Mint tickets with an authenticated HTTPS POST. Default TTL 30s, maximum60s.
+Browser mode binds an exact allowlisted scheme/host/port and matching Origin;
+native mode requires no Origin. Reject null/unlisted Origins. Explicit preflight
+permits needed methods/headers, with `Vary: Origin`; no wildcard credential CORS.
+Do not follow redirects with credentials or forward them across origins. Store
+only ticket hash. Consumption atomically checks deployment/audience/expiry/current
+generations/scope/Origin and registers the destination before upgrade. Exactly one
+redemption wins; failed upgrade consumes it. Forward the resulting nonsecret
+SocketIdentity once, then recheck local floors before attach and every command.
+Redact ticket queries in all proxy/request logs; never use reusable URL bearers.
+
+Durable envelopes include deployment, protocol/schema versions, conversation,
+event ID, contiguous eventSeq, timestamp, durability and typed payload. Snapshot
+projection and lastEventSeq are read consistently. Replay preserves stored IDs and
+captures `through` on page one; later pages keep that high-water. After below the
+retained floor returns410; a future cursor returns400. Redaction uses a stable view,
+never per-view sequence filtering. Unknown durable types with valid base envelopes
+are delivered generically and advance only after application; every known type is
+excluded from fallback so malformed known events fail. Volatile message deltas,
+tool output progress and heartbeat omit eventSeq and never advance cursors. Final
+text/tool results are durable. Client commands and executor frames reject unknown
+types. All acknowledgements/errors correlate requestId and client operation frames
+reuse the HTTP DTOs. Undefined body is omitted when serializing subscription input.
+
+Replay/live buffering is at most1MiB or256 frames; overflow sends
+`resync_required`, closes1013, and advances no cursor. Normal close1000;
+revocation1008; invalid payload1007; oversized1009. Executor heartbeat15s and
+three missed beats disconnect. Event retention, admitted receipts and idempotency
+keys last the conversation lifetime within admitted capacity; reject new work
+before exhaustion. Compaction/reset/forks cannot regenerate original envelopes.
+
+## Workspace boundaries and transient transfers
+
+Read/list/stat/manifest require revision; diff requires both revisions, read a
+normalized path and optional bounded single range. Committed blob/artifact routes
+prove resource grant and manifest/job membership. No generic staged-hash reader
+exists. Byte consumers verify declared length/hash; an initial200 never proves a
+complete stream. Streaming failure errors/truncates after headers; final status is
+in descriptors, not trailers. Invalid range416; offline local owner503; missing
+historic local content409/revision_unavailable.
+
+Decode URL input exactly once (`decodeWorkspacePath`), then validate valid UTF-8,
+NFC relative POSIX paths, ≤1024 encoded bytes. Reject empty/dot/dot-dot segments,
+NUL/control/backslash/absolute/drive/UNC/ADS inputs, device names, trailing dot/space
+aliases, case/normalization collisions and unsafe modes. `.fortipi`, `.git`,
+node_modules, .cache, .next, dist/build/coverage, .env*, key/pem, .ssh/.aws,
+.npmrc/.pnpmrc, credentials*.json and auth.json are excluded case-insensitively.
+The manifest helper checks aliases, collisions, file ancestors, sizes and modes;
+adapters must additionally reject links, junctions/reparse points, special files
+and external hardlinks, check ancestors/replacement races without following links,
+and repeat validation at snapshot/read/stage/materialization. Filtered omissions
+never imply deletion: transactions use explicit put/delete/mkdir with staged data.
+Native root checks do not establish OS confinement or eliminate host-writer races.
+
+Cloud upload seals immutable revision bytes. Authority atomically checks lease,
+expiry, credential/executor floor, fence, holder and base, then publishes pointer,
+receipt and recipient outbox; rejected staging/CAS preserves old pointer and bytes.
+The same WORKSPACES class/namespace has permanent authority/revision-store/scratch
+roles. Child IDs are server-derived, never public. Allocation and tombstone live
+permanently in the authority registry. Exact repeats observe; incompatible repeats
+conflict. Only revision-store can seal; scratch cannot publish. Retirement atomically
+tombstones an unreferenced/unpinned child before deletion, mutually exclusive with
+publication. Child checks the authority registry outside its mutex, never self-RPC.
+Deletion confirms deallocation, clears cached Computer handles, and forbids reuse
+or resurrection after deleteAll. Count unchanged copied bytes and scratch.
+
+One FIFO covers child Computer I/O, metadata and lazy pulls. Do not await cross-object
+calls while holding it, nest/self-acquire it, or hold it across long runtime waits.
+Authority pins/intents, unlocks, calls child, then rechecks before CAS. Scratch keeps
+an exclusive execution pin until runtime and sync quiesce. Container handleFetch
+is a narrow active scratch/backend bootstrap lane with upstream auth checks, no
+application SQL/filesystem/FIFO entry; never a broad raw Workspace/stub API.
+
+Local mutations use prepare → persisted LocalCommitIntent → one journaled apply →
+observe → metadata-only commit CAS → receipt delivery/ack. Preparation stages without
+changing canonical paths and pins root identity/full pre-manifest. CP persists apply
+send intent. Daemon durably claims once before touching files; native execution is
+through job.assign, never spawned by workspace apply. Lost apply ack resumes observe,
+not apply. Applied requires complete verified post-manifest and journal evidence;
+partial/unknown/drift quarantines the root for reconciliation. Only prepare/apply/
+commit need an unexpired lease. Observe/receipt lookup/receipt ack may use historical
+lease identity under current recovery/read grants and cannot authorize new effects.
+Metadata commit requires exact pending intent, observation, current floors, binding,
+unexpired authority lease, fence and base. CAS failure cannot undo host bytes.
+Lost commit ack recovers the matching receipt; lost receipt delivery retries only
+receipt. Persist receipt before releasing root pin. Never rebuild a missing ledger,
+repair a stale fence or repeat execution on retry. Retained local revision reads
+verify complete manifest before/after; never read current bytes as history.
+
+Local bytes use the three executor transfer routes, with mandatory nonsecret
+attemptId. Derive relative chunk/status paths from route metadata and descriptor
+IDs; no arbitrary URLs, redirects, bearer in descriptor, WS bytes or cloud canonical
+copy. CP stores scope/status only and matches two active fetch requests by exact
+attempt/chunk/direction/authorized peers. Bounded transient RAM validates a full
+chunk before exposure; recipient verifies chunk/full-file hashes independently.
+At most two matched chunks/transfer, four/install; rendezvous10s, idle10s, chunk30s,
+descriptorTTL≤60s and ≤lease expiry/deadline. At most one producer/consumer claim;
+competing claims409. Identical completed PUT returns stored chunk receipt only;
+a completed GET needs a new authorized attempt because RAM cannot replay history.
+Peer loss/revoke/expiry/restart cancels streams and requires new attempt after
+reauthorization. Reads can restart immutable available content; writes resume
+observed staging only, never apply again. Repeated status calls allocate nothing
+and extend nothing. 204 acknowledges chunk delivery, never local apply/commit.
+
+## Infrastructure and provider authentication
+
+Wire ceilings: JSON1MiB; output frame16KiB; aggregate inline64KiB; artifact16MiB;
+manifest512KiB/4096 entries; file64MiB; chunk256KiB; revision/upload256MiB; two
+uploads/workspace with15min TTL. Lease default30s, renewal10s, job deadline≤24h;
+RPC deadline≤30s, long execution returns observations. Effective values are the
+minimum of these ceilings and validated infrastructure policy, never Free-tier
+entitlements. `freeInfrastructurePolicy` matches foundation defaults: object128MiB,
+install512MiB, 25% repair headroom; file4MiB, snapshot/staging16MiB, 512 entries,
+8 retained revisions, workspace64MiB; inline32KiB, artifact1MiB, output/job8MiB;
+conversation2000 events/8MiB; one active mutating job, four queued; requests30 per
+principal/min and120/install/min, SQL pages100, transfer concurrency4.
+
+Reserve capacity idempotently before admission/side effects, retain reservation
+identity over restart, pessimistically count unknown bytes and release only proven
+unused/deallocated capacity. Count history/Pi/index/outbox/scratch/copies and preserve
+completion/revoke/repair headroom. Capacity blocks new work rather than evicting
+admitted history/receipts/referenced revisions. Free/unknown has no Loader/Containers
+binding. Explicit paid selection needs current available capability evidence and
+deployment validation; paid alone raises no bounds. Missing capability is501 with
+setup metadata. No automatic provisioning/fallback. quota_exceeded429 and
+quota_paused503 carry typed InfrastructurePressure and bounded retry details/
+Retry-After. Distinguish short rate limits. Storage has no daily reset; advertise
+only known reset/retry times, bounded UTC reset jitter where applicable. Coalesce
+backoff in existing recovery work, no new poller/alarm. Shared-account/provider
+failures can precede typed responses. There are no FortiPi model-provider budgets.
+
+Provider auth uses exactly GET/PUT/DELETE `/v1/admin/models/{providerId}/auth` with
+operation IDs getProviderAuthStatus/putProviderAuth/deleteProviderAuth and explicit
+models.auth.status/write/delete grants. Status returns only provider/version/
+generation/state/updatedAt. PUT is write-only OAuth (≤64KiB body, access/refresh
+≤16KiB each, explicit bounded providerFields validated by registry), expectedVersion:
+null for first version; DELETE is versioned logout with retained tombstone.
+Principal/provider/requestId+digest idempotency returns receipt only. All auth,
+credential and transfer responses are no-store. No public credential retrieval or
+credential-bearing backup/fact/log exists. Config uses secretRef or OAuth providerId;
+Workers AI binding is separate. API-key paths remain supported and plug-and-play.
+
+Private resolveProviderAuth accepts only resource-limited ModelResolutionContext
+and returns the pinned Pi ModelAuth/ProviderEnv privately. CP owns the allowlisted
+Pi CredentialStore read/list/modify/delete implementation and encrypted OAuth store;
+serialize ingest/refresh/logout and persist refreshed AES-GCM ciphertext before
+resolution. Use fresh nonce and provider/version AAD, separate preserved optional
+FORTIPI_MODEL_AUTH_KEY, required for OAuth, independent of bootstrap rotation.
+Generation/version CAS rejects stale refresh publication after logout. SecretRef
+adapter implements the complete read-only store contract, explicitly rejecting writes,
+fileExists false and scoped env resolution. No ambient ~/.pi files. External model
+factories use the private port; runtime gets no deployment credentials. Real Pi
+login/AuthInteraction is CLI-owned. Upstream refresh followed by death before local
+persistence can require re-login; exactly-once OAuth is not claimed.
+
+## Evidence scope
+
+Run from the repository with the pinned Node26.13/pnpm12.18 toolchain on PATH:
+
+```sh
+node packages/fortipi-contract/scripts/generate.ts
+node packages/fortipi-contract/scripts/generate.ts --check
+pnpm exec tsc -p packages/fortipi-contract/tsconfig.json --noEmit
+pnpm exec tsc -p apps/worker/tsconfig.json --noEmit
+pnpm exec tsc -p tsconfig.tools.json --noEmit
+node --test packages/fortipi-contract/test/schema.test.ts packages/fortipi-contract/test/wire.test.ts packages/fortipi-contract/test/compatibility.test.ts packages/fortipi-contract/test/generation.test.ts
+```
+
+Compile the contract once without `--noEmit` before running Node tests, which import
+its real emitted portable exports. Public fixtures import all three entrypoints;
+private fixtures consume the actual pinned RPC namespaces/stubs, Pi Models and
+container interfaces. Remote contractVersion is a promise on a platform RPC stub.
+Worker/tools use the parent's reviewed skipLibCheck configuration for pinned upstream
+declaration conflicts; maintained .ts and negative consumers remain strictly checked.
+Public package declarations retain full checks.
+
+| Claim | Oracle / actual observation | Sensitivity / limit |
+|---|---|---|
+| Route/schema coverage | Independently enumerated66 method/path pairs, exact generated matrices, every ref resolved by real strict Ajv2020; browser bundles resolve no dependencies | No HTTP handlers, network auth or deployment proved |
+| Schema/wire semantics | Fixed valid/invalid config, grant, local, transfer, OAuth, event and boundary fixtures accept/reject as specified | Temporal authority/CAS/no-follow/durability remain consumer obligations |
+| Event compatibility | Unknown durable cursor advances; malformed known/volatile-sequence frames reject | Disposable schema mutation removes known-type exclusions; malformed-known oracle actually fails, restore passes |
+| Deterministic generation | Real generator and --check compare all outputs without writes | Disposable declaration and OpenAPI drift each fail; regenerated/restored check passes |
+| Portable identity | Independent Node SHA-256 bytes match canonical digest; sorted manifest relation holds | Pure JSON/path checks do not prove filesystem or durable ledger behavior |
+| Private signatures | Complete reserve/acquire/intent/query/stage/commit/receipt/fact/finalize, revoke/local/store/model flows compile; negative missing identity/authority/evidence calls rejected | No fake backend, process, database, OAuth transport or runtime persistence substituted as proof |
+
+The canonical phase3 thread-2 build report records exact source commit, commands,
+hook failures/skips and observed limitations. Downstream owners must prove actual
+Pi/workerd startup, storage fencing/start dedup/restart, relay/local lost-ack and
+callback/GC races, OAuth encryption/refresh, paid Linux/Loader, three OS behavior,
+installed clients and deployed interoperability. This tranche claims no full CI,
+deployment, publication or runtime durability.

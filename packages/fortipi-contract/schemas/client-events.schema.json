@@ -1,0 +1,2068 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/client-events.schema.json",
+  "title": "client-events schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/client-events.schema.json#/$defs/ClientEvent",
+  "$defs": {
+    "KnownDurableEvent": {
+      "title": "KnownDurableEvent",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "conversation.created"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/Conversation"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "conversation.updated"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/Conversation"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "conversation.forked"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "conversation": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/Conversation"
+                },
+                "parentConversationId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "parentEventSeq": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["conversation", "parentConversationId", "parentEventSeq"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "message.committed"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/Message"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "message.completed"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/Message"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "message.failed"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "messageId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "error": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ErrorBody"
+                }
+              },
+              "required": ["messageId", "error"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "task.queued"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/tasks.schema.json#/$defs/Task"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "task.running"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/tasks.schema.json#/$defs/Task"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "task.waiting"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/tasks.schema.json#/$defs/Task"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "task.completed"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/tasks.schema.json#/$defs/Task"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "task.interrupted"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/tasks.schema.json#/$defs/Task"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "tool.execution.requested"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "tool.execution.started"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "tool.execution.completed"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "jobId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "result": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/PreparedResult"
+                },
+                "receipt": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/CommitReceipt"
+                }
+              },
+              "required": ["jobId", "result"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "tool.execution.failed"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "jobId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "error": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ErrorBody"
+                }
+              },
+              "required": ["jobId", "error"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "approval.requested"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/Approval"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "approval.resolved"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/Approval"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "approval.expired"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/Approval"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "workspace.revision.committed"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/CommitReceipt"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "workspace.sync.required"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "workspaceId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "revision": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+                }
+              },
+              "required": ["workspaceId", "revision"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "workspace.conflict"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "workspaceId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "reason": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ConflictReason"
+                }
+              },
+              "required": ["workspaceId", "reason"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "agent.status.changed"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "agentId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "state": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/tasks.schema.json#/$defs/TaskState"
+                }
+              },
+              "required": ["agentId", "state"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "executor.status.changed"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorDescription"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "job.state.changed"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/Job"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "job.reconciled"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ReconcileReceipt"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "durable"
+            },
+            "eventSeq": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "type": {
+              "const": "task.cancellation.requested"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ControlReceipt"
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "eventSeq",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "KnownVolatileEvent": {
+      "title": "KnownVolatileEvent",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "volatile"
+            },
+            "type": {
+              "const": "message.delta"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "messageId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16384
+                }
+              },
+              "required": ["messageId", "text"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "volatile"
+            },
+            "type": {
+              "const": "tool.execution.output"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "jobId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "sequence": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "stream": {
+                  "enum": ["stdout", "stderr"]
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16384
+                }
+              },
+              "required": ["jobId", "sequence", "stream", "text"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "protocolVersion": {
+              "const": "1.0"
+            },
+            "schemaVersion": {
+              "const": "1.0.0"
+            },
+            "deploymentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "eventId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "timestamp": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "toolCallId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "durability": {
+              "const": "volatile"
+            },
+            "type": {
+              "const": "heartbeat"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "serverTime": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+                }
+              },
+              "required": ["serverTime"],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "protocolVersion",
+            "schemaVersion",
+            "deploymentId",
+            "conversationId",
+            "eventId",
+            "timestamp",
+            "durability",
+            "type",
+            "payload"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "UnknownDurableEvent": {
+      "title": "UnknownDurableEvent",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "const": "1.0"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "deploymentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "conversationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "eventId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "timestamp": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "taskId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "toolCallId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "jobId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "durability": {
+          "const": "durable"
+        },
+        "eventSeq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "not": {
+            "enum": [
+              "conversation.created",
+              "conversation.updated",
+              "conversation.forked",
+              "message.committed",
+              "message.completed",
+              "message.failed",
+              "task.queued",
+              "task.running",
+              "task.waiting",
+              "task.completed",
+              "task.interrupted",
+              "tool.execution.requested",
+              "tool.execution.started",
+              "tool.execution.completed",
+              "tool.execution.failed",
+              "approval.requested",
+              "approval.resolved",
+              "approval.expired",
+              "workspace.revision.committed",
+              "workspace.sync.required",
+              "workspace.conflict",
+              "agent.status.changed",
+              "executor.status.changed",
+              "job.state.changed",
+              "job.reconciled",
+              "task.cancellation.requested",
+              "message.delta",
+              "tool.execution.output",
+              "heartbeat"
+            ]
+          }
+        },
+        "payload": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "schemaVersion",
+        "deploymentId",
+        "conversationId",
+        "eventId",
+        "timestamp",
+        "durability",
+        "eventSeq",
+        "type",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "UnknownVolatileEvent": {
+      "title": "UnknownVolatileEvent",
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "const": "1.0"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "deploymentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "conversationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "eventId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "timestamp": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "taskId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "toolCallId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "jobId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "durability": {
+          "const": "volatile"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "not": {
+            "enum": [
+              "conversation.created",
+              "conversation.updated",
+              "conversation.forked",
+              "message.committed",
+              "message.completed",
+              "message.failed",
+              "task.queued",
+              "task.running",
+              "task.waiting",
+              "task.completed",
+              "task.interrupted",
+              "tool.execution.requested",
+              "tool.execution.started",
+              "tool.execution.completed",
+              "tool.execution.failed",
+              "approval.requested",
+              "approval.resolved",
+              "approval.expired",
+              "workspace.revision.committed",
+              "workspace.sync.required",
+              "workspace.conflict",
+              "agent.status.changed",
+              "executor.status.changed",
+              "job.state.changed",
+              "job.reconciled",
+              "task.cancellation.requested",
+              "message.delta",
+              "tool.execution.output",
+              "heartbeat"
+            ]
+          }
+        },
+        "payload": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "schemaVersion",
+        "deploymentId",
+        "conversationId",
+        "eventId",
+        "timestamp",
+        "durability",
+        "type",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "DurableEvent": {
+      "title": "DurableEvent",
+      "oneOf": [
+        {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/client-events.schema.json#/$defs/KnownDurableEvent"
+        },
+        {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/client-events.schema.json#/$defs/UnknownDurableEvent"
+        }
+      ]
+    },
+    "VolatileEvent": {
+      "title": "VolatileEvent",
+      "oneOf": [
+        {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/client-events.schema.json#/$defs/KnownVolatileEvent"
+        },
+        {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/client-events.schema.json#/$defs/UnknownVolatileEvent"
+        }
+      ]
+    },
+    "ClientEvent": {
+      "title": "ClientEvent",
+      "oneOf": [
+        {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/client-events.schema.json#/$defs/DurableEvent"
+        },
+        {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/client-events.schema.json#/$defs/VolatileEvent"
+        }
+      ]
+    },
+    "ResyncRequired": {
+      "title": "ResyncRequired",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "resync_required"
+        },
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "reason": {
+          "enum": ["cursor.expired", "overflow", "scope.changed"]
+        },
+        "retainedFloor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["type", "requestId", "reason", "retainedFloor"],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json",
+  "title": "conversations schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/ConversationProjection",
+  "$defs": {
+    "Conversation": {
+      "title": "Conversation",
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "agentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "revision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "createdAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "taskState": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/tasks.schema.json#/$defs/TaskState"
+        }
+      },
+      "required": ["conversationId", "agentId", "title", "revision", "createdAt", "taskState"],
+      "additionalProperties": false
+    },
+    "ConversationCreate": {
+      "title": "ConversationCreate",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": ["requestId"],
+      "additionalProperties": false
+    },
+    "Message": {
+      "title": "Message",
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "role": {
+          "enum": ["user", "assistant", "tool"]
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "timestamp": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": ["messageId", "role", "content", "timestamp"],
+      "additionalProperties": false
+    },
+    "MessageSubmit": {
+      "title": "MessageSubmit",
+      "type": "object",
+      "properties": {
+        "clientRequestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "busyBehavior": {
+          "enum": ["followUp", "reject"]
+        },
+        "expectedConversationRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        }
+      },
+      "required": ["clientRequestId", "content", "busyBehavior"],
+      "additionalProperties": false
+    },
+    "SteerInput": {
+      "title": "SteerInput",
+      "type": "object",
+      "properties": {
+        "clientRequestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "expectedConversationRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        }
+      },
+      "required": ["clientRequestId", "content"],
+      "additionalProperties": false
+    },
+    "AdmissionReceipt": {
+      "title": "AdmissionReceipt",
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "messageId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "taskId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "revision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "eventSeq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["operationId", "messageId", "taskId", "revision", "eventSeq"],
+      "additionalProperties": false
+    },
+    "ConversationProjection": {
+      "title": "ConversationProjection",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/Conversation"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/Message"
+          },
+          "maxItems": 100
+        },
+        "projectionRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "lastEventSeq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "retainedFloor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "conversation",
+        "messages",
+        "projectionRevision",
+        "lastEventSeq",
+        "retainedFloor"
+      ],
+      "additionalProperties": false
+    },
+    "ForkInput": {
+      "title": "ForkInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "through": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": ["requestId", "through"],
+      "additionalProperties": false
+    },
+    "ReplayQuery": {
+      "title": "ReplayQuery",
+      "type": "object",
+      "properties": {
+        "after": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "through": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["after"],
+      "additionalProperties": false
+    },
+    "ReplayPage": {
+      "title": "ReplayPage",
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/client-events.schema.json#/$defs/DurableEvent"
+          },
+          "maxItems": 100
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "through": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lastEventSeq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "nextAfter": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "retainedFloor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "events",
+        "after",
+        "through",
+        "lastEventSeq",
+        "nextAfter",
+        "hasMore",
+        "retainedFloor"
+      ],
+      "additionalProperties": false
+    },
+    "ConversationPage": {
+      "title": "ConversationPage",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/conversations.schema.json#/$defs/Conversation"
+          },
+          "maxItems": 100
+        },
+        "nextPageToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": ["items"],
+      "additionalProperties": false
+    }
+  }
+}

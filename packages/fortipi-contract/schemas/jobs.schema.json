@@ -1,0 +1,502 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json",
+  "title": "jobs schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/Job",
+  "$defs": {
+    "JobState": {
+      "title": "JobState",
+      "enum": [
+        "created",
+        "awaiting_approval",
+        "authorized",
+        "queued",
+        "waiting_for_executor",
+        "waiting_for_local_policy",
+        "leased",
+        "dispatch_attempted",
+        "running",
+        "result_pending_commit",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted",
+        "expired",
+        "workspace_conflict",
+        "requires_reconciliation"
+      ]
+    },
+    "BackendRef": {
+      "title": "BackendRef",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "executor"
+            },
+            "executorId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["kind", "executorId", "generation"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "backend"
+            },
+            "backendId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["kind", "backendId", "generation"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ExecutionIdentity": {
+      "title": "ExecutionIdentity",
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "executionId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "operationDigest": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "assignmentDigest": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "target": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/BackendRef"
+        },
+        "lease": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Lease"
+        },
+        "baseRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "deadline": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "jobId",
+        "executionId",
+        "operationDigest",
+        "assignmentDigest",
+        "target",
+        "lease",
+        "baseRevision",
+        "deadline"
+      ],
+      "additionalProperties": false
+    },
+    "Job": {
+      "title": "Job",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "agentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationDigest": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "workspaceId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "baseRevision": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+            },
+            "state": {
+              "const": "completed"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "execution": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+            },
+            "preparedResult": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/PreparedResult"
+            },
+            "receipt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/CommitReceipt"
+            },
+            "evidence": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "committed"
+                    },
+                    "receipt": {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/CommitReceipt"
+                    }
+                  },
+                  "required": ["kind", "receipt"],
+                  "additionalProperties": false
+                },
+                {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/UnchangedBase"
+                }
+              ]
+            }
+          },
+          "required": [
+            "jobId",
+            "agentId",
+            "conversationId",
+            "taskId",
+            "operationDigest",
+            "workspaceId",
+            "baseRevision",
+            "state",
+            "version",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "jobId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "agentId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "conversationId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "taskId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "operationDigest": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+            },
+            "workspaceId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "baseRevision": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+            },
+            "state": {
+              "enum": [
+                "created",
+                "awaiting_approval",
+                "authorized",
+                "queued",
+                "waiting_for_executor",
+                "waiting_for_local_policy",
+                "leased",
+                "dispatch_attempted",
+                "running",
+                "result_pending_commit",
+                "failed",
+                "cancelled",
+                "interrupted",
+                "expired",
+                "workspace_conflict",
+                "requires_reconciliation"
+              ]
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "execution": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+            },
+            "preparedResult": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/PreparedResult"
+            },
+            "receipt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/CommitReceipt"
+            }
+          },
+          "required": [
+            "jobId",
+            "agentId",
+            "conversationId",
+            "taskId",
+            "operationDigest",
+            "workspaceId",
+            "baseRevision",
+            "state",
+            "version"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PreparedResult": {
+      "title": "PreparedResult",
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "state": {
+          "enum": ["succeeded", "failed", "cancelled", "unknown"]
+        },
+        "uploadId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "commitId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "manifestHash": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "tail": {
+              "type": "string",
+              "maxLength": 65536
+            },
+            "artifacts": {
+              "type": "array",
+              "items": {
+                "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ByteReference"
+              },
+              "maxItems": 16
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          },
+          "required": ["tail", "artifacts", "truncated"],
+          "additionalProperties": false
+        },
+        "possibleExternalEffects": {
+          "type": "boolean"
+        }
+      },
+      "required": ["identity", "sequence", "state", "output", "possibleExternalEffects"],
+      "additionalProperties": false
+    },
+    "ExecutionObservation": {
+      "title": "ExecutionObservation",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "identity": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+            },
+            "state": {
+              "const": "not_started"
+            },
+            "proof": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "durable-no-late-start"
+                },
+                "ledgerVersion": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "closedAssignmentDigest": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+                }
+              },
+              "required": ["kind", "ledgerVersion", "closedAssignmentDigest"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["identity", "state", "proof"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "identity": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+            },
+            "state": {
+              "enum": ["running", "terminal", "pending_sync", "lost", "unknown"]
+            },
+            "backendExecutionId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "runtimeUuid": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "result": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/PreparedResult"
+            }
+          },
+          "required": ["identity", "state"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ReconcileInput": {
+      "title": "ReconcileInput",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "action": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "accept-result"
+                },
+                "result": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/PreparedResult"
+                },
+                "receipt": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/CommitReceipt"
+                }
+              },
+              "required": ["kind", "result", "receipt"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": ["acknowledge-failed", "acknowledge-unknown", "discard-staging"]
+                }
+              },
+              "required": ["kind"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "new-job"
+                },
+                "newJobId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "authorizationId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                }
+              },
+              "required": ["kind", "newJobId", "authorizationId"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["requestId", "expectedVersion", "reason", "action"],
+      "additionalProperties": false
+    },
+    "ReconcileReceipt": {
+      "title": "ReconcileReceipt",
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "durableIntent": {
+          "const": true
+        },
+        "disposition": {
+          "enum": [
+            "result-verification-pending",
+            "failed-acknowledged",
+            "unknown-acknowledged",
+            "staging-discarded",
+            "new-job-requested"
+          ]
+        },
+        "newJobId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        }
+      },
+      "required": ["operationId", "durableIntent", "disposition"],
+      "additionalProperties": false
+    },
+    "UnchangedBase": {
+      "title": "UnchangedBase",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "verified-unchanged"
+        },
+        "workspaceId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "baseRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "manifestHash": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "executionId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "observedAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "kind",
+        "workspaceId",
+        "baseRevision",
+        "manifestHash",
+        "executionId",
+        "observedAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

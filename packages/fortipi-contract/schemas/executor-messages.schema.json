@@ -1,0 +1,670 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json",
+  "title": "executor-messages schema",
+  "description": "FortiPi protocol 1.0 / schema 1.0.0. Known records are closed. Cross-field authority and temporal predicates are enforced by the owning consumer; see the contract README.",
+  "$ref": "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/ExecutorFrame",
+  "$defs": {
+    "Assignment": {
+      "title": "Assignment",
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+        },
+        "reservationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "arguments": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/JsonObject"
+        },
+        "workspaceId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "bindingVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "rootBindingId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "approval": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation"
+        }
+      },
+      "required": [
+        "identity",
+        "reservationId",
+        "tool",
+        "arguments",
+        "workspaceId",
+        "bindingVersion"
+      ],
+      "additionalProperties": false
+    },
+    "LeaseUpdate": {
+      "title": "LeaseUpdate",
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+        },
+        "leaseVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expiresAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": ["identity", "leaseVersion", "expiresAt"],
+      "additionalProperties": false
+    },
+    "JobCommitted": {
+      "title": "JobCommitted",
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+        },
+        "evidence": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "committed"
+                },
+                "receipt": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/CommitReceipt"
+                }
+              },
+              "required": ["kind", "receipt"],
+              "additionalProperties": false
+            },
+            {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/UnchangedBase"
+            }
+          ]
+        },
+        "terminalVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "eventSeq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["identity", "evidence", "terminalVersion", "eventSeq"],
+      "additionalProperties": false
+    },
+    "ExecutorFrame": {
+      "title": "ExecutorFrame",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "executor.register"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "executorId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "protocolVersion": {
+                  "const": "1.0"
+                },
+                "schemaVersion": {
+                  "const": "1.0.0"
+                },
+                "capabilities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "maxItems": 100
+                },
+                "platform": {
+                  "enum": ["darwin", "linux", "win32"]
+                },
+                "caseBehavior": {
+                  "enum": ["sensitive", "insensitive"]
+                },
+                "rootBindingIds": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                  },
+                  "maxItems": 100
+                },
+                "confinement": {
+                  "enum": ["host", "isolated"]
+                }
+              },
+              "required": [
+                "executorId",
+                "generation",
+                "protocolVersion",
+                "schemaVersion",
+                "capabilities",
+                "platform",
+                "caseBehavior",
+                "rootBindingIds",
+                "confinement"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "executor.registered"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "executorId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "connectionEpoch": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "heartbeatMs": {
+                  "const": 15000
+                }
+              },
+              "required": ["executorId", "generation", "connectionEpoch", "heartbeatMs"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "executor.heartbeat"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "executorId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "connectionEpoch": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "timestamp": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+                }
+              },
+              "required": ["executorId", "generation", "connectionEpoch", "timestamp"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "executor.presence"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorDescription"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.assign"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/Assignment"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.start_ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "identity": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+                },
+                "ack": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/TransportAck"
+                }
+              },
+              "required": ["identity", "ack"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.query"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.query_result"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionObservation"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.cancel"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "identity": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                }
+              },
+              "required": ["identity", "reason"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.cancel_ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "identity": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+                },
+                "disposition": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CancellationDisposition"
+                }
+              },
+              "required": ["identity", "disposition"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.output"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "identity": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+                },
+                "sequence": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "stream": {
+                  "enum": ["stdout", "stderr"]
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16384
+                }
+              },
+              "required": ["identity", "sequence", "stream", "text"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.output_ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/TransportAck"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.prepared_result"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/PreparedResult"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.result_ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/TransportAck"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.lease_update"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/LeaseUpdate"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "job.committed"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/JobCommitted"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "local_policy.pending"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "identity": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+                },
+                "operation": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation"
+                }
+              },
+              "required": ["identity", "operation"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "local_policy.decision"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "identity": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+                },
+                "operationDigest": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+                },
+                "decision": {
+                  "enum": ["allow", "deny"]
+                }
+              },
+              "required": ["identity", "operationDigest", "decision"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "workspace.request"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "requestId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "correlationId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "request": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LocalWorkspaceRequest"
+                }
+              },
+              "required": ["requestId", "correlationId", "request"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "workspace.response"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "requestId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "correlationId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "response": {
+                  "oneOf": [
+                    {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LocalWorkspaceResponse"
+                    },
+                    {
+                      "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ErrorBody"
+                    }
+                  ]
+                }
+              },
+              "required": ["requestId", "correlationId", "response"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "transfer.open"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/transfers.schema.json#/$defs/TransferDescriptor"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "transfer.status"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/transfers.schema.json#/$defs/TransferStatus"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}
