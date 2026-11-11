@@ -20,6 +20,29 @@ Import `fortipi-contract` for resource DTOs, schemas, routes and generated
 metadata has no JSON body: the octet stream travels through the owning object's
 `fetch(Request)`, never a hidden RPC field. HTTP byte successes are bytes, and
 101/204 have no body. Private workspace reads return `ByteReference` instead.
+`ChunkInventory` carries only an announced `chunkBytes` grid and at most 256
+actual chunk hashes; its grid fits negotiated/local caps and hash count equals
+`ceil(size/chunkBytes)`. Zero-byte files have an empty hash list and no PUT.
+Local reads first use the existing read request without transfers to return
+`ByteReference.chunks` computed from retained owner bytes. Only then does the
+authority allocate a scoped descriptor and repeat that correlated read with
+transfers to start the producer. These requests retain the operation scope but
+have distinct body-bound request/correlation identities. Metadata is not a
+canonical byte copy or a substitute for checking current bytes and authority.
+
+`UploadBegin.blobs` supplies one `{sha256,chunks}` plan for every distinct
+declared put, including puts superseded by later ordered mutations. Local
+uploads require it (explicit `[]` when no put); Computer uploads may omit it.
+`validateUploadBlobs(input,{required})` checks exact coverage, shared-hash size
+consistency, the chunk inventory and the complete 1 MiB control-body cap.
+Puts sharing a SHA must agree on size even when optional Computer plans are absent.
+`validateChunkInventory(chunks,size)` supplements exact schema parsing; actors
+also enforce real limits/floors and verify file SHA, chunk SHA and length before
+forwarding/applying. Plans use sizes from puts rather than assuming every put
+survives in the final manifest. Duplicate/extra/missing plans reject. No new
+endpoint, transfer descriptor shape, file bytes in metadata or hash recipe is
+introduced; older calls without these optional fields retain their encoding.
+
 Responses discriminate status and semantic error code; conflict reasons and
 429/503 retry details remain typed. Lists default to 100 and allow 1–100 items;
 opaque page tokens bind principal, resource, filter and view, never authority.

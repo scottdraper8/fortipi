@@ -1,16 +1,22 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
+import type * as Client from "fortipi-contract/client";
+import type * as Executor from "fortipi-contract/executor";
+import type { UploadBegin } from "../dist/index.js";
 import {
   freeInfrastructurePolicy,
   incrementSafe,
   publicCommitReceipt,
   requireCapability,
   validateBrowserOrigin,
+  validateChunkInventory,
   validateLocalLease,
   validateManifest,
   validateProviderAuthPut,
   validateRelativePath,
   validateTransfer,
+  validateUploadBlobs,
 } from "../dist/index.js";
 import {
   credential,
@@ -27,6 +33,130 @@ import {
 } from "./fixtures/wire.ts";
 
 const { get } = validators();
+test("local upload and read metadata announce complete chunk grids before any bytes", () => {
+  const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+  const bytes = Buffer.concat([Buffer.alloc(262144, 65), Buffer.from("tail")]);
+  const sha256 = digest(bytes);
+  const chunks = {
+    chunkBytes: 262144,
+    chunkHashes: [digest(bytes.subarray(0, 262144)), digest(bytes.subarray(262144))],
+  } satisfies Client.ChunkInventory & Executor.ChunkInventory;
+  const plan = { sha256, chunks } satisfies Client.UploadBlobPlan & Executor.UploadBlobPlan;
+  const empty = digest(Buffer.alloc(0));
+  const removedBytes = Buffer.from("superseded");
+  const removed = digest(removedBytes);
+  const input = {
+    requestId: "request_1",
+    operationId: lease.operationId,
+    commitId: "commit_1",
+    baseRevision: lease.baseRevision,
+    lease,
+    manifestHash: hash,
+    manifest: {
+      version: 1,
+      entries: [
+        { path: "large.bin", type: "file", mode: 420, size: bytes.length, sha256 },
+        { path: "empty.txt", type: "file", mode: 420, size: 0, sha256: empty },
+      ],
+    },
+    mutations: [
+      { kind: "put", path: "removed.txt", mode: 420, size: removedBytes.length, sha256: removed },
+      { kind: "delete", path: "removed.txt" },
+      { kind: "put", path: "large.bin", mode: 420, size: bytes.length, sha256 },
+      { kind: "put", path: "copy.bin", mode: 420, size: bytes.length, sha256 },
+      { kind: "delete", path: "copy.bin" },
+      { kind: "put", path: "empty.txt", mode: 420, size: 0, sha256: empty },
+    ],
+    blobs: [
+      plan,
+      { sha256: removed, chunks: { chunkBytes: 262144, chunkHashes: [removed] } },
+      { sha256: empty, chunks: { chunkBytes: 262144, chunkHashes: [] } },
+    ],
+  } satisfies UploadBegin & Client.UploadBegin & Executor.UploadBegin;
+  accepted("UploadBegin", input);
+  validateUploadBlobs(input, { required: true });
+  const reference = {
+    workspaceId: "workspace_1",
+    revision: "revision_1",
+    sha256,
+    size: bytes.length,
+    endpoint: "/v1/workspaces/workspace_1/read",
+    owner: { kind: "local", executorId: "executor_1" },
+    chunks,
+  } satisfies Client.ByteReference & Executor.ByteReference;
+  accepted("ByteReference", reference);
+  accepted("LocalReadResult", { kind: "read", result: reference });
+  validateChunkInventory(reference.chunks, reference.size);
+  // A lower negotiated cap changes the announced grid, never the bytes or the final file SHA.
+  const smaller = {
+    chunkBytes: 131072,
+    chunkHashes: [
+      digest(bytes.subarray(0, 131072)),
+      digest(bytes.subarray(131072, 262144)),
+      digest(bytes.subarray(262144)),
+    ],
+  };
+  accepted("ChunkInventory", smaller);
+  validateChunkInventory(smaller, bytes.length);
+  assert.throws(() => validateChunkInventory(chunks, 262144), /chunk_inventory/);
+  assert.throws(
+    () =>
+      validateChunkInventory({ ...chunks, chunkHashes: chunks.chunkHashes.slice(1) }, bytes.length),
+    /chunk_inventory/,
+  );
+  assert.throws(
+    () => validateChunkInventory({ chunkBytes: 1, chunkHashes: Array(257).fill(hash) }, 257),
+    /chunk_inventory/,
+  );
+  rejected("ChunkInventory", { ...chunks, chunkBytes: 262145 });
+  rejected("ChunkInventory", { ...chunks, bytes: "forbidden" });
+  rejected("UploadBlobPlan", { sha256, chunks, uploadId: "future_id" });
+  const { blobs: _blobs, ...legacy } = input;
+  accepted("UploadBegin", legacy);
+  validateUploadBlobs(legacy, { required: false });
+  assert.throws(() => validateUploadBlobs(legacy, { required: true }), /missing_blobs/);
+  assert.throws(
+    () => validateUploadBlobs({ ...input, blobs: input.blobs.slice(1) }, { required: true }),
+    /missing_blobs/,
+  );
+  assert.throws(
+    () =>
+      validateUploadBlobs(
+        { ...input, blobs: [...(input.blobs ?? []), { sha256, chunks }] },
+        { required: true },
+      ),
+    /unexpected_blob/,
+  );
+  assert.throws(
+    () => validateUploadBlobs({ ...input, blobs: [{ sha256: hash, chunks }] }, { required: true }),
+    /unexpected_blob/,
+  );
+  const inconsistent = {
+    ...legacy,
+    mutations: [...input.mutations, { kind: "put", path: "bad.bin", mode: 420, sha256, size: 1 }],
+  } satisfies UploadBegin;
+  accepted("UploadBegin", inconsistent);
+  assert.throws(
+    () => validateUploadBlobs(inconsistent, { required: false }),
+    /inconsistent_file_size/,
+  );
+  assert.throws(
+    () => validateUploadBlobs({ ...inconsistent, blobs: input.blobs }, { required: true }),
+    /inconsistent_file_size/,
+  );
+  validateUploadBlobs(
+    { ...input, mutations: [{ kind: "delete", path: "old.txt" }], blobs: [] },
+    { required: true },
+  );
+  const oversized = {
+    ...input,
+    blobs: Array.from({ length: 64 }, (_, i) => ({
+      sha256: i.toString(16).padStart(64, "0"),
+      chunks: { chunkBytes: 262144, chunkHashes: Array(256).fill(hash) },
+    })),
+  };
+  assert.throws(() => validateUploadBlobs(oversized, { required: true }), /payload_too_large/);
+});
 test("ticket receipt carries only redacted authenticated identity with independent credential expiry", () => {
   const identity = {
     deploymentId: "deployment_1",
