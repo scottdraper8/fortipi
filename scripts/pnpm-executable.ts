@@ -1,8 +1,9 @@
 // Builtin-only so dependency installation can use this locator before node_modules exists.
 import { execFile } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { delimiter, dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { basename, delimiter, dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 
 function missing(error: unknown): boolean {
@@ -36,6 +37,30 @@ export async function pnpmExecutable(
     )
       continue;
     try {
+      // self-update leaves the action's older bootstrap package in place. Its
+      // generated POSIX shim names the active native target in this data marker.
+      const shimPath = resolve(directory, "pnpm");
+      if ((await regularFile(shimPath)) && (await stat(shimPath)).size <= 65_536) {
+        const marker = (await readFile(shimPath, "utf8"))
+          .trimEnd()
+          .split(/\r?\n/)
+          .at(-1)
+          ?.match(/^# cmd-shim-target=(.+)$/)?.[1];
+        if (marker) {
+          const target = resolve(directory, marker);
+          const manifest = JSON.parse(
+            await readFile(resolve(dirname(target), "package.json"), "utf8"),
+          ) as { name: string; version: string };
+          if (
+            basename(target) !== "pnpm.exe" ||
+            manifest.name !== "pnpm" ||
+            manifest.version !== "12.18.0" ||
+            !(await regularFile(target))
+          )
+            throw new Error("Use the reviewed pnpm 12.18.0 native installation");
+          return target;
+        }
+      }
       const lookup = createRequire(resolve(directory, ".fortipi-pnpm-lookup.cjs"));
       const manifestPath = lookup.resolve("pnpm/package.json");
       const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
@@ -67,15 +92,21 @@ export async function pnpmExecutable(
 export async function verifyPnpmExecutable(
   executable: string,
   env: NodeJS.ProcessEnv = process.env,
-  cwd = process.cwd(),
 ): Promise<string> {
-  const version = await promisify(execFile)(executable, ["--version"], {
-    cwd,
-    env,
-    timeout: 30_000,
-    maxBuffer: 4096,
-  });
-  if (version.stdout.trim() !== "12.18.0")
-    throw new Error("Use the reviewed pnpm 12.18.0 native installation");
-  return "12.18.0";
+  // pnpm can switch engines from a project's packageManager before printing its
+  // version. Probe outside that project so an old bootstrap cannot mask itself.
+  const cwd = await mkdtemp(resolve(tmpdir(), "fortipi-pnpm-version-"));
+  try {
+    const version = await promisify(execFile)(executable, ["--version"], {
+      cwd,
+      env,
+      timeout: 30_000,
+      maxBuffer: 4096,
+    });
+    if (version.stdout.trim() !== "12.18.0")
+      throw new Error("Use the reviewed pnpm 12.18.0 native installation");
+    return "12.18.0";
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
 }

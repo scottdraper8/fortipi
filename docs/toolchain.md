@@ -6,7 +6,7 @@ Release's registry verification uses Node-bundled npm **11.20.0** at its declare
 
 Bootstrap **before** invoking pnpm scripts:
 
-The builtin-only installer resolves the native pnpm executable and verifies its exact version before installation. On Windows it discovers the official package's `pnpm.exe` rather than executing a shell shim. Native verification sends one PTY input challenge and checks both real TTY output and rendered terminal cells; all three operating systems still require their own CI observations.
+The builtin-only installer resolves the native pnpm executable and verifies its exact version before installation. On Windows it discovers the official package's `pnpm.exe` rather than executing a shell shim. The pinned setup Action retains its older bootstrap package after self-update; read the generated shim's final `cmd-shim-target` data marker to locate the active engine, require its exact package identity, then probe its version outside the project so automatic version switching cannot mask an old binary. This layout follows the pinned [setup Action](https://github.com/pnpm/action-setup/blob/73e46992e05b19abd31f2f3c20e0e7370d762115/src/install-pnpm/run.ts) and [pnpm marker implementation](https://github.com/pnpm/pnpm/blob/0470052291b2ba369be93a9b696e0a0097722ba5/pnpm/crates/cmd-shim/src/shim/sh.rs). Native verification sends one PTY input challenge and checks both real TTY output and rendered terminal cells; all three operating systems still require their own CI observations.
 
 ```sh
 node scripts/install-dependencies.ts

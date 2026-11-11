@@ -70,6 +70,32 @@ test("package-manager verification rejects a real executable with the wrong vers
   );
 });
 
+test("Windows self-update shim selects the pinned engine instead of its older bootstrap", async () => {
+  await mkdir(resolve(repository, "dist/foundation-fixtures"), { recursive: true });
+  const root = await mkdtemp(resolve(repository, "dist/foundation-fixtures/self-update-"));
+  try {
+    const bin = resolve(root, "node_modules/.bin/bin");
+    const bootstrap = resolve(root, "node_modules/pnpm");
+    const engine = resolve(root, "active engine $literal/node_modules/pnpm");
+    await Promise.all([bin, bootstrap, engine].map((path) => mkdir(path, { recursive: true })));
+    await writeFile(
+      resolve(bootstrap, "package.json"),
+      JSON.stringify({ name: "pnpm", version: "12.17.0" }),
+    );
+    const manifest = resolve(engine, "package.json");
+    await writeFile(manifest, JSON.stringify({ name: "pnpm", version: "12.18.0" }));
+    const native = resolve(engine, "pnpm.exe");
+    await writeFile(native, "Fixture binary: never executed");
+    // Pinned pnpm's generated shim ends in this raw data marker; no shell is evaluated.
+    await writeFile(resolve(bin, "pnpm"), `#!/bin/sh\n# cmd-shim-target=${native}\r\n`);
+    assert.equal(await pnpmExecutable("win32", [bin]), native);
+    await writeFile(manifest, JSON.stringify({ name: "pnpm", version: "12.17.0" }));
+    await assert.rejects(() => pnpmExecutable("win32", [bin]), /reviewed pnpm 12.18.0/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 async function fixture(change: (root: string) => Promise<void>, rejection: RegExp): Promise<void> {
   await mkdir(resolve(repository, "dist/foundation-fixtures"), { recursive: true });
   const root = await mkdtemp(resolve(repository, "dist/foundation-fixtures/case-"));

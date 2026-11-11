@@ -8,7 +8,7 @@ import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 assert.equal(process.versions.node, "26.13.0");
 const pnpm = await pnpmExecutable();
-await verifyPnpmExecutable(pnpm, process.env, root);
+await verifyPnpmExecutable(pnpm);
 assert.ok(
   process.argv.slice(2).every((arg) => arg === "--force"),
   "Only optional --force is supported",

@@ -22,7 +22,7 @@ export async function run(
     command === "pnpm"
       ? await pnpmExecutable(process.platform, (env.PATH ?? env.Path ?? "").split(delimiter))
       : command;
-  if (command === "pnpm") await verifyPnpmExecutable(executable, env, cwd);
+  if (command === "pnpm") await verifyPnpmExecutable(executable, env);
   await new Promise<void>((accept, reject) => {
     const child = spawn(executable, args, { cwd, env, stdio: "inherit", windowsHide: true });
     let timedOut = false;
