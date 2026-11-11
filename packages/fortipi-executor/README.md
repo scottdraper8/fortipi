@@ -149,7 +149,13 @@ and direct filesystem attributes, without cmdlet module autoload or account-name
 translation. The native diagnostic emits bounded stage timings without identities
 or paths; it retains the same per-process protection timeout.
 Rejected DACLs report bounded owner-category/rule-mask diagnostics without SIDs or
-paths. A rejected SQLite sidecar is never silently repaired or accepted.
+paths. Only known SQLite sidecars under a strictly protected database and parent
+may tighten an inherited DACL whose owner is exactly the process token's default
+owner and whose only allow entries give current-user/SYSTEM full control. The
+adapter repeats eligibility before protecting the copied entries and setting the
+owner to the current user, then verifies identity, unchanged bytes and strict
+protection before SQLite opens it. Foreign owners/entries, links and unsafe
+parents are rejected without repair. This path requires actual Windows evidence.
 
 ## Reproduction and evidence limits
 

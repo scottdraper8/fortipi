@@ -55,6 +55,8 @@ export class ExecutorRuntime implements FrameHandler {
   transfers = new Set<string>();
   stageRetryAt = new Map<string, number>();
   queryIndex = 0;
+  private stopping = false;
+  private activities = new Set<Promise<unknown>>();
   private workspaceRequests = new Map<string, Promise<LocalWorkspaceResponse | ErrorBody>>();
   connected = false;
   revoked = false;
@@ -98,6 +100,43 @@ export class ExecutorRuntime implements FrameHandler {
   async initialize(): Promise<void> {
     await this.staging.initialize();
     await secureDirectory(join(this.directory, "artifacts"), this.platform);
+  }
+  private track(work: Promise<unknown>): void {
+    this.activities.add(work);
+    void work.then(
+      () => this.activities.delete(work),
+      () => this.activities.delete(work),
+    );
+  }
+  async shutdown(pendingTick: Promise<unknown> = Promise.resolve()): Promise<void> {
+    this.stopping = true;
+    this.connected = false;
+    this.revoked = true;
+    this.http.revoked = true;
+    this.track(pendingTick);
+    let cancellationFailed = false;
+    for (const identity of this.ledger.identities())
+      if (this.children.has(identity.jobId))
+        try {
+          await this.cancel(identity, "daemon stopping");
+        } catch {
+          cancellationFailed = true;
+        }
+    // Unconfirmed children remain durably unknown/quarantined. Detach their local
+    // observers; a later exit must never publish through a closed ledger.
+    for (const [jobId, child] of this.children)
+      if (child.exitCode === null && child.signalCode === null) {
+        child.removeAllListeners("close");
+        child.stdout?.removeAllListeners("data");
+        child.stderr?.removeAllListeners("data");
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        child.unref();
+        this.children.delete(jobId);
+        this.active.delete(jobId);
+      }
+    while (this.activities.size) await Promise.allSettled([...this.activities]);
+    if (cancellationFailed) throw new Error("daemon cancellation requires reconciliation");
   }
   identityAllowed(identity: ExecutionIdentity, allowRevoked = false): void {
     const p = this.profile,
@@ -156,6 +195,7 @@ export class ExecutorRuntime implements FrameHandler {
     this.profile.policy = p.policy;
   }
   async assignOnce(assignment: Assignment): Promise<ExecutionObservation> {
+    if (this.stopping) throw new Error("executor stopping");
     this.http.assertExecutorAuthority();
     frame({ type: "job.assign", requestId: randomUUID(), payload: assignment });
     this.identityAllowed(assignment.identity);
@@ -265,7 +305,12 @@ export class ExecutorRuntime implements FrameHandler {
       row.incarnation !== this.ledger.incarnation
     )
       return;
-    if (!this.connected || this.revoked || this.active.size >= this.http.limits.activeMutatingJobs)
+    if (
+      this.stopping ||
+      !this.connected ||
+      this.revoked ||
+      this.active.size >= this.http.limits.activeMutatingJobs
+    )
       return;
     if (this.http.pressureHeld || Date.now() < this.http.pausedUntil) return;
     this.active.add(id.jobId);
@@ -367,28 +412,22 @@ export class ExecutorRuntime implements FrameHandler {
       });
       const executionRoot = root;
       child.once("close", (code, signal) => {
-        void this.finished(
-          assignment,
-          executionRoot,
-          output,
-          code,
-          signal,
-          spawnError,
-          outputFailed,
-        )
-          .catch(() => {
-            const failed = this.ledger.get(id.jobId);
-            if (failed) {
-              failed.state = "unknown";
-              failed.reason = "result recovery requires reconciliation";
-              this.ledger.put(failed);
-            }
-            this.ledger.quarantine(executionRoot.key);
-          })
-          .finally(() => {
-            this.children.delete(id.jobId);
-            this.active.delete(id.jobId);
-          });
+        this.track(
+          this.finished(assignment, executionRoot, output, code, signal, spawnError, outputFailed)
+            .catch(() => {
+              const failed = this.ledger.get(id.jobId);
+              if (failed) {
+                failed.state = "unknown";
+                failed.reason = "result recovery requires reconciliation";
+                this.ledger.put(failed);
+              }
+              this.ledger.quarantine(executionRoot.key);
+            })
+            .finally(() => {
+              this.children.delete(id.jobId);
+              this.active.delete(id.jobId);
+            }),
+        );
       });
     } catch (error) {
       this.active.delete(id.jobId);
@@ -484,6 +523,10 @@ export class ExecutorRuntime implements FrameHandler {
       }
     }
     // Publish only the final prepared result; transport delivery is independent of terminal success.
+    if (this.revoked || this.leaseLost(this.ledger.get(id.jobId)?.assignment)) {
+      result.state = "unknown";
+      this.ledger.quarantine(root.key);
+    }
     this.ledger.transaction(() => {
       const latest = this.ledger.get(id.jobId);
       if (!latest) throw new Error("result missing");
@@ -699,6 +742,7 @@ export class ExecutorRuntime implements FrameHandler {
     this.connected = false;
   }
   async receive(value: ExecutorFrame): Promise<void> {
+    if (this.stopping) throw new Error("executor stopping");
     if (Buffer.byteLength(canonicalJson(value)) > this.http.jsonBytes)
       throw new Error("payload_too_large: encoded frame");
     frame(value);
@@ -713,25 +757,27 @@ export class ExecutorRuntime implements FrameHandler {
       return;
     }
     if (value.type === "job.assign") {
-      void this.assignOnce(value.payload)
-        .then((observation) => {
-          this.session?.send({
-            type: "job.start_ack",
-            requestId: value.requestId,
-            payload: {
-              identity: value.payload.identity,
-              ack: { deliveryId: value.requestId, sequence: 0, persisted: true },
-            },
-          });
-          this.session?.send({
-            type: "job.query_result",
-            requestId: randomUUID(),
-            payload: observation,
-          });
-        })
-        .catch(() => {
-          this.session?.socket?.close(1008, "assignment rejected");
-        });
+      this.track(
+        this.assignOnce(value.payload)
+          .then((observation) => {
+            this.session?.send({
+              type: "job.start_ack",
+              requestId: value.requestId,
+              payload: {
+                identity: value.payload.identity,
+                ack: { deliveryId: value.requestId, sequence: 0, persisted: true },
+              },
+            });
+            this.session?.send({
+              type: "job.query_result",
+              requestId: randomUUID(),
+              payload: observation,
+            });
+          })
+          .catch(() => {
+            this.session?.socket?.close(1008, "assignment rejected");
+          }),
+      );
       return;
     }
     if (value.type === "job.query") {
@@ -771,13 +817,15 @@ export class ExecutorRuntime implements FrameHandler {
       return;
     } // Remote decisions never mutate local approval state.
     if (value.type === "workspace.request") {
-      void this.handleWorkspaceFrame(value)
-        .then((response) => this.session?.send(response))
-        .catch(() => this.session?.socket?.close(1008, "workspace request identity conflict"));
+      this.track(
+        this.handleWorkspaceFrame(value)
+          .then((response) => this.session?.send(response))
+          .catch(() => this.session?.socket?.close(1008, "workspace request identity conflict")),
+      );
       return;
     }
     if (value.type === "transfer.open") {
-      void this.transfer(value.payload).catch(() => {});
+      this.track(this.transfer(value.payload).catch(() => {}));
       return;
     }
     if (value.type === "executor.presence") {
@@ -1079,10 +1127,11 @@ export async function runDaemon(
     const session = new SessionTransport(runtime.http, runtime);
     runtime.session = session;
     let ticking = false;
+    let pendingTick = Promise.resolve();
     const tick = setInterval(() => {
       if (!ticking) {
         ticking = true;
-        void runtime
+        pendingTick = runtime
           .tick()
           .catch(() => {})
           .finally(() => {
@@ -1134,8 +1183,7 @@ export async function runDaemon(
       }
     } finally {
       clearInterval(tick);
-      for (const identity of ledger.identities())
-        if (runtime.children.has(identity.jobId)) await runtime.cancel(identity, "daemon stopping");
+      await runtime.shutdown(pendingTick);
     }
   } finally {
     ledger?.close();
