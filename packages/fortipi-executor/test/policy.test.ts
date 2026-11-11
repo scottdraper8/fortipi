@@ -230,3 +230,79 @@ test("observed signal cancellation persists intent first, reports actual exit an
     await f.cleanup();
   }
 });
+test("daemon shutdown drains the actual child finalizer before SQLite can close and never replays its effects", async () => {
+  const f = await fixture(),
+    entered = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>(),
+    cancelled = Promise.withResolvers<void>();
+  let r: ExecutorRuntime | undefined, stopping: Promise<void> | undefined;
+  try {
+    const marker = join(f.path, "shutdown-effect"),
+      a = await assignment(nodeCommand(fixtureChild, "append-wait", marker));
+    r = await runtime(f);
+    const local = r.locals.get("root");
+    if (!local) throw new Error("local provider absent");
+    await local.request(prepare(a, f.initial.manifestHash));
+    await r.assignOnce(a);
+    const pending = r.approvals.list()[0];
+    if (!pending) throw new Error("approval absent");
+    r.approvals.decide(a.identity.jobId, pending.digest, "allow");
+    await r.tick();
+    await eventually(async () => {
+      try {
+        return (await readFile(marker, "utf8")) === "effect\n";
+      } catch {
+        return false;
+      }
+    }, "native process did not append");
+    const finished = local.nativeFinished.bind(local);
+    local.nativeFinished = async (...args) => {
+      entered.resolve();
+      await release.promise;
+      return finished(...args);
+    };
+    const cancel = r.cancel.bind(r);
+    r.cancel = async (...args) => {
+      try {
+        return await cancel(...args);
+      } finally {
+        cancelled.resolve();
+      }
+    };
+    let stopped = false;
+    stopping = r.shutdown().then(() => {
+      stopped = true;
+    });
+    await Promise.race([
+      entered.promise,
+      stopping.then(() => {
+        throw new Error("shutdown returned before the child finalizer");
+      }),
+    ]);
+    await cancelled.promise;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(stopped, false, "shutdown returned before the child finalizer");
+    assert.equal(
+      f.ledger.get(a.identity.jobId)?.cancelled,
+      true,
+      "ledger stays open during finalization",
+    );
+    release.resolve();
+    await stopping;
+    assert.equal(r.children.size, 0);
+    assert.equal(f.ledger.get(a.identity.jobId)?.result?.state, "unknown");
+    assert.equal(f.ledger.rootAvailable(f.root.key), false);
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+    await assert.rejects(r.assignOnce(a), /stopping/);
+    f.ledger.recover();
+    assert.equal(
+      f.ledger.claim(a.identity.jobId, pending.digest, f.root.key, a.identity.jobId),
+      false,
+    );
+  } finally {
+    release.resolve();
+    await stopping?.catch(() => {});
+    if (r?.children.size) await r.shutdown();
+    await f.cleanup();
+  }
+});
