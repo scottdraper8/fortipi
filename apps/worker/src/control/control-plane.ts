@@ -42,7 +42,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
   readonly leases: WorkspaceLeases;
   private readonly initialized: Promise<void>;
   private readonly origins = new Map<string, { value: string; deadline: number }>();
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: Env, providerTransport: typeof fetch = fetch) {
     super(ctx, env);
     this.store = new Store(
       ctx.storage,
@@ -88,17 +88,14 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       this.identities,
       env,
       () => this.directory.config(),
-      this.providerTransport(),
+      providerTransport,
     );
     this.initialized = ctx.blockConcurrencyWhile(async () => {
       await this.identities.bootstrap(env.FORTIPI_ADMIN_TOKEN);
       await this.store.rearm();
     });
   }
-  protected providerTransport(): typeof fetch {
-    return fetch;
-  }
-  private async call<T>(ctx: D.AuthContext, fn: () => Promise<T> | T): Promise<D.Outcome<T>> {
+  async #call<T>(ctx: D.AuthContext, fn: () => Promise<T> | T): Promise<D.Outcome<T>> {
     return outcome(ctx.requestId, async () => {
       await this.initialized;
       this.identities.current(ctx);
@@ -125,7 +122,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     });
   }
   async authorize(input: D.AuthorizationRequest): Promise<D.Outcome<D.GrantDecision>> {
-    return this.call(input.principal, () =>
+    return this.#call(input.principal, () =>
       roleAllows(input.principal, input.action) &&
       permits(input.principal.grants, input.resources, input.action)
         ? {
@@ -140,7 +137,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.AuthorityRecipientRequest,
   ): Promise<D.Outcome<D.AuthorityRegistration>> {
-    return this.call(ctx, () => this.tickets.register(ctx, input));
+    return this.#call(ctx, () => this.tickets.register(ctx, input));
   }
   async resolveExecutorGeneration(
     ctx: D.AuthContext,
@@ -152,13 +149,13 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       transferLimits: D.ExecutorTransferLimits | null;
     }>
   > {
-    return this.call(ctx, () => this.bindings.resolve(ctx, input));
+    return this.#call(ctx, () => this.bindings.resolve(ctx, input));
   }
   async reserveCapacity(
     ctx: D.AuthContext,
     input: Parameters<ControlPlaneRpc["reserveCapacity"]>[1],
   ): Promise<D.Outcome<D.CapacityReservation>> {
-    return this.call(ctx, () => this.capacity.reserve(ctx, input));
+    return this.#call(ctx, () => this.capacity.reserve(ctx, input));
   }
   async settleCapacity(
     ctx: D.AuthContext,
@@ -176,34 +173,34 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.TargetRequest,
   ): Promise<D.Outcome<D.TargetReservation>> {
-    return this.call(ctx, () => this.dispatch.reserve(ctx, input));
+    return this.#call(ctx, () => this.dispatch.reserve(ctx, input));
   }
   async recordDispatchIntent(
     ctx: D.AuthContext,
     input: D.DispatchIntent,
   ): Promise<D.Outcome<D.DispatchReceipt>> {
-    return this.call(ctx, () => this.dispatch.intent(ctx, input));
+    return this.#call(ctx, () => this.dispatch.intent(ctx, input));
   }
   async assignOnce(ctx: D.AuthContext, input: D.Assignment): Promise<D.Outcome<D.DispatchAck>> {
-    return this.call(ctx, () => this.dispatch.assign(ctx, input));
+    return this.#call(ctx, () => this.dispatch.assign(ctx, input));
   }
   async queryExecution(
     ctx: D.AuthContext,
     input: D.ExecutionIdentity,
   ): Promise<D.Outcome<D.ExecutionObservation>> {
-    return this.call(ctx, () => this.dispatch.query(ctx, input));
+    return this.#call(ctx, () => this.dispatch.query(ctx, input));
   }
   async cancelExecution(
     ctx: D.AuthContext,
     input: D.CancelRequest,
   ): Promise<D.Outcome<D.CancelDisposition>> {
-    return this.call(ctx, () => this.dispatch.cancel(ctx, input));
+    return this.#call(ctx, () => this.dispatch.cancel(ctx, input));
   }
   async deliverExecutorFrame(
     ctx: D.AuthContext,
     input: D.ExecutorDelivery,
   ): Promise<D.Outcome<D.DeliveryAck>> {
-    return this.call(ctx, () => {
+    return this.#call(ctx, () => {
       check(
         new TextEncoder().encode(json(input.frame)).length <= 1048576,
         "payload_too_large",
@@ -225,7 +222,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.LocalWorkspaceRequest,
   ): Promise<D.Outcome<D.LocalWorkspaceResponse>> {
-    return this.call(ctx, () => {
+    return this.#call(ctx, () => {
       check(
         new TextEncoder().encode(json(input)).length <= 1048576,
         "payload_too_large",
@@ -240,7 +237,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: Parameters<ControlPlaneRpc["openTransfer"]>[1],
   ): Promise<D.Outcome<D.TransferDescriptor>> {
-    return this.call(ctx, () => {
+    return this.#call(ctx, () => {
       check(
         new TextEncoder().encode(json(input)).length <= 1048576,
         "payload_too_large",
@@ -268,7 +265,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: { transferId: string; attemptId: string },
   ): Promise<D.Outcome<D.TransferStatus>> {
-    return this.call(ctx, () => this.relay.observe(ctx, input));
+    return this.#call(ctx, () => this.relay.observe(ctx, input));
   }
   async consumeTicket(input: D.TicketRedemption): Promise<D.Outcome<D.SocketIdentity>> {
     return outcome(id(), async () => {
@@ -277,10 +274,10 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     });
   }
   async pageFacts(ctx: D.AuthContext, input: D.FactPageRequest): Promise<D.Outcome<D.FactPage>> {
-    return this.call(ctx, () => this.delivery.page(ctx, input));
+    return this.#call(ctx, () => this.delivery.page(ctx, input));
   }
   async ackFacts(ctx: D.AuthContext, input: D.FactAckRequest): Promise<D.Outcome<D.FactAck>> {
-    return this.call(ctx, () => this.delivery.ack(ctx, input));
+    return this.#call(ctx, () => this.delivery.ack(ctx, input));
   }
   async resolveProviderAuth(
     ctx: D.ModelResolutionContext,
@@ -295,9 +292,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"listAgents">,
   ): Promise<D.Outcome<D.OperationResponse<"listAgents">>> {
-    return this.call(ctx, () => this.listAgentsValue(ctx, input));
+    return this.#call(ctx, () => this.#listAgentsValue(ctx, input));
   }
-  private listAgentsValue(
+  #listAgentsValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"listAgents">,
   ): D.OperationResponse<"listAgents"> {
@@ -307,9 +304,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"createAgent">,
   ): Promise<D.Outcome<D.OperationResponse<"createAgent">>> {
-    return this.call(ctx, () => this.createAgentValue(ctx, input));
+    return this.#call(ctx, () => this.#createAgentValue(ctx, input));
   }
-  private async createAgentValue(
+  async #createAgentValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"createAgent">,
   ): Promise<D.OperationResponse<"createAgent">> {
@@ -322,9 +319,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"describeAgent">,
   ): Promise<D.Outcome<D.OperationResponse<"describeAgent">>> {
-    return this.call(ctx, () => this.describeAgentValue(ctx, input));
+    return this.#call(ctx, () => this.#describeAgentValue(ctx, input));
   }
-  private describeAgentValue(
+  #describeAgentValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"describeAgent">,
   ): D.OperationResponse<"describeAgent"> {
@@ -337,9 +334,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"configureAgent">,
   ): Promise<D.Outcome<D.OperationResponse<"configureAgent">>> {
-    return this.call(ctx, () => this.configureAgentValue(ctx, input));
+    return this.#call(ctx, () => this.#configureAgentValue(ctx, input));
   }
-  private async configureAgentValue(
+  async #configureAgentValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"configureAgent">,
   ): Promise<D.OperationResponse<"configureAgent">> {
@@ -352,9 +349,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"mintCredential">,
   ): Promise<D.Outcome<D.OperationResponse<"mintCredential">>> {
-    return this.call(ctx, () => this.mintCredentialValue(ctx, input));
+    return this.#call(ctx, () => this.#mintCredentialValue(ctx, input));
   }
-  private async mintCredentialValue(
+  async #mintCredentialValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"mintCredential">,
   ): Promise<D.OperationResponse<"mintCredential">> {
@@ -369,9 +366,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"acquireWorkspaceLease">,
   ): Promise<D.Outcome<D.OperationResponse<"acquireWorkspaceLease">>> {
-    return this.call(ctx, () => this.acquireWorkspaceLeaseValue(ctx, input));
+    return this.#call(ctx, () => this.#acquireWorkspaceLeaseValue(ctx, input));
   }
-  private async acquireWorkspaceLeaseValue(
+  async #acquireWorkspaceLeaseValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"acquireWorkspaceLease">,
   ): Promise<D.OperationResponse<"acquireWorkspaceLease">> {
@@ -384,9 +381,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"renewWorkspaceLease">,
   ): Promise<D.Outcome<D.OperationResponse<"renewWorkspaceLease">>> {
-    return this.call(ctx, () => this.renewWorkspaceLeaseValue(ctx, input));
+    return this.#call(ctx, () => this.#renewWorkspaceLeaseValue(ctx, input));
   }
-  private async renewWorkspaceLeaseValue(
+  async #renewWorkspaceLeaseValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"renewWorkspaceLease">,
   ): Promise<D.OperationResponse<"renewWorkspaceLease">> {
@@ -396,9 +393,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"releaseWorkspaceLease">,
   ): Promise<D.Outcome<D.OperationResponse<"releaseWorkspaceLease">>> {
-    return this.call(ctx, () => this.releaseWorkspaceLeaseValue(ctx, input));
+    return this.#call(ctx, () => this.#releaseWorkspaceLeaseValue(ctx, input));
   }
-  private async releaseWorkspaceLeaseValue(
+  async #releaseWorkspaceLeaseValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"releaseWorkspaceLease">,
   ): Promise<D.OperationResponse<"releaseWorkspaceLease">> {
@@ -411,9 +408,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"revokeCredential">,
   ): Promise<D.Outcome<D.OperationResponse<"revokeCredential">>> {
-    return this.call(ctx, () => this.revokeCredentialValue(ctx, input));
+    return this.#call(ctx, () => this.#revokeCredentialValue(ctx, input));
   }
-  private async revokeCredentialValue(
+  async #revokeCredentialValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"revokeCredential">,
   ): Promise<D.OperationResponse<"revokeCredential">> {
@@ -426,9 +423,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"revokeExecutor">,
   ): Promise<D.Outcome<D.OperationResponse<"revokeExecutor">>> {
-    return this.call(ctx, () => this.revokeExecutorValue(ctx, input));
+    return this.#call(ctx, () => this.#revokeExecutorValue(ctx, input));
   }
-  private async revokeExecutorValue(
+  async #revokeExecutorValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"revokeExecutor">,
   ): Promise<D.OperationResponse<"revokeExecutor">> {
@@ -441,9 +438,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"rotateCredential">,
   ): Promise<D.Outcome<D.OperationResponse<"rotateCredential">>> {
-    return this.call(ctx, () => this.rotateCredentialValue(ctx, input));
+    return this.#call(ctx, () => this.#rotateCredentialValue(ctx, input));
   }
-  private async rotateCredentialValue(
+  async #rotateCredentialValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"rotateCredential">,
   ): Promise<D.OperationResponse<"rotateCredential">> {
@@ -492,9 +489,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"mintConnectionTicket">,
   ): Promise<D.Outcome<D.OperationResponse<"mintConnectionTicket">>> {
-    return this.call(ctx, () => this.mintTicketValue(ctx, input));
+    return this.#call(ctx, () => this.#mintTicketValue(ctx, input));
   }
-  private async mintTicketValue(
+  async #mintTicketValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"mintConnectionTicket">,
   ): Promise<D.OperationResponse<"mintConnectionTicket">> {
@@ -511,9 +508,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"getProviderAuthStatus">,
   ): Promise<D.Outcome<D.OperationResponse<"getProviderAuthStatus">>> {
-    return this.call(ctx, () => this.getProviderAuthStatusValue(ctx, input));
+    return this.#call(ctx, () => this.#getProviderAuthStatusValue(ctx, input));
   }
-  private getProviderAuthStatusValue(
+  #getProviderAuthStatusValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"getProviderAuthStatus">,
   ): D.OperationResponse<"getProviderAuthStatus"> {
@@ -526,9 +523,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"putProviderAuth">,
   ): Promise<D.Outcome<D.OperationResponse<"putProviderAuth">>> {
-    return this.call(ctx, () => this.putProviderAuthValue(ctx, input));
+    return this.#call(ctx, () => this.#putProviderAuthValue(ctx, input));
   }
-  private async putProviderAuthValue(
+  async #putProviderAuthValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"putProviderAuth">,
   ): Promise<D.OperationResponse<"putProviderAuth">> {
@@ -541,9 +538,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"deleteProviderAuth">,
   ): Promise<D.Outcome<D.OperationResponse<"deleteProviderAuth">>> {
-    return this.call(ctx, () => this.deleteProviderAuthValue(ctx, input));
+    return this.#call(ctx, () => this.#deleteProviderAuthValue(ctx, input));
   }
-  private async deleteProviderAuthValue(
+  async #deleteProviderAuthValue(
     ctx: D.AuthContext,
     input: D.OperationRequest<"deleteProviderAuth">,
   ): Promise<D.OperationResponse<"deleteProviderAuth">> {
@@ -557,7 +554,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     input: D.OperationRequest<K>,
   ): Promise<D.Outcome<D.OperationResponse<K>>> {
     const request = input as D.OperationRequest<D.ControlOperationId>;
-    const value = await this.call(ctx, async () => {
+    const value = await this.#call(ctx, async () => {
       const route = routeCatalog.find((r) => r.operationId === request.operationId);
       check(route, "invalid_request", "Unknown control operation");
       check(
@@ -568,35 +565,35 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       // Individual methods perform resource checks; management reads are installation scoped.
       switch (request.operationId) {
         case "listAgents":
-          return this.listAgentsValue(ctx, request);
+          return this.#listAgentsValue(ctx, request);
         case "createAgent":
-          return this.createAgentValue(ctx, request);
+          return this.#createAgentValue(ctx, request);
         case "describeAgent":
-          return this.describeAgentValue(ctx, request);
+          return this.#describeAgentValue(ctx, request);
         case "configureAgent":
-          return this.configureAgentValue(ctx, request);
+          return this.#configureAgentValue(ctx, request);
         case "acquireWorkspaceLease":
-          return this.acquireWorkspaceLeaseValue(ctx, request);
+          return this.#acquireWorkspaceLeaseValue(ctx, request);
         case "renewWorkspaceLease":
-          return this.renewWorkspaceLeaseValue(ctx, request);
+          return this.#renewWorkspaceLeaseValue(ctx, request);
         case "releaseWorkspaceLease":
-          return this.releaseWorkspaceLeaseValue(ctx, request);
+          return this.#releaseWorkspaceLeaseValue(ctx, request);
         case "mintCredential":
-          return this.mintCredentialValue(ctx, request);
+          return this.#mintCredentialValue(ctx, request);
         case "revokeCredential":
-          return this.revokeCredentialValue(ctx, request);
+          return this.#revokeCredentialValue(ctx, request);
         case "rotateCredential":
-          return this.rotateCredentialValue(ctx, request);
+          return this.#rotateCredentialValue(ctx, request);
         case "revokeExecutor":
-          return this.revokeExecutorValue(ctx, request);
+          return this.#revokeExecutorValue(ctx, request);
         case "mintConnectionTicket":
-          return this.mintTicketValue(ctx, request);
+          return this.#mintTicketValue(ctx, request);
         case "getProviderAuthStatus":
-          return this.getProviderAuthStatusValue(ctx, request);
+          return this.#getProviderAuthStatusValue(ctx, request);
         case "putProviderAuth":
-          return this.putProviderAuthValue(ctx, request);
+          return this.#putProviderAuthValue(ctx, request);
         case "deleteProviderAuth":
-          return this.deleteProviderAuthValue(ctx, request);
+          return this.#deleteProviderAuthValue(ctx, request);
         case "getConfiguration": {
           requireGrant(ctx, route.action);
           const config = this.directory.config();

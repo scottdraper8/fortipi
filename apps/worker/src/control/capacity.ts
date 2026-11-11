@@ -378,10 +378,10 @@ export class Capacity {
         check(same(row.settlement, settlement), "conflict", "Settlement changed");
         return row.reservation;
       }
-      // Absent measurement retains the entire original storage charge. Keep the
-      // field absent in the receipt: this is conservative accounting, not an
-      // observation, and cannot be rewritten by a later measured retry.
-      const chargedBytes = input.observedBytes ?? row.reservation.bytes;
+      // Unmeasured settled bytes remain reserved: public consumed accounting is
+      // observed usage. Keep the receipt field absent and the full charge intact;
+      // a later measured retry cannot rewrite this settlement identity.
+      const observedBytes = input.observedBytes;
       const totals = this.usage();
       const reservation = { ...row.reservation, state: "settled" as const };
       const updated = { ...row, reservation, settlement };
@@ -392,11 +392,12 @@ export class Capacity {
         updated,
       );
       this.store.put("capacity", "counters", {
-        reserved: totals.reserved - reservation.bytes,
-        consumed: totals.consumed + chargedBytes,
+        reserved: totals.reserved - (observedBytes === undefined ? 0 : reservation.bytes),
+        consumed: totals.consumed + (observedBytes ?? 0),
         slots: totals.slots - reservation.admissionSlots,
       });
-      if (chargedBytes < reservation.bytes) queueRepairResume(this.store, "reclaimed");
+      if (observedBytes !== undefined && observedBytes < reservation.bytes)
+        queueRepairResume(this.store, "reclaimed");
       return reservation;
     });
   }

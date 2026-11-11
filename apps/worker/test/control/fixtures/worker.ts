@@ -56,52 +56,61 @@ export class TestControlPlane extends ControlPlane {
   async setTokenResponseMode(mode: "valid" | "redirect" | "oversize"): Promise<void> {
     this.tokenResponseMode = mode;
   }
-  protected override providerTransport(): typeof fetch {
-    return async (input, init) => {
-      this.refreshCalls++;
-      if (!(input instanceof Request) || input.redirect !== "manual" || init !== undefined)
-        throw new Error("Real Worker request must prevent automatic credential forwarding");
-      const url = input.url;
-      const raw = await input.text();
-      let access = "synthetic-refreshed-access";
-      if (String(url) === "https://auth.openai.com/api/accounts/oauth/token") {
-        if (
-          input.headers.get("Content-Type") !== "application/x-www-form-urlencoded" ||
-          new URLSearchParams(raw).get("resource") !== "https://api.openai.com/v1" ||
-          new URLSearchParams(raw).get("client_id") !== "synthetic-client"
-        )
-          throw new Error("Wrong OpenAI pinned protocol");
-      } else if (String(url) === "https://platform.claude.com/v1/oauth/token") {
-        const payload = JSON.parse(raw) as Record<string, unknown>;
-        if (
-          payload.client_id !== "9d1c250a-e61b-44d9-88ed-5944d1962f5e" ||
-          payload.grant_type !== "refresh_token"
-        )
-          throw new Error("Wrong Anthropic pinned protocol");
-      } else if (String(url) === "https://auth.openai.com/oauth/token") {
-        if (
-          input.headers.get("Content-Type") !== "application/x-www-form-urlencoded" ||
-          new URLSearchParams(raw).get("client_id") !== "app_EMoamEEZ73f0CkXaXp7hrann"
-        )
-          throw new Error("Wrong Codex pinned protocol");
-        access = `e30.${btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "synthetic-account" } })).replaceAll("=", "")}.signature`;
-      } else throw new Error("Wrong fixed token endpoint");
-      if (this.tokenResponseMode === "redirect")
-        return new Response(null, {
-          status: 302,
-          headers: { Location: "https://untrusted.invalid/token" },
-        });
-      if (this.tokenResponseMode === "oversize")
-        return new Response("x".repeat(65537), { headers: { "Content-Type": "application/json" } });
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      return Response.json({
-        access_token: access,
-        refresh_token: "synthetic-refreshed-refresh",
-        expires_in: 7200,
-        scope: "openid chatgpt.tokens.use.direct",
-      });
-    };
+  constructor(
+    ctx: DurableObjectState,
+    env: Env,
+    wrapTransport: (transport: typeof fetch) => typeof fetch = (transport) => transport,
+  ) {
+    super(
+      ctx,
+      env,
+      wrapTransport((input, init) => this.#providerRequest(input, init)),
+    );
   }
+  #providerRequest: typeof fetch = async (input, init) => {
+    this.refreshCalls++;
+    if (!(input instanceof Request) || input.redirect !== "manual" || init !== undefined)
+      throw new Error("Real Worker request must prevent automatic credential forwarding");
+    const url = input.url;
+    const raw = await input.text();
+    let access = "synthetic-refreshed-access";
+    if (String(url) === "https://auth.openai.com/api/accounts/oauth/token") {
+      if (
+        input.headers.get("Content-Type") !== "application/x-www-form-urlencoded" ||
+        new URLSearchParams(raw).get("resource") !== "https://api.openai.com/v1" ||
+        new URLSearchParams(raw).get("client_id") !== "synthetic-client"
+      )
+        throw new Error("Wrong OpenAI pinned protocol");
+    } else if (String(url) === "https://platform.claude.com/v1/oauth/token") {
+      const payload = JSON.parse(raw) as Record<string, unknown>;
+      if (
+        payload.client_id !== "9d1c250a-e61b-44d9-88ed-5944d1962f5e" ||
+        payload.grant_type !== "refresh_token"
+      )
+        throw new Error("Wrong Anthropic pinned protocol");
+    } else if (String(url) === "https://auth.openai.com/oauth/token") {
+      if (
+        input.headers.get("Content-Type") !== "application/x-www-form-urlencoded" ||
+        new URLSearchParams(raw).get("client_id") !== "app_EMoamEEZ73f0CkXaXp7hrann"
+      )
+        throw new Error("Wrong Codex pinned protocol");
+      access = `e30.${btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "synthetic-account" } })).replaceAll("=", "")}.signature`;
+    } else throw new Error("Wrong fixed token endpoint");
+    if (this.tokenResponseMode === "redirect")
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "https://untrusted.invalid/token" },
+      });
+    if (this.tokenResponseMode === "oversize")
+      return new Response("x".repeat(65537), { headers: { "Content-Type": "application/json" } });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    return Response.json({
+      access_token: access,
+      refresh_token: "synthetic-refreshed-refresh",
+      expires_in: 7200,
+      scope: "openid chatgpt.tokens.use.direct",
+    });
+  };
   async deployment(): Promise<string> {
     return this.ctx.id.toString();
   }

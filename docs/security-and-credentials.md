@@ -350,12 +350,12 @@ Capacity reservations retain identity across retry/restart and count outstanding
 claims pessimistically. A failed/uncertain write does not release capacity.
 Settlement requires current retained internal authority and is idempotent.
 Consumed settlement without optional `observedBytes` retains the FULL original
-byte charge as conservative consumed capacity; it records no fabricated
+byte charge in reserved accounting while settling the row/releasing slots; it records no fabricated
 measurement and announces no reclaimed space. Exact absent/explicit measurements
 remain distinct settlement identities; a later measured retry cannot rewrite an
 unmeasured settlement. Explicit measurements must be safe nonnegative integers
 within the reservation, and unused settlement requires authoritative explicit
-zero. Consumed bytes remain charged. Physical SQLite size and reserved usage preserve
+zero. Only explicit measurements enter consumed/observed usage; unknown full charges remain reserved. Measured consumed bytes remain charged. Physical SQLite size and reserved usage preserve
 completion/revoke/repair headroom. Existing history/receipts are not evicted to
 admit new work. Unknown/free defaults are conservative; paid account status alone
 does not raise bounds or provision Loader/Containers. Account-wide remaining
@@ -371,6 +371,10 @@ private implementations for its delegated methods, so one physical invocation
 does not spend two local admission units. Distinct RPCs still spend separately,
 including retries sharing a request ID; these local units are not account-wide
 Cloudflare billing telemetry.
+Internal CP methods use JavaScript `#private` semantics: TypeScript visibility
+alone does not prevent Durable Object RPC invocation. The admission callback
+and delegated implementations cannot become extra RPC lanes. Provider transport
+is constructed internally, with no transport factory method on the RPC prototype.
 
 An existing current CP registration can authorize Agent storage reservations for
 its single logical operation under one current covering grant. Creation/fork

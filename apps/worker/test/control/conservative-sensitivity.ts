@@ -20,16 +20,26 @@ try {
   for (const mutation of [
     {
       file: "capacity.ts",
-      pattern: /const chargedBytes = input\.observedBytes \?\? row\.reservation\.bytes;/,
-      replacement: "const chargedBytes = input.observedBytes ?? 0;",
+      pattern:
+        /reserved: totals\.reserved - \(observedBytes === undefined \? 0 : reservation\.bytes\)/,
+      replacement: "reserved: totals.reserved - reservation.bytes",
       testPattern: "unmeasured consumed settlement",
-      oracle: "unmeasured consumed storage must retain the entire original byte charge",
+      oracle:
+        "public observedBytes must exclude unmeasured conservative charges and retain their full reservedBytes",
+    },
+    {
+      file: "capacity.ts",
+      pattern: /consumed: totals\.consumed \+ \(observedBytes \?\? 0\)/,
+      replacement: "consumed: totals.consumed + (observedBytes ?? reservation.bytes)",
+      testPattern: "unmeasured consumed settlement",
+      oracle:
+        "public observedBytes must exclude unmeasured conservative charges and retain their full reservedBytes",
     },
     {
       file: "capacity.ts",
       pattern: /const updated = \{ \.\.\.row, reservation, settlement \};/,
       replacement:
-        "const updated = { ...row, reservation, settlement: { ...settlement, observedBytes: chargedBytes } };",
+        "const updated = { ...row, reservation, settlement: { ...settlement, observedBytes: observedBytes ?? reservation.bytes } };",
       testPattern: "unmeasured consumed settlement",
       oracle: "conservative settlement must not fabricate an observedBytes field",
     },
