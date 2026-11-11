@@ -1,6 +1,7 @@
 import { validateChunkInventory, validateTransfer } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
+import { artifactForDescriptor, artifactScope } from "./artifact-index.js";
 import { contains, emptyScope, requireGrant } from "./authorization.js";
 import { type Directory, valid } from "./directory.js";
 import type { DispatchRecord } from "./dispatch.js";
@@ -15,6 +16,10 @@ interface Transfer {
   status: D.TransferStatus;
   principal: string;
   incarnation: string;
+  openRequestId: string;
+  connectionEpoch: number;
+  registrationId?: string;
+  producerReceipt?: { status: D.TransferStatus; ack: D.DeliveryAck };
 }
 interface Peer {
   request: Request;
@@ -41,6 +46,10 @@ export class Relay {
   readonly env: Env;
   private incarnation = id();
   private active = new Map<string, Rendezvous>();
+  private producerWaiters = new Map<
+    string,
+    { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
+  >();
   constructor(
     store: Store,
     identities: Identities,
@@ -57,13 +66,22 @@ export class Relay {
   async open(
     ctx: D.AuthContext,
     input: Omit<D.TransferDescriptor, "transferId" | "attemptId">,
+    announce = true,
   ): Promise<D.TransferDescriptor> {
     this.identities.current(ctx);
-    requireGrant(ctx, input.purpose === "local-stage" ? "workspace.write" : "workspace.read", {
-      ...emptyScope(),
-      workspaceIds: [input.workspaceId],
-      executorIds: [input.executorId],
-    });
+    requireGrant(
+      ctx,
+      input.purpose === "output"
+        ? "artifacts.read"
+        : input.purpose === "local-stage"
+          ? "workspace.write"
+          : "workspace.read",
+      {
+        ...emptyScope(),
+        workspaceIds: [input.workspaceId],
+        executorIds: [input.executorId],
+      },
+    );
     check(
       input.deploymentId === ctx.deploymentId &&
         same(input.credential, ref(ctx)) &&
@@ -76,6 +94,16 @@ export class Relay {
       "Transfer authority mismatch",
     );
     const descriptor = { ...input, transferId: id(), attemptId: id() } as D.TransferDescriptor;
+    if (descriptor.purpose === "output") {
+      const artifact = artifactForDescriptor(this.store, descriptor);
+      requireGrant(ctx, "artifacts.read", artifactScope(artifact));
+      check(
+        contains(descriptor.consumer, artifactScope(artifact)),
+        "unauthorized",
+        "Output consumer omits artifact scope",
+      );
+      this.outputRegistration(ctx, descriptor, ctx.registrationId);
+    }
     const grant = ctx.grants.find(
       (g) =>
         (g.expiresAt === undefined || g.expiresAt > Date.now()) &&
@@ -226,23 +254,138 @@ export class Relay {
         status: {
           transferId: descriptor.transferId,
           attemptId: descriptor.attemptId,
-          state: descriptor.size === 0 ? "verified" : "waiting",
+          state: descriptor.size === 0 && descriptor.purpose !== "output" ? "verified" : "waiting",
           verifiedChunks: [],
           bytes: 0,
         },
         principal: ctx.principalId,
         incarnation: this.incarnation,
+        openRequestId: id(),
+        connectionEpoch: e.epoch,
+        ...(ctx.registrationId ? { registrationId: ctx.registrationId } : {}),
       } satisfies Transfer,
       "",
       "",
       descriptor.expiresAt,
     );
-    this.executors.send(descriptor.executorId, descriptor.executorGeneration, {
-      type: "transfer.open",
-      requestId: id(),
-      payload: descriptor,
-    });
+    if (announce) await this.announce(ctx, descriptor);
     return descriptor;
+  }
+  private outputRegistration(
+    ctx: D.AuthContext,
+    d: D.TransferDescriptor,
+    registrationId: string | undefined,
+  ): void {
+    const registration = registrationId
+      ? this.store.get<D.AuthorityRegistration>("recipient", registrationId)
+      : undefined;
+    check(
+      registration &&
+        same(registration.credential, ref(ctx)) &&
+        registration.recipient.kind === "workspace" &&
+        registration.recipient.id === d.workspaceId &&
+        registration.executor?.executorId === d.executorId &&
+        registration.executor.generation === d.executorGeneration &&
+        contains(registration.resources, artifactScope(artifactForDescriptor(this.store, d))),
+      "unauthorized",
+      "Output requires current registered reader scope",
+    );
+  }
+  async announce(ctx: D.AuthContext, d: D.TransferDescriptor): Promise<void> {
+    const row = this.authorized(ctx, d.transferId, d.attemptId);
+    const frame: D.ExecutorFrame = {
+      type: "transfer.open",
+      requestId: row.openRequestId,
+      payload: d,
+    };
+    if (d.purpose !== "output" || d.size !== 0) {
+      this.executors.send(d.executorId, d.executorGeneration, frame);
+      return;
+    }
+    check(
+      this.producerWaiters.size < 16,
+      "unavailable",
+      "Producer acknowledgment window exhausted",
+    );
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(
+        () => this.abortAttempt(d.transferId, d.attemptId, "Producer acknowledgment deadline"),
+        Math.max(1, Math.min(10000, ctx.deadline - Date.now(), d.expiresAt - Date.now())),
+      );
+      this.producerWaiters.set(d.transferId, { resolve, reject, timer });
+      try {
+        this.executors.send(d.executorId, d.executorGeneration, frame);
+      } catch (error) {
+        this.abortAttempt(d.transferId, d.attemptId, "Producer unavailable");
+        reject(error);
+      }
+    });
+    this.authorized(ctx, d.transferId, d.attemptId);
+    check(
+      this.store.get<Transfer>("transfer", d.transferId)?.status.state === "verified",
+      "interrupted",
+      "Producer did not verify empty output",
+    );
+  }
+  async receiveStatus(ctx: D.AuthContext, input: D.ExecutorDelivery): Promise<D.DeliveryAck> {
+    check(input.frame.type === "transfer.status", "invalid_request", "Producer status required");
+    const status = input.frame.payload;
+    const row = this.authorized(ctx, status.transferId, status.attemptId, false, true);
+    const executor = this.store.get<ExecutorState>("executor", input.executorId);
+    check(
+      ctx.role === "executor" &&
+        input.executorId === row.descriptor.executorId &&
+        input.generation === row.descriptor.executorGeneration &&
+        executor?.epoch === input.connectionEpoch &&
+        row.connectionEpoch === input.connectionEpoch &&
+        input.frame.requestId === row.openRequestId &&
+        row.incarnation === this.incarnation,
+      "unauthenticated",
+      "Producer status correlation mismatch",
+    );
+    if (row.producerReceipt) {
+      check(same(row.producerReceipt.status, status), "conflict", "Producer status changed");
+      return row.producerReceipt.ack;
+    }
+    check(
+      status.state === "verified" || status.state === "interrupted",
+      "conflict",
+      "Terminal producer status required",
+    );
+    if (status.state === "verified") {
+      check(
+        row.status.state !== "interrupted" &&
+          row.status.state !== "expired" &&
+          status.bytes === row.descriptor.size &&
+          same(
+            [...status.verifiedChunks].sort((a, b) => a - b),
+            row.descriptor.chunkHashes.map((_, i) => i),
+          ) &&
+          status.bytes === row.status.bytes &&
+          same(
+            [...row.status.verifiedChunks].sort((a, b) => a - b),
+            [...status.verifiedChunks].sort((a, b) => a - b),
+          ),
+        "conflict",
+        "Producer status cannot replace actual chunk receipts",
+      );
+      this.checkLimits(row.descriptor);
+    }
+    const ack: D.DeliveryAck = { deliveryId: id(), sequence: 0, persisted: true };
+    row.producerReceipt = { status, ack };
+    if (status.state === "verified") row.status = { ...row.status, state: "verified" };
+    this.store.put("transfer", status.transferId, row, "", "", row.descriptor.expiresAt);
+    if (status.state === "interrupted")
+      this.abortAttempt(status.transferId, status.attemptId, "Producer interrupted");
+    else {
+      const waiter = this.producerWaiters.get(status.transferId);
+      if (waiter) {
+        clearTimeout(waiter.timer);
+        this.producerWaiters.delete(status.transferId);
+        waiter.resolve();
+      }
+    }
+    return ack;
   }
   private authorized(
     ctx: D.AuthContext,
@@ -265,24 +408,61 @@ export class Relay {
             : "transfers.output"
         : d.purpose === "local-stage"
           ? "workspace.write"
-          : "workspace.read",
-      { ...emptyScope(), workspaceIds: [d.workspaceId], executorIds: [d.executorId] },
+          : d.purpose === "output"
+            ? "artifacts.read"
+            : "workspace.read",
+      d.purpose === "output"
+        ? {
+            ...artifactScope(artifactForDescriptor(this.store, d)),
+            actions: ctx.role === "executor" ? [] : ["artifacts.read"],
+          }
+        : { ...emptyScope(), workspaceIds: [d.workspaceId], executorIds: [d.executorId] },
     );
     const source = this.store.get<import("./identity.js").CredentialRecord>(
       "credential",
       d.credential.credentialId,
     );
     check(
-      source?.status === "active" && source.generation === d.credential.generation,
+      source?.status === "active" &&
+        source.generation === d.credential.generation &&
+        source.grantVersion === d.credential.grantVersion &&
+        (source.expiresAt === null || source.expiresAt > Date.now()),
       "unauthenticated",
       "Transfer authority revoked",
     );
+    const sourceCtx: D.AuthContext = {
+      ...d.credential,
+      principalId: source.principalId,
+      role: source.role,
+      grants: source.grants,
+      deploymentId: d.deploymentId,
+      requestId: ctx.requestId,
+      authenticatedAt: Date.now(),
+      credentialExpiresAt: source.expiresAt,
+      deadline: Math.min(d.deadline, Date.now() + 30000),
+    };
+    requireGrant(
+      sourceCtx,
+      d.purpose === "output"
+        ? "artifacts.read"
+        : d.purpose === "local-stage"
+          ? "workspace.write"
+          : "workspace.read",
+      d.consumer,
+    );
+    if (d.purpose === "output") this.outputRegistration(sourceCtx, d, row.registrationId);
     const e = this.store.get<ExecutorState>("executor", d.executorId);
     check(
       e && e.status !== "revoked" && e.generation === d.executorGeneration,
       "unauthenticated",
       "Transfer executor revoked",
     );
+    if (d.purpose === "output")
+      check(
+        e.epoch === row.connectionEpoch,
+        "interrupted",
+        "Output producer connection changed; authorize a new attempt",
+      );
     check(
       (c.role === "executor" && c.executorId === d.executorId) ||
         (ctx.principalId === row.principal && same(ref(ctx), d.credential)),
@@ -537,6 +717,12 @@ export class Relay {
               controller.error(new Error("Relay interrupted"));
               return;
             }
+            try {
+              this.authorized(ctx, d.transferId, d.attemptId);
+            } catch {
+              this.interrupt(key, "Transfer authority changed");
+              return;
+            }
             const end = Math.min(length, cursor + 65536);
             controller.enqueue(bytes.subarray(cursor, end));
             cursor = end;
@@ -553,8 +739,10 @@ export class Relay {
         { highWaterMark: 0 },
       );
       idle = setTimeout(() => this.interrupt(key, "Consumer idle deadline"), 10000);
+      const fixed = new FixedLengthStream(length);
+      void stream.pipeTo(fixed.writable).catch(() => undefined);
       consumer.resolve(
-        new Response(stream, {
+        new Response(fixed.readable, {
           headers: {
             "Cache-Control": "no-store",
             "Content-Type": "application/octet-stream",
@@ -593,6 +781,9 @@ export class Relay {
   private interrupt(key: string, reason: string): void {
     if (!this.active.has(key)) return;
     const [transferId = "", attemptId = ""] = key.split(":");
+    this.abortAttempt(transferId, attemptId, reason);
+  }
+  abortAttempt(transferId: string, attemptId: string, reason = "Transfer interrupted"): void {
     const prefix = `${transferId}:${attemptId}:`;
     const pairs = [...this.active].filter(([activeKey]) => activeKey.startsWith(prefix));
     for (const [activeKey] of pairs) this.active.delete(activeKey);
@@ -605,6 +796,12 @@ export class Relay {
       clearTimeout(pair.timer);
     }
     this.executors.interruptTransfer(transferId, attemptId);
+    const waiter = this.producerWaiters.get(transferId);
+    if (waiter) {
+      clearTimeout(waiter.timer);
+      this.producerWaiters.delete(transferId);
+      waiter.reject(new ControlError("interrupted", reason));
+    }
     const row = this.store.get<Transfer>("transfer", transferId);
     if (row) {
       row.status = { ...row.status, state: "interrupted", reason };
@@ -612,6 +809,16 @@ export class Relay {
     }
   }
   revoke(subject: D.Invalidation["subject"]): void {
+    for (const transferId of this.producerWaiters.keys()) {
+      const row = this.store.get<Transfer>("transfer", transferId);
+      if (
+        row &&
+        (subject.kind === "credential"
+          ? row.descriptor.credential.credentialId === subject.credentialId
+          : row.descriptor.executorId === subject.executorId)
+      )
+        this.abortAttempt(transferId, row.descriptor.attemptId, "Transfer authority revoked");
+    }
     for (const key of this.active.keys()) {
       const row = this.store.get<Transfer>("transfer", key.split(":")[0] ?? "");
       if (

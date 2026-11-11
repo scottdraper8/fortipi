@@ -1,15 +1,14 @@
-import { publicCommitReceipt } from "fortipi-contract";
-import type { AgentSessionRpc } from "../boundary/agent-session.js";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
-import { emptyScope, requireGrant } from "./authorization.js";
+import { indexArtifacts } from "./artifact-index.js";
+import { emptyScope, permits, requireGrant } from "./authorization.js";
 import { type Directory, valid } from "./directory.js";
 import { type DispatchRecord, sameExecution } from "./dispatch.js";
 import type { Executors } from "./executors.js";
 import type { Identities } from "./identity.js";
 import { postponeRepair, repairAccepted } from "./repair.js";
-import { check, hash, id, json, next, type Store, same, within } from "./store.js";
-import type { ExecutorState } from "./tickets.js";
+import { check, fail, hash, id, json, next, ref, type Store, same, within } from "./store.js";
+import type { ExecutorState, Tickets } from "./tickets.js";
 
 interface Inbox {
   digest: string;
@@ -25,6 +24,7 @@ interface Command {
   ack: D.DeliveryAck;
   digest: string;
   attempts: number;
+  workspaceProofAction?: string;
 }
 export interface LocalTransport {
   request: D.LocalWorkspaceRequest;
@@ -38,11 +38,19 @@ export class Delivery {
   readonly identities: Identities;
   readonly directory: Directory;
   readonly env: Env;
-  constructor(store: Store, identities: Identities, directory: Directory, env: Env) {
+  readonly tickets: Tickets;
+  constructor(
+    store: Store,
+    identities: Identities,
+    directory: Directory,
+    env: Env,
+    tickets: Tickets,
+  ) {
     this.store = store;
     this.identities = identities;
     this.directory = directory;
     this.env = env;
+    this.tickets = tickets;
   }
   async forward(
     ctx: D.AuthContext,
@@ -60,7 +68,7 @@ export class Delivery {
     const record = this.store.get<DispatchRecord>("dispatch", identity.executionId);
     check(
       record?.attempted &&
-        identity.assignmentDigest === record.receipt.assignmentDigest &&
+        sameExecution(record.intent.assignment.identity, identity) &&
         identity.target.kind === "executor" &&
         identity.target.executorId === input.executorId &&
         identity.target.generation === input.generation,
@@ -73,8 +81,26 @@ export class Delivery {
       conversationIds: [record.intent.reservation.conversationId],
       workspaceIds: [record.intent.reservation.workspaceId],
       executorIds: [input.executorId],
+      tools: [record.intent.assignment.tool],
     };
     requireGrant(ctx, "jobs.dispatch", resources);
+    const workspaceResources = { ...resources, tools: [] };
+    let workspaceProofAction: string | undefined;
+    const currentAuthority = (): void => {
+      this.identities.current(ctx);
+      requireGrant(ctx, "jobs.dispatch", resources);
+      if (workspaceProofAction) requireGrant(ctx, workspaceProofAction, workspaceResources);
+      const executor = this.store.get<ExecutorState>("executor", input.executorId);
+      check(
+        executor &&
+          executor.status !== "revoked" &&
+          executor.generation === input.generation &&
+          executor.epoch === input.connectionEpoch,
+        "conflict",
+        "Terminal executor authority changed",
+      );
+    };
+    currentAuthority();
     if (frame.type === "job.lease_update") {
       const old = record.intent.assignment.identity.lease;
       check(
@@ -82,122 +108,198 @@ export class Delivery {
           old.fence === identity.lease.fence &&
           old.baseRevision === identity.lease.baseRevision &&
           same(old.credential, identity.lease.credential) &&
-          old.expiresAt > Date.now() &&
-          frame.payload.leaseVersion > old.leaseVersion &&
-          frame.payload.expiresAt > Date.now() &&
           frame.payload.expiresAt <= identity.deadline,
         "conflict",
         "Lease update cannot change identity or revive expiry",
       );
-      this.store.put("lease", old.leaseId, {
-        lease: {
-          ...old,
-          leaseVersion: frame.payload.leaseVersion,
-          expiresAt: frame.payload.expiresAt,
-        },
-      });
     } else {
       check(
         frame.payload.terminalVersion > 0 && frame.payload.eventSeq > 0,
         "conflict",
         "Terminal coordinates are required",
       );
-      const workspace = this.env.WORKSPACES.getByName(record.intent.reservation.workspaceId);
-      check(
-        (await workspace.contractVersion) === "1.0",
-        "unsupported",
-        "Workspace contract mismatch",
+      const proofScope = { ...resources, actions: ["jobs.dispatch"] };
+      const reservedActions = record.intent.reservation.actions.filter(
+        (action) => action === "workspace.write" || action === "workspace.read",
       );
-      if (frame.payload.evidence.kind === "committed") {
-        const receipt = frame.payload.evidence.receipt;
-        const found = await workspace.getReceipt(ctx, {
-          workspaceId: receipt.workspaceId,
-          commitId: receipt.commitId,
-          commitDigest: receipt.commitDigest,
-        });
+      const candidates =
+        frame.payload.evidence.kind === "committed"
+          ? reservedActions.includes("workspace.write")
+            ? ["workspace.write"]
+            : []
+          : reservedActions.length
+            ? ["workspace.read", "workspace.write"]
+            : [];
+      const workspaceAction = candidates.find((action) =>
+        permits(ctx.grants, workspaceResources, action),
+      );
+      check(
+        workspaceAction,
+        "unauthorized",
+        "Terminal proof needs current authority for the reserved workspace operation",
+      );
+      requireGrant(ctx, workspaceAction, workspaceResources);
+      workspaceProofAction = workspaceAction;
+      const workspaceRegistration = this.tickets.register(ctx, {
+        credential: ref(ctx),
+        recipient: { kind: "workspace", id: record.intent.reservation.workspaceId },
+        resources: { ...workspaceResources, actions: [workspaceAction] },
+        executor: { executorId: input.executorId, generation: input.generation },
+      });
+      const agentRegistration = this.tickets.register(ctx, {
+        credential: ref(ctx),
+        recipient: { kind: "agent", id: record.intent.reservation.agentId },
+        resources: proofScope,
+        executor: { executorId: input.executorId, generation: input.generation },
+      });
+      const workspace = this.env.WORKSPACES.getByName(record.intent.reservation.workspaceId);
+      const agent = this.env.AGENT_SESSIONS.getByName(record.intent.reservation.agentId);
+      const versions = await within(
+        Promise.all([workspace.contractVersion, agent.contractVersion]),
+        Math.max(1, Math.min(5000, ctx.deadline - Date.now())),
+      );
+      currentAuthority();
+      check(
+        versions.every((version) => version === "1.0"),
+        "unsupported",
+        "Terminal proof contract mismatch",
+      );
+      const signal = AbortSignal.timeout(Math.max(1, Math.min(5000, ctx.deadline - Date.now())));
+      const payload = json(frame.payload);
+      check(
+        new TextEncoder().encode(payload).length <= 65536,
+        "payload_too_large",
+        "Terminal proof exceeds body bound",
+      );
+      const workspaceRequest = new Request("https://workspace.internal/__fortipi/terminal-proof", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-fortipi-workspace-context": json({
+            auth: { ...ctx, registrationId: workspaceRegistration.registrationId },
+          }),
+        },
+        body: payload,
+        signal,
+      });
+      const agentRequest = new Request(
+        `https://agent.internal/__fortipi/terminal-proof/${identity.jobId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Fortipi-Context": json({ ...ctx, registrationId: agentRegistration.registrationId }),
+          },
+          body: payload,
+          signal,
+        },
+      );
+      const replies = await within(
+        Promise.all([
+          workspace.fetch(workspaceRequest, { signal }),
+          agent.fetch(agentRequest, { signal }),
+        ]),
+        Math.max(1, Math.min(5000, ctx.deadline - Date.now())),
+      );
+      currentAuthority();
+      for (const response of replies) {
         check(
-          found.ok && same(publicCommitReceipt(found.value), receipt),
+          response.headers
+            .get("Cache-Control")
+            ?.split(",")
+            .some((value) => value.trim().toLowerCase() === "no-store"),
           "conflict",
-          "Commit evidence is not authoritative",
+          "Terminal proof must not be cached",
         );
-      } else {
-        const evidence = frame.payload.evidence;
-        const found = await workspace.manifest(ctx, {
-          operationId: "getWorkspaceManifest",
-          path: { workspaceId: evidence.workspaceId },
-          query: { revision: evidence.baseRevision },
-          body: undefined,
-        });
+        const proof = await boundedProof(response, Math.min(ctx.deadline, Date.now() + 5000), () =>
+          currentAuthority(),
+        );
+        currentAuthority();
+        if (response.status !== 200) {
+          if (
+            proof &&
+            typeof proof === "object" &&
+            "error" in proof &&
+            isProtocolError(proof.error)
+          )
+            fail(proof.error.code, "Terminal proof unavailable", proof.error.details);
+          fail("unavailable", "Terminal proof unavailable");
+        }
         check(
-          found.ok &&
-            found.value.status === 200 &&
-            found.value.body.manifestHash === evidence.manifestHash &&
-            evidence.baseRevision === identity.baseRevision,
+          valid("executor-messages", "ExecutorFrame", {
+            type: "job.committed",
+            requestId: frame.requestId,
+            payload: proof,
+          }) && same(proof, frame.payload),
           "conflict",
-          "Unchanged-base evidence is not authoritative",
+          "Actual terminal proof does not match",
         );
       }
-      const agent = this.env.AGENT_SESSIONS.getByName(record.intent.reservation.agentId);
-      check((await agent.contractVersion) === "1.0", "unsupported", "Agent contract mismatch");
-      const registered = {
-        ...ctx,
-        registrationId: record.intent.reservation.registrationIds.agent,
-      };
-      const job = await agent.describeJob(registered, {
-        operationId: "describeJob",
-        path: { id: identity.jobId },
-        query: {},
-        body: undefined,
-      });
-      check(
-        job.ok &&
-          job.value.status === 200 &&
-          job.value.body.state === "completed" &&
-          job.value.body.version === frame.payload.terminalVersion &&
-          same(job.value.body.evidence, frame.payload.evidence),
-        "conflict",
-        "Job terminal evidence does not match",
-      );
-      // The platform mapped generic expands all operation unions past TS's depth limit.
-      // Reuse the declared boundary signature; validate the actual reply below.
-      const api = agent as unknown as Pick<AgentSessionRpc, "handleApi">;
-      const raw = await api.handleApi(registered, {
-        operationId: "replayEvents",
-        path: { id: record.intent.reservation.conversationId },
-        query: { after: frame.payload.eventSeq - 1, through: frame.payload.eventSeq, limit: 1 },
-        body: undefined,
-      });
-      const events = raw as D.Outcome<{ status: number; body: unknown }>;
-      check(
-        events.ok &&
-          events.value.status === 200 &&
-          valid("conversations", "ReplayPage", events.value.body),
-        "conflict",
-        "Terminal event coordinate is not persisted",
-      );
-      const page = events.value.body as D.ReplayPage;
-      check(
-        page.events.some(
-          (event) =>
-            event.eventSeq === frame.payload.eventSeq &&
-            event.type === "job.state.changed" &&
-            typeof event.payload === "object" &&
-            event.payload !== null &&
-            "jobId" in event.payload &&
-            event.payload.jobId === identity.jobId,
-        ),
-        "conflict",
-        "Terminal event does not identify the job",
-      );
     }
     const digest = await hash(json(frame.payload));
     const key = `${identity.executionId}:${frame.type}:${frame.type === "job.committed" ? frame.payload.terminalVersion : frame.payload.leaseVersion}`;
     await this.store.arm();
     const command = this.store.tx(() => {
-      this.identities.current(ctx);
+      currentAuthority();
+      const current = this.store.get<DispatchRecord>("dispatch", identity.executionId);
+      const executor = this.store.get<ExecutorState>("executor", input.executorId);
+      check(
+        current?.attempted &&
+          sameExecution(current.intent.assignment.identity, identity) &&
+          executor &&
+          executor.status !== "revoked" &&
+          executor.generation === input.generation,
+        "conflict",
+        "Authority changed while terminal proof was awaited",
+      );
       const old = this.store.get<Command>("command", key);
+      if (frame.type === "job.lease_update") {
+        const original = current.intent.assignment.identity.lease;
+        const owner = this.store.get<import("./identity.js").CredentialRecord>(
+          "credential",
+          original.credential.credentialId,
+        );
+        check(
+          owner &&
+            owner.status === "active" &&
+            same(ref(owner), original.credential) &&
+            (owner.expiresAt === null || owner.expiresAt > Date.now()),
+          "unauthenticated",
+          "Original lease authority revoked or expired",
+        );
+        const grant = owner.grants.find((grant) => permits([grant], resources, "jobs.dispatch"));
+        check(grant, "unauthorized", "Original execution grant expired");
+        if (!old) {
+          const retained =
+            this.store.get<{ lease: D.Lease }>("lease", original.leaseId)?.lease ?? original;
+          check(
+            retained.expiresAt > Date.now() &&
+              frame.payload.leaseVersion > retained.leaseVersion &&
+              frame.payload.expiresAt > Date.now() &&
+              frame.payload.expiresAt <=
+                Math.min(
+                  identity.deadline,
+                  Date.now() + 30000,
+                  owner.expiresAt ?? Number.MAX_SAFE_INTEGER,
+                  grant.expiresAt ?? Number.MAX_SAFE_INTEGER,
+                ),
+            "conflict",
+            "Lease update cannot revive expiry or regress the retained version",
+          );
+          this.store.put("lease", original.leaseId, {
+            lease: {
+              ...retained,
+              leaseVersion: frame.payload.leaseVersion,
+              expiresAt: frame.payload.expiresAt,
+            },
+          });
+        }
+      }
       if (old) {
         check(old.digest === digest, "conflict", "Authority command changed");
+        old.ctx = ctx;
+        if (workspaceProofAction) old.workspaceProofAction = workspaceProofAction;
+        this.store.put("command", key, old, "", "", Date.now());
         return old;
       }
       const command: Command = {
@@ -213,6 +315,7 @@ export class Delivery {
           persisted: true,
         },
         attempts: 0,
+        ...(workspaceProofAction ? { workspaceProofAction } : {}),
       };
       this.store.put("command", key, command, "", "", Date.now());
       return command;
@@ -224,10 +327,53 @@ export class Delivery {
     const command = this.store.get<Command>("command", key);
     if (!command) return;
     try {
-      this.identities.current({ ...command.ctx, deadline: Date.now() + 5000 });
+      const liveCtx = { ...command.ctx, deadline: Date.now() + 5000 };
+      this.identities.current(liveCtx);
       const frame = command.delivery.frame;
-      if (frame.type === "job.lease_update")
-        check(frame.payload.expiresAt > Date.now(), "conflict", "Lease update expired");
+      check(
+        frame.type === "job.lease_update" || frame.type === "job.committed",
+        "conflict",
+        "Unknown authority command",
+      );
+      const dispatch = this.store.get<DispatchRecord>(
+        "dispatch",
+        frame.payload.identity.executionId,
+      );
+      check(
+        dispatch?.attempted &&
+          sameExecution(dispatch.intent.assignment.identity, frame.payload.identity),
+        "conflict",
+        "Retained command execution changed",
+      );
+      const scope = {
+        ...emptyScope(),
+        agentIds: [dispatch.intent.reservation.agentId],
+        conversationIds: [dispatch.intent.reservation.conversationId],
+        workspaceIds: [dispatch.intent.reservation.workspaceId],
+        tools: [dispatch.intent.assignment.tool],
+        executorIds: [command.delivery.executorId],
+      };
+      requireGrant(liveCtx, "jobs.dispatch", scope);
+      if (command.workspaceProofAction)
+        requireGrant(liveCtx, command.workspaceProofAction, { ...scope, tools: [] });
+      if (frame.type === "job.lease_update") {
+        const retained = this.store.get<{ lease: D.Lease }>(
+          "lease",
+          frame.payload.identity.lease.leaseId,
+        )?.lease;
+        if (
+          !retained ||
+          retained.expiresAt <= Date.now() ||
+          frame.payload.expiresAt <= Date.now()
+        ) {
+          this.store.put("command", key, command);
+          return;
+        }
+        if (retained.leaseVersion > frame.payload.leaseVersion) {
+          this.store.put("command", key, command);
+          return;
+        }
+      }
       executors.send(command.delivery.executorId, command.delivery.generation, frame);
       this.store.put("command", key, command); // receipt retained; socket send is not a commit acknowledgment
     } catch {
@@ -300,7 +446,30 @@ export class Delivery {
         const key = `${identity.executionId}:${sequence}`;
         await this.store.arm();
         return this.store.tx(() => {
+          this.identities.current(ctx);
+          const publisher = this.store.get<ExecutorState>("executor", input.executorId);
+          check(
+            publisher &&
+              publisher.generation === input.generation &&
+              publisher.epoch === input.connectionEpoch &&
+              publisher.status !== "revoked",
+            "unauthenticated",
+            "Artifact publisher changed before persistence",
+          );
           const old = this.store.get<{ digest: string; ack: D.DeliveryAck }>("late_result", key);
+          const delivered =
+            this.store.get<{ digest: string; ack: D.DeliveryAck }>(
+              "inbox",
+              `${input.executorId}:${identity.executionId}:job.prepared_result:${sequence}`,
+            ) ??
+            this.store.get<{ digest: string; ack: D.DeliveryAck }>(
+              "transport_receipt",
+              `${input.executorId}:${identity.executionId}:job.prepared_result:${sequence}`,
+            );
+          if (delivered) {
+            check(delivered.digest === digest, "conflict", "Late result sequence changed");
+            return delivered.ack;
+          }
           if (old) {
             check(old.digest === digest, "conflict", "Late result sequence changed");
             return old.ack;
@@ -311,6 +480,7 @@ export class Delivery {
             "Late result quarantine exhausted",
           );
           const ack: D.DeliveryAck = { deliveryId: id(), sequence, persisted: true };
+          indexArtifacts(this.store, this.directory, frame.payload);
           this.store.put(
             "late_result",
             key,
@@ -377,14 +547,7 @@ export class Delivery {
         this.store.put("output_usage", identity.executionId, { bytes: used + bytes });
       }
       if (frame.type === "job.prepared_result")
-        check(
-          new TextEncoder().encode(frame.payload.output.tail).length <=
-            this.directory.policy().bounds.inlineTailBytes &&
-            frame.payload.output.artifacts.reduce((sum, artifact) => sum + artifact.size, 0) <=
-              this.directory.policy().bounds.artifactBytes,
-          "payload_too_large",
-          "Prepared result exceeds effective output bounds",
-        );
+        indexArtifacts(this.store, this.directory, frame.payload);
       check(
         this.store.storage.sql
           .exec<{ n: number }>(
@@ -697,5 +860,44 @@ export class Delivery {
       repairAccepted(this.store, "fact", key);
       return ack;
     });
+  }
+}
+
+function isProtocolError(value: unknown): value is D.ProtocolError {
+  return valid("common", "ProtocolError", value);
+}
+async function boundedProof(
+  response: Response,
+  deadline: number,
+  current: () => unknown,
+): Promise<unknown> {
+  const reader = response.body?.getReader();
+  check(reader, "conflict", "Terminal proof body missing");
+  const bytes = new Uint8Array(65536);
+  let offset = 0;
+  try {
+    for (;;) {
+      const part = await within(reader.read(), Math.max(1, deadline - Date.now()));
+      current();
+      if (part.done) break;
+      check(
+        Date.now() < deadline && offset + part.value.length <= bytes.length,
+        "payload_too_large",
+        "Terminal proof bound exceeded",
+      );
+      bytes.set(part.value, offset);
+      offset += part.value.length;
+    }
+    try {
+      return JSON.parse(
+        new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(
+          bytes.subarray(0, offset),
+        ),
+      );
+    } catch {
+      fail("conflict", "Invalid terminal proof");
+    }
+  } finally {
+    await within(reader.cancel(), Math.max(1, deadline - Date.now())).catch(() => undefined);
   }
 }

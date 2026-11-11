@@ -5,7 +5,9 @@ import type * as D from "../../src/boundary/dto.js";
 import { type harness, request, scope, uuid, value } from "./harness.ts";
 
 export async function connected(
-  h: Awaited<ReturnType<typeof harness>>,
+  h: Pick<Awaited<ReturnType<typeof harness>>, "mint" | "auth" | "server"> & {
+    cp: Pick<Awaited<ReturnType<typeof harness>>["cp"], "mintTicket">;
+  },
   options: { workspaceIds?: string[]; transferLimits?: D.ExecutorTransferLimits } = {},
 ) {
   const resources = {

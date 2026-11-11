@@ -141,6 +141,85 @@ interrupt the entire attempt. Restart requires a new attempt. Completed PUT repe
 GET requires a new authorized attempt because vanished RAM cannot replay bytes.
 No local bytes enter SQLite, R2, Computer, WebSocket JSON, logs or facts.
 
+Native output metadata is indexed by opaque artifact ID in the same transaction
+as its validated prepared-result acknowledgment. The actual retained dispatch,
+reservation/execution ID, original binding/base, explicit stream, size and hash
+grid must match. Membership is immutable and bounded to sixteen artifacts and
+the current effective output/storage limits. Cross-job reuse conflicts. The
+metadata survives inbox acknowledgment; exact retries after original credential
+revocation retain the original transport receipt.
+
+An absent cloud artifact delegates privately to
+`GET /internal/artifacts/{workspaceId}/{artifactId}` with the existing
+`X-Fortipi-Context` JSON envelope. CP first validates the incoming Workspace
+registration against the current caller credential. After lookup it checks
+`artifacts.read` over the actual indexed agent, conversation, workspace and
+executor, then registers that exact scope under the same current identity and
+recipient. A minimal incoming Workspace registration is sufficient; no missing
+grant is added. Missing metadata returns unavailable/404 without registering a
+guessed scope. Repeated matching scopes reuse their actual registration.
+
+Output descriptors retain the original job/execution, operation digest,
+binding/base and exact artifact/stream, with the current reader credential and
+no historical lease. Current reader and executor floors, grants, retention and
+registered limits are checked during streaming. An expired or revoked original
+job credential does not prevent a different authorized reader from retrieving
+retained output. Explicit `revision` must equal the indexed original revision;
+query duplicates, changed streams and unauthorized owner scopes fail closed.
+
+Full output is verified incrementally. A bounded range uses a full verification
+pass to calculate the selected-body hash, followed by a fresh full-source
+descriptor that drains all chunks while emitting the selected bytes. There is
+no offset field or whole-file cloud buffer. The final fragment is retained until
+the whole-source and selected-body checks complete. Responses use a
+`FixedLengthStream` so their actual byte length survives Worker transport;
+[Cloudflare documents this requirement](https://developers.cloudflare.com/workers/runtime-apis/response/).
+
+An output open records its request ID, transfer/attempt IDs and connection epoch
+before send. Existing `transfer.status` replies must correlate exactly with that
+current executor channel. Empty output remains waiting until a matching producer
+`verified` reply reports zero bytes and no chunks after checking its actual
+private source. An index entry alone cannot manufacture an empty response.
+Missing proof interrupts the attempt within ten seconds; a late proof cannot
+revive it. Nonempty producer status never replaces actual HTTP chunk receipts or
+receiver whole-file verification. Reopening the runtime interrupts incomplete
+attempts and requires a fresh descriptor; it never reassigns execution. The
+native collector currently emits no reference for an empty output stream; the
+generic zero-reference path is exercised using an explicitly retained file.
+
+Terminal delivery verifies private authoritative proofs before recording its
+command. The Agent path is `POST /__fortipi/terminal-proof/{jobId}` with
+`X-Fortipi-Context: <current registered Agent AuthContext JSON>`. The Workspace
+path is exactly `POST /__fortipi/terminal-proof` with
+`x-fortipi-workspace-context: {"auth": <current registered Workspace AuthContext>}`.
+Both consume existing `JobCommitted` JSON bounded to 64 KiB and return the same
+validated JSON with status 200 and `Cache-Control: no-store`; failures use the
+existing redacted error body/status. CP bounds waits/bodies, compares the exact
+reply and rechecks current authority after awaits before persisting the command.
+
+Agent registration carries `jobs.dispatch` for the actual job scopes. Workspace
+registration separately carries the actual selected workspace operation action
+and original workspace/agent/conversation/target scopes, with no tool projection.
+Committed evidence requires original reserved write authority and current write
+authority. Unchanged-base proof needs an original reserved read/write operation
+and current read or write authority. Separate grants are supported; no combined
+read/write/dispatch grant or public `jobs.read`/`conversations.read` prerequisite
+is introduced. A replacement credential may prove immutable historical evidence
+without refreshing the old job lease or rewriting hashes. Source5 must implement
+the Agent's actual known-job/owner/floor/dispatch checks and authoritative terminal
+version plus exact durable `job.state.changed` event sequence. CP fixture proofs
+do not establish that future implementation. Public routers must enforce each
+route's audience even when an action such as `artifacts.read` is shared by
+application and admin routes, and must strip all internal authority headers.
+
+Explicit job lease notifications compare against CP's retained current renewal,
+not the original assignment's expiry. Version advancement and its durable command
+receipt share one transaction. Exact retries preserve the receipt; older receipts
+cannot regress or resend over a newer renewal. New updates cannot revive an
+expired retained lease, exceed the wire/deadline/current authority bound or bypass
+the original credential floor. These are forwarding checks; the notification is
+still required to originate from the actual private Workspace renewal result.
+
 The local Wrangler proxy did not propagate an unmatched GET disconnect within
 500 ms, including with explicit signal forwarding and the documented
 `enable_request_signal`/`request_signal_passthrough` flags. Actual HTTP tests

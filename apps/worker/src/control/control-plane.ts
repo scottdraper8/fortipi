@@ -3,6 +3,7 @@ import { errorStatuses, routeCatalog, validateBrowserOrigin } from "fortipi-cont
 import type { ControlPlaneRpc } from "../boundary/control-plane.js";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
+import { Artifacts } from "./artifacts.js";
 import { emptyScope, permits, requireGrant, roleAllows } from "./authorization.js";
 import { Bindings } from "./bindings.js";
 import { Capacity } from "./capacity.js";
@@ -36,6 +37,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
   readonly providerAuth: ProviderAuth;
   readonly local: LocalWorkspace;
   readonly relay: Relay;
+  readonly artifacts: Artifacts;
   readonly bindings: Bindings;
   readonly leases: WorkspaceLeases;
   private readonly initialized: Promise<void>;
@@ -53,9 +55,11 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     this.capacity = new Capacity(this.store, this.identities, this.directory);
     this.tickets = new Tickets(this.store, this.identities);
     this.bindings = new Bindings(this.store, this.identities, this.tickets, this.directory, env);
-    this.delivery = new Delivery(this.store, this.identities, this.directory, env);
+    this.delivery = new Delivery(this.store, this.identities, this.directory, env, this.tickets);
     this.executors = new Executors(ctx, this.store, this.identities, (auth, frame) =>
-      this.delivery.receive(auth, frame),
+      frame.frame.type === "transfer.status"
+        ? this.relay.receiveStatus(auth, frame)
+        : this.delivery.receive(auth, frame),
     );
     this.dispatch = new Dispatch(
       this.store,
@@ -74,6 +78,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       this.local,
     );
     this.relay = new Relay(this.store, this.identities, this.directory, this.executors, env);
+    this.artifacts = new Artifacts(this.store, this.identities, this.relay, this.tickets);
     this.revocations = new Revocations(this.store, this.identities, env, (subject) => {
       this.executors.close(subject);
       this.relay.revoke(subject);
@@ -207,7 +212,9 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
         "Invalid executor delivery frame",
       );
       return ctx.role === "executor"
-        ? this.delivery.receive(ctx, input)
+        ? input.frame.type === "transfer.status"
+          ? this.relay.receiveStatus(ctx, input)
+          : this.delivery.receive(ctx, input)
         : this.delivery.forward(ctx, input, this.executors);
     });
   }
@@ -477,7 +484,7 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       );
       // Individual methods perform resource checks; management reads are installation scoped.
       const unwrap = <T>(result: D.Outcome<T>): T => {
-        if (!result.ok) fail(result.code, result.message);
+        if (!result.ok) fail(result.code, result.message, result.details);
         return result.value;
       };
       switch (request.operationId) {
@@ -813,7 +820,10 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
           url.pathname,
         );
       const statusMatch = /^\/v1\/executor\/transfers\/([a-zA-Z0-9_-]+)$/.exec(url.pathname);
-      check(match || statusMatch, "not_found", "Control route unavailable");
+      const artifactMatch = /^\/internal\/artifacts\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_-]+)$/.exec(
+        url.pathname,
+      );
+      check(match || statusMatch || artifactMatch, "not_found", "Control route unavailable");
       let auth: D.AuthContext;
       if (url.pathname.startsWith("/internal/")) {
         const envelope = request.headers.get("X-Fortipi-Context");
@@ -835,6 +845,8 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
         });
         check(auth.role === "executor", "unauthorized", "Executor credential required");
       }
+      if (artifactMatch)
+        return this.artifacts.fetch(auth, request, artifactMatch[1] ?? "", artifactMatch[2] ?? "");
       if (statusMatch) {
         check(request.method === "GET", "invalid_request", "Transfer status requires GET");
         return Response.json(
