@@ -30,6 +30,14 @@ transfers to start the producer. These requests retain the operation scope but
 have distinct body-bound request/correlation identities. Metadata is not a
 canonical byte copy or a substitute for checking current bytes and authority.
 
+`AdminOperation.artifacts` uses closed `AdminArtifactReference` records with the
+actual agent/conversations or workspace/revision scope and an exact admin byte
+route. Agent exports need no workspace identity. Download through the existing
+`getAdminArtifact` operation; workspace `ByteReference` helpers retain their own
+route checks. Private export producers receive the actual `exports.create` or
+`backups.create` action. Descriptors confer no authority: the owner checks current
+grants, endpoint/ID correlation, measured size/hash and immutable retained bytes.
+
 `UploadBegin.blobs` supplies one `{sha256,chunks}` plan for every distinct
 declared put, including puts superseded by later ordered mutations. Local
 uploads require it (explicit `[]` when no put); Computer uploads may omit it.

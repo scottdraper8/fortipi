@@ -35,6 +35,29 @@ import type { ExecutionBackend } from "../execution-backend.js";
 import type { JobStore } from "../job-store.js";
 import type { WorkspaceObjectRpc } from "../workspace-object.js";
 
+export async function adminExportPorts(
+  agent: AgentSessionRpc,
+  workspace: WorkspaceObjectRpc,
+  auth: D.AuthContext,
+  input: D.ExportRequest,
+): Promise<void> {
+  await agent.exportData(auth, { ...input, action: "exports.create" });
+  const result = await workspace.exportData(auth, { ...input, action: "backups.create" });
+  if (result.ok)
+    for (const reference of result.value.artifacts) {
+      if ("scope" in reference) {
+        const admin: D.AdminArtifactReference = reference;
+        void admin;
+      } else {
+        const legacy: D.ByteReference = reference;
+        void legacy;
+      }
+    }
+  const { action: _action, ...missingAction } = input;
+  // @ts-expect-error A private producer must receive the actual initiating action.
+  await agent.exportData(auth, missingAction);
+}
+
 function value<T>(outcome: D.Outcome<T>): T {
   if (!outcome.ok) throw new Error(outcome.code);
   return outcome.value;

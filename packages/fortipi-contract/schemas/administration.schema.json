@@ -417,6 +417,71 @@
       "required": ["providerId", "version", "generation", "state"],
       "additionalProperties": false
     },
+    "AdminArtifactReference": {
+      "title": "AdminArtifactReference",
+      "type": "object",
+      "properties": {
+        "artifactId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "sha256": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16777216
+        },
+        "endpoint": {
+          "type": "string",
+          "maxLength": 148,
+          "pattern": "^/v1/admin/artifacts/[A-Za-z0-9_-]{1,128}$"
+        },
+        "scope": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "agent"
+                },
+                "agentId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "conversationIds": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                  },
+                  "uniqueItems": true,
+                  "maxItems": 100
+                }
+              },
+              "required": ["kind", "agentId", "conversationIds"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "workspace"
+                },
+                "workspaceId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "revision": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+                }
+              },
+              "required": ["kind", "workspaceId", "revision"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["artifactId", "sha256", "size", "endpoint", "scope"],
+      "additionalProperties": false
+    },
     "AdminOperation": {
       "title": "AdminOperation",
       "type": "object",
@@ -433,7 +498,7 @@
         "artifacts": {
           "type": "array",
           "items": {
-            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ByteReference"
+            "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/AdminArtifactReference"
           },
           "maxItems": 16
         },

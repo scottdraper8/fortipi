@@ -35,6 +35,42 @@ import {
 } from "./fixtures/wire.ts";
 
 const { get } = validators();
+test("admin artifacts retain agent or workspace provenance without inventing workspace identity", () => {
+  const agent = {
+    artifactId: "export_part",
+    sha256: hash,
+    size: 0,
+    endpoint: "/v1/admin/artifacts/export_part",
+    scope: { kind: "agent", agentId: "agent_1", conversationIds: ["conversation_1"] },
+  } satisfies Client.AdminArtifactReference;
+  const response = {
+    status: 200,
+    body: { operationId: "export_1", kind: "export", state: "completed", artifacts: [agent] },
+  } satisfies Client.OperationResponse<"getAdminOperation">;
+  accepted("AdminArtifactReference", agent);
+  accepted("AdminArtifactReference", { ...agent, scope: { ...agent.scope, conversationIds: [] } });
+  accepted("AdminArtifactReference", {
+    ...agent,
+    scope: { kind: "workspace", workspaceId: "workspace_1", revision: "revision_1" },
+  });
+  accepted("AdminOperation", response.body);
+  rejected("ByteReference", agent);
+  for (const endpoint of [
+    "/v1/workspaces/workspace_1/artifacts/export_part",
+    "https://example.invalid/v1/admin/artifacts/export_part",
+    "/v1/admin/artifacts/../export_part",
+    "/v1/admin/artifacts/export_part?owner=other",
+  ])
+    rejected("AdminArtifactReference", { ...agent, endpoint });
+  rejected("AdminArtifactReference", { ...agent, scope: undefined });
+  rejected("AdminArtifactReference", { ...agent, size: 16777217 });
+  rejected("AdminArtifactReference", { ...agent, scope: { ...agent.scope, workspaceId: "fake" } });
+  rejected("AdminArtifactReference", {
+    ...agent,
+    scope: { ...agent.scope, conversationIds: ["conversation_1", "conversation_1"] },
+  });
+  rejected("AdminOperation", { ...response.body, artifacts: Array(17).fill(agent) });
+});
 test("native output artifacts carry actual stream provenance before a server can route bytes", () => {
   const reference = {
     workspaceId: "workspace_1",
