@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { root } from "./harness.ts";
 
@@ -42,6 +42,7 @@ const authority = await readFile(resolve(source, "authority.ts"), "utf8");
 const computer = await readFile(resolve(source, "computer.ts"), "utf8");
 const workspace = await readFile(resolve(source, "workspace-object.ts"), "utf8");
 const fixture = await readFile(resolve(tests, "runtime-worker.ts"), "utf8");
+await mkdir(resolve(root, "apps/worker/dist"), { recursive: true });
 try {
   for (const mutant of ["generation", "expiry", "seal"] as const) {
     let changedAuthority = authority;

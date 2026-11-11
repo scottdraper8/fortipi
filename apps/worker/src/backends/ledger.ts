@@ -96,12 +96,7 @@ export class ExecutionLedger {
     authorize(this.owner.state, ctx, authority.workspaceId, "workspace.read");
     const row = this.owner.state.get<RecordEntry>(`execution:${identity.executionId}`);
     requireThat(
-      row &&
-        identity.assignmentDigest === row.prepared.request.identity.assignmentDigest &&
-        identity.operationDigest === row.prepared.request.identity.operationDigest &&
-        identity.jobId === row.prepared.request.identity.jobId &&
-        same(identity.target, row.prepared.request.identity.target) &&
-        same(identity.lease.credential, row.prepared.request.identity.lease.credential),
+      row && sameExecutionIdentity(identity, row.prepared.request.identity),
       "conflict",
       "Execution identity mismatch",
     );
@@ -896,6 +891,13 @@ export class ExecutionLedger {
 function tail(text: string, maximum: number): string {
   const bytes = new TextEncoder().encode(text);
   return new TextDecoder().decode(bytes.slice(-maximum));
+}
+function sameExecutionIdentity(a: D.ExecutionIdentity, b: D.ExecutionIdentity): boolean {
+  const immutable = (identity: D.ExecutionIdentity) => {
+    const { expiresAt: _expiry, leaseVersion: _version, ...lease } = identity.lease;
+    return { ...identity, lease };
+  };
+  return same(immutable(a), immutable(b));
 }
 async function sha(bytes: Uint8Array): Promise<string> {
   const { createHash } = await import("node:crypto");

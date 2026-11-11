@@ -1099,6 +1099,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       await this.checkLocalSnapshot(ctx, authority, input.query.revision);
       if (input.query.path) validateRelativePath(input.query.path);
       return this.mutex.run(() => {
+        authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
         const all = this.revision(input.query.revision)
           .manifest.entries.filter(
             (entry) => !input.query.path || entry.path.startsWith(`${input.query.path}/`),
@@ -1156,6 +1157,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       await this.checkLocalSnapshot(ctx, authority, input.query.revision);
       validateRelativePath(input.query.path);
       return this.mutex.run(() => {
+        authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
         const entry = this.revision(input.query.revision).manifest.entries.find(
           (item) => item.path === input.query.path,
         );
@@ -1171,11 +1173,12 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     return outcome(async () => {
       const authority = await this.authority(ctx, input.path.workspaceId);
       validateRelativePath(input.query.path);
-      const entry = await this.mutex.run(() =>
-        this.revision(input.query.revision).manifest.entries.find(
+      const entry = await this.mutex.run(() => {
+        authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
+        return this.revision(input.query.revision).manifest.entries.find(
           (item) => item.path === input.query.path,
-        ),
-      );
+        );
+      });
       requireThat(entry?.type === "file", "not_found", "File absent from revision");
       const range = input.query.range
         ? checkedRange(input.query.range.start, input.query.range.end ?? entry.size - 1, entry.size)
@@ -1198,7 +1201,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           "Local byte reference drift",
           { reason: "local_drift" },
         );
-        if (!range) return { ...reference, endpoint };
+        if (!range)
+          return this.mutex.run(() => {
+            authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
+            return { ...reference, endpoint };
+          });
         requireThat(reference.chunks, "interrupted", "Local range requires owner chunk inventory");
         const observed = await hashInventory(
           sliceStream(
@@ -1217,13 +1224,16 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           reference.chunks.chunkBytes,
           ctx.deadline,
         );
-        return {
-          ...reference,
-          endpoint,
-          size: length,
-          sha256: observed.sha256,
-          chunks: observed.chunks,
-        };
+        return this.mutex.run(() => {
+          authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
+          return {
+            ...reference,
+            endpoint,
+            size: length,
+            sha256: observed.sha256,
+            chunks: observed.chunks,
+          };
+        });
       }
       const hash = range
         ? await hashStream(
@@ -1236,14 +1246,17 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             ctx.deadline,
           )
         : entry.sha256;
-      return {
-        workspaceId: input.path.workspaceId,
-        revision: input.query.revision,
-        size: length,
-        sha256: hash,
-        endpoint,
-        owner: { kind: "cloud" },
-      };
+      return this.mutex.run(() => {
+        authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
+        return {
+          workspaceId: input.path.workspaceId,
+          revision: input.query.revision,
+          size: length,
+          sha256: hash,
+          endpoint,
+          owner: { kind: "cloud" as const },
+        };
+      });
     }, ctx.requestId);
   }
   snapshot(
@@ -1282,6 +1295,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       await this.checkLocalSnapshot(ctx, authority, input.query.revision);
       await this.checkLocalSnapshot(ctx, authority, input.query.otherRevision);
       return this.mutex.run(() => {
+        authorize(this.state, ctx, input.path.workspaceId, "workspace.read");
         const before = new Map(
           this.revision(input.query.revision).manifest.entries.map((entry) => [entry.path, entry]),
         );
@@ -2612,18 +2626,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             "not_found",
             "Artifact unavailable",
           );
-          requireThat(
-            auth.grants.some(
-              (grant) =>
-                (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
-                permitsResource(grant.resources.workspaceIds, authority.workspaceId) &&
-                permitsResource(grant.resources.actions, "artifacts.read") &&
-                permitsResource(grant.resources.agentIds, artifact.agentId) &&
-                permitsResource(grant.resources.conversationIds, artifact.conversationId),
-            ),
-            "unauthorized",
-            "Job output owner grant required",
-          );
+          this.authorizeArtifact(auth, artifact);
           const open = async () => {
             const response = await this.childFetch(auth, artifact.allocation, "/artifact-read", {
               artifact: {
@@ -2640,7 +2643,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             artifact.reference.size,
             artifact.reference.sha256,
             auth.deadline,
-            async () => this.authorizedBytes(auth, "artifacts.read", await open()),
+            async () => this.authorizedBytes(auth, "artifacts.read", await open(), artifact),
           );
         }
         const path = url.searchParams.get("path");
@@ -2681,12 +2684,58 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         );
       }
       const { allocation } = envelope;
+      const path = url.pathname.slice("/__fortipi/store".length);
+      // Reuse the private store fetch lane for an exact output-member observation.
+      // A current artifacts.read consumer never receives workspace.read authority.
+      if (
+        path === "/artifact-read" &&
+        request.method === "POST" &&
+        allocation &&
+        this.isSelf(allocation.authorityId)
+      )
+        return this.mutex.run(() => {
+          const authority = this.current();
+          authorize(this.state, auth, authority.workspaceId, "artifacts.read");
+          requireThat(
+            allocation.role === "scratch" && allocation.workspaceId === authority.workspaceId,
+            "unauthorized",
+            "Output scratch authority required",
+          );
+          const row = this.state.get<AllocationRecord>(`allocation:${allocation.allocationId}`);
+          requireThat(
+            row &&
+              same(row.state.allocation, allocation) &&
+              row.state.state !== "retiring" &&
+              row.state.state !== "deleted",
+            "unauthorized",
+            "Output allocation unavailable",
+          );
+          const references = this.state.get<D.ByteReference[]>(
+            `artifacts-execution:${allocation.executionId}`,
+          );
+          const artifact = references
+            ?.map((ref) => this.state.get<ArtifactRecord>(`artifact:${ref.artifactId}`))
+            .find(
+              (record) =>
+                record &&
+                same(record.allocation, allocation) &&
+                record.path === envelope.artifact?.path &&
+                record.offset === envelope.artifact?.offset &&
+                record.reference.size === envelope.artifact?.size,
+            );
+          requireThat(artifact, "unauthorized", "Exact output member required");
+          this.authorizeArtifact(auth, artifact);
+          return Response.json(row.state);
+        });
       requireThat(
         allocation && this.isSelf(allocation.childId),
         "unauthorized",
         "Child identity required",
       );
-      const registry = await this.registry(auth, lookup(allocation));
+      const registry =
+        path === "/artifact-read" && request.method === "GET"
+          ? await this.artifactRegistry(envelope)
+          : await this.registry(auth, lookup(allocation));
       requireThat(
         same(registry.state.allocation, allocation) &&
           registry.state.state !== "retiring" &&
@@ -2695,7 +2744,6 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         "Allocation unavailable",
       );
       const child = this.childStore();
-      const path = url.pathname.slice("/__fortipi/store".length);
       if (path.startsWith("/chunk/") && request.method === "PUT") {
         const index = Number(path.slice(7));
         requireThat(
@@ -2858,6 +2906,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     ctx: D.AuthContext,
     action: string,
     stream: ReadableStream<Uint8Array>,
+    artifact?: ArtifactRecord,
   ): ReadableStream<Uint8Array> {
     const reader = stream.getReader();
     let closed = false;
@@ -2875,10 +2924,15 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             authorize(this.state, ctx, this.current().workspaceId, action),
           );
           const next = await reader.read();
+          await this.mutex.run(() => {
+            authorize(this.state, ctx, this.current().workspaceId, action);
+            if (artifact) this.authorizeArtifact(ctx, artifact);
+            if (!next.done) controller.enqueue(next.value);
+          });
           if (next.done) {
             await finish();
             controller.close();
-          } else controller.enqueue(next.value);
+          }
         } catch (error) {
           await finish();
           controller.error(error);
@@ -2886,6 +2940,42 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       },
       cancel: finish,
     });
+  }
+  private authorizeArtifact(ctx: D.AuthContext, artifact: ArtifactRecord): void {
+    authorize(this.state, ctx, artifact.reference.workspaceId, "artifacts.read");
+    requireThat(
+      artifact.state === "ready" && artifact.expiresAt > Date.now(),
+      "not_found",
+      "Artifact unavailable",
+    );
+    requireThat(
+      ctx.grants.some(
+        (grant) =>
+          (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+          permitsResource(grant.resources.workspaceIds, artifact.reference.workspaceId) &&
+          permitsResource(grant.resources.actions, "artifacts.read") &&
+          permitsResource(grant.resources.agentIds, artifact.agentId) &&
+          permitsResource(grant.resources.conversationIds, artifact.conversationId),
+      ),
+      "unauthorized",
+      "Job output owner grant required",
+    );
+  }
+  private async artifactRegistry(envelope: InternalContext): Promise<AllocationRecord> {
+    const observation = await this.stub(envelope.allocation.authorityId).describeStore(
+      envelope.auth,
+      lookup(envelope.allocation),
+    );
+    if (observation.ok) return { state: observation.value, referenced: false, pins: 0 };
+    requireThat(observation.code === "unauthorized", observation.code, observation.message);
+    const response = await this.stub(envelope.allocation.authorityId).fetch(
+      new Request("https://workspace.internal/__fortipi/store/artifact-read", {
+        method: "POST",
+        headers: { [internalHeader]: JSON.stringify(envelope) },
+      }),
+    );
+    requireThat(response.ok, "unauthorized", "Output member authority required");
+    return { state: await response.json<D.StoreState>(), referenced: false, pins: 0 };
   }
   private async nativeArtifact(
     request: Request,

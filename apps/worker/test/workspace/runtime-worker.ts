@@ -12,6 +12,29 @@ import {
 
 /** Actual binding application plus a test-only post-transaction response barrier. */
 export class WorkspaceObject extends WorkspaceBase {
+  override async authority(ctx: D.AuthContext, workspaceId: string, action = "workspace.read") {
+    const authority = await super.authority(ctx, workspaceId, action);
+    if (ctx.requestId === "revoke-during-metadata")
+      await this.invalidateGeneration(
+        {
+          kind: "control-recovery",
+          deploymentId: ctx.deploymentId,
+          revocationId: "metadata-reader-revoked",
+          recipient: { kind: "workspace", id: workspaceId },
+          actions: ["invalidate"],
+          deadline: ctx.deadline,
+        },
+        {
+          revocationId: "metadata-reader-revoked",
+          subject: {
+            kind: "credential",
+            credentialId: ctx.credentialId,
+            minimumGeneration: ctx.generation + 1,
+          },
+        },
+      );
+    return authority;
+  }
   override async initializeStore(
     ctx: D.AuthContext,
     input: D.StoreAllocation,
@@ -173,6 +196,10 @@ type Call =
   | { kind: "commit"; input: D.OperationRequest<"commitUpload"> }
   | { kind: "receipt"; input: D.CommitLookup }
   | { kind: "manifest"; input: D.OperationRequest<"getWorkspaceManifest"> }
+  | { kind: "list"; input: D.OperationRequest<"listWorkspaceFiles"> }
+  | { kind: "stat"; input: D.OperationRequest<"statWorkspaceFile"> }
+  | { kind: "read-metadata"; input: D.OperationRequest<"readWorkspaceFile"> }
+  | { kind: "diff"; input: D.OperationRequest<"diffWorkspace"> }
   | { kind: "describe"; input: D.OperationRequest<"describeWorkspace"> }
   | { kind: "invalidate"; input: D.Invalidation }
   | { kind: "facts"; input: D.FactPageRequest }
@@ -193,6 +220,7 @@ type Call =
     }
   | { kind: "child-state"; input: D.StoreLookup }
   | { kind: "child-mutate"; input: D.StoreAllocation; entry: D.ManifestEntry; bytes: number[] }
+  | { kind: "child-materialize"; input: D.StoreAllocation; entry: D.ManifestEntry; bytes: number[] }
   | { kind: "delete"; input: D.StoreRetirement };
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -272,6 +300,10 @@ export default {
       ];
     }
     if (request.headers.get("x-test-no-grants") === "1") ctx.grants = [];
+    if (request.headers.get("x-test-artifacts-only") === "1")
+      for (const grant of ctx.grants) grant.resources.actions = ["artifacts.read"];
+    if (request.headers.get("x-test-other-conversation") === "1")
+      for (const grant of ctx.grants) grant.resources.conversationIds = ["other"];
     const authority = env.WORKSPACES.getByName("workspace");
     if (url.pathname === "/artifact-observation")
       return env.CONTROL_PLANE.getByName("control").fetch(
@@ -343,6 +375,14 @@ export default {
         return Response.json(await authority.getReceipt(ctx, call.input));
       case "manifest":
         return Response.json(await authority.manifest(ctx, call.input));
+      case "list":
+        return Response.json(await authority.list(ctx, call.input));
+      case "stat":
+        return Response.json(await authority.stat(ctx, call.input));
+      case "read-metadata":
+        return Response.json(await authority.read(ctx, call.input));
+      case "diff":
+        return Response.json(await authority.diff(ctx, call.input));
       case "describe":
         return Response.json(await authority.describe(ctx, call.input));
       case "invalidate":
@@ -378,18 +418,22 @@ export default {
           await env.WORKSPACES.getByName(call.input.childId).describeStore(ctx, call.input),
         );
       case "child-mutate":
+      case "child-materialize":
         return env.WORKSPACES.getByName(call.input.childId).fetch(
-          new Request("https://workspace.internal/__fortipi/store/blob", {
-            method: "PUT",
-            headers: {
-              [internalHeader]: JSON.stringify({
-                auth: ctx,
-                allocation: call.input,
-                entry: call.entry,
-              }),
+          new Request(
+            `https://workspace.internal/__fortipi/store/${call.kind === "child-mutate" ? "blob" : "materialize"}`,
+            {
+              method: "PUT",
+              headers: {
+                [internalHeader]: JSON.stringify({
+                  auth: ctx,
+                  allocation: call.input,
+                  entry: call.entry,
+                }),
+              },
+              body: Uint8Array.from(call.bytes),
             },
-            body: Uint8Array.from(call.bytes),
-          }),
+          ),
         );
       case "store":
         return Response.json(await authority.describeStore(ctx, call.input));

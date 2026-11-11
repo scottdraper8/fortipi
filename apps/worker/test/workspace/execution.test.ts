@@ -146,12 +146,51 @@ async function runFixture(source?: string, denied = false): Promise<void> {
       await delay(20);
     }
     assert.equal(observation?.state, "terminal");
+    const identityErrors: string[] = [];
+    for (const changed of [
+      { ...identity, baseRevision: "unrelated-base" },
+      { ...identity, deadline: identity.deadline + 1 },
+      { ...identity, lease: { ...identity.lease, fence: "999" } },
+    ]) {
+      const reply = (await (
+        await server.fetch("/rpc", {
+          method: "POST",
+          body: JSON.stringify({ kind: "query-execution", input: changed }),
+        })
+      ).json()) as D.Outcome<D.ExecutionObservation>;
+      if (reply.ok || reply.code !== "conflict")
+        identityErrors.push("Changed execution identity was accepted");
+    }
+    assert.deepEqual(
+      await call<D.ExecutionObservation>({
+        kind: "query-execution",
+        input: { ...identity, lease: { ...identity.lease, expiresAt: 0, leaseVersion: 999 } },
+      }),
+      observation,
+      "Mutable lease observations changed the retained execution identity",
+    );
     const result = await call<D.PreparedResult>({ kind: "collect-execution", input: identity });
     assert.equal(result.state, "succeeded");
     assert.ok(result.output.artifacts.length > 0);
     const artifact = await server.fetch(result.output.artifacts[0]?.endpoint ?? "");
     assert.equal(artifact.status, 200);
     assert.equal(await artifact.text(), `${"x".repeat(40000)}\n`);
+    const outputReader = await server.fetch(result.output.artifacts[0]?.endpoint ?? "", {
+      headers: { "x-test-artifacts-only": "1" },
+    });
+    if (outputReader.status !== 200)
+      identityErrors.push(`Artifact-only reader rejected with ${outputReader.status}`);
+    else assert.equal(await outputReader.text(), `${"x".repeat(40000)}\n`);
+    await outputReader.body?.cancel().catch(() => {});
+    assert.equal(
+      (
+        await server.fetch(result.output.artifacts[0]?.endpoint ?? "", {
+          headers: { "x-test-artifacts-only": "1", "x-test-other-conversation": "1" },
+        })
+      ).status,
+      403,
+      "Output member escaped conversation scope",
+    );
 
     assert.ok(result.uploadId && result.commitId);
     const validation = await call<{ status: 200; body: D.UploadValidation }>({
@@ -188,6 +227,15 @@ async function runFixture(source?: string, denied = false): Promise<void> {
     assert.equal(response.status, 200);
     assert.equal(await response.text(), "1", "Duplicate dispatch reran user code");
     assert.equal(
+      (
+        await server.fetch(`/read?revision=${receipt.body.revision}&path=run-count.txt`, {
+          headers: { "x-test-artifacts-only": "1" },
+        })
+      ).status,
+      403,
+      "Artifact-only reader gained workspace access",
+    );
+    assert.equal(
       await (
         await server.fetch(`/read?revision=${receipt.body.revision}&path=confinement.txt`)
       ).text(),
@@ -198,6 +246,7 @@ async function runFixture(source?: string, denied = false): Promise<void> {
       result,
       "Collection retried a new stage",
     );
+    assert.deepEqual(identityErrors, []);
   } finally {
     await server.close();
   }

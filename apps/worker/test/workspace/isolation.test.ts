@@ -190,10 +190,40 @@ test("supported child deleteAll reduces observed storage and permanent registry 
         operationDigest: "b".repeat(64),
         capacityReservationId: capacity.reservationId,
         reservedBytes: capacity.bytes,
-        deadline: Date.now() + 100,
+        deadline: Date.now() + 1000,
       },
     });
     await call({ kind: "initialize", input: allocation });
+    const canary = new TextEncoder().encode("materialization-retry-canary");
+    const entry: D.ManifestEntry = {
+      type: "file",
+      path: "input.txt",
+      mode: 420,
+      size: canary.length,
+      sha256: createHash("sha256").update(canary).digest("hex"),
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const repeated = await server.fetch("/rpc", {
+        method: "POST",
+        body: JSON.stringify({
+          kind: "child-materialize",
+          input: allocation,
+          entry,
+          bytes: [...canary],
+        }),
+      });
+      assert.equal(repeated.status, 204, "Exact scratch materialization retry failed");
+    }
+    const changed = await server.fetch("/rpc", {
+      method: "POST",
+      body: JSON.stringify({
+        kind: "child-materialize",
+        input: allocation,
+        entry: { ...entry, sha256: "0".repeat(64) },
+        bytes: [...canary],
+      }),
+    });
+    assert.equal(changed.status, 409, "Changed materialization overwrote committed input");
     const input: D.StoreLookup = {
       allocationId: allocation.allocationId,
       authorityId: allocation.authorityId,

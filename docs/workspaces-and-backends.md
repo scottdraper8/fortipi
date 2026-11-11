@@ -33,6 +33,8 @@ credentials, Git metadata and excluded dependency/build trees cannot enter a
 snapshot. Missing paths do not delete files: deletion is explicit. Reads authorize
 committed manifest membership before opening bytes. Clients verify response
 length/hash, including the exact response body for a range.
+Metadata responses recheck current credential/grant authority after awaited
+observations and before returning the result.
 
 Child I/O and metadata use one FIFO, including lazy read pulls. Authority calls
 children outside its FIFO and revalidates before publication. Execution holds a
@@ -126,6 +128,16 @@ Results require terminal evidence, the recorded runtime and complete sync withou
 required skipped files before collection into a new sealed revision. Unknown,
 lost or pending-sync results remain uncertain. Cancellation does not promise
 rollback. Computer's container API is experimental.
+
+Execution observation, cancellation and collection match the entire immutable
+prepared identity, including its original base, deadline and lease fence. Only
+the lease's mutable expiry/version observations may differ after renewal. Saved
+cloud output can be read with `artifacts.read` and its agent/conversation scope;
+the existing private store fetch lane rechecks exact output membership at the
+authority without granting workspace access. Stream delivery rechecks current
+authority after each awaited read before exposing another chunk.
+Scratch materialization retries verify an existing file's type, mode, size and
+full hash against the committed input; they never overwrite a mismatching file.
 
 ## Image inputs and verification
 

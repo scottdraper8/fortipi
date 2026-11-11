@@ -213,6 +213,28 @@ export class ComputerStore {
       requireThat(stream, "invalid_request", "Missing materialization bytes");
       const parent = path.slice(0, path.lastIndexOf("/"));
       await ws.fs.mkdir(parent, { recursive: true });
+      const existing = await ws.fs.lstat(path).catch((error: unknown) => {
+        requireThat(
+          error instanceof Error && "code" in error && error.code === "ENOENT",
+          "interrupted",
+          "Scratch materialization state is unavailable",
+        );
+        return undefined;
+      });
+      if (existing) {
+        await stream.cancel();
+        requireThat(
+          existing.isFile &&
+            !existing.isSymbolicLink &&
+            existing.size === entry.size &&
+            (existing.mode & 0o7777) === entry.mode &&
+            (await hashStream(await ws.fs.readFile(path), entry.size, Date.now() + 30_000)) ===
+              entry.sha256,
+          "conflict",
+          "Existing scratch materialization differs from its committed input",
+        );
+        return;
+      }
       await ws.fs.writeFile(path, limitedStream(stream, entry.size, Date.now() + 30_000), {
         exclusive: true,
         mode: entry.mode,
