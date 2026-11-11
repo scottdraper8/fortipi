@@ -10,6 +10,7 @@
   "include": [
     "scripts/**/*.ts",
     "tools/unstale/**/*.ts",
+    "tools/compatibility-watch/**/*.ts",
     "packages/*/scripts/**/*.ts",
     "packages/*/test/**/*.ts",
     "apps/worker/container/**/*.ts",
