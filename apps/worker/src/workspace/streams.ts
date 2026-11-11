@@ -2,6 +2,62 @@ import { createHash } from "node:crypto";
 import { requireThat } from "./errors.js";
 
 export const chunkBytes = 256 * 1024;
+export async function hashInventory(
+  stream: ReadableStream<Uint8Array>,
+  size: number,
+  grid: number,
+  deadline: number,
+): Promise<{ sha256: string; chunks: { chunkBytes: number; chunkHashes: string[] } }> {
+  requireThat(
+    Number.isSafeInteger(grid) &&
+      grid >= 1 &&
+      grid <= chunkBytes &&
+      size >= 0 &&
+      Math.ceil(size / grid) <= 256,
+    "invalid_request",
+    "Incompatible range chunk inventory",
+  );
+  const reader = stream.getReader();
+  const timer = setTimeout(
+    () => {
+      void reader.cancel();
+    },
+    Math.max(1, Math.min(30_000, deadline - Date.now())),
+  );
+  const whole = createHash("sha256");
+  let chunk = createHash("sha256");
+  const hashes: string[] = [];
+  let offset = 0;
+  let total = 0;
+  try {
+    for (;;) {
+      requireThat(Date.now() < deadline, "interrupted", "Inventory deadline exceeded");
+      const next = await reader.read();
+      if (next.done) break;
+      total += next.value.length;
+      requireThat(total <= size, "invalid_request", "Inventory exceeds declared length");
+      whole.update(next.value);
+      for (let start = 0; start < next.value.length; ) {
+        const length = Math.min(grid - offset, next.value.length - start);
+        chunk.update(next.value.subarray(start, start + length));
+        start += length;
+        offset += length;
+        if (offset === grid) {
+          hashes.push(chunk.digest("hex"));
+          chunk = createHash("sha256");
+          offset = 0;
+        }
+      }
+    }
+    requireThat(total === size, "interrupted", "Inventory stream truncated");
+    if (offset) hashes.push(chunk.digest("hex"));
+    return { sha256: whole.digest("hex"), chunks: { chunkBytes: grid, chunkHashes: hashes } };
+  } finally {
+    clearTimeout(timer);
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
 export async function hashStream(
   stream: ReadableStream<Uint8Array>,
   size: number,

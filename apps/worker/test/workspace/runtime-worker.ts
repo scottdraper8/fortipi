@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type * as D from "../../src/boundary/dto.js";
 import type { Env } from "../../src/boundary/env.js";
+import { hashInventory } from "../../src/workspace/streams.js";
 import {
   internalHeader,
   WorkspaceObject as WorkspaceBase,
@@ -121,6 +122,15 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/ready") return new Response("ready");
+    if (url.pathname === "/inventory" && request.body)
+      return Response.json(
+        await hashInventory(
+          request.body,
+          Number(url.searchParams.get("size")),
+          Number(url.searchParams.get("grid")),
+          Date.now() + 5000,
+        ),
+      );
     const ctx: D.AuthContext = {
       deploymentId: "test-deployment",
       principalId: "principal",
@@ -155,6 +165,25 @@ export default {
         },
       ],
     };
+    if (request.headers.get("x-test-bootstrap") === "1") {
+      ctx.role = "admin";
+      ctx.grants = [
+        {
+          grantId: "bootstrap",
+          version: 1,
+          resources: {
+            workspaceIds: ["*"],
+            actions: ["*"],
+            agentIds: ["*"],
+            conversationIds: ["*"],
+            executorIds: ["*"],
+            backendIds: ["*"],
+            tools: ["*"],
+          },
+        },
+      ];
+    }
+    if (request.headers.get("x-test-no-grants") === "1") ctx.grants = [];
     const authority = env.WORKSPACES.getByName("workspace");
     if (url.pathname === "/seed")
       return Response.json(

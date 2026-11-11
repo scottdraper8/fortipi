@@ -20,6 +20,7 @@ import {
   type AuthorityRecord,
   authorize,
   nextFence,
+  permitsResource,
   type RevisionRecord,
   renew,
   same,
@@ -39,7 +40,14 @@ import {
 } from "./manifest.js";
 import { Mutex } from "./mutex.js";
 import { State } from "./state.js";
-import { boundedBytes, bytesStream, chunkBytes, hashStream, sliceStream } from "./streams.js";
+import {
+  boundedBytes,
+  bytesStream,
+  chunkBytes,
+  hashInventory,
+  hashStream,
+  sliceStream,
+} from "./streams.js";
 
 const lookup = (allocation: D.StoreLookup): D.StoreLookup => ({
   allocationId: allocation.allocationId,
@@ -140,10 +148,10 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         requireThat(
           ctx.grants.some(
             (grant) =>
-              (!grant.expiresAt || grant.expiresAt > now) &&
-              grant.resources.actions.includes(action) &&
+              (grant.expiresAt === undefined || grant.expiresAt > now) &&
+              permitsResource(grant.resources.actions, action) &&
               (input.expectedVersion === null ||
-                grant.resources.workspaceIds.includes(workspaceId)),
+                permitsResource(grant.resources.workspaceIds, workspaceId)),
           ),
           "unauthorized",
           "Explicit binding grant required",
@@ -606,6 +614,13 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       return this.mutex.run(() =>
         this.state.transaction(() => {
           this.authorizeLeaseReceipt(ctx, input.lease);
+          requireThat(
+            this.current().lease?.leaseId === input.lease.leaseId &&
+              !this.state.get(`release:${input.lease.leaseId}`),
+            "workspace.conflict",
+            "Released or superseded lease cannot renew",
+            { reason: "stale_fence" },
+          );
           const key = `lease-renew:${ctx.credentialId}:${ctx.requestId}`;
           const prior = this.state.get<{ digest: string; lease: D.Lease }>(key);
           if (prior) {
@@ -616,9 +631,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             `reservation:${input.lease.leaseId}`,
           );
           requireThat(
-            reservation &&
-              reservation.expiresAt >= input.expiresAt &&
-              reservation.deadline >= input.expiresAt,
+            reservation && reservation.deadline >= input.expiresAt,
             "conflict",
             "Renewal exceeds target reservation",
           );
@@ -1098,6 +1111,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         ),
       );
       requireThat(entry?.type === "file", "not_found", "File absent from revision");
+      const range = input.query.range
+        ? checkedRange(input.query.range.start, input.query.range.end ?? entry.size - 1, entry.size)
+        : undefined;
+      const length = range ? range.end - range.start + 1 : entry.size;
+      const endpoint = `/v1/workspaces/${input.path.workspaceId}/read?revision=${encodeURIComponent(input.query.revision)}&path=${encodeURIComponent(entry.path)}${range ? `&range[start]=${range.start}&range[end]=${range.end}` : ""}`;
       if (authority.binding.config.kind === "local" && !this.revision(input.query.revision).store) {
         const reference = await new LocalProvider(this.control()).read(
           ctx,
@@ -1114,12 +1132,33 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           "Local byte reference drift",
           { reason: "local_drift" },
         );
-        return reference;
+        if (!range) return { ...reference, endpoint };
+        requireThat(reference.chunks, "interrupted", "Local range requires owner chunk inventory");
+        const observed = await hashInventory(
+          sliceStream(
+            await this.localReads.open(
+              ctx,
+              authority.binding,
+              input.query.revision,
+              entry,
+              this.revision(input.query.revision).manifestHash,
+              new AbortController().signal,
+            ),
+            range.start,
+            length,
+          ),
+          length,
+          reference.chunks.chunkBytes,
+          ctx.deadline,
+        );
+        return {
+          ...reference,
+          endpoint,
+          size: length,
+          sha256: observed.sha256,
+          chunks: observed.chunks,
+        };
       }
-      const range = input.query.range
-        ? checkedRange(input.query.range.start, input.query.range.end ?? entry.size - 1, entry.size)
-        : undefined;
-      const length = range ? range.end - range.start + 1 : entry.size;
       const hash = range
         ? await hashStream(
             sliceStream(
@@ -1136,7 +1175,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         revision: input.query.revision,
         size: length,
         sha256: hash,
-        endpoint: `/v1/workspaces/${input.path.workspaceId}/read?revision=${encodeURIComponent(input.query.revision)}&path=${encodeURIComponent(entry.path)}${range ? `&range[start]=${range.start}&range[end]=${range.end}` : ""}`,
+        endpoint,
         owner: { kind: "cloud" },
       };
     }, ctx.requestId);
@@ -2170,7 +2209,9 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           authorize(this.state, ctx, authority.workspaceId, "workspace.read");
           requireThat(
             input.recipient.kind === "agent" &&
-              ctx.grants.some((grant) => grant.resources.agentIds.includes(input.recipient.id)),
+              ctx.grants.some((grant) =>
+                permitsResource(grant.resources.agentIds, input.recipient.id),
+              ),
             "unauthorized",
             "Fact recipient grant required",
           );
@@ -2205,7 +2246,9 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             authorize(this.state, ctx, authority.workspaceId, "workspace.read");
             requireThat(
               input.recipient.kind === "agent" &&
-                ctx.grants.some((grant) => grant.resources.agentIds.includes(input.recipient.id)) &&
+                ctx.grants.some((grant) =>
+                  permitsResource(grant.resources.agentIds, input.recipient.id),
+                ) &&
                 input.eventSeq > 0 &&
                 Number.isSafeInteger(input.eventSeq),
               "unauthorized",
@@ -2241,7 +2284,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const authority = this.current();
       await this.authority(ctx, authority.workspaceId);
       requireThat(
-        input.resources.workspaceIds.includes(authority.workspaceId) &&
+        permitsResource(input.resources.workspaceIds, authority.workspaceId) &&
           input.deadline > Date.now() &&
           input.maxBytes <= this.policy.bounds.snapshotBytes,
         "unauthorized",
@@ -2460,7 +2503,10 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       }
       if (url.pathname === "/__fortipi/facts")
         return Response.json(
-          await this.pageFacts(auth, (await request.json()) as D.FactPageRequest),
+          await this.pageFacts(
+            auth,
+            await boundedJson<D.FactPageRequest>(request, wireLimits.jsonBytes),
+          ),
         );
       if (url.pathname.startsWith("/__fortipi/transfer/"))
         return this.transferRequest(request, auth);
@@ -2497,11 +2543,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           requireThat(
             auth.grants.some(
               (grant) =>
-                (!grant.expiresAt || grant.expiresAt > Date.now()) &&
-                grant.resources.workspaceIds.includes(authority.workspaceId) &&
-                grant.resources.actions.includes("artifacts.read") &&
-                grant.resources.agentIds.includes(artifact.agentId) &&
-                grant.resources.conversationIds.includes(artifact.conversationId),
+                (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+                permitsResource(grant.resources.workspaceIds, authority.workspaceId) &&
+                permitsResource(grant.resources.actions, "artifacts.read") &&
+                permitsResource(grant.resources.agentIds, artifact.agentId) &&
+                permitsResource(grant.resources.conversationIds, artifact.conversationId),
             ),
             "unauthorized",
             "Job output owner grant required",
@@ -3051,7 +3097,7 @@ function requestRange(request: Request, size: number): { start: number; end: num
   requireThat(!query || same(query, range), "invalid_request", "Header and query range disagree");
   return range;
 }
-async function boundedJson<T>(request: Request, maximum = 524288): Promise<T> {
+export async function boundedJson<T>(request: Request, maximum = 524288): Promise<T> {
   requireThat(request.body, "invalid_request", "Missing request body");
   const reader = request.body.getReader();
   const parts: Uint8Array[] = [];

@@ -23,7 +23,18 @@ test("lease acknowledgments are observational retries before version and clock c
   };
   try {
     await server.listen();
-    await server.fetch("/seed");
+    const denied = (await (
+      await server.fetch("/seed", { headers: { "x-test-no-grants": "1" } })
+    ).json()) as D.Outcome<D.WorkspaceBinding>;
+    assert.equal(denied.ok, false);
+    const initialized = (await (
+      await server.fetch("/seed", { headers: { "x-test-bootstrap": "1" } })
+    ).json()) as D.Outcome<D.WorkspaceBinding>;
+    assert.equal(
+      initialized.ok,
+      true,
+      "CP bootstrap wildcard grants could not initialize authority",
+    );
     const target: D.TargetRequest = {
       ownerKind: "job",
       jobId: "lease-job",
@@ -36,7 +47,7 @@ test("lease acknowledgments are observational retries before version and clock c
       target: { kind: "executor", executorId: "executor", generation: 1 },
       actions: ["workspace.write"],
       deadline: Date.now() + 5000,
-      expiresAt: Date.now() + 5000,
+      expiresAt: Date.now() + 1000,
     };
     const lease = await call<D.Lease>({ kind: "acquire", input: target }, "acquire");
     const renewal: D.LeaseRenewal = {
@@ -46,6 +57,10 @@ test("lease acknowledgments are observational retries before version and clock c
     };
     const renewed = await call<D.Lease>({ kind: "renew", input: renewal }, "renew-one");
     assert.equal(renewed.leaseVersion, lease.leaseVersion + 1);
+    assert.ok(
+      renewed.expiresAt > target.expiresAt,
+      "Renewal was incorrectly capped by first-acquisition admission expiry",
+    );
     assert.deepEqual(await call({ kind: "renew", input: renewal }, "renew-one"), renewed);
     assert.equal(
       (
@@ -66,6 +81,11 @@ test("lease acknowledgments are observational retries before version and clock c
     const release: D.LeaseRelease = { lease: renewed, reason: "completed" };
     const released = await call<D.ReleaseReceipt>({ kind: "release", input: release }, "release");
     assert.deepEqual(await call({ kind: "release", input: release }, "release"), released);
+    assert.equal(
+      (await request({ kind: "renew", input: renewal }, "renew-one")).ok,
+      false,
+      "A stored renewal acknowledgment revived a released lease",
+    );
     assert.equal(
       (await request({ kind: "release", input: { ...release, reason: "cancelled" } }, "release"))
         .ok,

@@ -61,7 +61,10 @@ grid. The authority opens the matched private consumer before requesting the
 producer, verifies each bounded chunk and the whole-file hash, and stores no byte
 copy. A range's hash and response use separate observational reads. Cancelling a
 stream aborts the peer/body and waits for the associated producer request to
-settle; ControlPlane interrupts all pairs on that attempt. Public `read()` returns
+settle. When cancellation reaches ControlPlane, it interrupts all pairs on that
+attempt. Actual owner4 testing found that Wrangler's local HTTP proxy can lose
+that signal; its bounded timeout is a fallback, and immediate integrated
+cancellation remains an open transport gate. Public `read()` returns
 metadata, while the endpoint opens the stream; neither recursively calls itself.
 
 The same-process transfer stream is the concatenation of changed file bytes in
@@ -133,6 +136,10 @@ digests are never presented as a final built image digest. A local image ID and
 archive hash do not establish a published registry manifest digest. CLI packaging
 and release must bind the actual selected image and source kit to the release
 commit and preserve applicable source/replacement obligations.
+The builder retains Buildx's actual manifest/config metadata, checks the loaded
+config ID, and records `builtManifestDigest`; `registryDigest` stays null until
+publication supplies an observed registry digest. This uses Docker's documented
+[build metadata output](https://docs.docker.com/reference/cli/docker/buildx/build/#write-build-result-metadata-to-a-file-metadata-file).
 
 `sources-and-notices.tar` contains the exact frozen source archives, embedded npm
 archives, Computer source, licenses and recipe, with an internal hash inventory.

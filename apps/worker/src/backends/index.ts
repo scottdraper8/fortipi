@@ -2,7 +2,9 @@ import { requireCapability } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import type { ExecutionBackendFactory, FactoryDependencies } from "../boundary/env.js";
 import type { ExecutionBackend } from "../boundary/execution-backend.js";
-import { outcome, requireThat } from "../workspace/errors.js";
+import { permitsResource } from "../workspace/authority.js";
+import { outcome, requireThat, unwrap } from "../workspace/errors.js";
+import { internalHeader } from "../workspace/workspace-object.js";
 
 export class CloudExecutionBackend implements ExecutionBackend {
   readonly contractVersion = "1.0" as const;
@@ -19,17 +21,20 @@ export class CloudExecutionBackend implements ExecutionBackend {
           input.target.backendId === this.config.backendId &&
           ctx.grants.some(
             (grant) =>
-              grant.resources.backendIds.includes(this.config.backendId) &&
-              grant.resources.workspaceIds.includes(input.workspace.workspaceId) &&
-              (!grant.expiresAt || grant.expiresAt > Date.now()),
+              permitsResource(grant.resources.backendIds, this.config.backendId) &&
+              permitsResource(grant.resources.workspaceIds, input.workspace.workspaceId) &&
+              (grant.expiresAt === undefined || grant.expiresAt > Date.now()),
           ),
         "unauthorized",
         "Backend grant required",
       );
-      const available = requireCapability(
-        this.deps.env.FORTIPI_CONFIG.infrastructure,
-        this.config.kind === "cloud-js" ? "loader" : "containers",
-        ctx.deploymentId,
+      const available = Boolean(
+        (this.config.kind === "cloud-js" ? this.deps.env.LOADER : this.deps.env.LINUX_CONTAINERS) &&
+          requireCapability(
+            this.deps.env.FORTIPI_CONFIG.infrastructure,
+            this.config.kind === "cloud-js" ? "loader" : "containers",
+            ctx.deploymentId,
+          ),
       );
       return {
         target: input.target,
@@ -47,20 +52,41 @@ export class CloudExecutionBackend implements ExecutionBackend {
       };
     });
   }
+  private async call<T>(
+    ctx: D.AuthContext,
+    action: string,
+    input: D.ExecutionRequest | D.PreparedExecution | D.ExecutionIdentity,
+  ): Promise<D.Outcome<T>> {
+    return outcome(async () => {
+      const response = await this.deps.authority.fetch(
+        new Request(`https://workspace.internal/__fortipi/authority/${action}`, {
+          method: "POST",
+          headers: { [internalHeader]: JSON.stringify({ auth: ctx }) },
+          body: JSON.stringify(input),
+        }),
+      );
+      requireThat(
+        response.ok,
+        "interrupted",
+        "Authority transport interrupted; observe the existing execution",
+      );
+      return unwrap(await response.json<D.Outcome<T>>());
+    }, ctx.requestId);
+  }
   prepare(ctx: D.AuthContext, input: D.ExecutionRequest) {
-    return this.deps.authority.prepareExecution(ctx, input);
+    return this.call<D.PreparedExecution>(ctx, "prepare", input);
   }
   startOnce(ctx: D.AuthContext, input: D.PreparedExecution) {
-    return this.deps.authority.startOnce(ctx, input);
+    return this.call<D.ExecutionObservation>(ctx, "start", input);
   }
   queryExisting(ctx: D.AuthContext, input: D.ExecutionIdentity) {
-    return this.deps.authority.queryExecution(ctx, input);
+    return this.call<D.ExecutionObservation>(ctx, "query", input);
   }
   cancel(ctx: D.AuthContext, input: D.CancelRequest) {
     return this.deps.authority.cancelExecution(ctx, input);
   }
   collectResult(ctx: D.AuthContext, input: D.ExecutionIdentity) {
-    return this.deps.authority.collectResult(ctx, input);
+    return this.call<D.PreparedResult>(ctx, "collect", input);
   }
   classifyUncertainty(
     _ctx: D.AuthContext,

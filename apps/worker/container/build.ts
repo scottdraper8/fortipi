@@ -496,6 +496,7 @@ async function build(pin: Freeze): Promise<void> {
   );
   const buildkit = command("docker", ["buildx", "inspect", "--bootstrap"]);
   check(buildkit.includes(`v${imageInputs.buildkit}`), "Use reviewed BuildKit");
+  const buildMetadata = resolve(output, "buildx-metadata.json");
   command("docker", [
     "buildx",
     "build",
@@ -504,6 +505,8 @@ async function build(pin: Freeze): Promise<void> {
     "--network=none",
     "--provenance=false",
     "--load",
+    "--metadata-file",
+    buildMetadata,
     "--tag",
     "fortipi-computerd:verified",
     context,
@@ -516,6 +519,17 @@ async function build(pin: Freeze): Promise<void> {
     "{{.Id}}",
   ]).trim();
   check(/^sha256:[a-f0-9]{64}$/.test(imageId), "Missing actual built image ID");
+  const built = JSON.parse(await readFile(buildMetadata, "utf8")) as {
+    "containerimage.digest"?: string;
+    "containerimage.config.digest"?: string;
+  };
+  const builtManifestDigest = built["containerimage.digest"];
+  check(
+    builtManifestDigest &&
+      /^sha256:[a-f0-9]{64}$/.test(builtManifestDigest) &&
+      built["containerimage.config.digest"] === imageId,
+    "Missing built manifest digest or loaded image config mismatch",
+  );
   const archive = resolve(output, "image.tar");
   command("docker", ["save", "--output", archive, imageId]);
   const inventory = command("docker", [
@@ -604,7 +618,7 @@ async function build(pin: Freeze): Promise<void> {
   await writeFile(resolve(output, "installed-packages.txt"), inventory);
   await writeFile(
     resolve(output, "image-metadata.json"),
-    `${JSON.stringify({ schemaVersion: 1, sourceCommit, computerSource: imageInputs.source, computerSourceArchiveSha256: imageInputs.sourceArchiveSha256, embeddedNodeVersion: imageInputs.embeddedNodeVersion, embeddedInventorySha256: await fileDigest(resolve(here, "embedded-freeze.json")), licenseInventorySha256: await fileDigest(resolve(output, "license-inventory.json")), sourceKitSha256: await fileDigest(resolve(output, "sources-and-notices.tar")), installedSourceInventorySha256: await fileDigest(resolve(output, "installed-source-inventory.json")), computerVersion: imageInputs.computerVersion, platform: "linux/amd64", inputDigests: [imageInputs.computerd, imageInputs.debian], imageId, archiveSha256: await fileDigest(archive), inventorySha256: digest(inventory), freezeSha256: digest(await readFile(resolve(here, "debian-freeze.json"))), registryDigest: null, runtimeVerified: false, licenseReviewRequired: true }, null, 2)}\n`,
+    `${JSON.stringify({ schemaVersion: 1, sourceCommit, computerSource: imageInputs.source, computerSourceArchiveSha256: imageInputs.sourceArchiveSha256, embeddedNodeVersion: imageInputs.embeddedNodeVersion, embeddedInventorySha256: await fileDigest(resolve(here, "embedded-freeze.json")), licenseInventorySha256: await fileDigest(resolve(output, "license-inventory.json")), sourceKitSha256: await fileDigest(resolve(output, "sources-and-notices.tar")), installedSourceInventorySha256: await fileDigest(resolve(output, "installed-source-inventory.json")), computerVersion: imageInputs.computerVersion, platform: "linux/amd64", inputDigests: [imageInputs.computerd, imageInputs.debian], imageId, builtManifestDigest, buildMetadataSha256: await fileDigest(buildMetadata), archiveSha256: await fileDigest(archive), inventorySha256: digest(inventory), freezeSha256: digest(await readFile(resolve(here, "debian-freeze.json"))), registryDigest: null, runtimeVerified: false, licenseReviewRequired: true }, null, 2)}\n`,
   );
 }
 async function main(): Promise<void> {

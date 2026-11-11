@@ -8,16 +8,21 @@ import {
   operationDigest,
   operationForAssignment,
   requireCapability,
+  wireLimits,
 } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
 import type { FencedContainerAPI } from "../container/host-adapter.js";
-import { authorize, same, validateLease } from "../workspace/authority.js";
+import { authorize, permitsResource, same, validateLease } from "../workspace/authority.js";
 import type { ComputerStore } from "../workspace/computer.js";
 import { outcome, requireThat, unwrap } from "../workspace/errors.js";
 import { checkedManifest, snapshotBytes } from "../workspace/manifest.js";
 import { chunkBytes } from "../workspace/streams.js";
-import { internalHeader, type WorkspaceObject } from "../workspace/workspace-object.js";
+import {
+  boundedJson,
+  internalHeader,
+  type WorkspaceObject,
+} from "../workspace/workspace-object.js";
 import { codemode } from "./codemode.js";
 import { linux, linuxHostId } from "./linux.js";
 
@@ -151,10 +156,10 @@ export class ExecutionLedger {
           request.identity.lease.executorGeneration === request.identity.target.generation &&
           ctx.grants.some(
             (grant) =>
-              (!grant.expiresAt || grant.expiresAt > Date.now()) &&
-              grant.resources.workspaceIds.includes(request.workspaceId) &&
-              grant.resources.backendIds.includes(config.backendId) &&
-              grant.resources.tools.includes(request.tool),
+              (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+              permitsResource(grant.resources.workspaceIds, request.workspaceId) &&
+              permitsResource(grant.resources.backendIds, config.backendId) &&
+              permitsResource(grant.resources.tools, request.tool),
           ),
         "unauthorized",
         "Cloud tool and target grants required",
@@ -562,10 +567,8 @@ export class ExecutionLedger {
       "Active registered scratch required",
     );
     const action = new URL(request.url).pathname.split("/").at(-1);
-    const bytes = await request.text();
-    requireThat(bytes.length <= 1024 * 1024, "payload_too_large", "Execution request too large");
     if (action === "start") {
-      const prepared = JSON.parse(bytes) as D.PreparedExecution;
+      const prepared = await boundedJson<D.PreparedExecution>(request, wireLimits.jsonBytes);
       requireThat(
         prepared.scratchId === envelope.allocation.childId &&
           prepared.request.identity.executionId ===
@@ -644,6 +647,9 @@ export class ExecutionLedger {
           backend: config.backendId,
           cwd: "/workspace",
           encoding: "utf8",
+          ...(prepared.request.arguments.input === undefined
+            ? {}
+            : { input: prepared.request.arguments.input }),
           timeoutMs: Math.min(
             30_000,
             identity.deadline - Date.now(),
@@ -691,7 +697,7 @@ export class ExecutionLedger {
         ...(this.host?.runtime ? { runtimeUuid: this.host.runtime.runtimeId } : {}),
       });
     }
-    const identity = JSON.parse(bytes) as D.ExecutionIdentity;
+    const identity = await boundedJson<D.ExecutionIdentity>(request, wireLimits.jsonBytes);
     const saved = this.owner.state.get<{
       identity: D.ExecutionIdentity;
       result: WorkspaceRuntimeResult<"utf8">;
@@ -776,7 +782,7 @@ export class ExecutionLedger {
     return this.active && this.container !== undefined;
   }
   async permit(request: Request, ctx: D.AuthContext): Promise<Response> {
-    const identity = (await request.json()) as D.ExecutionIdentity;
+    const identity = await boundedJson<D.ExecutionIdentity>(request, wireLimits.jsonBytes);
     const proof = await this.owner.mutex.run(() => {
       const row = this.row(ctx, identity);
       validateLease(this.owner.state, this.owner.current(), identity.lease, ctx);
@@ -790,12 +796,12 @@ export class ExecutionLedger {
     return Response.json({ proof });
   }
   async observed(request: Request, allocation: D.StoreAllocation): Promise<Response> {
-    const observed = (await request.json()) as {
+    const observed = await boundedJson<{
       identity: D.ExecutionIdentity;
       result: WorkspaceRuntimeResult<"utf8">;
       proof: string;
       runtimeId?: string;
-    };
+    }>(request, wireLimits.jsonBytes);
     requireThat(
       new TextEncoder().encode(JSON.stringify(observed.result)).length <=
         this.owner.policy.bounds.inlineTailBytes * 3 + 65_536,

@@ -34,6 +34,25 @@ export interface AllocationRecord {
 export function same(a: unknown, b: unknown): boolean {
   return canonicalJson(a) === canonicalJson(b);
 }
+/** AuthContext is CP-validated; bootstrap may carry internal wildcard grants. */
+export function permitsResource(values: readonly string[], value: string): boolean {
+  return values.includes(value) || values.includes("*");
+}
+export function transferConsumer(
+  workspaceId: string,
+  action: string,
+  executorId: string,
+): D.ResourceScope {
+  return {
+    agentIds: [],
+    conversationIds: [],
+    workspaceIds: [workspaceId],
+    actions: [action],
+    tools: [],
+    executorIds: [executorId],
+    backendIds: [],
+  };
+}
 export function authorize(
   state: State,
   ctx: D.AuthContext,
@@ -62,8 +81,8 @@ export function authorize(
     ctx.grants.some(
       (grant) =>
         (grant.expiresAt === undefined || grant.expiresAt > now) &&
-        grant.resources.workspaceIds.includes(workspaceId) &&
-        grant.resources.actions.includes(action),
+        permitsResource(grant.resources.workspaceIds, workspaceId) &&
+        permitsResource(grant.resources.actions, action),
     ),
     "unauthorized",
     "Workspace grant required",
@@ -152,8 +171,8 @@ export function renew(
       (ctx.credentialExpiresAt === null || input.expiresAt <= ctx.credentialExpiresAt) &&
       ctx.grants.some(
         (grant) =>
-          grant.resources.workspaceIds.includes(authority.workspaceId) &&
-          grant.resources.actions.includes("workspace.write") &&
+          permitsResource(grant.resources.workspaceIds, authority.workspaceId) &&
+          permitsResource(grant.resources.actions, "workspace.write") &&
           (grant.expiresAt === undefined || grant.expiresAt >= input.expiresAt),
       ),
     "conflict",

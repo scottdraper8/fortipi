@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { digestJson } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
+import { permitsResource, transferConsumer } from "./authority.js";
 import { requireThat, unwrap, WorkspaceError } from "./errors.js";
 import { LocalProvider } from "./local.js";
 import { boundedBytes, bytesStream } from "./streams.js";
@@ -60,9 +61,10 @@ export class LocalReads {
       }
       const grant = ctx.grants.find(
         (grant) =>
-          (!grant.expiresAt || grant.expiresAt > Date.now()) &&
-          grant.resources.workspaceIds.includes(binding.workspaceId) &&
-          grant.resources.actions.includes("workspace.read"),
+          (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+          permitsResource(grant.resources.workspaceIds, binding.workspaceId) &&
+          permitsResource(grant.resources.actions, "workspace.read") &&
+          permitsResource(grant.resources.executorIds, request.executorId),
       );
       requireThat(grant, "unauthorized", "Local read grant required");
       const inventory = reference.chunks;
@@ -85,14 +87,19 @@ export class LocalReads {
           executorId: request.executorId,
           executorGeneration: request.executorGeneration,
           credential: request.credential,
-          consumer: grant.resources,
+          consumer: transferConsumer(binding.workspaceId, "workspace.read", request.executorId),
           baseRevision: revision,
           content: { kind: "workspace-file", path: entry.path, manifestHash },
           fileSha256: entry.sha256,
           size: entry.size,
           chunkBytes: inventory.chunkBytes,
           chunkHashes: inventory.chunkHashes,
-          expiresAt: Math.min(ctx.deadline, Date.now() + 60_000),
+          expiresAt: Math.min(
+            ctx.deadline,
+            Date.now() + 60_000,
+            ctx.credentialExpiresAt ?? Infinity,
+            grant.expiresAt ?? Infinity,
+          ),
           deadline: ctx.deadline,
         }),
       );

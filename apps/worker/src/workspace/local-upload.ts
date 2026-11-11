@@ -7,7 +7,7 @@ import {
   validateLocalStage,
 } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
-import { authorize, same, validateLease } from "./authority.js";
+import { authorize, permitsResource, same, transferConsumer, validateLease } from "./authority.js";
 import { requireThat, unwrap, WorkspaceError } from "./errors.js";
 import { applyMutations, checkedManifest, manifestDigest } from "./manifest.js";
 import type { WorkspaceObject } from "./workspace-object.js";
@@ -292,9 +292,10 @@ export class LocalUploads {
           );
           const grant = ctx.grants.find(
             (grant) =>
-              (!grant.expiresAt || grant.expiresAt > Date.now()) &&
-              grant.resources.workspaceIds.includes(row.scope.workspaceId) &&
-              grant.resources.actions.includes("workspace.write"),
+              (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+              permitsResource(grant.resources.workspaceIds, row.scope.workspaceId) &&
+              permitsResource(grant.resources.actions, "workspace.write") &&
+              permitsResource(grant.resources.executorIds, row.scope.executorId),
           );
           requireThat(grant, "unauthorized", "Local staging grant required");
           const opened = unwrap(
@@ -310,7 +311,11 @@ export class LocalUploads {
               executorId: row.scope.executorId,
               executorGeneration: row.scope.executorGeneration,
               credential: row.scope.credential,
-              consumer: grant.resources,
+              consumer: transferConsumer(
+                row.scope.workspaceId,
+                "workspace.write",
+                row.scope.executorId,
+              ),
               baseRevision: row.scope.baseRevision,
               lease: active,
               content: {
@@ -328,6 +333,8 @@ export class LocalUploads {
                 active.expiresAt,
                 ctx.deadline,
                 row.scope.deadline,
+                ctx.credentialExpiresAt ?? Infinity,
+                grant.expiresAt ?? Infinity,
               ),
               deadline: row.scope.deadline,
             }),
