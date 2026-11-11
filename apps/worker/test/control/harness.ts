@@ -52,8 +52,8 @@ export const scope = (actions: string[] = ["*"]): D.ResourceScope => ({
   tools: ["*"],
   actions,
 });
-export async function harness(
-  options: { modelAuthKey?: string | null; allowedOrigins?: string[] } = {},
+export async function harness<T extends FixtureControl = FixtureControl>(
+  options: { modelAuthKey?: string | null; allowedOrigins?: string[]; fixturePath?: string } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-control-"));
   const configPath = join(directory, "wrangler.json");
@@ -74,9 +74,9 @@ export async function harness(
       main: process.env.FORTIPI_CONTROL_TEST_SOURCE
         ? join(
             process.env.FORTIPI_CONTROL_TEST_SOURCE,
-            "apps/worker/test/control/fixtures/worker.ts",
+            options.fixturePath ?? "apps/worker/test/control/fixtures/worker.ts",
           )
-        : resolve("apps/worker/test/control/fixtures/worker.ts"),
+        : resolve(options.fixturePath ?? "apps/worker/test/control/fixtures/worker.ts"),
       ...(process.env.FORTIPI_CONTROL_TEST_SOURCE ? { alias } : {}),
       compatibility_date: "2026-11-10",
       compatibility_flags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
@@ -105,7 +105,7 @@ export async function harness(
   const server = createTestHarness({ root: directory, workers: [{ configPath }] });
   await server.listen();
   const worker = server.getWorker<{
-    CONTROL_PLANE: DurableObjectNamespace<FixtureControl>;
+    CONTROL_PLANE: DurableObjectNamespace<T>;
     AGENT_SESSIONS: DurableObjectNamespace<TestRecipient>;
     WORKSPACES: DurableObjectNamespace<TestRecipient>;
   }>();

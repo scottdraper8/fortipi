@@ -19,6 +19,22 @@ try {
   );
   for (const mutation of [
     {
+      file: "executors.ts",
+      pattern: /(const epoch = this\.store\.tx\(\(\) => \{)\s*this\.context\(identity\);/,
+      replacement: "$1",
+      test: "enforcer-races.test.ts",
+      oracle: "completed credential revocation must prevent delayed attachment",
+    },
+    {
+      file: "executors.ts",
+      pattern:
+        /this\.store\.tx\(\(\) => \{\s*this\.context\(a\.identity\);[\s\S]*?description: publicDescription,\s*\}\);\s*\}\);/,
+      replacement:
+        'this.transition(executor.executorId, { ...e, status: "online", description: publicDescription });',
+      test: "enforcer-races.test.ts",
+      oracle: "concurrent registration must retain the durable revocation floor",
+    },
+    {
       file: "tickets.ts",
       pattern: /used:\s*true/,
       replacement: "used: false",

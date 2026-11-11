@@ -96,6 +96,7 @@ export class Executors {
     const executor = identity.executor;
     await this.store.arm(Date.now() + 45000);
     const epoch = this.store.tx(() => {
+      this.context(identity);
       const e = this.store.get<ExecutorState>("executor", executor.executorId);
       check(
         e && e.status !== "revoked" && e.generation === executor.generation,
@@ -309,10 +310,22 @@ export class Executors {
         schemaVersion: _schema,
         ...publicDescription
       } = description as D.ExecutorDescription & { protocolVersion: string; schemaVersion: string };
-      this.transition(executor.executorId, {
-        ...e,
-        status: "online",
-        description: publicDescription,
+      this.store.tx(() => {
+        this.context(a.identity);
+        const current = this.store.get<ExecutorState>("executor", executor.executorId);
+        check(
+          current &&
+            current.status !== "revoked" &&
+            current.generation === executor.generation &&
+            current.epoch === a.epoch,
+          "unauthenticated",
+          "Executor authority changed before registration",
+        );
+        this.transition(executor.executorId, {
+          ...current,
+          status: "online",
+          description: publicDescription,
+        });
       });
       a.registered = true;
       a.lastBeat = Date.now();
