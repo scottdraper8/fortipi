@@ -308,14 +308,10 @@ export class Dispatch {
       agentIds: [record.intent.reservation.agentId],
       conversationIds: [record.intent.reservation.conversationId],
       workspaceIds: [record.intent.reservation.workspaceId],
-      ...(action === "jobs.read"
-        ? {}
-        : {
-            tools: [assignment.tool],
-            ...(identity.target.kind === "executor"
-              ? { executorIds: [identity.target.executorId] }
-              : { backendIds: [identity.target.backendId] }),
-          }),
+      tools: [assignment.tool],
+      ...(identity.target.kind === "executor"
+        ? { executorIds: [identity.target.executorId] }
+        : { backendIds: [identity.target.backendId] }),
     });
     return record;
   }

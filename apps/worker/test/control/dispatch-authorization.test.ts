@@ -114,6 +114,43 @@ test("dispatch intent requires dispatch authority and retained resources without
     assert.equal((await h.cp.queryExecution(writer.actor, writer.assignment.identity)).ok, false);
     value(await h.cp.assignOnce(writer.actor, writer.assignment));
     await channel.wait("job.assign");
+    const readCredential = await h.mint({
+      requestId: uuid(),
+      role: "client",
+      grants: [{ grantId: "read-only", version: 1, resources: scope(["jobs.read"]) }],
+    });
+    const reading = h.cp.queryExecution(
+      await h.auth(readCredential.token),
+      writer.assignment.identity,
+    );
+    const query = await channel.wait("job.query");
+    assert.equal(query.type, "job.query");
+    channel.send({
+      type: "job.query_result",
+      requestId: query.requestId,
+      payload: { identity: writer.assignment.identity, state: "unknown" },
+    });
+    assert.equal(
+      value(await reading).state,
+      "unknown",
+      "job-read authority alone can query the retained execution",
+    );
+    const wrongTarget = await h.mint({
+      requestId: uuid(),
+      role: "client",
+      grants: [
+        {
+          grantId: "other-target",
+          version: 1,
+          resources: { ...scope(["jobs.read"]), executorIds: ["other-executor"] },
+        },
+      ],
+    });
+    assert.equal(
+      (await h.cp.queryExecution(await h.auth(wrongTarget.token), writer.assignment.identity)).ok,
+      false,
+      "query authority must cover the retained tool and target as well as job resources",
+    );
     const wrongScope = await h.mint({
       requestId: uuid(),
       role: "client",
