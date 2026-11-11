@@ -118,11 +118,11 @@ try {
     }
     process.stdout.write(`${JSON.stringify({ ...trace, namespaceStable })}\n`);
   }
+  verifyGatewayEgress(harness.getLogs(), network);
   assert.ok(
     trace?.complete && namespaceStable,
     "Harness host-fetch observation is incomplete or unknown",
   );
-  verifyGatewayEgress(harness.getLogs(), network);
   process.stdout.write(
     `${JSON.stringify({
       probe: "application-namespace-https",
