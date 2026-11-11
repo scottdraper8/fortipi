@@ -14,6 +14,12 @@ Node 26.13 or later is required. `--help` documents the installed-bin interface.
 There are no token/secret arguments. The renderer uses static progress labels;
 `--no-animation` preserves all controls and focus behavior.
 
+Reopening needs the conversation's known agent. For `--conversation` or a saved
+`conversationId`, set that profile's `agentId` as well. Interactively, select an
+agent with `/agents` first or use `/open ID AGENT`. `open` rejects missing agent
+context with `select_agent` before making a request; ticket minting never discovers
+the agent by reading a conversation.
+
 Profiles live outside the checkout at:
 
 - macOS: `~/Library/Application Support/FortiPi/profiles.json`

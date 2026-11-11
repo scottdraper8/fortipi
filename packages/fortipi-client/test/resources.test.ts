@@ -8,6 +8,7 @@ import { json, protocol, ticketReceipt } from "./fixtures/wire.ts";
 
 void test("ticket minting binds the caller's concrete agent without a conversation read", async () => {
   const requests: string[] = [];
+  let requestedResources: unknown;
   const client = new FortiPiClient({
     endpoint: "https://example.test",
     credentials: async () => "synthetic",
@@ -23,19 +24,20 @@ void test("ticket minting binds the caller's concrete agent without a conversati
       assert.equal(typeof init?.body, "string");
       const body: unknown = JSON.parse(String(init?.body));
       assert.ok(body && typeof body === "object" && "resources" in body);
-      assert.deepEqual(body.resources, {
-        agentIds: ["agent_2"],
-        conversationIds: ["conv_2"],
-        workspaceIds: [],
-        actions: ["events.read"],
-        tools: [],
-        executorIds: [],
-        backendIds: [],
-      });
+      requestedResources = body.resources;
       return json(ticketReceipt(), 201);
     },
   });
   await client.tickets.mint("agent_2", "conv_2");
+  assert.deepEqual(requestedResources, {
+    agentIds: ["agent_2"],
+    conversationIds: ["conv_2"],
+    workspaceIds: [],
+    actions: ["events.read"],
+    tools: [],
+    executorIds: [],
+    backendIds: [],
+  });
   assert.deepEqual(requests, ["/v1/connections/tickets"]);
 });
 

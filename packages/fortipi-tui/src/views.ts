@@ -77,12 +77,13 @@ export function content(controller: Controller): string {
   );
 }
 export const help = `Tab / Shift-Tab: cycle composer, list and transcript. Arrows / Enter: select. Escape: dismiss / stop search. PageUp / PageDown: output. Ctrl-C or /quit: exit.
-/agents [search]  /conversations [search]  /more  /new [title]  /open ID
+/agents [search]  /conversations [search]  /more  /new [title]  /open ID [AGENT]
 /steer text  /retry  /discard-intent  /task [ID]  /cancel [ID]  /resume ID continuation
 /approvals [ID]  /approve  /reject
 /reconcile [jobID]  /ack-unknown reason  /ack-failed reason  /discard-staging reason
 /accept-result reason  /new-job newJobID authorizationID reason
 /workspace ID  /diff workspaceID fromRevision toRevision  /read workspaceID revision path
 /artifact ID [destination]  /ids  /copy  /profiles  /disconnect  /reconnect  /resnapshot  /help
+Reopen requires a selected agent. Select it with /agents or supply /open ID AGENT.
 Approval never enables native host trust. Configure an executor explicitly through the operator/executor tools.
 Reconciliation observes uncertain effects; it never silently reruns a job. Cancel intent is not rollback.`;

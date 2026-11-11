@@ -10,6 +10,14 @@ export function consumers(browser: BrowserClient, native: NodeClient) {
   };
   void browser.request(send);
   void native.operations.submitMessage({ path: { id: "conv" }, query: {}, body: send.body });
+  void browser.conversations.subscribe("conv", {
+    agentId: "agent",
+    onSnapshot: () => {},
+    onEvent: () => {},
+  });
+  void native.tickets.mint("agent", "conv");
+  // @ts-expect-error subscriptions require the known concrete agent
+  void native.conversations.subscribe("conv", { onSnapshot: () => {}, onEvent: () => {} });
   void browser.operations.submitMessage({
     path: { id: "conv" },
     query: {},

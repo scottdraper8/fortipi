@@ -524,12 +524,8 @@ void test("authenticated identity and agent scope retained cursors; changed auth
   ];
   for (const [index, current] of changed.entries()) {
     const agentId = index === changed.length - 1 ? "agent_2" : "agent_1";
-    assert.equal(
-      cursorScopeKey({ ...cursorScope, agentId, identity: current }) ===
-        cursorScopeKey(cursorScope),
-      index === 0,
-    );
     let snapshots = 0;
+    const requestedCursors: number[] = [];
     const after = index === 0 ? 5 : 0;
     const client = new FortiPiClient({
       endpoint: "https://example.test",
@@ -540,8 +536,9 @@ void test("authenticated identity and agent scope retained cursors; changed auth
         if (parsed.pathname.endsWith("/tickets"))
           return json(ticketReceipt("fresh_ticket", current, Date.now() + 20000), 201);
         if (parsed.pathname.endsWith("/events")) {
-          assert.equal(Number(parsed.searchParams.get("after")), after);
-          return json(replay([], after));
+          const requested = Number(parsed.searchParams.get("after"));
+          requestedCursors.push(requested);
+          return json(replay([], requested));
         }
         snapshots++;
         return json({ ...snapshot, conversation: { ...snapshot.conversation, agentId } });
@@ -553,7 +550,7 @@ void test("authenticated identity and agent scope retained cursors; changed auth
             type: "ack",
             requestId: (command as { requestId: string }).requestId,
             operationId: "replayEvents",
-            receipt: replay([], after),
+            receipt: replay([], requestedCursors.at(-1) ?? 0),
           });
         return socket;
       },
@@ -572,8 +569,15 @@ void test("authenticated identity and agent scope retained cursors; changed auth
     try {
       await sub.ready;
       assert.equal(snapshots, index === 0 ? 0 : 1);
+      assert.deepEqual(requestedCursors, [after]);
       assert.equal(sub.cursor, after);
+      assert.equal(sub.scope?.agentId, agentId);
       assert.deepEqual(sub.scope?.identity, current);
+      assert.equal(
+        cursorScopeKey({ ...cursorScope, agentId, identity: current }) ===
+          cursorScopeKey(cursorScope),
+        index === 0,
+      );
     } finally {
       sub.close();
       await sub.done;
