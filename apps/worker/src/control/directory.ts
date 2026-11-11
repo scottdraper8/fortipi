@@ -6,6 +6,7 @@ import { audit } from "./audit.js";
 import { contains, emptyScope, permits, requireGrant, roleAllows } from "./authorization.js";
 import type { Identities } from "./identity.js";
 import { queueRepairResume } from "./repair.js";
+import { StorageBudget } from "./storage-budget.js";
 import { check, fail, hash, id, json, next, ref, type Store, same } from "./store.js";
 import type { ExecutorState } from "./tickets.js";
 
@@ -61,6 +62,7 @@ const modelActions = new Set([
   "tasks.resume",
 ]);
 export class Directory {
+  readonly budget: StorageBudget;
   readonly store: Store;
   readonly identities: Identities;
   readonly env: Env;
@@ -68,6 +70,7 @@ export class Directory {
     this.store = store;
     this.identities = identities;
     this.env = env;
+    this.budget = new StorageBudget(store, () => this.policy(), identities.deploymentId);
   }
   config(): Env["FORTIPI_CONFIG"] {
     return this.store.get<D.Configuration>("config", "active") ?? this.env.FORTIPI_CONFIG;
@@ -182,7 +185,7 @@ export class Directory {
     this.identities.current(ctx);
     requireGrant(ctx, "agents.create");
     check(valid("agents", "AgentCreate", body), "invalid_request", "Invalid agent configuration");
-    return this.once(ctx, "agent.create", body.requestId, body, () => {
+    const agent = await this.once(ctx, "agent.create", body.requestId, body, () => {
       const agent: D.Agent = {
         agentId: id(),
         name: body.name,
@@ -190,10 +193,14 @@ export class Directory {
         model: { providerId: body.model.providerId, modelId: body.model.modelId },
         status: "idle",
       };
+      this.budget.allocate("agent", agent.agentId);
       this.store.put("agent", agent.agentId, { agent, model: body.model });
       audit(this.store, ctx, "agents.create", agent.agentId, "allowed");
       return agent;
     });
+    // Also cover pre-ledger retained creation receipts before exposing their IDs.
+    this.store.tx(() => this.budget.allocate("agent", agent.agentId));
+    return agent;
   }
   describe(ctx: D.AuthContext, agentId: string): D.Agent {
     this.identities.current(ctx);
@@ -345,6 +352,7 @@ export class Directory {
         "Configuration must advance one version",
       );
       this.store.put("config", "active", body.configuration);
+      this.budget.retainPolicyFloors();
       queueRepairResume(this.store, "configuration");
       audit(this.store, ctx, "configuration.write", "installation", "allowed");
       return body.configuration;

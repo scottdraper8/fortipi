@@ -59,6 +59,7 @@ test("admin bytes are real SQLite BLOBs, idempotent and independently hashed acr
   const f = await storageFixture();
   try {
     const bytes = Uint8Array.from({ length: 393217 }, (_, i) => (i * 23 + 9) % 251);
+    const baseline: { jsonRows: number } = JSON.parse(await f.cp.audit());
     for (let ordinal = 0; ordinal < 7; ordinal++)
       assert.equal(
         value(
@@ -76,7 +77,7 @@ test("admin bytes are real SQLite BLOBs, idempotent and independently hashed acr
       rows: 7,
       bytes: bytes.length,
       blobRows: 7,
-      jsonRows: 1,
+      jsonRows: baseline.jsonRows,
     });
     const response = await f.worker.fetch(
       `http://fixture/bytes?size=${bytes.length}&sha256=${sha(bytes)}`,
@@ -92,6 +93,7 @@ test("admin bytes are real SQLite BLOBs, idempotent and independently hashed acr
 test("retained zero/range bytes verify and truncation or same-length corruption cannot pass", async () => {
   const f = await storageFixture();
   try {
+    const baseline: { jsonRows: number } = JSON.parse(await f.cp.audit());
     const bytes = Uint8Array.from({ length: 131089 }, (_, i) => (i * 13) % 239),
       digest = sha(bytes);
     value(await f.cp.put("artifact", 0, bytes.subarray(0, 65536)));
@@ -120,14 +122,14 @@ test("retained zero/range bytes verify and truncation or same-length corruption 
       rows: 0,
       bytes: 0,
       blobRows: 0,
-      jsonRows: 1,
+      jsonRows: baseline.jsonRows,
     });
   } finally {
     await f.close();
   }
 });
 
-test("near-full actual install reservation rejects new BLOB growth without changing pending bytes or publishing an index", async () => {
+test("near-full install retains pending claims while prepaid CP storage covers bounded BLOB growth once", async () => {
   const f = await storageFixture();
   try {
     const pending = Uint8Array.from({ length: 65536 }, (_, i) => (i * 7) % 241);
@@ -136,22 +138,28 @@ test("near-full actual install reservation rejects new BLOB growth without chang
       usage: { reserved: number; consumed: number; slots: number };
       physical: number;
     } = JSON.parse(await f.cp.nearFullReservation());
-    const denied: D.Outcome<unknown> = JSON.parse(
+    const admitted: D.Outcome<unknown> = JSON.parse(
       await f.cp.put("pending", 1, new Uint8Array(65536)),
     );
-    assert.equal(denied.ok, false);
-    if (denied.ok) assert.fail("Near-full install admitted new BLOB bytes");
-    assert.equal(denied.code, "quota_exceeded");
-    assert.match(denied.message, /install repair headroom/);
+    assert.equal(
+      admitted.ok,
+      true,
+      "The CP floor already covers this physical growth; it must not be charged twice",
+    );
     const after: {
       usage: { reserved: number; consumed: number; slots: number };
       physical: number;
       ready: number;
     } = JSON.parse(await f.cp.usage());
     assert.deepEqual(after.usage, before.usage);
-    assert.equal(after.physical, before.physical);
+    assert.ok(after.physical > before.physical);
     assert.equal(after.ready, 0);
-    assert.equal(value(await f.cp.verify("pending", pending.length, sha(pending))), sha(pending));
+    const combined = new Uint8Array(pending.length * 2);
+    combined.set(pending);
+    assert.equal(
+      value(await f.cp.verify("pending", combined.length, sha(combined))),
+      sha(combined),
+    );
   } finally {
     await f.close();
   }

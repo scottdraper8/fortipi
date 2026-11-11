@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
+import type { BudgetControl } from "./fixtures/storage-budget.js";
 import { harness, request, uuid, value } from "./harness.ts";
 
 async function setup() {
-  const h = await harness();
+  const h = await harness<BudgetControl>({
+    fixturePath: "apps/worker/test/control/fixtures/storage-budget.ts",
+  });
   try {
     const admin = await h.auth();
     const created = value(
@@ -27,6 +30,7 @@ async function setup() {
       tools: [],
       actions: ["conversations.create"],
     };
+    let sampleSeq = 0;
     const actor = async (expiresAt?: number) => {
       const issued = await h.mint({
         requestId: uuid(),
@@ -48,9 +52,30 @@ async function setup() {
           resources,
         }),
       );
+      const registered = { ...auth, registrationId: registration.registrationId };
+      const measured = await h.cp.peerStorage(created.body.agentId);
+      const sampling = await h.cp.fetch(
+        new Request("https://control.internal/internal/storage-sample", {
+          method: "POST",
+          headers: { "X-Fortipi-Context": JSON.stringify(registered) },
+          body: JSON.stringify({
+            sampleId: uuid(),
+            policyVersion: 1,
+            sampleSeq: ++sampleSeq,
+            observedAt: measured.observedAt,
+            coverage: { kind: "agent", bytes: measured.bytes },
+            coveredReservationIds: [],
+          }),
+        }),
+      );
+      assert.equal(
+        sampling.status,
+        200,
+        "Growth starts only after a real recipient physical sample",
+      );
       return {
         raw: auth,
-        registered: { ...auth, registrationId: registration.registrationId },
+        registered,
         issued,
       };
     };
@@ -88,10 +113,15 @@ test("unmeasured consumed settlement durably retains the full charge, keeps abse
       "settled",
       "consumed without measurement must settle conservatively under its original authority",
     );
-    assert.deepEqual(
-      await publicUsage(h),
-      { reservedBytes: 4096, observedBytes: 0 },
-      "public observedBytes must exclude unmeasured conservative charges and retain their full reservedBytes",
+    const initialUsage = await publicUsage(h);
+    assert.equal(
+      initialUsage.reservedBytes + initialUsage.observedBytes,
+      256 * 1048576,
+      "Physical allocation floors include pending work without adding the same bytes twice",
+    );
+    assert.ok(
+      initialUsage.observedBytes > 0,
+      "Only actual CP/recipient physical samples are observed usage",
     );
     assert.deepEqual(
       JSON.parse(await h.cp.capacityUsage()),
@@ -191,10 +221,12 @@ test("unmeasured consumed settlement durably retains the full charge, keeps abse
         observedBytes: measuredBytes,
       }),
     );
+    const finalUsage = await publicUsage(h);
+    assert.equal(finalUsage.reservedBytes + finalUsage.observedBytes, 256 * 1048576);
     assert.deepEqual(
-      await publicUsage(h),
-      { reservedBytes: 12288, observedBytes: measuredBytes },
-      "an explicit measured claim must not release another unmeasured charge or relabel it observed",
+      JSON.parse(await h.cp.capacityUsage()),
+      { reserved: 12288, consumed: measuredBytes, slots: 0 },
+      "An immutable operation measurement is distinct from cumulative physical storage",
     );
   } finally {
     await h.close();

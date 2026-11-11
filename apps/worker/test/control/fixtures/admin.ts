@@ -79,12 +79,9 @@ export class AdminFixtureControl extends ControlPlane {
   }
   async nearFull(ctx: D.AuthContext): Promise<string> {
     const bounds = this.directory.policy().bounds,
-      usage = this.capacity.usage(),
       bytes =
         Math.floor(bounds.installBytes * (1 - bounds.headroomFraction)) -
-        this.ctx.storage.sql.databaseSize -
-        usage.reserved -
-        usage.consumed -
+        this.directory.budget.usage().total -
         98304;
     const reservation = this.capacity.reserve(ctx, {
       operationId: "existing-pending-work",

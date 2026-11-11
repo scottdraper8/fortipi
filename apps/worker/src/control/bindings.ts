@@ -289,9 +289,11 @@ export class Bindings {
       const old = this.store.get<BindingRequest>("binding_request", key);
       if (old) {
         check(old.digest === digest, "conflict", "Binding request changed");
+        this.directory.budget.allocate("workspace", old.application.binding.workspaceId);
         return old;
       }
       const app = application();
+      this.directory.budget.allocate("workspace", app.binding.workspaceId);
       check(
         !this.store.get("binding_pending", app.binding.workspaceId),
         "conflict",
