@@ -10,6 +10,7 @@ on:
       - tools/unstale/verify-container-egress.ts
       - tools/unstale/verify-container-egress.test.ts
       - tools/unstale/image-network-diagnostics.ts
+      - tools/unstale/container-runtime-diagnostics.ts
   push:
     branches: [main]
     paths:
@@ -21,6 +22,7 @@ on:
       - tools/unstale/verify-container-egress.ts
       - tools/unstale/verify-container-egress.test.ts
       - tools/unstale/image-network-diagnostics.ts
+      - tools/unstale/container-runtime-diagnostics.ts
   workflow_dispatch:
 permissions:
   contents: read
@@ -123,7 +125,7 @@ jobs:
         id: build
         run: node --import ./tools/unstale/image-network-diagnostics.ts apps/worker/container/build.ts
       - name: Verify ContainerHost transport (${{ matrix.mode }})
-        run: node apps/worker/test/backends/linux-image.ts ${{ matrix.fuse_args }}
+        run: node --import ./tools/unstale/container-runtime-diagnostics.ts apps/worker/test/backends/linux-image.ts ${{ matrix.fuse_args }}
       - name: Observe actual bridge and host container egress
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: node tools/unstale/verify-container-egress.ts
