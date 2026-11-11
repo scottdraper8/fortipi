@@ -31,6 +31,7 @@ import {
 } from "./authority.js";
 import { ComputerStore } from "./computer.js";
 import { outcome, requireThat, unwrap, WorkspaceError } from "./errors.js";
+import { WorkspaceExports } from "./export.js";
 import { LocalProvider } from "./local.js";
 import { LocalReads } from "./local-read.js";
 import { LocalUploads } from "./local-upload.js";
@@ -74,6 +75,7 @@ interface InternalContext {
   hash?: string;
   length?: number;
   artifact?: { path: string; offset: number; size: number };
+  exportId?: string;
 }
 interface ArtifactRecord {
   reference: D.ByteReference;
@@ -88,7 +90,7 @@ interface ArtifactRecord {
 }
 interface DueRecord {
   at: number;
-  kind: "upload" | "artifact" | "local-upload";
+  kind: "upload" | "artifact" | "local-upload" | "export";
   id: string;
 }
 interface FactRow {
@@ -106,6 +108,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   readonly execution: ExecutionLedger;
   readonly localUploads: LocalUploads;
   readonly localReads: LocalReads;
+  private readonly exports: WorkspaceExports;
   private child: ComputerStore | undefined;
   private deleted = false;
   constructor(ctx: DurableObjectState, env: Env) {
@@ -114,6 +117,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     this.execution = new ExecutionLedger(this, env);
     this.localUploads = new LocalUploads(this);
     this.localReads = new LocalReads(this);
+    this.exports = new WorkspaceExports(this);
   }
   trackLocalRead(completion: Promise<unknown>): void {
     this.ctx.waitUntil(completion);
@@ -1687,6 +1691,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       hash?: string;
       length?: number;
       artifact?: { path: string; offset: number; size: number };
+      exportId?: string;
     } = {},
   ): Promise<Response> {
     const auth: InternalContext = {
@@ -1696,6 +1701,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       ...(init.hash ? { hash: init.hash } : {}),
       ...(init.length === undefined ? {} : { length: init.length }),
       ...(init.artifact ? { artifact: init.artifact } : {}),
+      ...(init.exportId ? { exportId: init.exportId } : {}),
     };
     return this.stub(allocation.childId).fetch(
       new Request(`https://workspace.internal/__fortipi/store${path}`, {
@@ -2531,43 +2537,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     }
   }
   exportData(ctx: D.AuthContext, input: D.ExportRequest): Promise<D.Outcome<D.ExportDescriptor>> {
-    return outcome(async () => {
-      const authority = this.current();
-      await this.authority(ctx, authority.workspaceId);
-      requireThat(
-        permitsResource(input.resources.workspaceIds, authority.workspaceId) &&
-          input.deadline > Date.now() &&
-          input.maxBytes <= this.policy.bounds.snapshotBytes,
-        "unauthorized",
-        "Export scope mismatch",
-      );
-      const revision = this.revision(authority.binding.revision);
-      const artifacts: D.ByteReference[] = [];
-      let size = 0;
-      for (const entry of revision.manifest.entries)
-        if (entry.type === "file") {
-          size += entry.size;
-          if (size > input.maxBytes) break;
-          artifacts.push(
-            unwrap(
-              await this.read(ctx, {
-                operationId: "readWorkspaceFile",
-                path: { workspaceId: authority.workspaceId },
-                query: { revision: revision.revision, path: entry.path },
-                body: undefined,
-              }),
-            ),
-          );
-          if (artifacts.length === 100) break;
-        }
-      return {
-        exportId: input.exportId,
-        state: size > input.maxBytes || artifacts.length === 100 ? "partial" : "ready",
-        artifacts,
-        unavailableWorkspaceIds: [],
-        credentialsExcluded: true,
-      };
-    }, ctx.requestId);
+    return outcome(() => this.exports.create(ctx, input), ctx.requestId);
   }
   async captureArtifacts(
     ctx: D.AuthContext,
@@ -2720,6 +2690,22 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const envelope = JSON.parse(raw) as InternalContext;
       const { auth } = envelope;
       const url = new URL(request.url);
+      if (url.pathname.startsWith("/v1/admin/")) {
+        const match = /^\/v1\/admin\/artifacts\/([A-Za-z0-9_-]{1,128})$/.exec(url.pathname);
+        requireThat(
+          match && request.method === "GET" && !url.search,
+          "invalid_request",
+          "Exact private export artifact GET required",
+        );
+        const peer = await this.exports.peer(auth, match[1] ?? "", request.signal);
+        return byteResponse(
+          request,
+          peer.reference.size,
+          peer.reference.sha256,
+          auth.deadline,
+          async () => peer.open(),
+        );
+      }
       if (url.pathname === "/__fortipi/operational-metadata") {
         requireThat(
           request.method === "GET",
@@ -2930,6 +2916,19 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       }
       const { allocation } = envelope;
       const path = url.pathname.slice("/__fortipi/store".length);
+      if (
+        path === "/read" &&
+        request.method === "POST" &&
+        envelope.exportId &&
+        envelope.entry &&
+        allocation &&
+        this.isSelf(allocation.authorityId)
+      ) {
+        const entry = envelope.entry;
+        return this.mutex.run(() =>
+          Response.json(this.exports.member(auth, envelope.exportId ?? "", allocation, entry)),
+        );
+      }
       // Reuse the private store fetch lane for an exact output-member observation.
       // A current artifacts.read consumer never receives workspace.read authority.
       if (
@@ -2978,9 +2977,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         "Child identity required",
       );
       const registry =
-        path === "/artifact-read" && request.method === "GET"
-          ? await this.artifactRegistry(envelope)
-          : await this.registry(auth, lookup(allocation));
+        path === "/read" && request.method === "GET" && envelope.exportId
+          ? await this.exportRegistry(envelope)
+          : path === "/artifact-read" && request.method === "GET"
+            ? await this.artifactRegistry(envelope)
+            : await this.registry(auth, lookup(allocation));
       requireThat(
         same(registry.state.allocation, allocation) &&
           registry.state.state !== "retiring" &&
@@ -3101,6 +3102,8 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             }
           } else if (value.kind === "local-upload") {
             this.localUploads.expire(value.id);
+          } else if (value.kind === "export") {
+            this.exports.expire(value.id);
           } else {
             const artifact = this.state.get<ArtifactRecord>(`artifact:${value.id}`);
             if (artifact?.state === "ready") {
@@ -3221,6 +3224,16 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     );
     requireThat(response.ok, "unauthorized", "Output member authority required");
     return { state: await response.json<D.StoreState>(), referenced: false, pins: 0 };
+  }
+  private async exportRegistry(envelope: InternalContext): Promise<AllocationRecord> {
+    const response = await this.stub(envelope.allocation.authorityId).fetch(
+      new Request("https://workspace.internal/__fortipi/store/read", {
+        method: "POST",
+        headers: { [internalHeader]: JSON.stringify(envelope) },
+      }),
+    );
+    requireThat(response.ok, "unauthorized", "Retained export member authority required");
+    return { state: await response.json<D.StoreState>(), referenced: true, pins: 0 };
   }
   private async nativeArtifact(
     request: Request,

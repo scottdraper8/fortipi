@@ -12,6 +12,110 @@ import {
 
 /** Actual binding application plus a test-only post-transaction response barrier. */
 export class WorkspaceObject extends WorkspaceBase {
+  override async exportData(
+    ctx: D.AuthContext,
+    input: D.ExportRequest,
+  ): Promise<D.Outcome<D.ExportDescriptor>> {
+    const result = await super.exportData(ctx, input);
+    if (
+      input.exportId === "lost-export-reply" &&
+      result.ok &&
+      !this.state.get("test-export-reply-lost")
+    ) {
+      this.state.put("test-export-reply-lost", true);
+      return {
+        ok: false,
+        code: "interrupted",
+        message: "Injected lost export reply",
+        requestId: ctx.requestId,
+        retryable: false,
+        details: { reason: "uncertain_effects" },
+      };
+    }
+    if (
+      input.exportId === "kill-export-reply" &&
+      result.ok &&
+      !this.state.get("test-export-kill")
+    ) {
+      this.state.put("test-export-kill", true);
+      this.state.put("test-barrier", true);
+      await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
+    }
+    return result;
+  }
+  override async childFetch(
+    ctx: D.AuthContext,
+    allocation: D.StoreAllocation,
+    path: string,
+    init: Parameters<WorkspaceBase["childFetch"]>[3] = {},
+  ): Promise<Response> {
+    const response = await super.childFetch(ctx, allocation, path, init);
+    if (
+      !init.exportId ||
+      !response.body ||
+      !["export-corrupt", "export-truncate", "export-revoke"].includes(ctx.requestId)
+    )
+      return response;
+    const reader = response.body.getReader();
+    let first = true;
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        pull: async (controller) => {
+          const next = await reader.read();
+          if (next.done) {
+            reader.releaseLock();
+            controller.close();
+            return;
+          }
+          if (first) {
+            first = false;
+            if (ctx.requestId === "export-revoke") {
+              const ack = await this.invalidateGeneration(
+                {
+                  kind: "control-recovery",
+                  deploymentId: ctx.deploymentId,
+                  revocationId: "export-reader-floor",
+                  recipient: { kind: "workspace", id: "workspace" },
+                  actions: ["invalidate"],
+                  deadline: ctx.deadline,
+                },
+                {
+                  revocationId: "export-reader-floor",
+                  subject: {
+                    kind: "credential",
+                    credentialId: ctx.credentialId,
+                    minimumGeneration: ctx.generation + 1,
+                  },
+                },
+              );
+              if (!ack.ok) throw new Error("Export reader revocation failed");
+            }
+            if (ctx.requestId === "export-corrupt") {
+              const bytes = next.value.slice();
+              bytes[0] = (bytes[0] ?? 0) ^ 1;
+              controller.enqueue(bytes);
+              return;
+            }
+            if (ctx.requestId === "export-truncate") {
+              controller.enqueue(next.value.subarray(0, next.value.length - 1));
+              await reader.cancel();
+              reader.releaseLock();
+              controller.close();
+              return;
+            }
+          }
+          controller.enqueue(next.value);
+        },
+        async cancel() {
+          await reader.cancel().catch(() => {});
+          try {
+            reader.releaseLock();
+          } catch {}
+        },
+      }),
+      { status: response.status },
+    );
+  }
   override async authority(ctx: D.AuthContext, workspaceId: string, action = "workspace.read") {
     const authority = await super.authority(ctx, workspaceId, action);
     if (ctx.requestId === "revoke-during-metadata")
@@ -65,6 +169,7 @@ export class WorkspaceObject extends WorkspaceBase {
   }
   override async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (path === "/__test/export-physical") return Response.json({ bytes: this.state.bytes });
     if (path === "/__test/seed") {
       return new Response(null, { status: 404 });
     }
@@ -246,6 +351,7 @@ export class ControlFixture extends DurableObject {
   }
 }
 type Call =
+  | { kind: "export"; input: D.ExportRequest }
   | { kind: "acquire"; input: D.TargetRequest }
   | { kind: "reservation"; input: D.TargetRequest }
   | { kind: "binding"; input: D.WorkspaceBindingApplication }
@@ -371,6 +477,9 @@ export default {
       for (const grant of ctx.grants) grant.resources.actions = ["artifacts.read"];
     if (request.headers.get("x-test-write-only") === "1")
       for (const grant of ctx.grants) grant.resources.actions = ["workspace.write"];
+    const exportAction = request.headers.get("x-test-export-action");
+    if (exportAction === "exports.create" || exportAction === "backups.create")
+      for (const grant of ctx.grants) grant.resources.actions = [exportAction];
     if (request.headers.get("x-test-dispatch-write") === "1")
       for (const grant of ctx.grants)
         grant.resources.actions = ["jobs.dispatch", "workspace.write"];
@@ -394,6 +503,7 @@ export default {
     }
     if (request.headers.get("x-test-unregistered") === "1") delete ctx.registrationId;
     if (request.headers.get("x-test-expired") === "1") ctx.credentialExpiresAt = Date.now() - 1;
+    if (request.headers.get("x-test-short-deadline") === "1") ctx.deadline = Date.now() + 300;
     if (request.headers.get("x-test-other-agent") === "1")
       for (const grant of ctx.grants) grant.resources.agentIds = ["other"];
     if (request.headers.get("x-test-other-target") === "1")
@@ -427,6 +537,56 @@ export default {
       });
     }
     const authority = env.WORKSPACES.getByName("workspace");
+    if (url.pathname === "/export-physical")
+      return authority.fetch(new Request("https://fixture.internal/__test/export-physical"));
+    if (url.pathname === "/export-stream-control") {
+      const abort = new AbortController();
+      const response = await authority.fetch(
+        new Request(
+          `https://workspace.internal/v1/admin/artifacts/${url.searchParams.get("artifactId")}`,
+          { headers: { [internalHeader]: JSON.stringify({ auth: ctx }) }, signal: abort.signal },
+        ),
+      );
+      if (!response.ok || !response.body) return response;
+      const reader = response.body.getReader();
+      const first = await reader.read();
+      const mode = url.searchParams.get("mode");
+      if (mode === "cancel") {
+        await reader.cancel();
+        return Response.json({ first: first.value?.length, cancelled: true });
+      }
+      if (mode === "abort") abort.abort();
+      if (mode === "deadline") await new Promise<void>((resolve) => setTimeout(resolve, 350));
+      if (mode === "revoke") {
+        const ack = await authority.invalidateGeneration(
+          {
+            kind: "control-recovery",
+            deploymentId: ctx.deploymentId,
+            revocationId: "export-stream-floor",
+            recipient: { kind: "workspace", id: "workspace" },
+            actions: ["invalidate"],
+            deadline: ctx.deadline,
+          },
+          {
+            revocationId: "export-stream-floor",
+            subject: {
+              kind: "credential",
+              credentialId: ctx.credentialId,
+              minimumGeneration: ctx.generation + 1,
+            },
+          },
+        );
+        if (!ack.ok) throw new Error("Export stream floor failed");
+      }
+      let rejected = false;
+      try {
+        while (!(await reader.read()).done) {}
+      } catch {
+        rejected = true;
+      }
+      await reader.cancel().catch(() => {});
+      return Response.json({ first: first.value?.length, rejected });
+    }
     if (url.pathname === "/operational-metadata") {
       const headers = new Headers();
       if (request.headers.get("x-test-no-context") !== "1")
@@ -539,13 +699,22 @@ export default {
       );
     if (url.pathname === "/barrier")
       return authority.fetch(new Request("https://fixture.internal/__test/barrier"));
-    if (url.pathname === "/read" || url.pathname.startsWith("/v1/workspaces/")) {
+    if (
+      url.pathname === "/read" ||
+      url.pathname.startsWith("/v1/workspaces/") ||
+      url.pathname.startsWith("/v1/admin/") ||
+      url.pathname === "/__fortipi/store/read"
+    ) {
       const headers = new Headers(request.headers);
-      headers.set(internalHeader, JSON.stringify({ auth: ctx }));
+      headers.delete(internalHeader);
+      if (request.headers.get("x-test-no-context") !== "1")
+        headers.set(internalHeader, JSON.stringify({ auth: ctx }));
       return authority.fetch(new Request(request, { headers }));
     }
     const call = (await request.json()) as Call;
     switch (call.kind) {
+      case "export":
+        return Response.json(await authority.exportData(ctx, call.input));
       case "binding":
         return Response.json(
           await authority.applyBinding({ ...ctx, registrationId: "registration" }, call.input),
