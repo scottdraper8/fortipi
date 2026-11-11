@@ -70,6 +70,16 @@ export class Controls {
           }),
           tx,
         );
+        check(
+          admission.state === "settled",
+          "conflict",
+          "Previous operation settlement must be acknowledged before resuming",
+        );
+        const pending = await tx.get<{ id: string }>(
+          "SELECT id FROM fp_records_v1 WHERE kind='control' AND json_extract(data,'$.admission')=? AND json_extract(data,'$.input.operationId')='resumeTask' LIMIT 1",
+          mapped.key,
+        );
+        check(!pending, "conflict", "A resume intent is already pending for this task");
         await store.claimGrowth(receipt.operationId, growthBytes, tx);
       }
       await store.put(
@@ -103,6 +113,8 @@ export class Controls {
     await this.conversations.lanes.run(admission.conversationId, async () => {
       const intent = await store.get<ControlIntent>("control", id);
       if (!intent) return;
+      const admission = await store.get<Admission>("admission", intent.admission);
+      check(admission, "not_found", "Task admission unavailable");
       const auth = { ...intent.auth, deadline: Date.now() + 30000 };
       const action = intent.input.operationId === "cancelTask" ? "tasks.cancel" : "tasks.resume";
       await authority.authorize(auth, action, admission.conversationId);
@@ -145,11 +157,15 @@ export class Controls {
           .session(row.piId)
           .abort(admission.continuation?.operationId ?? admission.operationId);
       } else {
-        const model = await this.conversations.host.selectModel(
-          auth,
-          action,
-          admission.conversationId,
+        check(
+          admission.state === "settled" || admission.continuation?.operationId === id,
+          "unavailable",
+          "Previous operation settlement must be acknowledged before resuming",
         );
+        const model =
+          admission.continuation?.operationId === id
+            ? admission.model
+            : await this.conversations.host.selectModel(auth, action, admission.conversationId);
         if (!intent.capacity) {
           await authority.physical.beforeGrowth(
             auth,
@@ -200,10 +216,21 @@ export class Controls {
           );
           const current = await store.get<Admission>("admission", intent.admission, tx);
           check(current, "not_found", "Task admission unavailable");
-          current.continuation = { operationId: id, auth: intent.auth, capacity: intent.capacity! };
-          current.state = "accepted";
-          current.model = model;
-          await store.put("admission", current.key, current, tx, Date.now());
+          check(
+            current.state === "settled" || current.continuation?.operationId === id,
+            "unavailable",
+            "Previous operation settlement must be acknowledged before resuming",
+          );
+          if (current.continuation?.operationId !== id) {
+            current.continuation = {
+              operationId: id,
+              auth: intent.auth,
+              capacity: intent.capacity!,
+            };
+            current.state = "accepted";
+            current.model = model;
+            await store.put("admission", current.key, current, tx, Date.now());
+          }
           await store.put("operation-admission", id, { key: current.key }, tx);
         });
         if (!submission) {
