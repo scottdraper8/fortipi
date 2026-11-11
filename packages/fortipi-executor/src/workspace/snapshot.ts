@@ -152,7 +152,26 @@ export class Snapshots {
       (await manifestDigest(response.manifest)) !== response.manifestHash
     )
       throw new Error("snapshot revision integrity");
-    checkManifest(response.manifest, this.limits, "sensitive");
+    const manifestBounds = () => [
+      this.limits.fileBytes,
+      this.limits.snapshotBytes,
+      this.limits.manifestEntries,
+      this.http.limits.fileBytes,
+      this.http.limits.snapshotBytes,
+      this.http.limits.manifestEntries,
+    ];
+    const fixedBounds = manifestBounds();
+    const checkBounds = () => {
+      if (manifestBounds().some((value, index) => value !== fixedBounds[index]))
+        throw new Error("snapshot limits changed");
+    };
+    const snapshotLimits = {
+      ...this.limits,
+      fileBytes: Math.min(this.limits.fileBytes, this.http.limits.fileBytes),
+      snapshotBytes: Math.min(this.limits.snapshotBytes, this.http.limits.snapshotBytes),
+      manifestEntries: Math.min(this.limits.manifestEntries, this.http.limits.manifestEntries),
+    };
+    checkManifest(response.manifest, snapshotLimits, "sensitive");
     this.ledger.transaction(() => {
       const reserved = Number(
         (
@@ -182,8 +201,9 @@ export class Snapshots {
       executionId: id.executionId,
     });
     const root = await SafeRoot.open(path, this.platform);
+    checkBounds();
     this.ledger.saveRecord("stages", `scratch_root_${id.executionId}`, { key: root.key });
-    checkManifest(response.manifest, this.limits, root.identity.caseBehavior);
+    checkManifest(response.manifest, snapshotLimits, root.identity.caseBehavior);
     const directories = new Set<string>();
     for (const entry of response.manifest.entries) {
       const parts = entry.path.split("/");
@@ -194,30 +214,53 @@ export class Snapshots {
       (a, b) => a.split("/").length - b.split("/").length,
     ))
       await root.mkdir(directory);
+    const verified = new Map<string, Uint8Array>();
+    let verifiedBytes = 0;
     for (const entry of response.manifest.entries) {
       if (entry.type !== "file") continue;
-      checkManifest(response.manifest, this.http.limits, root.identity.caseBehavior);
-      const { r, bytes } = await this.readSnapshot(
-        assignment,
-        `/blobs/${entry.sha256}`,
-        entry.size,
-        epoch,
-        preparation,
-      );
-      if (
-        bytes.byteLength !== entry.size ||
-        hash(bytes) !== entry.sha256 ||
-        Number(r.headers.get("Content-Length")) !== entry.size ||
-        r.headers.get("X-Content-SHA256") !== entry.sha256
-      )
+      checkBounds();
+      const cached = verified.get(entry.sha256);
+      let bytes = cached;
+      if (bytes === undefined) {
+        const result = await this.readSnapshot(
+          assignment,
+          `/blobs/${entry.sha256}`,
+          entry.size,
+          epoch,
+          preparation,
+        );
+        if (
+          Number(result.r.headers.get("Content-Length")) !== entry.size ||
+          result.r.headers.get("X-Content-SHA256") !== entry.sha256
+        )
+          throw new Error("snapshot file integrity");
+        bytes = result.bytes;
+      } else {
+        preparation?.signal.throwIfAborted();
+        await preparation?.check();
+        preparation?.signal.throwIfAborted();
+        this.http.executorJobQuery(assignment, epoch);
+      }
+      if (bytes.byteLength !== entry.size || hash(bytes) !== entry.sha256)
         throw new Error("snapshot file integrity");
-      checkManifest(response.manifest, this.http.limits, root.identity.caseBehavior);
+      checkBounds();
+      if (cached === undefined) {
+        if (
+          verifiedBytes + bytes.byteLength >
+          Math.min(this.limits.snapshotBytes, this.http.limits.snapshotBytes)
+        )
+          throw new Error("workspace capacity exceeded");
+        verifiedBytes += bytes.byteLength;
+        verified.set(entry.sha256, bytes);
+      }
       await root.write(entry.path, bytes, entry.mode);
     }
-    const actual = await scan(root, this.limits);
+    checkBounds();
+    const actual = await scan(root, snapshotLimits);
     preparation?.signal.throwIfAborted();
     await preparation?.check();
     this.http.executorJobQuery(assignment, epoch);
+    checkBounds();
     if (actual.manifestHash !== response.manifestHash)
       throw new Error("snapshot materialization mismatch");
     return root;
