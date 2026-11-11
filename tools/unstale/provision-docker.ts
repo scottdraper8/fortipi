@@ -621,6 +621,8 @@ async function main(): Promise<void> {
       DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER: "builtin",
       DOCKERD_ROOTLESS_ROOTLESSKIT_DISABLE_HOST_LOOPBACK: "true",
       DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS: "--subid-source=static",
+      // Upstream compatibility mode keeps the daemon and its private bridge together.
+      DOCKERD_ROOTLESS_ROOTLESSKIT_DETACH_NETNS: "false",
     });
     await mkdir(env.XDG_RUNTIME_DIR ?? "", { mode: 0o700 });
     await mkdir(env.XDG_CONFIG_HOME ?? "", { mode: 0o700 });
