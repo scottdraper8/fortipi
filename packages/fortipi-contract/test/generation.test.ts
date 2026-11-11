@@ -91,6 +91,21 @@ test("renewal identity and private child disclosure regressions fail their consu
     await writeFile(resolve(temp, "package.json"), '{"type":"module"}\n');
     const cases = [
       {
+        label: "ordered directory recreation",
+        path: "dist/compatibility.js",
+        test: "compatibility",
+        pattern: "local stage directory recreation",
+        failure: /unwanted rejection|put_metadata/,
+        mutate: (source: string): string => {
+          const reset = 'if (mutation.kind !== "mkdir")\n            replaced.add(mutation.path);';
+          assert.ok(source.includes(reset), "Missing emitted descendant reset");
+          return source.replace(
+            reset,
+            'if (!superseded && mutation.kind !== "mkdir")\n            replaced.add(mutation.path);',
+          );
+        },
+      },
+      {
         label: "local intent renewal exclusion",
         path: "dist/compatibility.js",
         test: "compatibility",

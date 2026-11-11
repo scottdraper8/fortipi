@@ -422,6 +422,60 @@ test("local stages carry explicit put/delete/mkdir metadata bound to their enclo
   );
   await assert.rejects(validateLocalStage(oversized), /payload_too_large/);
 });
+test("local stage directory recreation clears earlier descendant claims in mutation order", async () => {
+  const directory = { path: "tree", type: "directory" as const, mode: 493 as const };
+  const oldFile = {
+    path: "tree/old.txt",
+    type: "file" as const,
+    mode: 420 as const,
+    size: 3,
+    sha256: hash,
+  };
+  const newFile = { ...oldFile, path: "tree/new.txt" };
+  const put = {
+    kind: "put" as const,
+    path: oldFile.path,
+    sha256: hash,
+    size: 3,
+    mode: 420 as const,
+  };
+  const mutations = [
+    put,
+    { kind: "delete" as const, path: directory.path },
+    { kind: "mkdir" as const, path: directory.path, mode: 493 as const },
+  ];
+  for (const recreateChild of [false, true]) {
+    const input = {
+      uploadId: "upload_1",
+      manifest: {
+        version: 1 as const,
+        entries: recreateChild ? [directory, newFile] : [directory],
+      },
+      mutations: recreateChild ? [...mutations, { ...put, path: newFile.path }] : mutations,
+    };
+    const stage = {
+      kind: "staged-change" as const,
+      ...input,
+      postManifestHash: await manifestDigest(input.manifest),
+      stagedDigest: await localStageDigest(input),
+    };
+    assert.equal(
+      get("LocalPrepare")({
+        ...scope,
+        kind: "prepare",
+        commitId: "commit_1",
+        expectedManifestHash: hash,
+        mode: stage,
+      }),
+      true,
+    );
+    await assert.doesNotReject(() => validateLocalStage(stage));
+    // Moving the put after recreation makes its metadata a required final claim again.
+    const reordered = { ...stage, mutations: [...mutations.slice(1), put] };
+    reordered.stagedDigest = await localStageDigest(reordered);
+    await assert.rejects(validateLocalStage(reordered), /put_metadata/);
+  }
+});
 test("local intent and final commit have independent immutable byte oracles", async () => {
   const input = {
     commitId: "commit_1",

@@ -327,9 +327,10 @@ export async function validateLocalStage(input: LocalStagedChange): Promise<void
       superseded = replaced.has(ancestors.join("/"));
       ancestors.pop();
     }
+    // Recreating a directory supersedes its own deletion, but that deletion still clears earlier descendants.
+    if (mutation.kind !== "mkdir") replaced.add(mutation.path);
     if (superseded) continue;
     claimed.add(mutation.path);
-    if (mutation.kind !== "mkdir") replaced.add(mutation.path);
     if (mutation.kind === "put") {
       const entry = entries.get(mutation.path);
       if (
