@@ -13,7 +13,13 @@ import {
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
 import type { FencedContainerAPI } from "../container/host-adapter.js";
-import { authorize, permitsResource, same, validateLease } from "../workspace/authority.js";
+import {
+  authorize,
+  authorizeReservedAction,
+  permitsResource,
+  same,
+  validateLease,
+} from "../workspace/authority.js";
 import type { ComputerStore } from "../workspace/computer.js";
 import { outcome, requireThat, unwrap } from "../workspace/errors.js";
 import { checkedManifest, snapshotBytes } from "../workspace/manifest.js";
@@ -93,7 +99,16 @@ export class ExecutionLedger {
   }
   private row(ctx: D.AuthContext, identity: D.ExecutionIdentity): RecordEntry {
     const authority = this.owner.current();
-    authorize(this.owner.state, ctx, authority.workspaceId, "workspace.read");
+    if (
+      ctx.grants.some(
+        (grant) =>
+          (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+          permitsResource(grant.resources.workspaceIds, authority.workspaceId) &&
+          permitsResource(grant.resources.actions, "workspace.read"),
+      )
+    )
+      authorize(this.owner.state, ctx, authority.workspaceId, "workspace.read");
+    else authorizeReservedAction(this.owner.state, ctx, identity.lease, "workspace.write");
     const row = this.owner.state.get<RecordEntry>(`execution:${identity.executionId}`);
     requireThat(
       row && sameExecutionIdentity(identity, row.prepared.request.identity),

@@ -488,7 +488,7 @@ export class LocalUploads {
     input: D.OperationRequest<"commitUpload">,
   ): Promise<D.OperationResponse<"commitUpload">> {
     const row = await this.owner.mutex.run(() => {
-      authorize(this.owner.state, ctx, input.path.workspaceId, "workspace.read");
+      authorize(this.owner.state, ctx, input.path.workspaceId, "workspace.write");
       const row = this.owner.state.get<LocalUpload>(`local-upload:${input.path.uploadId}`);
       requireThat(
         row && row.scope.workspaceId === input.path.workspaceId,
@@ -519,11 +519,15 @@ export class LocalUploads {
     );
     const existing = this.owner.state.get<D.CommitReceipt>(`receipt:${commit.commitId}`);
     if (existing) {
+      const observation =
+        row.observation ??
+        this.owner.state.get<D.LocalObservation>(`local-observation:${commit.commitId}`);
+      requireThat(observation, "conflict", "Stored local publication observation required");
       const receipt = unwrap(
-        await this.owner.getReceipt(ctx, {
-          workspaceId: commit.workspaceId,
-          commitId: commit.commitId,
-          commitDigest: existing.commitDigest,
+        await this.owner.commitLocal(ctx, {
+          intent: row.intent,
+          observation,
+          manifest: row.request.manifest,
         }),
       );
       await this.owner.mutex.run(() => {

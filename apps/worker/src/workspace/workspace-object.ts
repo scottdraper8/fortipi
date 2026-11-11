@@ -20,6 +20,7 @@ import {
   type AllocationRecord,
   type AuthorityRecord,
   authorize,
+  authorizeReservedAction,
   nextFence,
   permitsResource,
   type RevisionRecord,
@@ -50,6 +51,7 @@ import {
   limitedStream,
   sliceStream,
 } from "./streams.js";
+import { terminalProof } from "./terminal-proof.js";
 
 const lookup = (allocation: D.StoreLookup): D.StoreLookup => ({
   allocationId: allocation.allocationId,
@@ -868,6 +870,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             pins: 0,
           };
           this.state.put(`allocation:${allocation.allocationId}`, row);
+          this.state.put(`allocation-lease:${allocation.allocationId}`, active.leaseId);
           this.state.put(`capacity-allocation:${capacity.reservationId}`, allocation.allocationId);
           this.state.put(`allocation-child:${allocation.childId}`, allocation.allocationId);
           this.state.put(intent, allocation);
@@ -880,13 +883,64 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     return outcome(async () => {
       if (this.isSelf(input.authorityId))
         return this.mutex.run(() => {
-          authorize(this.state, ctx, input.workspaceId, "workspace.read");
+          const read = ctx.grants.some(
+            (grant) =>
+              (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+              permitsResource(grant.resources.workspaceIds, input.workspaceId) &&
+              permitsResource(grant.resources.actions, "workspace.read"),
+          );
+          authorize(
+            this.state,
+            ctx,
+            input.workspaceId,
+            read ? "workspace.read" : "workspace.write",
+          );
           const row = this.state.get<AllocationRecord>(`allocation:${input.allocationId}`);
           requireThat(
             row && same(lookup(row.state.allocation), lookup(input)),
             "not_found",
             "Unknown allocation",
           );
+          if (!read) {
+            const allocation = row.state.allocation;
+            const leaseId = this.state.get<string>(`allocation-lease:${allocation.allocationId}`);
+            const allocationLease = leaseId
+              ? this.state.get<D.TargetReservation>(`reservation:${leaseId}`)
+              : undefined;
+            const acquired = allocationLease
+              ? this.state.get<{ lease: D.Lease }>(`lease-acquire:${allocationLease.reservationId}`)
+              : undefined;
+            const upload =
+              allocation.role === "revision-store"
+                ? this.state.get<UploadRecord>(`upload:${allocation.uploadId}`)
+                : undefined;
+            const scratch =
+              allocation.role === "scratch"
+                ? this.state.get<{ prepared: D.PreparedExecution }>(
+                    `execution:${allocation.executionId}`,
+                  )
+                : undefined;
+            const lease = row.referenced
+              ? this.current().lease
+              : (acquired?.lease ??
+                upload?.request.lease ??
+                scratch?.prepared.request.identity.lease);
+            requireThat(lease, "unauthorized", "Registered store operation required");
+            const reservation = authorizeReservedAction(this.state, ctx, lease, "workspace.write");
+            if (row.referenced) validateLease(this.state, this.current(), lease, ctx);
+            else
+              requireThat(
+                allocation.baseRevision === lease.baseRevision &&
+                  allocation.operationDigest === reservation.operationDigest &&
+                  allocation.generation === lease.executorGeneration &&
+                  (allocation.role !== "scratch" ||
+                    (reservation.ownerKind === "job" &&
+                      allocation.jobId === reservation.jobId &&
+                      allocation.executionId === reservation.executionId)),
+                "unauthorized",
+                "Store operation scope mismatch",
+              );
+          }
           return row.state;
         });
       const registered = await this.registry(ctx, input);
@@ -1882,7 +1936,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
   commit(ctx: D.AuthContext, input: D.CommitInput): Promise<D.Outcome<D.CommitReceipt>> {
     return outcome(async () => {
       await this.authority(ctx, input.workspaceId, "workspace.write");
-      const prior = await this.mutex.run(() => this.receipt(ctx, input));
+      const prior = await this.mutex.run(() => this.receipt(ctx, input, "workspace.write"));
       if (prior) return prior;
       if (input.providerKind === "local") return this.localUploads.publishObserved(ctx, input);
       const digest = await commitDigest({
@@ -1901,7 +1955,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       );
       return this.mutex.run(() =>
         this.state.transaction(() => {
-          const repeated = this.receipt(ctx, input);
+          const repeated = this.receipt(ctx, input, "workspace.write");
           if (repeated) return repeated;
           const authority = this.current();
           validateLease(this.state, authority, input.lease, ctx);
@@ -1951,15 +2005,41 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       );
     }, ctx.requestId);
   }
-  private receipt(ctx: D.AuthContext, input: D.CommitLookup): D.CommitReceipt | undefined {
-    authorize(this.state, ctx, input.workspaceId, "workspace.read");
+  private receipt(
+    ctx: D.AuthContext,
+    input: D.CommitLookup,
+    action: "workspace.read" | "workspace.write" = "workspace.read",
+  ): D.CommitReceipt | undefined {
+    authorize(this.state, ctx, input.workspaceId, action);
     const prior = this.state.get<D.CommitReceipt>(`receipt:${input.commitId}`);
-    if (prior)
+    if (prior) {
       requireThat(
         prior.commitDigest === input.commitDigest,
         "conflict",
         "Commit ID reused with different digest",
       );
+      if (action === "workspace.write") {
+        const upload =
+          prior.providerKind === "computer"
+            ? this.state.get<UploadRecord>(`upload:${prior.storeRef.uploadId}`)
+            : undefined;
+        const local =
+          prior.providerKind === "local"
+            ? this.state.get<D.LocalCommitIntent>(`local-intent:${prior.commitId}`)
+            : undefined;
+        const lease = upload?.request.lease ?? local?.scope.lease;
+        requireThat(
+          lease &&
+            lease.workspaceId === prior.workspaceId &&
+            lease.baseRevision === prior.baseRevision &&
+            lease.operationId === prior.operationId &&
+            (lease.ownerKind === "job" ? lease.jobId === prior.jobId : prior.jobId === undefined),
+          "conflict",
+          "Stored publication operation mismatch",
+        );
+        authorizeReservedAction(this.state, ctx, lease, "workspace.write");
+      }
+    }
     return prior;
   }
   private publication(
@@ -2232,11 +2312,15 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       });
       return this.mutex.run(() =>
         this.state.transaction(() => {
-          const previous = this.receipt(ctx, {
-            workspaceId: intent.scope.workspaceId,
-            commitId: intent.commitId,
-            commitDigest: finalDigest,
-          });
+          const previous = this.receipt(
+            ctx,
+            {
+              workspaceId: intent.scope.workspaceId,
+              commitId: intent.commitId,
+              commitDigest: finalDigest,
+            },
+            "workspace.write",
+          );
           if (previous) return previous;
           const pending = this.state.get<D.LocalCommitIntent>(`local-intent:${intent.commitId}`);
           requireThat(
@@ -2410,7 +2494,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     result: WorkspaceRuntimeResult<"utf8">,
   ): Promise<D.ByteReference[]> {
     const authority = this.current();
-    authorize(this.state, ctx, authority.workspaceId, "workspace.read");
+    authorizeReservedAction(this.state, ctx, identity.lease, "workspace.write");
     const reservation = this.state.get<D.TargetReservation>(
       `reservation:${identity.lease.leaseId}`,
     );
@@ -2474,7 +2558,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       }
     const references = await this.mutex.run(() =>
       this.state.transaction(() => {
-        authorize(this.state, ctx, authority.workspaceId, "workspace.read");
+        authorizeReservedAction(this.state, ctx, identity.lease, "workspace.write");
         const repeated = this.state.get<D.ByteReference[]>(
           `artifacts-execution:${identity.executionId}`,
         );
@@ -2554,6 +2638,12 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const envelope = JSON.parse(raw) as InternalContext;
       const { auth } = envelope;
       const url = new URL(request.url);
+      if (url.pathname === "/__fortipi/terminal-proof") {
+        requireThat(request.method === "POST", "invalid_request", "Terminal proof requires POST");
+        const input = await boundedJson<unknown>(request, 65_536);
+        const proof = await this.mutex.run(() => terminalProof(this, auth, input));
+        return Response.json(proof, { headers: { "Cache-Control": "no-store" } });
+      }
       if (url.pathname.startsWith("/__fortipi/authority/")) {
         const action = url.pathname.split("/").at(-1);
         if (action === "prepare")
@@ -3323,7 +3413,10 @@ function requestRange(request: Request, size: number): { start: number; end: num
   requireThat(!query || same(query, range), "invalid_request", "Header and query range disagree");
   return range;
 }
-export async function boundedJson<T>(request: Request, maximum = wireLimits.jsonBytes): Promise<T> {
+export async function boundedJson<T>(
+  request: Request,
+  maximum: number = wireLimits.jsonBytes,
+): Promise<T> {
   requireThat(request.body, "invalid_request", "Missing request body");
   const reader = request.body.getReader();
   const timer = setTimeout(() => {

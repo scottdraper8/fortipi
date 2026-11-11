@@ -303,9 +303,26 @@ export default {
     if (request.headers.get("x-test-no-grants") === "1") ctx.grants = [];
     if (request.headers.get("x-test-artifacts-only") === "1")
       for (const grant of ctx.grants) grant.resources.actions = ["artifacts.read"];
+    if (request.headers.get("x-test-write-only") === "1")
+      for (const grant of ctx.grants) grant.resources.actions = ["workspace.write"];
+    if (request.headers.get("x-test-read-only") === "1")
+      for (const grant of ctx.grants) grant.resources.actions = ["workspace.read"];
+    if (request.headers.get("x-test-recovery") === "1") {
+      ctx.credentialId = "recovery-credential";
+      ctx.registrationId = "recovery-registration";
+    }
+    if (request.headers.get("x-test-unregistered") === "1") delete ctx.registrationId;
     if (request.headers.get("x-test-other-conversation") === "1")
       for (const grant of ctx.grants) grant.resources.conversationIds = ["other"];
     const authority = env.WORKSPACES.getByName("workspace");
+    if (url.pathname === "/terminal-proof")
+      return authority.fetch(
+        new Request("https://workspace.internal/__fortipi/terminal-proof", {
+          method: request.method,
+          headers: { [internalHeader]: JSON.stringify({ auth: ctx }) },
+          ...(request.body ? { body: request.body } : {}),
+        }),
+      );
     if (url.pathname === "/artifact-observation")
       return env.CONTROL_PLANE.getByName("control").fetch(
         new Request("https://control.internal/__test/artifact-observation"),

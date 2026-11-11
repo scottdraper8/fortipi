@@ -88,6 +88,71 @@ export function authorize(
     "Workspace grant required",
   );
 }
+/** Historical immutable identity; renewal observations never rewrite the original authority. */
+export function immutableLease(lease: D.Lease) {
+  const { expiresAt: _expiry, leaseVersion: _version, ...identity } = lease;
+  return identity;
+}
+export function reservedLease(state: State, lease: D.Lease): D.TargetReservation {
+  const reservation = state.get<D.TargetReservation>(`reservation:${lease.leaseId}`);
+  const acquired = reservation
+    ? state.get<{ lease: D.Lease }>(`lease-acquire:${reservation.reservationId}`)
+    : undefined;
+  requireThat(
+    reservation &&
+      acquired &&
+      same(immutableLease(acquired.lease), immutableLease(lease)) &&
+      reservation.workspaceId === lease.workspaceId &&
+      reservation.operationId === lease.operationId &&
+      same(reservation.credential, lease.credential) &&
+      reservation.registrationIds.workspace === lease.registrationId &&
+      reservation.ownerKind === lease.ownerKind &&
+      (reservation.ownerKind !== "job" ||
+        (lease.ownerKind === "job" && reservation.jobId === lease.jobId)) &&
+      reservation.target.generation === lease.executorGeneration &&
+      (reservation.target.kind === "executor"
+        ? reservation.target.executorId
+        : reservation.target.backendId) === lease.executorId,
+    "conflict",
+    "Original lease reservation mismatch",
+  );
+  return reservation;
+}
+/** Private operation proof only. Public read methods continue to require workspace.read. */
+export function authorizeReservedAction(
+  state: State,
+  ctx: D.AuthContext,
+  lease: D.Lease,
+  action: "workspace.read" | "workspace.write",
+): D.TargetReservation {
+  authorize(state, ctx, lease.workspaceId, action);
+  const reservation = reservedLease(state, lease);
+  requireThat(
+    (reservation.actions.includes(action) ||
+      (action === "workspace.read" && reservation.actions.includes("workspace.write"))) &&
+      (reservation.target.kind !== "executor" ||
+        reservation.target.generation >=
+          (state.get<number>(`floor:executor:${reservation.target.executorId}`) ?? 0)) &&
+      ctx.grants.some(
+        (grant) =>
+          (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+          permitsResource(grant.resources.workspaceIds, reservation.workspaceId) &&
+          permitsResource(grant.resources.actions, action) &&
+          (!reservation.agentId ||
+            permitsResource(grant.resources.agentIds, reservation.agentId)) &&
+          (!reservation.conversationId ||
+            permitsResource(grant.resources.conversationIds, reservation.conversationId)) &&
+          (reservation.target.kind === "executor"
+            ? permitsResource(grant.resources.executorIds, reservation.target.executorId)
+            : permitsResource(grant.resources.backendIds, reservation.target.backendId) ||
+              (reservation.ownerKind === "workspace-operation" &&
+                reservation.target.backendId === reservation.workspaceId)),
+      ),
+    "unauthorized",
+    "Current reserved operation grant or target generation required",
+  );
+  return reservation;
+}
 export function validateLease(
   state: State,
   authority: AuthorityRecord,

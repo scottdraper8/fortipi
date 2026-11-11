@@ -6,10 +6,19 @@ import { assignmentDigest, operationDigest } from "fortipi-contract";
 import type * as D from "../../src/boundary/dto.js";
 import { harness } from "./harness.ts";
 
-async function runFixture(source?: string, denied = false, cancelled = false): Promise<void> {
+async function runFixture(
+  source?: string,
+  denied = false,
+  cancelled = false,
+  writeOnly = false,
+): Promise<void> {
   const server = harness(true);
   async function call<T>(input: unknown): Promise<T> {
-    const response = await server.fetch("/rpc", { method: "POST", body: JSON.stringify(input) });
+    const response = await server.fetch("/rpc", {
+      method: "POST",
+      body: JSON.stringify(input),
+      ...(writeOnly ? { headers: { "x-test-write-only": "1" } } : {}),
+    });
     const result = (await response.json()) as D.Outcome<T>;
     if (!result.ok) assert.fail(JSON.stringify(result));
     return result.value;
@@ -317,4 +326,9 @@ test(
       false,
       true,
     ),
+);
+test(
+  "actual cloud-JS private preparation, output collection and publication require no public read grant",
+  { timeout: 60_000 },
+  () => runFixture(undefined, false, false, true),
 );

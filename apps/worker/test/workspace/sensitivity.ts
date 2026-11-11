@@ -11,6 +11,7 @@ const paths = [
   resolve(source, ".sensitivity-computer.ts"),
   resolve(source, ".sensitivity-workspace-object.ts"),
   resolve(tests, ".sensitivity-runtime-worker.ts"),
+  resolve(source, ".sensitivity-terminal-proof.ts"),
 ];
 async function run(
   file: string,
@@ -42,11 +43,19 @@ const authority = await readFile(resolve(source, "authority.ts"), "utf8");
 const computer = await readFile(resolve(source, "computer.ts"), "utf8");
 const workspace = await readFile(resolve(source, "workspace-object.ts"), "utf8");
 const fixture = await readFile(resolve(tests, "runtime-worker.ts"), "utf8");
+const terminal = await readFile(resolve(source, "terminal-proof.ts"), "utf8");
 await mkdir(resolve(root, "apps/worker/dist"), { recursive: true });
 try {
-  for (const mutant of ["generation", "expiry", "seal"] as const) {
+  for (const mutant of [
+    "generation",
+    "expiry",
+    "seal",
+    "writer-receipt",
+    "terminal-scope",
+  ] as const) {
     let changedAuthority = authority;
     let changedComputer = computer;
+    let changedWorkspace = workspace;
     if (mutant === "generation")
       changedAuthority = authority.replace(
         /active\.executorGeneration\s*>=\s*\(state\.get<number>\(`floor:executor:\$\{active\.executorId\}`\) \?\? 0\)/,
@@ -59,17 +68,34 @@ try {
         'state.state === "writable" &&',
         '(state.state === "writable" || state.state === "sealed") &&',
       );
+    if (mutant === "writer-receipt")
+      changedWorkspace = workspace.replace(
+        'this.receipt(ctx, input, "workspace.write")',
+        "this.receipt(ctx, input)",
+      );
+    if (mutant === "terminal-scope")
+      changedAuthority = authority.replace(
+        /\(!reservation\.conversationId\s*\|\|\s*permitsResource\(grant\.resources\.conversationIds, reservation\.conversationId\)\)/,
+        "true",
+      );
     assert.ok(
-      changedAuthority !== authority || changedComputer !== computer,
+      changedAuthority !== authority ||
+        changedComputer !== computer ||
+        changedWorkspace !== workspace,
       `Mutation ${mutant} did not apply`,
     );
     await writeFile(paths[0] ?? "", changedAuthority);
     await writeFile(paths[1] ?? "", changedComputer);
     await writeFile(
       paths[2] ?? "",
-      workspace
+      changedWorkspace
         .replace('from "./authority.js"', 'from "./.sensitivity-authority.js"')
-        .replace('from "./computer.js"', 'from "./.sensitivity-computer.js"'),
+        .replace('from "./computer.js"', 'from "./.sensitivity-computer.js"')
+        .replace('from "./terminal-proof.js"', 'from "./.sensitivity-terminal-proof.js"'),
+    );
+    await writeFile(
+      paths[4] ?? "",
+      terminal.replace('from "./authority.js"', 'from "./.sensitivity-authority.js"'),
     );
     await writeFile(
       paths[3] ?? "",
@@ -79,8 +105,12 @@ try {
       ),
     );
     const result = await run(
-      mutant === "generation" ? "workspace.test.ts" : "isolation.test.ts",
-      mutant === "generation" ? undefined : "sealed children",
+      mutant === "generation"
+        ? "workspace.test.ts"
+        : mutant === "expiry" || mutant === "seal"
+          ? "isolation.test.ts"
+          : "terminal-proof.test.ts",
+      mutant === "expiry" || mutant === "seal" ? "sealed children" : undefined,
     );
     await writeFile(resolve(root, `apps/worker/dist/sensitivity-${mutant}.log`), result.output);
     assert.notEqual(result.code, 0, `The ${mutant} regression escaped the real runtime oracle`);
@@ -90,7 +120,11 @@ try {
           ? "Sealed-store mutation was accepted"
           : mutant === "expiry"
             ? "Expired lease published a revision"
-            : "Revoked generation published a revision",
+            : mutant === "generation"
+              ? "Revoked generation published a revision"
+              : mutant === "writer-receipt"
+                ? "Workspace grant required"
+                : "Wrong conversation received a terminal proof",
       ),
       `Mutation failed for an unintended reason: ${result.output.slice(-3000)}`,
     );

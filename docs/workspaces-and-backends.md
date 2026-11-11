@@ -53,6 +53,24 @@ including the current workspace registration. These paths invoke the same method
 fences and durable ledgers. Direct deeply recursive stub calls hit the platform's
 TypeScript recursion limit; they are not the compiled or tested transport here.
 
+Private publication and store observations use the caller's actual reserved
+workspace action and the saved allocation/lease/reservation scope. A writer can
+copy retained bytes into a full new revision and recover its publication receipt
+without receiving public read permission. Public file/stat/manifest/receipt reads
+still require `workspace.read`.
+
+`POST /__fortipi/terminal-proof` accepts at most 64 KiB of the existing
+`JobCommitted` JSON, with the same server-constructed context header. It checks
+the historical acquired lease, known job/execution/operation reservation, current
+registered caller's scope and floors, and an actual projected receipt or retained
+unchanged base. Committed proof requires write; unchanged proof permits read or
+write. Success returns the same validated JSON with `Cache-Control: no-store`.
+A current authorized recovery credential may differ from the historical job's
+credential; historical lease expiry is not renewed or rewritten. ControlPlane
+still checks the native assignment digest, and AgentSession must prove the actual
+terminal version/event coordinates. This workspace proof does not attest those
+independent records or native execution.
+
 An unreferenced expired child is permanently tombstoned at its authority before
 physical deletion. Cleanup drains handles, closes Computer and uses supported
 `storage.deleteAll()` on the disposable child. The authority and retained revisions
