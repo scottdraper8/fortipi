@@ -71,6 +71,19 @@ and authenticatedAt stay unchanged. Full grants do not belong in the bounded
 actual native JSON-only pre-upgrade guard. The namespace stream fixture proves
 the CP handoff, not the Agent/Pi implementation.
 
+After readiness, a registered Agent can resolve its selected model through
+existing CP `fetch`: query-free `GET /internal/agents/{agentId}/model`, with its
+current canonical `X-Fortipi-Context`. CP requires its exact own-Agent registration
+and one current covering model-using logical grant, then returns only the actual
+persisted `ModelConfig` as no-store JSON. `X-Fortipi-Agent-Config-Version` identifies
+the same retained Agent row's version. This includes configured secret references,
+never provider credentials or secret values. Raw application grants, another
+Agent, stale refs/floors, expired grants and read-only/ambiguous operations cannot
+use this private lane. Authority envelopes are bounded to64KiB UTF-8. Public
+`describeAgent`/HTTP reads still require `agents.read`. The outer Worker must
+reject public access to internal paths and caller authority headers; Agent5 owns
+that guard and invokes this handoff after readiness, with no CP startup network.
+
 An executor's application credential generation, execution generation and socket
 connection epoch are separate. Reconnect increments only the epoch. Restoring a
 lost execution ledger requires explicit new-generation authorization. The
