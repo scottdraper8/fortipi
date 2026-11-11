@@ -7762,38 +7762,7 @@
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/zod@4.6.7; Sigstore transparency verification required at release"
     }
   },
-  "exemptions": {
-    "@unstale/cli-darwin-arm64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:10:04.621Z",
-      "integrity": "sha512-DFW8XPHq4mmrF5ikQHsO2uH0P0HxUW4Oq9R9839AsqvBNi0+xiss41hmY5DfSa4KSsucTbOnxBEm55ElKJI5Gw=="
-    },
-    "@unstale/cli-darwin-x64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:09:08.126Z",
-      "integrity": "sha512-dMPwjCmfAJPJrPIQY+ifb2C+cKS1pz+wLBP+P3GyzNVaiRTcEv1hrq/QF9V1I1mf/QCCwT1m+tGIFW+qxv7aJA=="
-    },
-    "@unstale/cli-linux-arm64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:09:22.116Z",
-      "integrity": "sha512-yV58+ZQFuCBhpGLebAp3Ir+RbwA0af0zd13bRsDrWhffF9O+4leSEgk63Pz+xtPNNTBXnr+xt0CXdGZrCV+XZg=="
-    },
-    "@unstale/cli-linux-x64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:07:23.542Z",
-      "integrity": "sha512-HuVv/qK6KqRrXm7ugckaVllahCKju8hmeMO+Cw9uZpUmfGHhggutl2o0mW9eA6xblZJ3V340qX2MTIymzgCzcg=="
-    },
-    "@unstale/cli-win32-x64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:07:53.527Z",
-      "integrity": "sha512-2R93KzKWxkeX3TsAGfXRUfj3XYqQoNtmI4ctOZky72+Z5KlY30DOXVD8kTlQuXjAMOzvZQpkTYiq5bTtkD7osw=="
-    },
-    "@unstale/cli@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:08:27.771Z",
-      "integrity": "sha512-bg4rFUiut6gzpNZlF3sZIPFMjeCVLphy8hVVQ2XpiQxmlPhGDQkBOCargFV5ygdAGmo8mdNjYrkUwLRB8LWaFw=="
-    }
-  },
+  "exemptions": {},
   "advisory": {
     "checkedAt": "2026-11-11T01:19:13.255Z",
     "identities": 381,
