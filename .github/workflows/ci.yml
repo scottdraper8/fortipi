@@ -179,4 +179,8 @@ jobs:
         timeout-minutes: 3
       - run: pnpm run build:executor
       - run: pnpm run typecheck:executor
+      - name: Probe Windows startup and state protection
+        if: runner.os == 'Windows'
+        timeout-minutes: 2
+        run: node packages/fortipi-executor/test/fixtures/daemon.ts windows-probe
       - run: pnpm run test:executor
