@@ -7,6 +7,7 @@ import type * as D from "../boundary/dto.js";
 export async function retainedModelConfigurations(
   store: Store,
   selected?: D.ModelConfig,
+  includeStoredSelection = true,
 ): Promise<{
   catalog: D.ModelConfig[];
   configurations: D.ModelConfig[];
@@ -16,7 +17,11 @@ export async function retainedModelConfigurations(
     // Historical catalog entries are not requirements. Only the current
     // selection and persisted unfinished work may require provider auth.
     const catalog = new Map<string, D.ModelConfig>();
-    const current = selected ?? (await store.get<D.ModelConfig>("meta", "selected-model", tx));
+    const current =
+      selected ??
+      (includeStoredSelection
+        ? await store.get<D.ModelConfig>("meta", "selected-model", tx)
+        : undefined);
     if (current) {
       validate<D.ModelConfig>("ModelConfig", current);
       catalog.set(current.providerId, current);

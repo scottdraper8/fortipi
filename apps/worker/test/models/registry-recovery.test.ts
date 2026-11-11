@@ -30,6 +30,7 @@ type Facts = {
 type State = {
   settled: boolean;
   selectedAuth: string | null;
+  selectedProvider: string | null;
   expiredAfterCommit: boolean;
   openaiBindingPresent: boolean;
   ready: boolean;
@@ -218,7 +219,58 @@ test("finished historical provider with removed optional binding cannot veto cur
   }
 });
 
-test("removing the CURRENT provider binding still rejects real startup without ambient fallback", {
+test("cold CP selection change applies on first request before unused local credentials are required", {
+  timeout: 45000,
+}, async () => {
+  const h = await fixture();
+  try {
+    const agent = await create(h, openai),
+      cid = await conversation(h, agent);
+    await complete(h, agent, cid);
+    await h.api(`/__models/${agent}/canary`, {}, "PUT");
+    await select(h, agent, anthropic);
+    const before = (await h.api<State>(`/__models/${agent}/state`)).body;
+    assert.equal(before.settled, true);
+    assert.equal(
+      before.selectedProvider,
+      "openai",
+      "No B operation may update local selection before death",
+    );
+    await h.crash();
+    await h.bindings(true);
+    await h.start();
+    const state = await h.api<State>(`/__models/${agent}/state`);
+    const proof = {
+      localSelectionStillA: before.selectedProvider === "openai",
+      coldReady: state.status === 200 && state.body.ready === true,
+      missingBoundCredential: state.body.missingBoundCredential === true,
+    };
+    console.log(JSON.stringify(proof));
+    assert.equal(
+      proof.coldReady,
+      true,
+      "Cold startup must let the authorized caller resolve current CP selection",
+    );
+    assert.equal(state.body.openaiBindingPresent, false);
+    assert.equal(
+      (await h.api<{ committed: boolean }>(`/__models/${agent}/canary`)).body.committed,
+      true,
+    );
+    const history = await h.api<D.ConversationProjection>(`/v1/conversations/${cid}`);
+    assert.equal(history.status, 200);
+    assert.ok(history.body.messages.some((message) => message.content === "openai-answer"));
+    await complete(h, agent, cid);
+    const after = (await h.api<State>(`/__models/${agent}/state`)).body;
+    assert.equal(after.selectedProvider, "anthropic");
+    const facts = (await h.api<Facts>(`/__models/${agent}/facts`)).body;
+    assert.equal(facts.openai.calls, 0);
+    assert.equal(facts.anthropic.authorized, true);
+  } finally {
+    await h.close();
+  }
+});
+
+test("missing CURRENT provider auth rejects new work after read-only startup without ambient fallback", {
   timeout: 30000,
 }, async () => {
   const h = await fixture();
@@ -230,9 +282,18 @@ test("removing the CURRENT provider binding still rejects real startup without a
     await h.bindings(true);
     await h.start();
     const state = await h.api<State>(`/__models/${agent}/state`);
-    assert.equal(state.status, 500);
-    assert.equal(state.body.ready, false);
-    assert.equal(state.body.missingBoundCredential, true);
+    assert.equal(state.status, 200);
+    assert.equal(state.body.ready, true);
+    assert.equal(state.body.openaiBindingPresent, false);
+    const rejected = await h.api<{ error: D.ProtocolError }>(`/v1/conversations/${cid}/messages`, {
+      clientRequestId: crypto.randomUUID(),
+      content: "missing current credential",
+      busyBehavior: "followUp",
+    });
+    assert.equal(rejected.status, 401);
+    assert.equal(rejected.body.error.code, "unauthenticated");
+    const facts = (await h.api<Facts>(`/__models/${agent}/facts`)).body;
+    assert.equal(facts.openai.calls, 0);
   } finally {
     await h.close();
   }

@@ -14,6 +14,7 @@ try {
     "latest-only",
     "stale-installed-auth",
     "historical-auth",
+    "cold-stored-selection",
   ] as const) {
     const outfile = join(directory, `${fault}.js`);
     let changes = 0;
@@ -44,7 +45,7 @@ try {
                     "this.#modelRegistry.setProvider(installed.models.getProvider(selected.providerId));",
                   ],
                   "latest-only": [
-                    "const { configurations, selected } = await retainedModelConfigurations(this.store);",
+                    "const { configurations, selected } = await retainedModelConfigurations(\n      this.store,\n      undefined,\n      false,\n    );",
                     'const selected = await this.store.get("meta", "selected-model"); const configurations = selected ? [selected] : [];',
                   ],
                   "stale-installed-auth": [
@@ -55,6 +56,7 @@ try {
                     "const configurations = [...catalog.values()];",
                     'const configurations = [...catalog.values()]; for (const config of (await store.get<D.ModelConfig[]>("meta", "model-catalog", tx)) ?? []) { if (!catalog.has(config.providerId)) { catalog.set(config.providerId, config); configurations.push(config); } }',
                   ],
+                  "cold-stored-selection": ["\n      false,\n    );", "\n      true,\n    );"],
                 };
                 const [needle, replacement] = mutations[fault];
                 assert.ok(needle !== undefined && replacement !== undefined);
@@ -69,13 +71,35 @@ try {
       ],
     });
     assert.equal(changes, 1);
-    const args = [
-      "--test",
-      `--test-name-pattern=${fault === "provider-only" ? "first real" : fault === "latest-only" ? "cross-provider" : fault === "stale-installed-auth" ? "postcommit" : "finished historical"}`,
-      fault === "provider-only" || fault === "latest-only"
-        ? "apps/worker/test/models/agent-auth.test.ts"
-        : "apps/worker/test/models/registry-recovery.test.ts",
-    ];
+    const [pattern, suite, evidence] = {
+      "provider-only": [
+        "first real",
+        "agent-auth.test.ts",
+        '"reachedProvider":false,"correctBoundCredential":false',
+      ],
+      "latest-only": [
+        "cross-provider",
+        "agent-auth.test.ts",
+        '"canarySurvived":true,"oldProviderReached":false,"oldCredentialCorrect":false',
+      ],
+      "stale-installed-auth": [
+        "postcommit",
+        "registry-recovery.test.ts",
+        '"selectionCommitted":true,"finalAuthorityRejected":true,"oauthUsed":false,"staleApiKeyReused":true',
+      ],
+      "historical-auth": [
+        "finished historical",
+        "registry-recovery.test.ts",
+        '"currentProviderReady":false,"missingBoundCredential":true',
+      ],
+      "cold-stored-selection": [
+        "cold CP",
+        "registry-recovery.test.ts",
+        '"localSelectionStillA":true,"coldReady":false,"missingBoundCredential":true',
+      ],
+    }[fault];
+    assert.ok(pattern && suite && evidence);
+    const args = ["--test", `--test-name-pattern=${pattern}`, `apps/worker/test/models/${suite}`];
     let code = 0,
       output = "";
     try {
@@ -92,18 +116,7 @@ try {
       output = (failed.stdout ?? "") + (failed.stderr ?? "");
     }
     assert.equal(code, 1, `${fault}: actual behavioral oracle must fail`);
-    assert.ok(
-      output.includes(
-        fault === "provider-only"
-          ? '"reachedProvider":false,"correctBoundCredential":false'
-          : fault === "latest-only"
-            ? '"canarySurvived":true,"oldProviderReached":false,"oldCredentialCorrect":false'
-            : fault === "stale-installed-auth"
-              ? '"selectionCommitted":true,"finalAuthorityRejected":true,"oauthUsed":false,"staleApiKeyReused":true'
-              : '"currentProviderReady":false,"missingBoundCredential":true',
-      ),
-      output,
-    );
+    assert.ok(output.includes(evidence), output);
     assert.ok(
       output.includes("AssertionError"),
       "Each fault must reach its named behavioral assertion",

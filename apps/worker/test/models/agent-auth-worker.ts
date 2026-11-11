@@ -230,6 +230,7 @@ export class TestAgentSession extends AgentSession {
       return Response.json({
         settled: admissions.every((row) => row.value.state === "settled"),
         selectedAuth: selected && "auth" in selected ? selected.auth.kind : null,
+        selectedProvider: selected?.providerId ?? null,
         expiredAfterCommit: this.#expiredAfterCommit,
         openaiBindingPresent: !!this.env.OPENAI_API_KEY,
         ready: this.lifecycle.isStarted(),

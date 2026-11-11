@@ -209,7 +209,13 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       .use(this.#sockets);
   }
   async #models() {
-    const { configurations, selected } = await retainedModelConfigurations(this.store);
+    // Local selection may lag a CP change while idle. Startup restores pending
+    // work only; a new caller supplies authority to resolve the current model.
+    const { configurations, selected } = await retainedModelConfigurations(
+      this.store,
+      undefined,
+      false,
+    );
     const result =
       configurations.length === 0 && !this.#testModelBuilder
         ? { ok: true as const, value: bootstrapModels() }
