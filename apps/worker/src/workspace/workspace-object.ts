@@ -2877,7 +2877,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       if (url.pathname === "/__fortipi/execution/permit")
         return this.execution.permit(request, envelope.auth);
       if (url.pathname === "/__fortipi/execution/observed")
-        return this.execution.observed(request, envelope.allocation);
+        return this.execution.observed(request, envelope.allocation, auth);
       if (url.pathname.startsWith("/__fortipi/execution/"))
         return this.execution.fetch(request, envelope, this.#childStore());
       if (!url.pathname.startsWith("/__fortipi/store/")) {

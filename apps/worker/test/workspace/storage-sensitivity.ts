@@ -86,33 +86,48 @@ try {
     config,
     JSON.stringify({ extends: "../tsconfig.json", include: [], files: [entry, controlEntry] }),
   );
-  for (const fault of ["pending", "copies", "survey", "activation", "settlement"] as const) {
+  const hosts = process.argv.includes("--hosts");
+  const faults = hosts
+    ? (["host-copies", "host-credit"] as const)
+    : (["pending", "copies", "survey", "activation", "settlement"] as const);
+  for (const fault of faults) {
     const changed =
-      fault === "pending"
-        ? pool.replace("uploadOperation &&", "true &&")
-        : fault === "copies"
-          ? pool.replace(
-              /observed \+= owner\.state\.get<number>\(`storage-observed:\$\{allocation.childId\}`\) \?\? 0;/,
-              "observed += 0;",
-            )
-          : fault === "survey"
-            ? pool.replace("this.survey() === before", "true")
-            : fault === "settlement"
-              ? pool.replace("await this.settleCompleted(ctx);", "// Missing completion settlement")
-              : pool.replace(
-                  /this\.owner\.state\.get\((`storage-initialized:[^`]+`)\)/g,
-                  "(this.owner.state.get($1) ?? true)",
-                );
+      fault === "host-copies"
+        ? pool.replace("Object.values(hosts).reduce((sum, bytes) => sum + bytes, 0)", "0")
+        : fault === "host-credit"
+          ? pool.replace("unspent += metadataCredit;", "// Missing Host metadata growth coverage")
+          : fault === "pending"
+            ? pool.replace("uploadOperation &&", "true &&")
+            : fault === "copies"
+              ? pool.replace(
+                  /observed \+= owner\.state\.get<number>\(`storage-observed:\$\{allocation.childId\}`\) \?\? 0;/,
+                  "observed += 0;",
+                )
+              : fault === "survey"
+                ? pool.replace("this.survey() === before", "true")
+                : fault === "settlement"
+                  ? pool.replace(
+                      "await this.settleCompleted(ctx);",
+                      "// Missing completion settlement",
+                    )
+                  : pool.replace(
+                      /this\.owner\.state\.get\((`storage-initialized:[^`]+`)\)/g,
+                      "(this.owner.state.get($1) ?? true)",
+                    );
     assert.notEqual(changed, pool, `Fault did not apply: ${fault}`);
-    await writeFile(poolPath, changed);
+    await writeFile(
+      poolPath,
+      changed.replaceAll('"./workspace-object.js"', '"./.storage-workspace.js"'),
+    );
     const compiled = await run([resolve(root, "node_modules/typescript/bin/tsc"), "-p", config]);
     assert.equal(
       compiled.code,
       0,
       `Fault failed unchanged strict Worker compile: ${compiled.output}`,
     );
-    const pattern =
-      fault === "pending"
+    const pattern = hosts
+      ? "Workspace census counts Host"
+      : fault === "pending"
         ? "unknown actual Loader"
         : fault === "activation"
           ? "physical census preserves"
@@ -125,7 +140,7 @@ try {
         `--test-name-pattern=${pattern}`,
         resolve(
           root,
-          `apps/worker/test/workspace/${fault === "settlement" ? "storage-settlement" : "storage"}.test.ts`,
+          `apps/worker/test/workspace/${hosts ? "host-storage" : fault === "settlement" ? "storage-settlement" : "storage"}.test.ts`,
         ),
       ],
       true,

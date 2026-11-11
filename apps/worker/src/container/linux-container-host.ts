@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
+import { linuxHostId } from "../backends/linux.js";
 import type { Env } from "../boundary/env.js";
 import { requireThat } from "../workspace/errors.js";
 import { ContainerHostTransport } from "./host-transport.js";
@@ -23,11 +24,38 @@ export class LinuxContainerHost extends DurableObject<Env> {
     return configured;
   }
   #host(): ContainerHostTransport {
-    this.#configuredImage();
+    const container = this.ctx.container;
+    requireThat(container, "unsupported", "Owning native container context is unavailable");
     this.#transport ??= new ContainerHostTransport(
       this.ctx.storage,
       new WorkspaceContainerAPI(this.ctx),
       () => this.#configuredImage(),
+      { inspect: () => container.inspect(), destroy: () => container.destroy() },
+      {
+        policyVersion: () => this.env.FORTIPI_CONFIG.infrastructure.version,
+        validate: (context, activation) => {
+          requireThat(
+            this.env.LINUX_CONTAINERS?.idFromName(context.hostId).equals(this.ctx.id) &&
+              context.hostId.endsWith(
+                `:${this.env.WORKSPACES.idFromName(context.childId).toString()}`,
+              ),
+            "unauthorized",
+            "Exact physical Host namespace and child identity required",
+          );
+          if (activation)
+            requireThat(
+              "execution" in this.env.FORTIPI_CONFIG &&
+                this.env.FORTIPI_CONFIG.execution.kind === "linux" &&
+                context.hostId ===
+                  linuxHostId(
+                    this.env.FORTIPI_CONFIG.execution.host,
+                    this.env.WORKSPACES.idFromName(context.childId).toString(),
+                  ),
+              "conflict",
+              "Selected backend does not own this Host context",
+            );
+        },
+      },
     );
     return this.#transport;
   }

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { createHash } from "node:crypto";
 import type * as D from "../../src/boundary/dto.js";
 import type { Env } from "../../src/boundary/env.js";
+import type { RuntimeHostContext } from "../../src/boundary/infrastructure.js";
 import { outcome } from "../../src/workspace/errors.js";
 import { jobSnapshot } from "../../src/workspace/job-snapshot.js";
 import { admitLocalUpload } from "../../src/workspace/local-admission.js";
@@ -11,6 +12,8 @@ import {
   internalHeader,
   WorkspaceObject as WorkspaceBase,
 } from "../../src/workspace/workspace-object.js";
+
+export { HostProbe } from "../backends/host-rpc-worker.js";
 
 /** Actual binding application plus a test-only post-transaction response barrier. */
 export class WorkspaceObject extends WorkspaceBase {
@@ -222,6 +225,54 @@ export class WorkspaceObject extends WorkspaceBase {
         census: this.state.get("storage-census"),
         report: this.state.get("storage-report"),
       });
+    if (path === "/__test/storage-native-ack") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      const body = await request.json<{ allocation: D.StoreAllocation; observation: unknown }>();
+      return super.fetch(
+        new Request("https://workspace.internal/__fortipi/execution/observed", {
+          method: "POST",
+          headers: { [internalHeader]: JSON.stringify({ auth, allocation: body.allocation }) },
+          body: JSON.stringify(body.observation),
+        }),
+      );
+    }
+    if (path === "/__test/storage-host-register" || path === "/__test/storage-host-ack") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      const body = await request.json<{
+        allocation: D.StoreAllocation;
+        config: Extract<D.BackendConfig, { kind: "linux" }>;
+        context?: RuntimeHostContext;
+        runtimeId?: string;
+      }>();
+      await this.registry(auth, {
+        allocationId: body.allocation.allocationId,
+        childId: body.allocation.childId,
+        authorityId: body.allocation.authorityId,
+        workspaceId: body.allocation.workspaceId,
+      });
+      const pool = new WorkspaceStorage(this);
+      if (path.endsWith("register")) {
+        const initialized = await this.stub(body.allocation.childId).initializeStore(
+          auth,
+          body.allocation,
+        );
+        if (!initialized.ok) return Response.json(initialized, { status: 409 });
+        await pool.initialized(auth, body.allocation);
+      }
+      return Response.json(
+        await this.mutex.run(() =>
+          this.state.transaction(() => {
+            const context = pool.registerHost(auth, body.allocation, body.config);
+            if (body.runtimeId) pool.acknowledgeHost(context, body.runtimeId);
+            return context;
+          }),
+        ),
+      );
+    }
     if (path === "/__test/storage-role")
       return Response.json(
         await outcome(() => {
