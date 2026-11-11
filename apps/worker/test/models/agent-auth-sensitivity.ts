@@ -9,7 +9,12 @@ import { build } from "esbuild";
 
 const directory = await mkdtemp(join(tmpdir(), "fortipi-auth-fault-"));
 try {
-  for (const fault of ["provider-only", "latest-only"] as const) {
+  for (const fault of [
+    "provider-only",
+    "latest-only",
+    "stale-installed-auth",
+    "historical-auth",
+  ] as const) {
     const outfile = join(directory, `${fault}.js`);
     let changes = 0;
     await build({
@@ -28,22 +33,37 @@ try {
         {
           name: "owned-model-regression",
           setup(builder) {
-            builder.onLoad({ filter: /src\/agent\/agent-session\.ts$/ }, async (args) => {
-              let contents = await readFile(args.path, "utf8");
-              const needle =
-                fault === "provider-only"
-                  ? "this.#modelRegistry = installed.models;"
-                  : "const { configurations } = await retainedModelConfigurations(this.store);";
-              assert.equal(contents.split(needle).length, 2);
-              contents = contents.replace(
-                needle,
-                fault === "provider-only"
-                  ? "this.#modelRegistry.setProvider(installed.models.getProvider(selected.providerId));"
-                  : 'const selected = await this.store.get("meta", "selected-model"); const configurations = selected ? [selected] : [];',
-              );
-              changes++;
-              return { contents, loader: "ts" };
-            });
+            builder.onLoad(
+              { filter: /src\/(agent\/agent-session|models\/retained)\.ts$/ },
+              async (args) => {
+                if (args.path.endsWith("retained.ts") !== (fault === "historical-auth")) return;
+                let contents = await readFile(args.path, "utf8");
+                const mutations = {
+                  "provider-only": [
+                    "this.#modelRegistry = installed.models;",
+                    "this.#modelRegistry.setProvider(installed.models.getProvider(selected.providerId));",
+                  ],
+                  "latest-only": [
+                    "const { configurations, selected } = await retainedModelConfigurations(this.store);",
+                    'const selected = await this.store.get("meta", "selected-model"); const configurations = selected ? [selected] : [];',
+                  ],
+                  "stale-installed-auth": [
+                    "!same(this.#installedModelConfiguration ?? null, selected) ||",
+                    "",
+                  ],
+                  "historical-auth": [
+                    "const configurations = [...catalog.values()];",
+                    'const configurations = [...catalog.values()]; for (const config of (await store.get<D.ModelConfig[]>("meta", "model-catalog", tx)) ?? []) { if (!catalog.has(config.providerId)) { catalog.set(config.providerId, config); configurations.push(config); } }',
+                  ],
+                };
+                const [needle, replacement] = mutations[fault];
+                assert.ok(needle !== undefined && replacement !== undefined);
+                assert.equal(contents.split(needle).length, 2);
+                contents = contents.replace(needle, replacement);
+                changes++;
+                return { contents, loader: "ts" };
+              },
+            );
           },
         },
       ],
@@ -51,8 +71,10 @@ try {
     assert.equal(changes, 1);
     const args = [
       "--test",
-      `--test-name-pattern=${fault === "provider-only" ? "first real" : "cross-provider"}`,
-      "apps/worker/test/models/agent-auth.test.ts",
+      `--test-name-pattern=${fault === "provider-only" ? "first real" : fault === "latest-only" ? "cross-provider" : fault === "stale-installed-auth" ? "postcommit" : "finished historical"}`,
+      fault === "provider-only" || fault === "latest-only"
+        ? "apps/worker/test/models/agent-auth.test.ts"
+        : "apps/worker/test/models/registry-recovery.test.ts",
     ];
     let code = 0,
       output = "";
@@ -74,13 +96,17 @@ try {
       output.includes(
         fault === "provider-only"
           ? '"reachedProvider":false,"correctBoundCredential":false'
-          : '"canarySurvived":true,"oldProviderReached":false,"oldCredentialCorrect":false',
+          : fault === "latest-only"
+            ? '"canarySurvived":true,"oldProviderReached":false,"oldCredentialCorrect":false'
+            : fault === "stale-installed-auth"
+              ? '"selectionCommitted":true,"finalAuthorityRejected":true,"oauthUsed":false,"staleApiKeyReused":true'
+              : '"currentProviderReady":false,"missingBoundCredential":true',
       ),
       output,
     );
     assert.ok(
       output.includes("AssertionError"),
-      "Compiler/startup failures are not sensitivity evidence",
+      "Each fault must reach its named behavioral assertion",
     );
     console.log(JSON.stringify({ fault, actualBehavioralFailure: true }));
   }

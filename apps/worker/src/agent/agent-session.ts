@@ -84,6 +84,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
   #hintScheduled = false;
   #observation: CommitObservation | undefined;
   #modelRegistry: MutableModels | undefined;
+  #installedModelConfiguration: D.ModelConfig | undefined;
   readonly #modelBuilder: typeof buildModels;
   readonly #testModelBuilder: boolean;
   constructor(ctx: DurableObjectState, env: Env, modelBuilder?: typeof buildModels) {
@@ -208,13 +209,16 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       .use(this.#sockets);
   }
   async #models() {
-    const { configurations } = await retainedModelConfigurations(this.store);
-    if (configurations.length === 0 && !this.#testModelBuilder)
-      return { ok: true as const, value: bootstrapModels() };
-    return this.#modelBuilder(configurations, this.env, {
-      agentId: this.agentId,
-      deploymentId: this.env.CONTROL_PLANE.idFromName("control").toString(),
-    });
+    const { configurations, selected } = await retainedModelConfigurations(this.store);
+    const result =
+      configurations.length === 0 && !this.#testModelBuilder
+        ? { ok: true as const, value: bootstrapModels() }
+        : await this.#modelBuilder(configurations, this.env, {
+            agentId: this.agentId,
+            deploymentId: this.env.CONTROL_PLANE.idFromName("control").toString(),
+          });
+    if (result.ok) this.#installedModelConfiguration = selected;
+    return result;
   }
   #selectedModel(auth: D.AuthContext): Promise<D.ModelConfig> {
     return configuredModel(this.env.CONTROL_PLANE.getByName("control"), this.agentId, auth);
@@ -261,6 +265,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
     const old = await this.store.get<D.ModelConfig>("meta", "selected-model");
     if (
       !same(old ?? null, selected) ||
+      !same(this.#installedModelConfiguration ?? null, selected) ||
       !this.#modelRegistry?.getModel(selected.providerId, selected.modelId)
     ) {
       const installed = await this.#installSelectedModel(selected, auth);
@@ -272,6 +277,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       });
       await this.authority.current(auth, resources);
       this.#modelRegistry = installed.models;
+      this.#installedModelConfiguration = selected;
     }
     return selected;
   }
