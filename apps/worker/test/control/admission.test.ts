@@ -297,7 +297,6 @@ test("registered completion survives new-admission pressure but each retry consu
     const settle = {
       reservationId: reserved.reservationId,
       disposition: "consumed" as const,
-      observedBytes: 4096,
     };
     const repairLimit = Math.floor(
       config.infrastructure.bounds.requestsPerInstallMinute *

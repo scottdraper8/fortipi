@@ -221,18 +221,24 @@ export class Capacity {
         "Capacity settlement requires its original current Agent operation",
       );
     else requireGrant(ctx, "capacity.settle");
+    check(
+      input.disposition === "consumed" || input.disposition === "unused",
+      "invalid_request",
+      "Unknown capacity settlement disposition",
+    );
     const settlement = {
       disposition: input.disposition,
       ...(input.observedBytes === undefined ? {} : { observedBytes: input.observedBytes }),
     };
     if (row.settlement) check(same(row.settlement, settlement), "conflict", "Settlement changed");
     check(
-      input.observedBytes !== undefined &&
-        Number.isSafeInteger(input.observedBytes) &&
-        input.observedBytes >= 0 &&
-        input.observedBytes <= row.reservation.bytes,
+      input.observedBytes === undefined
+        ? input.disposition === "consumed"
+        : Number.isSafeInteger(input.observedBytes) &&
+            input.observedBytes >= 0 &&
+            input.observedBytes <= row.reservation.bytes,
       "invalid_request",
-      "Settlement requires authoritative measured bytes",
+      "Explicit settlement measurements must fit the original reservation",
     );
     check(
       input.disposition !== "unused" || input.observedBytes === 0,
@@ -372,7 +378,10 @@ export class Capacity {
         check(same(row.settlement, settlement), "conflict", "Settlement changed");
         return row.reservation;
       }
-      check(input.observedBytes !== undefined, "invalid_request", "Measured bytes required");
+      // Unmeasured settled bytes remain reserved: public consumed accounting is
+      // observed usage. Keep the receipt field absent and the full charge intact;
+      // a later measured retry cannot rewrite this settlement identity.
+      const observedBytes = input.observedBytes;
       const totals = this.usage();
       const reservation = { ...row.reservation, state: "settled" as const };
       const updated = { ...row, reservation, settlement };
@@ -383,11 +392,12 @@ export class Capacity {
         updated,
       );
       this.store.put("capacity", "counters", {
-        reserved: totals.reserved - reservation.bytes,
-        consumed: totals.consumed + input.observedBytes,
+        reserved: totals.reserved - (observedBytes === undefined ? 0 : reservation.bytes),
+        consumed: totals.consumed + (observedBytes ?? 0),
         slots: totals.slots - reservation.admissionSlots,
       });
-      if (input.observedBytes < reservation.bytes) queueRepairResume(this.store, "reclaimed");
+      if (observedBytes !== undefined && observedBytes < reservation.bytes)
+        queueRepairResume(this.store, "reclaimed");
       return reservation;
     });
   }
