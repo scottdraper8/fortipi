@@ -371,7 +371,7 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
 if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === "windows-probe") {
   if (process.platform !== "win32")
     throw new Error("windows-probe requires an actual Windows host");
-  const { powershellArgs, windowsUtilityEnvironment } = await import(
+  const { powershellArgs, windowsUtilityEnvironment, verifyWindowsSqliteSidecar } = await import(
       "../../dist/platform/windows.js"
     ),
     execute = promisify(execFile),
@@ -530,6 +530,7 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
   const bclPassed = await runMarked("direct-bcl", bclSteps),
     started = performance.now();
   let aclPassed = false;
+  let sidecarPassed = false;
   let operation = "protect-directory";
   try {
     const p = adapter();
@@ -544,6 +545,86 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     process.stdout.write(
       `${JSON.stringify({ phase: "actual-dacl", elapsedMs: Math.round(performance.now() - started), protectedDirectoryAndFile: true })}\n`,
     );
+    operation = "sqlite-sidecar-eligibility";
+    const { link, mkdir, readFile, stat } = await import("node:fs/promises");
+    const database = join(path, "probe.sqlite"),
+      sidecar = `${database}-journal`,
+      bytes = Buffer.from("synthetic retained journal bytes");
+    await writeFile(database, "");
+    await p.protect(database, false);
+    async function security(command: string): Promise<string> {
+      const pending = execute(
+        executable,
+        powershellArgs(`$ErrorActionPreference='Stop';${command}`),
+        { env: environment, timeout: 10000, maxBuffer: 8192, windowsHide: true },
+      );
+      pending.child.stdin?.on("error", () => {});
+      pending.child.stdin?.end();
+      return (await pending).stdout.trim();
+    }
+    const descriptor = (target: string) =>
+      security(
+        `$a=[System.IO.File]::GetAccessControl(${psLiteral(target)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');[Console]::Out.Write($a.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]'Owner,Access'))`,
+      );
+    const fresh = async () => {
+      await rm(sidecar, { force: true });
+      await writeFile(sidecar, bytes);
+    };
+    await fresh();
+    const before = await stat(sidecar);
+    await verifyWindowsSqliteSidecar(database, "-journal");
+    await p.verifyProtection(sidecar, false);
+    const after = await stat(sidecar);
+    if (
+      before.ino !== after.ino ||
+      before.dev !== after.dev ||
+      before.mtimeMs !== after.mtimeMs ||
+      !(await readFile(sidecar)).equals(bytes)
+    )
+      throw new Error("sidecar hardening changed identity/content");
+    async function rejectUnchanged(main: string, target: string, expected: RegExp): Promise<void> {
+      const before = await descriptor(target);
+      let rejected = false;
+      try {
+        await verifyWindowsSqliteSidecar(main, "-journal");
+      } catch (error) {
+        if (!(error instanceof Error) || !expected.test(error.message))
+          throw new Error("sidecar rejection did not reach the expected safety gate");
+        rejected = true;
+      }
+      if (
+        !rejected ||
+        (await descriptor(target)) !== before ||
+        !(await readFile(target)).equals(bytes)
+      )
+        throw new Error("unsafe sidecar accepted or changed before rejection");
+    }
+    await fresh();
+    await security(
+      `$p=${psLiteral(sidecar)};$a=[System.IO.File]::GetAccessControl($p);$r=[System.Security.AccessControl.FileSystemAccessRule]::new([System.Security.Principal.SecurityIdentifier]::new('S-1-1-0'),[System.Security.AccessControl.FileSystemRights]::FullControl,[System.Security.AccessControl.AccessControlType]::Allow);$a.AddAccessRule($r);[System.IO.File]::SetAccessControl($p,$a)`,
+    );
+    await rejectUnchanged(database, sidecar, /^unsafe SQLite sidecar rules/);
+    await fresh();
+    const alias = join(path, "hardlink");
+    await link(sidecar, alias);
+    await rejectUnchanged(database, sidecar, /^unsafe SQLite sidecar type\/link/);
+    await rm(alias);
+    const unsafeParent = join(path, "unsafe-parent");
+    await mkdir(unsafeParent);
+    await p.protect(unsafeParent, true);
+    const unsafeDatabase = join(unsafeParent, "probe.sqlite"),
+      unsafeSidecar = `${unsafeDatabase}-journal`;
+    await writeFile(unsafeDatabase, "");
+    await p.protect(unsafeDatabase, false);
+    await writeFile(unsafeSidecar, bytes);
+    await security(
+      `$p=${psLiteral(unsafeParent)};$a=[System.IO.Directory]::GetAccessControl($p);$r=[System.Security.AccessControl.FileSystemAccessRule]::new([System.Security.Principal.SecurityIdentifier]::new('S-1-1-0'),[System.Security.AccessControl.FileSystemRights]::FullControl,[System.Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit',[System.Security.AccessControl.PropagationFlags]::None,[System.Security.AccessControl.AccessControlType]::Allow);$a.AddAccessRule($r);[System.IO.Directory]::SetAccessControl($p,$a)`,
+    );
+    await rejectUnchanged(unsafeDatabase, unsafeSidecar, /^unsafe executor DACL/);
+    sidecarPassed = true;
+    process.stdout.write(
+      `${JSON.stringify({ phase: "sqlite-sidecar-eligibility", sameIdentityAndBytes: true, foreignAceRejectedUnchanged: true, hardlinkRejectedUnchanged: true, unsafeParentRejectedUnchanged: true })}\n`,
+    );
   } catch (error) {
     process.stdout.write(
       `${JSON.stringify({ phase: "actual-dacl", operation, elapsedMs: Math.round(performance.now() - started), protectedDirectoryAndFile: false, reason: error instanceof Error ? error.message : "unknown" })}\n`,
@@ -552,7 +633,7 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     await rm(path, { recursive: true, force: true });
   }
   process.stdout.write(
-    `${JSON.stringify({ phase: "normal-exit", controlledEofPassed, bclPassed, aclPassed })}\n`,
+    `${JSON.stringify({ phase: "normal-exit", controlledEofPassed, bclPassed, aclPassed, sidecarPassed })}\n`,
   );
-  if (!controlledEofPassed || !bclPassed || !aclPassed) process.exitCode = 1;
+  if (!controlledEofPassed || !bclPassed || !aclPassed || !sidecarPassed) process.exitCode = 1;
 }

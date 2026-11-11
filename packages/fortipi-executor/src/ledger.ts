@@ -86,7 +86,12 @@ async function prepareDatabase(
   }
   for (const suffix of ["-journal", "-wal", "-shm"]) {
     try {
-      await platform.verifyProtection(`${path}${suffix}`, false);
+      if (platform.platform === "win32") {
+        const { verifyWindowsSqliteSidecar } = await import("./platform/windows.js");
+        if (suffix !== "-journal" && suffix !== "-wal" && suffix !== "-shm")
+          throw new Error("invalid SQLite sidecar suffix");
+        await verifyWindowsSqliteSidecar(path, suffix);
+      } else await platform.verifyProtection(`${path}${suffix}`, false);
     } catch (error) {
       if (error instanceof Error && error.message.startsWith("unsafe executor DACL"))
         throw new Error(`SQLite ${suffix} protection failed: ${error.message}`);

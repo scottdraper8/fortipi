@@ -1,7 +1,7 @@
 import { execFile, spawn } from "node:child_process";
-import { lstat } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import { userInfo } from "node:os";
-import { isAbsolute, win32 } from "node:path";
+import { isAbsolute, resolve, win32 } from "node:path";
 import { promisify } from "node:util";
 import type { PlatformAdapter } from "./types.js";
 
@@ -69,6 +69,76 @@ async function ps(command: string): Promise<string> {
   }
   return stdout.trim();
 }
+interface Dacl {
+  owner: string;
+  me: string;
+  tokenOwner: string;
+  protected: boolean;
+  rules: { sid: string; allow: boolean; rights: number }[];
+}
+async function inspectDacl(path: string, directory: boolean): Promise<Dacl> {
+  return JSON.parse(
+    await ps(
+      `$a=[System.IO.${directory ? "Directory" : "File"}]::GetAccessControl(${literal(path)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');$identity=[System.Security.Principal.WindowsIdentity]::GetCurrent();$me=$identity.User.Value;$b=[System.Text.StringBuilder]::new();[void]$b.Append('{"owner":"'+$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value+'","me":"'+$me+'","tokenOwner":"'+$identity.Owner.Value+'","protected":'+$a.AreAccessRulesProtected.ToString().ToLowerInvariant()+',"rules":[');$sep='';foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){[void]$b.Append($sep+'{"sid":"'+$r.IdentityReference.Value+'","allow":'+($r.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow).ToString().ToLowerInvariant()+',"rights":'+([int64]$r.FileSystemRights).ToString([System.Globalization.CultureInfo]::InvariantCulture)+'}');$sep=','};[void]$b.Append(']}');[Console]::Out.Write($b.ToString())`,
+    ),
+  ) as Dacl;
+}
+/** Only SQLite sidecars under an already protected database/parent may tighten a token-default owner. */
+export async function verifyWindowsSqliteSidecar(
+  databasePath: string,
+  suffix: "-journal" | "-wal" | "-shm",
+): Promise<void> {
+  if (!databasePath.endsWith(".sqlite") || !["-journal", "-wal", "-shm"].includes(suffix))
+    throw new Error("invalid SQLite sidecar identity");
+  const path = `${databasePath}${suffix}`,
+    parent = win32.dirname(databasePath),
+    platform = windows();
+  const before = await lstat(path);
+  if (!before.isFile() || before.nlink !== 1) throw new Error("unsafe SQLite sidecar type/link");
+  await platform.verifyProtection(parent, true);
+  await platform.verifyProtection(databasePath, false);
+  if ((await realpath(parent)) !== resolve(parent)) throw new Error("SQLite parent alias");
+  const parentBefore = await lstat(parent);
+  await platform.verifyEntry(path, before);
+  if ((await realpath(path)) !== resolve(path)) throw new Error("SQLite sidecar alias");
+  const dacl = await inspectDacl(path, false);
+  if (
+    !dacl.rules.some((r) => r.sid === dacl.me && r.allow && (r.rights & 2032127) === 2032127) ||
+    dacl.rules.some((r) => !r.allow || ![dacl.me, "S-1-5-18"].includes(r.sid))
+  )
+    throw new Error("unsafe SQLite sidecar rules; no hardening performed");
+  if (dacl.owner !== dacl.me) {
+    const subjects = new Set([dacl.me, "S-1-5-18"]);
+    if (
+      dacl.owner !== dacl.tokenOwner ||
+      dacl.protected ||
+      dacl.rules.length !== subjects.size ||
+      dacl.rules.some((r) => !r.allow || !subjects.has(r.sid) || r.rights !== 2032127) ||
+      [...subjects].some((sid) => !dacl.rules.some((r) => r.sid === sid))
+    )
+      throw new Error("unsafe SQLite sidecar owner or rules; no hardening performed");
+    // Repeat the eligibility checks in the same bounded process that writes security metadata.
+    // No permission is granted to another SID, and bytes are never read by SQLite before this returns.
+    await ps(
+      `$p=${literal(path)};$parent=${literal(parent)};$identity=[System.Security.Principal.WindowsIdentity]::GetCurrent();$sid=$identity.User;$system='S-1-5-18';$pa=[System.IO.Directory]::GetAccessControl($parent,[System.Security.AccessControl.AccessControlSections]'Owner,Access');if(!$pa.AreAccessRulesProtected -or $pa.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){throw 'SQLite parent protection changed'};$userControl=$false;foreach($r in $pa.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){if($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow -or ($r.IdentityReference.Value -ne $sid.Value -and $r.IdentityReference.Value -ne $system)){throw 'SQLite parent rules changed'};if($r.IdentityReference.Value -eq $sid.Value -and (([int64]$r.FileSystemRights -band 2032127) -eq 2032127)){$userControl=$true}};if(!$userControl -or (([int][System.IO.File]::GetAttributes($p) -band 1024) -ne 0)){throw 'SQLite sidecar protection changed'};$a=[System.IO.File]::GetAccessControl($p,[System.Security.AccessControl.AccessControlSections]'Owner,Access');if($a.AreAccessRulesProtected -or $a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $identity.Owner.Value){throw 'SQLite sidecar owner changed'};$rules=$a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier]);$expected=if($sid.Value -eq $system){1}else{2};if($rules.Count -ne $expected){throw 'SQLite sidecar rules changed'};$seenUser=$false;$seenSystem=$false;foreach($r in $rules){$s=$r.IdentityReference.Value;if($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow -or ($s -ne $sid.Value -and $s -ne $system) -or [int64]$r.FileSystemRights -ne 2032127){throw 'SQLite sidecar rules changed'};if($s -eq $sid.Value){$seenUser=$true};if($s -eq $system){$seenSystem=$true}};if(!$seenUser -or !$seenSystem){throw 'SQLite sidecar rules changed'};$a.SetAccessRuleProtection($true,$true);$a.SetOwner($sid);[System.IO.File]::SetAccessControl($p,$a)`,
+    );
+  }
+  const after = await lstat(path),
+    parentAfter = await lstat(parent);
+  if (
+    before.dev !== after.dev ||
+    before.ino !== after.ino ||
+    after.nlink !== 1 ||
+    before.size !== after.size ||
+    before.mtimeMs !== after.mtimeMs ||
+    parentBefore.dev !== parentAfter.dev ||
+    parentBefore.ino !== parentAfter.ino
+  )
+    throw new Error("SQLite sidecar replacement or content change");
+  await platform.verifyProtection(parent, true);
+  await platform.verifyProtection(databasePath, false);
+  await platform.verifyProtection(path, false);
+}
 export function windows(): PlatformAdapter {
   return {
     platform: "win32",
@@ -86,17 +156,7 @@ export function windows(): PlatformAdapter {
       if (stat.isDirectory() !== directory || (!directory && (!stat.isFile() || stat.nlink !== 1)))
         throw new Error("unsafe state type");
       await this.verifyEntry(path, stat);
-      const result = JSON.parse(
-        await ps(
-          `$a=[System.IO.${directory ? "Directory" : "File"}]::GetAccessControl(${literal(path)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');$identity=[System.Security.Principal.WindowsIdentity]::GetCurrent();$me=$identity.User.Value;$b=[System.Text.StringBuilder]::new();[void]$b.Append('{"owner":"'+$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value+'","me":"'+$me+'","tokenOwner":"'+$identity.Owner.Value+'","protected":'+$a.AreAccessRulesProtected.ToString().ToLowerInvariant()+',"rules":[');$sep='';foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){[void]$b.Append($sep+'{"sid":"'+$r.IdentityReference.Value+'","allow":'+($r.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow).ToString().ToLowerInvariant()+',"rights":'+([int64]$r.FileSystemRights).ToString([System.Globalization.CultureInfo]::InvariantCulture)+'}');$sep=','};[void]$b.Append(']}');[Console]::Out.Write($b.ToString())`,
-        ),
-      ) as {
-        owner: string;
-        me: string;
-        tokenOwner: string;
-        protected: boolean;
-        rules: { sid: string; allow: boolean; rights: number }[];
-      };
+      const result = await inspectDacl(path, directory);
       if (
         result.owner !== result.me ||
         (directory && !result.protected) ||
