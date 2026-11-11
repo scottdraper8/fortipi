@@ -371,6 +371,10 @@ private implementations for its delegated methods, so one physical invocation
 does not spend two local admission units. Distinct RPCs still spend separately,
 including retries sharing a request ID; these local units are not account-wide
 Cloudflare billing telemetry.
+Internal CP methods use JavaScript `#private` semantics: TypeScript visibility
+alone does not prevent Durable Object RPC invocation. The admission callback
+and delegated implementations cannot become extra RPC lanes. Provider transport
+is constructed internally, with no transport factory method on the RPC prototype.
 
 An existing current CP registration can authorize Agent storage reservations for
 its single logical operation under one current covering grant. Creation/fork

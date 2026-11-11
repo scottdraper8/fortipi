@@ -20,7 +20,7 @@ try {
   for (const mutation of [
     {
       file: "control-plane.ts",
-      pattern: /case "listAgents":\s*return this\.listAgentsValue\(ctx, request\);/,
+      pattern: /case "listAgents":\s*return this\.#listAgentsValue\(ctx, request\);/,
       replacement:
         'case "listAgents": { const nested = await this.listAgents(ctx, request); check(nested.ok, "rate_limited", "Nested admission failed"); return nested.value; }',
       testPattern: "one physical nested-route",
