@@ -32,8 +32,53 @@ import type {
   WorkspaceProviderFactory,
 } from "../env.js";
 import type { ExecutionBackend } from "../execution-backend.js";
+import type {
+  StorageSampleInput,
+  WorkspaceStorageSample,
+  WorkspaceStorageSampleInput,
+} from "../infrastructure.js";
 import type { JobStore } from "../job-store.js";
 import type { WorkspaceObjectRpc } from "../workspace-object.js";
+
+export function storageSamplePorts(lookup: D.StoreLookup): void {
+  const authority: WorkspaceStorageSampleInput = {
+    kind: "authority",
+    sampleId: "authority_sample",
+    policyVersion: 1,
+  };
+  const child: WorkspaceStorageSampleInput = {
+    kind: "child",
+    sampleId: "child_sample",
+    policyVersion: 1,
+    lookup,
+    registryVersion: 2,
+  };
+  const observation: WorkspaceStorageSample = {
+    kind: "child",
+    sampleId: child.sampleId,
+    lookup,
+    registryVersion: 2,
+    bytes: 4096,
+    observedAt: 1000,
+  };
+  // @ts-expect-error A child lookup alone does not bind a registry observation.
+  const unversioned: WorkspaceStorageSampleInput = { ...child, registryVersion: undefined };
+  // @ts-expect-error Authority sampling cannot select a child through structural assignment.
+  const redirected: WorkspaceStorageSampleInput = { ...authority, lookup, registryVersion: 2 };
+  // @ts-expect-error A child response must retain its exact lookup/version pair.
+  const anonymous: WorkspaceStorageSample = { ...observation, lookup: undefined };
+  const incomplete = {
+    sampleId: "census_sample",
+    policyVersion: 1,
+    sampleSeq: 1,
+    observedAt: 1000,
+    coverage: { kind: "workspace" as const, bytes: 4096 },
+    coveredReservationIds: [],
+  };
+  // @ts-expect-error Workspace coverage requires a completed census identity.
+  const census: StorageSampleInput = incomplete;
+  void [authority, child, observation, unversioned, redirected, anonymous, census];
+}
 
 export async function adminExportPorts(
   agent: AgentSessionRpc,

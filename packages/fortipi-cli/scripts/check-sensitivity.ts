@@ -74,8 +74,40 @@ try {
   );
   await writeFile(oauthPath, oauth);
   await run("model-auth.test.ts", "actual public Pi OpenAI", true);
+  const helperPath = join(root, "dist/windows-helper.js");
+  const helper = await readFile(helperPath, "utf8");
+  const relativeHelper = helper.replace(
+    'executable: win32.join(psHome, "powershell.exe")',
+    'executable: "powershell.exe"',
+  );
+  assert.notEqual(relativeHelper, helper);
+  await writeFile(helperPath, relativeHelper);
+  await run(
+    "windows-helper.test.ts",
+    "Windows ACL helper",
+    false,
+    "Expected values to be strictly equal",
+  );
+  await writeFile(helperPath, helper);
+  await run("windows-helper.test.ts", "Windows ACL helper", true);
+  const adminPath = join(root, "dist/admin.js");
+  const admin = await readFile(adminPath, "utf8");
+  const remoteText = admin.replace(
+    "resource: p.resource,",
+    "resource: p.resource, reason: p.reason,",
+  );
+  assert.notEqual(remoteText, admin);
+  await writeFile(adminPath, remoteText);
+  await run(
+    "commands.test.ts",
+    "validated infrastructure errors",
+    false,
+    "Expected values to be strictly deep-equal",
+  );
+  await writeFile(adminPath, admin);
+  await run("commands.test.ts", "validated infrastructure errors", true);
   console.log(
-    "Permission bypass, role-environment leak and lost OAuth extensions detected; restored copies pass. Worker-asset fault awaits genuine5 assets.",
+    "Permission bypass, role-environment leak, lost OAuth extensions, relative Windows helper and remote pressure text detected; restored copies pass. Worker-asset fault awaits genuine5 assets.",
   );
 } finally {
   await rm(root, { recursive: true, force: true });

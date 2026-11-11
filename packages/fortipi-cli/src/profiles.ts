@@ -8,6 +8,7 @@ import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { promisify } from "node:util";
 import { exactOrigin } from "./config.js";
 import { CliError, check } from "./errors.js";
+import { windowsAclHelper } from "./windows-helper.js";
 
 export function helperEnvironment(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -31,16 +32,20 @@ async function windowsAcl(path: string, protect = false): Promise<void> {
     "$r=@($a.Access);if(!$r.Count){throw 'empty'};foreach($v in $r){if($v.AccessControlType -eq 'Allow' -and " +
     "$v.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){throw 'grant'}};";
   try {
-    await promisify(execFile)(
-      "powershell.exe",
+    const helper = windowsAclHelper();
+    const pending = promisify(execFile)(
+      helper.executable,
       ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
       {
-        env: { ...helperEnvironment(), FORTIPI_ACL_TARGET: path },
+        env: { ...helper.env, FORTIPI_ACL_TARGET: path },
         timeout: 10000,
         maxBuffer: 4096,
         windowsHide: true,
       },
     );
+    pending.child.stdin?.on("error", () => undefined);
+    pending.child.stdin?.end();
+    await pending;
   } catch {
     throw new CliError("protected_acl_required", 3);
   }

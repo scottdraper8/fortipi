@@ -1,4 +1,4 @@
-import type { AuthContext, CapacityReservation, Outcome } from "./dto.js";
+import type { AuthContext, CapacityReservation, Outcome, StoreLookup } from "./dto.js";
 
 /** Private registered-recipient input to CP.fetch POST /internal/storage-sample; closed JSON <=64KiB. */
 export interface StorageSampleInput {
@@ -16,6 +16,22 @@ export interface StorageSampleReceipt {
   sampleSeq: number;
   chargeBytes: number;
 }
+/** Private Workspace.fetch POST /__fortipi/storage-sample; metadata only, closed JSON <=64KiB. */
+export type WorkspaceStorageSampleInput = {
+  sampleId: string;
+  policyVersion: number;
+} & (
+  | { kind: "authority"; lookup?: never; registryVersion?: never }
+  | { kind: "child"; lookup: StoreLookup; registryVersion: number }
+);
+export type WorkspaceStorageSample = {
+  sampleId: string;
+  bytes: number;
+  observedAt: number;
+} & (
+  | { kind: "authority"; lookup?: never; registryVersion?: never }
+  | { kind: "child"; lookup: StoreLookup; registryVersion: number }
+);
 
 export type {
   CapabilityStatus,

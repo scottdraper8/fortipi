@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
   AdminArtifactReference,
+  ErrorBody,
   OperationId,
   OperationRequest,
   OperationValue,
@@ -8,6 +9,7 @@ import type {
 } from "fortipi-contract";
 import { errorStatuses, routeCatalog, validateProviderAuthPut, wireLimits } from "fortipi-contract";
 import { exactOrigin } from "./config.js";
+import type { SafePressure } from "./errors.js";
 import { CliError, check } from "./errors.js";
 import type { Profile } from "./profiles.js";
 import { reserveProtected, verifyReserved } from "./profiles.js";
@@ -102,23 +104,38 @@ export class AdminClient {
     }
     if (!route.success.includes(response.status)) {
       // Never echo a server message, URL, token, or arbitrary body into diagnostics.
+      let pressure: SafePressure | undefined;
       try {
         const error: unknown = JSON.parse(
           new TextDecoder().decode(await boundedBytes(response, 65536)),
         );
         validate("ErrorBody", error);
-        const code = (error as { error: { code: keyof typeof errorStatuses } }).error.code;
+        const typed = (error as ErrorBody).error;
+        const code = typed.code;
         check(
           route.errors.includes(code) && errorStatuses[code] === response.status,
           "invalid_error_response",
           1,
         );
+        const p = typed.details?.pressure;
+        if (p)
+          pressure = {
+            resource: p.resource,
+            source: p.source,
+            measurement: p.measurement,
+            action: p.action,
+            ...(p.limit === undefined ? {} : { limit: p.limit }),
+            ...(p.remaining === undefined ? {} : { remaining: p.remaining }),
+            ...(p.resetAt === undefined ? {} : { resetAt: p.resetAt }),
+            ...(p.retryAt === undefined ? {} : { retryAt: p.retryAt }),
+          };
       } catch {
         throw new CliError("invalid_error_response");
       }
       throw new CliError(
         response.status === 409 ? "version_conflict" : `http_${response.status}`,
         response.status === 409 ? 4 : 1,
+        pressure,
       );
     }
     return response;
