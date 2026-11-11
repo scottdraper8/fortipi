@@ -94,6 +94,233 @@ async function optionalSetting(path: string): Promise<string | undefined> {
   }
 }
 
+export interface PrivateContainerd {
+  pid: number;
+  start: string;
+  root: string;
+  state: string;
+  socket: string;
+  rootIdentity: string;
+  stateIdentity: string;
+  socketIdentity: string;
+}
+
+async function startupDiagnostics(session: string): Promise<void> {
+  // Only a bounded startup tail, from the credential-free child environment.
+  const diagnostics = await open(resolve(session, "daemon.log"), "r");
+  try {
+    const size = (await diagnostics.stat()).size;
+    const tail = Buffer.alloc(Math.min(size, 16 * 1024));
+    await diagnostics.read(tail, 0, tail.length, Math.max(0, size - tail.length));
+    await writeFile(resolve(session, "startup-diagnostics.txt"), tail, { mode: 0o600 });
+    console.error(
+      `Bounded daemon startup diagnostics: ${resolve(session, "startup-diagnostics.txt")}`,
+    );
+    console.error(tail.toString("utf8"));
+  } finally {
+    await diagnostics.close();
+  }
+}
+
+// Match Moby 29.9.3's supervised version-2 configuration and disabled CRI plugins.
+// Explicit config avoids host imports; all endpoints stay below this private session.
+export function privateContainerdConfig(session: string): string {
+  assert.ok(/^\/tmp\/fortipi-docker-[A-Za-z0-9_-]+$/.test(session));
+  return `version = 2\nroot = "${session}/containerd-root"\nstate = "${session}/containerd-state"\ndisabled_plugins = ["io.containerd.grpc.v1.cri", "io.containerd.cri.v1.images", "io.containerd.cri.v1.runtime", "io.containerd.podsandbox.controller.v1.podsandbox"]\nimports = []\n[grpc]\n  address = "${session}/containerd.sock"\n  tcp_address = ""\n  uid = 0\n  gid = 0\n[debug]\n  address = ""\n  level = "error"\n[metrics]\n  address = ""\n`;
+}
+
+async function processStart(pid: number): Promise<string> {
+  assert.ok(Number.isSafeInteger(pid) && pid > 0);
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+  const start = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+  assert.ok(start && /^[0-9]+$/.test(start));
+  return start;
+}
+
+/** Recheck the actual process, exact private config, binary and physical directories. */
+export async function verifyPrivateContainerd(
+  directory: string,
+  session: string,
+  env: NodeJS.ProcessEnv,
+  raw: Buffer,
+): Promise<PrivateContainerd> {
+  try {
+    assert.equal(process.platform, "linux");
+    for (const path of [directory, session]) {
+      assert.equal(await realpath(path), path);
+      const stat = await lstat(path);
+      assert.ok(
+        stat.isDirectory() && stat.uid === process.getuid?.() && (stat.mode & 0o777) === 0o700,
+      );
+    }
+    const proof = resolve(session, "containerd-process.json");
+    const stat = await lstat(proof);
+    assert.ok(
+      stat.isFile() &&
+        stat.uid === process.getuid?.() &&
+        (stat.mode & 0o777) === 0o600 &&
+        stat.size < 256,
+    );
+    const identity = JSON.parse(await readFile(proof, "utf8")) as { pid: number; start: string };
+    const { pid, start } = identity;
+    assert.equal(await processStart(pid), start);
+    const binary = resolve(directory, "containerd");
+    assert.equal(
+      (
+        await command("/usr/bin/sudo", ["-n", "/usr/bin/readlink", "-f", `/proc/${pid}/exe`], env)
+      ).trim(),
+      binary,
+    );
+    assert.equal(await realpath(binary), binary);
+    const file = await lstat(binary);
+    assert.ok(file.isFile() && file.uid === process.getuid?.() && (file.mode & 0o777) === 0o755);
+    assert.equal(hash(raw), policy.docker.sha256);
+    const publisher = archiveEntries(raw).get("docker/containerd");
+    assert.ok(publisher);
+    assert.equal(hash(await readFile(binary)), hash(publisher));
+    const config = resolve(session, "config/containerd.toml");
+    const configStat = await lstat(config);
+    assert.ok(
+      configStat.isFile() &&
+        configStat.uid === process.getuid?.() &&
+        configStat.size < 4096 &&
+        (configStat.mode & 0o777) === 0o600,
+    );
+    assert.equal(await readFile(config, "utf8"), privateContainerdConfig(session));
+    assert.deepEqual((await readFile(`/proc/${pid}/cmdline`, "utf8")).split("\0").filter(Boolean), [
+      binary,
+      "--config",
+      config,
+    ]);
+    assert.match(await readFile(`/proc/${pid}/status`, "utf8"), /^Uid:\s+0\s+0\s+0\s+0$/m);
+    const root = resolve(session, "containerd-root");
+    const state = resolve(session, "containerd-state");
+    const socket = resolve(session, "containerd.sock");
+    const identities: string[] = [];
+    for (const path of [root, state, socket]) {
+      assert.equal(await realpath(path), path);
+      const observed = await lstat(path, { bigint: true });
+      assert.ok(
+        path === socket
+          ? observed.isSocket() &&
+              observed.uid === 0n &&
+              observed.gid === 0n &&
+              (observed.mode & 7n) === 0n
+          : observed.isDirectory() &&
+              observed.uid === BigInt(process.getuid?.() ?? -1) &&
+              (observed.mode & 0o777n) === 0o700n,
+      );
+      identities.push(`${observed.dev}:${observed.ino}`);
+    }
+    assert.equal(await processStart(pid), start);
+    const [rootIdentity, stateIdentity, socketIdentity] = identities;
+    assert.ok(rootIdentity && stateIdentity && socketIdentity);
+    return { pid, start, root, state, socket, rootIdentity, stateIdentity, socketIdentity };
+  } catch {
+    throw new Error("Private bundled containerd identity rejected");
+  }
+}
+
+export function assertPrivateContainerdApi(actual: unknown, backend: PrivateContainerd): void {
+  try {
+    assert.deepEqual(actual, {
+      Address: backend.socket,
+      Namespaces: { Containers: "moby", Plugins: "plugins.moby" },
+    });
+  } catch {
+    throw new Error("Docker must bind the verified private containerd backend");
+  }
+}
+
+async function startPrivateContainerd(
+  directory: string,
+  session: string,
+  env: NodeJS.ProcessEnv,
+  logFd: number,
+  raw: Buffer,
+): Promise<void> {
+  for (const name of ["containerd-root", "containerd-state"])
+    await mkdir(resolve(session, name), { mode: 0o700 });
+  const binary = resolve(directory, "containerd");
+  const publisher = archiveEntries(raw).get("docker/containerd");
+  assert.ok(publisher && hash(await readFile(binary)) === hash(publisher));
+  const config = resolve(session, "config/containerd.toml");
+  await writeFile(config, privateContainerdConfig(session), { flag: "wx", mode: 0o600 });
+  const child = spawn("/usr/bin/sudo", ["-n", binary, "--config", config], {
+    env,
+    detached: true,
+    stdio: ["ignore", logFd, logFd],
+  });
+  let stopped = false;
+  child.once("error", () => {
+    stopped = true;
+  });
+  child.once("exit", () => {
+    stopped = true;
+  });
+  child.unref();
+  assert.ok(child.pid);
+  let pid: number | undefined;
+  const deadline = Date.now() + 30_000;
+  while (!stopped && Date.now() < deadline) {
+    // Only this launch's bounded sudo/monitor subtree; never scan host processes.
+    if (pid === undefined) {
+      let candidates: number[] = [child.pid];
+      for (let depth = 0; depth < 3 && pid === undefined; depth++) {
+        assert.ok(candidates.length <= 4);
+        const next: number[] = [];
+        for (const candidate of candidates) {
+          assert.ok(Date.now() < deadline);
+          const exe = (
+            await command(
+              "/usr/bin/sudo",
+              ["-n", "/usr/bin/readlink", "-f", `/proc/${candidate}/exe`],
+              env,
+              2000,
+            )
+          ).trim();
+          if (exe === binary) {
+            pid = candidate;
+            break;
+          }
+          assert.equal(exe, "/usr/bin/sudo");
+          const children = (
+            await command(
+              "/usr/bin/sudo",
+              ["-n", "/usr/bin/cat", `/proc/${candidate}/task/${candidate}/children`],
+              env,
+              2000,
+            )
+          ).trim();
+          for (const value of children.split(/\s+/).filter(Boolean)) {
+            assert.match(value, /^[1-9][0-9]*$/);
+            const id = Number(value);
+            assert.ok(Number.isSafeInteger(id));
+            next.push(id);
+          }
+        }
+        candidates = next;
+      }
+    }
+    if (pid !== undefined) {
+      try {
+        await lstat(resolve(session, "containerd.sock"));
+        await writeFile(
+          resolve(session, "containerd-process.json"),
+          `${JSON.stringify({ pid, start: await processStart(pid) })}\n`,
+          { flag: "wx", mode: 0o600 },
+        );
+        await verifyPrivateContainerd(directory, session, env, raw);
+        return;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }
+    await new Promise((accept) => setTimeout(accept, 250));
+  }
+  throw new Error("Private bundled containerd startup failed or timed out");
+}
+
 // Same supported upstream target on CI and in independent cross-build verification.
 export async function prepareRootlesskit(directory: string, compiler = "go"): Promise<void> {
   const pin = policy.rootless.rootlesskit;
@@ -670,8 +897,21 @@ async function main(): Promise<void> {
   const log = await open(resolve(session, "daemon.log"), "wx", 0o600);
   const daemonConfig = resolve(config, "daemon.json");
   await writeFile(daemonConfig, "{}\n", { mode: 0o600 });
+  if (!rootless) {
+    try {
+      await startPrivateContainerd(directory, session, env, log.fd, raw);
+    } catch {
+      await log.close();
+      await startupDiagnostics(session);
+      throw new Error(
+        "Private bundled containerd startup rejected; inspect the private daemon log",
+      );
+    }
+  }
   const daemonArguments = [
-    ...(rootless ? ["--rootless", "--storage-driver", "overlay2"] : ["--dns", "172.17.0.1"]),
+    ...(rootless
+      ? ["--rootless", "--storage-driver", "overlay2"]
+      : ["--dns", "172.17.0.1", "--containerd", resolve(session, "containerd.sock")]),
     "--config-file",
     daemonConfig,
     "--log-level",
@@ -813,6 +1053,20 @@ async function main(): Promise<void> {
       );
       const status = await readFile(`/proc/${pid}/status`, "utf8");
       assert.match(status, /^Uid:\s+0\s+0\s+0\s+0$/m, "Default mode must remain actually rootful");
+      const backend = await verifyPrivateContainerd(directory, session, env, raw);
+      assertPrivateContainerdApi(
+        JSON.parse(
+          await command(
+            resolve(directory, "docker"),
+            ["info", "--format", "{{json .Containerd}}"],
+            env,
+          ),
+        ),
+        backend,
+      );
+      console.log(
+        "Rootful private bundled containerd process, config, physical roots and Unix API verified",
+      );
     }
     const activeBuildx = (
       await command(resolve(directory, "docker"), ["buildx", "version"], env)
@@ -851,20 +1105,7 @@ async function main(): Promise<void> {
       `Docker CLI/Engine 29.9.3 (${rootless ? "rootless" : "rootful"}), Buildx 0.38.2/default embedded BuildKit ${policy.docker.buildkit} verified; actual image/FUSE evidence is still required`,
     );
   } catch (error) {
-    // Only a bounded startup tail, from the credential-free child environment.
-    const diagnostics = await open(resolve(session, "daemon.log"), "r");
-    try {
-      const size = (await diagnostics.stat()).size;
-      const tail = Buffer.alloc(Math.min(size, 16 * 1024));
-      await diagnostics.read(tail, 0, tail.length, Math.max(0, size - tail.length));
-      await writeFile(resolve(session, "startup-diagnostics.txt"), tail, { mode: 0o600 });
-      console.error(
-        `Bounded daemon startup diagnostics: ${resolve(session, "startup-diagnostics.txt")}`,
-      );
-      console.error(tail.toString("utf8"));
-    } finally {
-      await diagnostics.close();
-    }
+    await startupDiagnostics(session);
     if (rootless && daemon.pid) {
       try {
         process.kill(-daemon.pid, "SIGTERM");

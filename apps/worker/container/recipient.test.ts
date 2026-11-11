@@ -8,6 +8,10 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
 import { c as tar } from "tar";
+import {
+  assertPrivateContainerdApi,
+  privateContainerdConfig,
+} from "../../../tools/unstale/provision-docker.ts";
 import { inspectImageArchive } from "./image-archive.ts";
 import {
   assertDistinctStores,
@@ -62,6 +66,18 @@ const image = {
   RootFS: { Type: "layers", Layers: graph.diffIds },
   Config: config,
 };
+function backendFixture(ordinal: number) {
+  return {
+    pid: 100 + ordinal,
+    start: `${1000 + ordinal}`,
+    root: `/private/backend-${ordinal}/root`,
+    state: `/private/backend-${ordinal}/state`,
+    socket: `/private/backend-${ordinal}/socket`,
+    rootIdentity: `1:${ordinal * 3}`,
+    stateIdentity: `1:${ordinal * 3 + 1}`,
+    socketIdentity: `1:${ordinal * 3 + 2}`,
+  };
+}
 
 test("an untagged imported image is selected only when it is the sole valid identity", () => {
   assert.equal(singleImportedImage([digest("a")]), digest("a"));
@@ -197,6 +213,7 @@ test("same daemon, real store or Unix API cannot count as an independent empty r
     start: "100",
     rootless: false,
     networkNamespace: "net:[100]",
+    backend: backendFixture(1),
   };
   const recipient = {
     id: "recipient",
@@ -206,6 +223,7 @@ test("same daemon, real store or Unix API cannot count as an independent empty r
     start: "101",
     rootless: false,
     networkNamespace: "net:[100]",
+    backend: backendFixture(2),
   };
   assertDistinctStores(builder, recipient);
   assertDistinctStores(builder, { ...recipient, rootless: true, networkNamespace: "net:[101]" });
@@ -263,7 +281,11 @@ test("unprotected recipient invocation fails before Docker and emits only a fini
 });
 
 const canary = "PRIVATE_CANARY_never_emit_91d7";
-function rejected(reason: string, action: () => void): Error {
+function rejected(
+  reason: string,
+  action: () => void,
+  config?: { field: string; side: string; shape: string },
+): Error {
   let caught: unknown;
   try {
     action();
@@ -276,6 +298,7 @@ function rejected(reason: string, action: () => void): Error {
     probe: "recipient-import",
     stage: "imported-identity",
     reason,
+    ...(config ? { config } : {}),
     passed: false,
   });
   assert.equal(JSON.stringify(result).includes(canary), false);
@@ -295,6 +318,7 @@ test("finite reasons distinguish every store separation and empty-store guard wi
     start: "100",
     rootless: false,
     networkNamespace: "net:[100]",
+    backend: backendFixture(1),
   };
   const recipient = {
     id: "recipient",
@@ -304,6 +328,7 @@ test("finite reasons distinguish every store separation and empty-store guard wi
     start: "101",
     rootless: false,
     networkNamespace: "net:[100]",
+    backend: backendFixture(2),
   };
   assertDistinctStores(builder, recipient);
   assertDistinctStores(builder, { ...recipient, pid: builder.pid });
@@ -367,7 +392,13 @@ test("finite reasons preserve selected graph, platform, DiffID and runtime confi
     ["config-fields", { ...image, Config: { ...config, [canary]: canary } }],
     ["config-equality", { ...image, Config: { ...config, Env: [...config.Env].reverse() } }],
   ] as [string, typeof image][])
-    rejected(reason, () => assertImportedImage(changed, graph));
+    rejected(
+      reason,
+      () => assertImportedImage(changed, graph),
+      reason === "config-fields"
+        ? { field: "unknown", side: "actual", shape: "string" }
+        : undefined,
+    );
   assert.equal(assertImportedImage(image, graph), image.Id);
 });
 
@@ -415,4 +446,162 @@ test("foreign errors and tainted reason properties cannot bypass the finite diag
   const genuine = rejected("tag", () => assertRecipientTag(canary, image.Id));
   Object.assign(genuine, { reason: canary });
   assert.equal(recipientFailure("imported-identity", genuine).reason, "unknown");
+});
+
+test("rootful recipient requires a different physical backend, not merely different Docker names or namespaces", () => {
+  const builder = {
+    id: "builder",
+    root: "/private/a",
+    host: "unix:///private/a.sock",
+    pid: 10,
+    start: "100",
+    rootless: false,
+    networkNamespace: "net:[100]",
+    backend: backendFixture(1),
+  };
+  const recipient = {
+    id: "recipient",
+    root: "/private/b",
+    host: "unix:///private/b.sock",
+    pid: 11,
+    start: "101",
+    rootless: false,
+    networkNamespace: "net:[100]",
+    backend: backendFixture(2),
+  };
+  assertDistinctStores(builder, recipient);
+  for (const [reason, backend] of [
+    ["same-backend-root", { ...recipient.backend, root: builder.backend.root }],
+    ["same-backend-root", { ...recipient.backend, rootIdentity: builder.backend.rootIdentity }],
+    ["same-backend-state", { ...recipient.backend, state: builder.backend.state }],
+    ["same-backend-state", { ...recipient.backend, stateIdentity: builder.backend.stateIdentity }],
+    ["same-backend-socket", { ...recipient.backend, socket: builder.backend.socket }],
+    [
+      "same-backend-socket",
+      { ...recipient.backend, socketIdentity: builder.backend.socketIdentity },
+    ],
+    [
+      "same-backend-process",
+      { ...recipient.backend, pid: builder.backend.pid, start: builder.backend.start },
+    ],
+  ] as const)
+    rejected(reason, () => assertDistinctStores(builder, { ...recipient, backend }));
+  const { backend: _builderBackend, ...bareBuilder } = builder;
+  const { backend: _recipientBackend, ...bareRecipient } = recipient;
+  rejected("backend-binding", () => assertDistinctStores(builder, bareRecipient));
+  rejected("backend-binding", () => assertDistinctStores(bareBuilder, recipient));
+  // Rootless keeps its existing independent namespace/classic storage architecture.
+  assertDistinctStores(
+    { ...bareBuilder, rootless: true },
+    { ...bareRecipient, rootless: true, networkNamespace: "net:[101]" },
+  );
+});
+
+test("private containerd uses an explicit configuration and API binding instead of an ambient host service", () => {
+  const session = "/tmp/fortipi-docker-test";
+  const text = privateContainerdConfig(session);
+  for (const [key, value] of [
+    ["root", `${session}/containerd-root`],
+    ["state", `${session}/containerd-state`],
+    ["address", `${session}/containerd.sock`],
+  ])
+    assert.ok(text.includes(`${key} = "${value}"`));
+  assert.ok(text.includes("imports = []") && text.includes('tcp_address = ""'));
+  assert.ok(text.includes('[debug]\n  address = ""') && text.includes('[metrics]\n  address = ""'));
+  assert.throws(() =>
+    privateContainerdConfig(`/tmp/fortipi-docker-${canary}\nimports = ["/ambient"]`),
+  );
+  const backend = backendFixture(1);
+  const api = {
+    Address: backend.socket,
+    Namespaces: { Containers: "moby", Plugins: "plugins.moby" },
+  };
+  assertPrivateContainerdApi(api, backend);
+  for (const changed of [
+    null,
+    { ...api, Address: `/run/${canary}/containerd.sock` },
+    { ...api, Namespaces: { ...api.Namespaces, Containers: canary } },
+    { ...api, Namespaces: { ...api.Namespaces, Plugins: canary } },
+  ])
+    assert.throws(
+      () => assertPrivateContainerdApi(changed, backend),
+      (error) => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.message.includes(canary), false);
+        return true;
+      },
+    );
+});
+
+test("Config diagnostics disclose only whitelisted field, side and finite shape while every value still rejects", () => {
+  const withField = (field: string, value: unknown) => ({ ...config, [field]: value });
+  for (const [shape, value] of [
+    ["null", null],
+    ["emptystring", ""],
+    ["string", canary],
+    ["false", false],
+    ["true", true],
+    ["number", 17],
+    ["emptyarray", []],
+    ["array", [canary]],
+    ["emptyobject", {}],
+    ["object", { [canary]: canary }],
+  ] as const) {
+    rejected(
+      "config-fields",
+      () => assertImportedImage({ ...image, Config: withField("StopTimeout", value) }, graph),
+      { field: "StopTimeout", side: "actual", shape },
+    );
+    rejected(
+      "config-fields",
+      () =>
+        assertImportedImage(image, { ...graph, configuration: withField("StopTimeout", value) }),
+      { field: "StopTimeout", side: "expected", shape },
+    );
+    rejected(
+      "config-fields",
+      () => assertImportedImage({ ...image, Config: withField(canary, value) }, graph),
+      { field: "unknown", side: "actual", shape },
+    );
+  }
+  for (const field of [
+    "Hostname",
+    "Domainname",
+    "AttachStdin",
+    "AttachStdout",
+    "AttachStderr",
+    "Tty",
+    "OpenStdin",
+    "StdinOnce",
+    "Healthcheck",
+    "ArgsEscaped",
+    "Image",
+    "NetworkDisabled",
+    "OnBuild",
+    "StopTimeout",
+  ])
+    rejected(
+      "config-fields",
+      () =>
+        assertImportedImage(
+          { ...image, Config: { ...config, [field]: { [canary]: canary } } },
+          graph,
+        ),
+      { field, side: "actual", shape: "object" },
+    );
+  const genuine = rejected(
+    "config-fields",
+    () => assertImportedImage({ ...image, Config: withField(canary, canary) }, graph),
+    { field: "unknown", side: "actual", shape: "string" },
+  );
+  for (const detail of [
+    { field: canary, side: "actual", shape: "string" },
+    { field: "Image", side: canary, shape: "string" },
+    { field: "Image", side: "actual", shape: canary },
+  ]) {
+    Object.assign(genuine, { config: detail });
+    const result = recipientFailure("imported-identity", genuine);
+    assert.equal(Object.hasOwn(result, "config"), false);
+    assert.equal(JSON.stringify(result).includes(canary), false);
+  }
 });

@@ -9,6 +9,11 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { repository } from "../../../scripts/build-workspaces.ts";
+import {
+  assertPrivateContainerdApi,
+  type PrivateContainerd,
+  verifyPrivateContainerd,
+} from "../../../tools/unstale/provision-docker.ts";
 import { archiveEntries, hash } from "../../../tools/unstale/review-supply-chain.ts";
 import { inspectImageArchive, type SavedImage } from "./image-archive.ts";
 import { assertRuntimeConfig, type ImageConfig, type PrunePolicy } from "./image-prune.ts";
@@ -32,6 +37,11 @@ const reasons = [
   "same-socket",
   "same-process",
   "same-namespace",
+  "backend-binding",
+  "same-backend-root",
+  "same-backend-state",
+  "same-backend-socket",
+  "same-backend-process",
   "store-query",
   "store-types",
   "store-images",
@@ -70,28 +80,101 @@ type Stage =
   | "import"
   | "imported-identity";
 
+// Public Config schema: Moby 29.9.3 api/types/container/config.go plus
+// DockerOCIImageConfig's embedded OCI fields. This is diagnostic-only.
+const configFields = [
+  "Hostname",
+  "Domainname",
+  "User",
+  "AttachStdin",
+  "AttachStdout",
+  "AttachStderr",
+  "ExposedPorts",
+  "Tty",
+  "OpenStdin",
+  "StdinOnce",
+  "Env",
+  "Cmd",
+  "Healthcheck",
+  "ArgsEscaped",
+  "Image",
+  "Volumes",
+  "WorkingDir",
+  "Entrypoint",
+  "NetworkDisabled",
+  "OnBuild",
+  "Labels",
+  "StopSignal",
+  "StopTimeout",
+  "Shell",
+  "unknown",
+] as const;
+const shapes = [
+  "null",
+  "emptystring",
+  "string",
+  "false",
+  "true",
+  "number",
+  "emptyarray",
+  "array",
+  "emptyobject",
+  "object",
+] as const;
+interface ConfigDiagnostic {
+  field: (typeof configFields)[number];
+  side: "actual" | "expected";
+  shape: (typeof shapes)[number];
+}
+function configDiagnostic(
+  key: string,
+  value: unknown,
+  side: ConfigDiagnostic["side"],
+): ConfigDiagnostic | undefined {
+  let shape: ConfigDiagnostic["shape"] | undefined;
+  if (value === null) shape = "null";
+  else if (typeof value === "string") shape = value === "" ? "emptystring" : "string";
+  else if (typeof value === "boolean") shape = value ? "true" : "false";
+  else if (typeof value === "number") shape = "number";
+  else if (Array.isArray(value)) shape = value.length === 0 ? "emptyarray" : "array";
+  else if (typeof value === "object")
+    shape = Object.keys(value).length === 0 ? "emptyobject" : "object";
+  if (shape === undefined) return undefined;
+  return { field: configFields.find((field) => field === key) ?? "unknown", side, shape };
+}
+
 class RecipientProofError extends Error {
   readonly reason: Reason;
-  constructor(reason: Reason) {
+  readonly config?: ConfigDiagnostic;
+  constructor(reason: Reason, config?: ConfigDiagnostic) {
     super("Recipient proof rejected");
     this.name = "RecipientProofError";
     this.reason = reason;
+    if (config !== undefined) this.config = config;
   }
 }
 // Discard assertion details here; never retain actual/expected, message or cause.
-function checked(reason: Reason, assertion: () => void): void {
+function checked(reason: Reason, assertion: () => void, config?: ConfigDiagnostic): void {
   try {
     assertion();
   } catch {
-    throw new RecipientProofError(reason);
+    throw new RecipientProofError(reason, config);
   }
 }
 export function recipientFailure(stage: Stage, error: unknown, fallback: Reason = "unknown") {
   const reason = error instanceof RecipientProofError ? error.reason : fallback;
+  const config =
+    error instanceof RecipientProofError && reason === "config-fields" ? error.config : undefined;
   return {
     probe: "recipient-import",
     stage,
     reason: reasons.includes(reason) ? reason : "unknown",
+    ...(config &&
+    configFields.includes(config.field) &&
+    shapes.includes(config.shape) &&
+    ["actual", "expected"].includes(config.side)
+      ? { config: { field: config.field, side: config.side, shape: config.shape } }
+      : {}),
     passed: false,
   };
 }
@@ -112,6 +195,7 @@ interface Daemon {
   start: string;
   rootless: boolean;
   networkNamespace: string;
+  backend?: PrivateContainerd;
 }
 interface Receipt {
   version: 1;
@@ -229,6 +313,22 @@ export function assertDistinctStores(builder: Daemon, recipient: Daemon): void {
         "Rootless recipient namespace is the builder namespace",
       ),
     );
+  else {
+    checked("backend-binding", () => assert.ok(builder.backend && recipient.backend));
+    const a = builder.backend;
+    const b = recipient.backend;
+    assert.ok(a && b);
+    checked("same-backend-root", () =>
+      assert.ok(a.root !== b.root && a.rootIdentity !== b.rootIdentity),
+    );
+    checked("same-backend-state", () =>
+      assert.ok(a.state !== b.state && a.stateIdentity !== b.stateIdentity),
+    );
+    checked("same-backend-socket", () =>
+      assert.ok(a.socket !== b.socket && a.socketIdentity !== b.socketIdentity),
+    );
+    checked("same-backend-process", () => assert.ok(a.pid !== b.pid || a.start !== b.start));
+  }
 }
 
 /** Save-by-ID need not restore a tag; select only the sole image in the empty store. */
@@ -248,7 +348,7 @@ export function singleImportedImage(ids: string[]): string {
 }
 
 // Docker inspect can expose inert API defaults absent from OCI Config.
-function configuration(config: ImageConfig): unknown {
+function configuration(config: ImageConfig, side: ConfigDiagnostic["side"]): unknown {
   checked("runtime-config", () => assertRuntimeConfig(config));
   const keys = [
     "Env",
@@ -264,24 +364,28 @@ function configuration(config: ImageConfig): unknown {
   ];
   for (const [key, value] of Object.entries(config)) {
     if (keys.includes(key)) continue;
-    checked("config-fields", () =>
-      assert.ok(
-        (["Hostname", "Domainname", "Image"].includes(key) && value === "") ||
-          ([
-            "AttachStdin",
-            "AttachStdout",
-            "AttachStderr",
-            "Tty",
-            "OpenStdin",
-            "StdinOnce",
-            "ArgsEscaped",
-            "NetworkDisabled",
-          ].includes(key) &&
-            value === false) ||
-          (["OnBuild", "Healthcheck"].includes(key) &&
-            (value === null || (key === "OnBuild" && Array.isArray(value) && value.length === 0))),
-        "Unexpected recipient configuration field",
-      ),
+    checked(
+      "config-fields",
+      () =>
+        assert.ok(
+          (["Hostname", "Domainname", "Image"].includes(key) && value === "") ||
+            ([
+              "AttachStdin",
+              "AttachStdout",
+              "AttachStderr",
+              "Tty",
+              "OpenStdin",
+              "StdinOnce",
+              "ArgsEscaped",
+              "NetworkDisabled",
+            ].includes(key) &&
+              value === false) ||
+            (["OnBuild", "Healthcheck"].includes(key) &&
+              (value === null ||
+                (key === "OnBuild" && Array.isArray(value) && value.length === 0))),
+          "Unexpected recipient configuration field",
+        ),
+      configDiagnostic(key, value, side),
     );
   }
   return {
@@ -314,8 +418,8 @@ export function assertImportedImage(
   checked("diffids", () =>
     assert.deepEqual(actual.RootFS.Layers, expected.diffIds, "Imported DiffIDs changed"),
   );
-  const actualConfig = configuration(actual.Config);
-  const expectedConfig = configuration(expected.configuration);
+  const actualConfig = configuration(actual.Config, "actual");
+  const expectedConfig = configuration(expected.configuration, "expected");
   checked("config-equality", () =>
     assert.deepEqual(actualConfig, expectedConfig, "Imported runtime config changed"),
   );
@@ -384,7 +488,9 @@ async function binding(): Promise<Daemon> {
   }
   const expected = [
     executable,
-    ...(rootless ? ["--rootless", "--storage-driver", "overlay2"] : ["--dns", "172.17.0.1"]),
+    ...(rootless
+      ? ["--rootless", "--storage-driver", "overlay2"]
+      : ["--dns", "172.17.0.1", "--containerd", resolve(session, "containerd.sock")]),
     "--config-file",
     resolve(session, "config/daemon.json"),
     "--log-level",
@@ -436,6 +542,14 @@ async function binding(): Promise<Daemon> {
     ? await readlink(namespace)
     : await command("/usr/bin/sudo", ["-n", "/usr/bin/readlink", namespace]);
   assert.match(networkNamespace, /^net:\[[0-9]+\]$/);
+  let backend: PrivateContainerd | undefined;
+  if (!rootless) {
+    backend = await verifyPrivateContainerd(tool, session, env, raw);
+    assertPrivateContainerdApi(
+      JSON.parse(await docker(["info", "--format", "{{json .Containerd}}"])),
+      backend,
+    );
+  }
   return {
     id: info.id,
     root: canonical,
@@ -444,6 +558,7 @@ async function binding(): Promise<Daemon> {
     start,
     rootless,
     networkNamespace,
+    ...(backend ? { backend } : {}),
   };
 }
 async function readReceipt(): Promise<Receipt> {
