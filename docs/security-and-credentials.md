@@ -49,7 +49,11 @@ strings from access/error logs.
 An executor's application credential generation, execution generation and socket
 connection epoch are separate. Reconnect increments only the epoch. Restoring a
 lost execution ledger requires explicit new-generation authorization. The
-platform owns WebSockets and hibernation; there is no Agents socket protocol or
+upgrade and registration transactions recheck current credential authority;
+registration also rechecks the executor generation and connection epoch after
+asynchronous alarm scheduling, so a pending registration cannot restore a revoked
+generation or superseded connection. The platform owns WebSockets and hibernation;
+there is no Agents socket protocol or
 second scheduler. Attachments contain nonsecret identity/scope/epoch metadata.
 The negotiated heartbeat frame contains dynamic identity/time fields, so the
 handler uses volatile liveness instead of inventing a static auto-response.
