@@ -59,6 +59,23 @@ copy retained bytes into a full new revision and recover its publication receipt
 without receiving public read permission. Public file/stat/manifest/receipt reads
 still require `workspace.read`.
 
+Private `getReceipt` can also recover an exact known commit with the current
+registered writer's retained reservation scope. It verifies the saved upload or
+local intent, original job/operation/base/lease identity, current agent/conversation/
+target grant and credential/executor floors. Historical expiry does not renew or
+rewrite that authority. Receipt lookup is observational and does not initiate
+publication or cleanup. The public `getCommitReceipt` path always requires read.
+
+When a commit reply is lost before its computed digest is known, private fact
+paging can expose only the intended recipient's actual retained publication fact
+under that same write authority. The fact must match the stored receipt and its
+original reservation; write does not authorize arbitrary facts. Read-authorized
+fact pages and acknowledgments also require one current grant covering the actual
+workspace, action, recipient agent and fact conversation. Acknowledgments retain
+their original event coordinates on retry. The service still compares each
+receipt/fact with its known job and binding: `CommitLookup` carries only workspace,
+commit ID and digest, not independent job or binding coordinates.
+
 `POST /__fortipi/terminal-proof` accepts at most 64 KiB of the existing
 `JobCommitted` JSON, with the same server-constructed context header. It checks
 the historical acquired lease, known job/execution/operation reservation, current

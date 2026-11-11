@@ -30,7 +30,7 @@ import {
   validateLease,
 } from "./authority.js";
 import { ComputerStore } from "./computer.js";
-import { outcome, requireThat, unwrap } from "./errors.js";
+import { outcome, requireThat, unwrap, WorkspaceError } from "./errors.js";
 import { LocalProvider } from "./local.js";
 import { LocalReads } from "./local-read.js";
 import { LocalUploads } from "./local-upload.js";
@@ -2014,34 +2014,65 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     authorize(this.state, ctx, input.workspaceId, action);
     const prior = this.state.get<D.CommitReceipt>(`receipt:${input.commitId}`);
     if (prior) {
+      if (action === "workspace.write") this.receiptReservation(ctx, prior);
       requireThat(
         prior.commitDigest === input.commitDigest,
         "conflict",
         "Commit ID reused with different digest",
       );
-      if (action === "workspace.write") {
-        const upload =
-          prior.providerKind === "computer"
-            ? this.state.get<UploadRecord>(`upload:${prior.storeRef.uploadId}`)
-            : undefined;
-        const local =
-          prior.providerKind === "local"
-            ? this.state.get<D.LocalCommitIntent>(`local-intent:${prior.commitId}`)
-            : undefined;
-        const lease = upload?.request.lease ?? local?.scope.lease;
-        requireThat(
-          lease &&
-            lease.workspaceId === prior.workspaceId &&
-            lease.baseRevision === prior.baseRevision &&
-            lease.operationId === prior.operationId &&
-            (lease.ownerKind === "job" ? lease.jobId === prior.jobId : prior.jobId === undefined),
-          "conflict",
-          "Stored publication operation mismatch",
-        );
-        authorizeReservedAction(this.state, ctx, lease, "workspace.write");
-      }
     }
     return prior;
+  }
+  private receiptReservation(ctx: D.AuthContext, receipt: D.CommitReceipt): D.TargetReservation {
+    const upload =
+      receipt.providerKind === "computer"
+        ? this.state.get<UploadRecord>(`upload:${receipt.storeRef.uploadId}`)
+        : undefined;
+    const local =
+      receipt.providerKind === "local"
+        ? this.state.get<D.LocalCommitIntent>(`local-intent:${receipt.commitId}`)
+        : undefined;
+    const lease = upload?.request.lease ?? local?.scope.lease;
+    requireThat(
+      lease &&
+        lease.workspaceId === receipt.workspaceId &&
+        lease.baseRevision === receipt.baseRevision &&
+        lease.operationId === receipt.operationId &&
+        (lease.ownerKind === "job" ? lease.jobId === receipt.jobId : receipt.jobId === undefined),
+      "conflict",
+      "Stored publication operation mismatch",
+    );
+    return authorizeReservedAction(this.state, ctx, lease, "workspace.write");
+  }
+  /** Receipt recovery may use write authority, but never grants a public read capability. */
+  private receiptReadAction(
+    ctx: D.AuthContext,
+    workspaceId: string,
+  ): "workspace.read" | "workspace.write" {
+    try {
+      authorize(this.state, ctx, workspaceId, "workspace.read");
+      return "workspace.read";
+    } catch (error) {
+      if (!(error instanceof WorkspaceError) || error.code !== "unauthorized") throw error;
+      authorize(this.state, ctx, workspaceId, "workspace.write");
+      return "workspace.write";
+    }
+  }
+  private lookupReceipt(
+    ctx: D.AuthContext,
+    input: D.CommitLookup,
+    action: "workspace.read" | "workspace.write",
+  ): D.CommitReceipt {
+    const receipt = this.receipt(ctx, input, action);
+    requireThat(
+      !this.state.get("child") &&
+        this.isSelf(input.workspaceId) &&
+        this.current().workspaceId === input.workspaceId,
+      "unauthorized",
+      "Only the workspace authority accepts this operation",
+    );
+    requireThat(receipt, "not_found", "Receipt not found");
+    return receipt;
   }
   private publication(
     _ctx: D.AuthContext,
@@ -2124,32 +2155,34 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
     }
   }
   getReceipt(ctx: D.AuthContext, input: D.CommitLookup): Promise<D.Outcome<D.CommitReceipt>> {
-    return outcome(async () => {
-      await this.authority(ctx, input.workspaceId);
-      return this.mutex.run(() => {
-        const receipt = this.receipt(ctx, input);
-        requireThat(receipt, "not_found", "Receipt not found");
-        return receipt;
-      });
-    }, ctx.requestId);
+    return outcome(
+      () =>
+        this.mutex.run(() =>
+          this.lookupReceipt(ctx, input, this.receiptReadAction(ctx, input.workspaceId)),
+        ),
+      ctx.requestId,
+    );
   }
   getCommitReceipt(
     ctx: D.AuthContext,
     input: D.OperationRequest<"getCommitReceipt">,
   ): Promise<D.Outcome<D.OperationResponse<"getCommitReceipt">>> {
     return outcome(
-      async () => ({
-        status: 200 as const,
-        body: publicCommitReceipt(
-          unwrap(
-            await this.getReceipt(ctx, {
-              workspaceId: input.path.workspaceId,
-              commitId: input.path.commitId,
-              commitDigest: input.query.commitDigest,
-            }),
+      () =>
+        this.mutex.run(() => ({
+          status: 200 as const,
+          body: publicCommitReceipt(
+            this.lookupReceipt(
+              ctx,
+              {
+                workspaceId: input.path.workspaceId,
+                commitId: input.path.commitId,
+                commitDigest: input.query.commitDigest,
+              },
+              "workspace.read",
+            ),
           ),
-        ),
-      }),
+        })),
       ctx.requestId,
     );
   }
@@ -2378,11 +2411,16 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       () =>
         this.mutex.run(() => {
           const authority = this.current();
-          authorize(this.state, ctx, authority.workspaceId, "workspace.read");
+          this.receiptReadAction(ctx, authority.workspaceId);
           requireThat(
             input.recipient.kind === "agent" &&
-              ctx.grants.some((grant) =>
-                permitsResource(grant.resources.agentIds, input.recipient.id),
+              ctx.grants.some(
+                (grant) =>
+                  (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+                  permitsResource(grant.resources.workspaceIds, authority.workspaceId) &&
+                  (permitsResource(grant.resources.actions, "workspace.read") ||
+                    permitsResource(grant.resources.actions, "workspace.write")) &&
+                  permitsResource(grant.resources.agentIds, input.recipient.id),
               ),
             "unauthorized",
             "Fact recipient grant required",
@@ -2399,7 +2437,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             items: rows
               .filter(
                 (row) =>
-                  row.value.fact.recipients.some((recipient) => same(recipient, input.recipient)) &&
+                  this.canReadFact(ctx, row.value.fact, input.recipient) &&
                   !row.value.acknowledgments.some((ack) => same(ack.recipient, input.recipient)),
               )
               .map((row) => row.value.fact),
@@ -2415,12 +2453,9 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         this.mutex.run(() =>
           this.state.transaction(() => {
             const authority = this.current();
-            authorize(this.state, ctx, authority.workspaceId, "workspace.read");
+            this.receiptReadAction(ctx, authority.workspaceId);
             requireThat(
               input.recipient.kind === "agent" &&
-                ctx.grants.some((grant) =>
-                  permitsResource(grant.resources.agentIds, input.recipient.id),
-                ) &&
                 input.eventSeq > 0 &&
                 Number.isSafeInteger(input.eventSeq),
               "unauthorized",
@@ -2429,9 +2464,9 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             const row = this.state.get<FactRow>(`fact:${input.factId}`);
             requireThat(row, "not_found", "Fact absent");
             requireThat(
-              row.fact.recipients.some((recipient) => same(recipient, input.recipient)),
-              "not_found",
-              "Fact recipient absent",
+              this.canReadFact(ctx, row.fact, input.recipient),
+              "unauthorized",
+              "Fact scope or recipient grant required",
             );
             const prior = row.acknowledgments.find((ack) => same(ack.recipient, input.recipient));
             if (prior) {
@@ -2450,6 +2485,50 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         ),
       ctx.requestId,
     );
+  }
+  private canReadFact(ctx: D.AuthContext, fact: D.Fact, recipient: D.Recipient): boolean {
+    const authority = this.current();
+    if (
+      this.state.get("child") ||
+      !this.isSelf(authority.workspaceId) ||
+      !same(fact.source, { kind: "workspace", id: authority.workspaceId }) ||
+      fact.event.deploymentId !== authority.deploymentId ||
+      fact.event.conversationId !== fact.conversationId ||
+      recipient.kind !== "agent" ||
+      !fact.recipients.some((saved) => same(saved, recipient))
+    )
+      return false;
+    const scoped = (action: "workspace.read" | "workspace.write") =>
+      ctx.grants.some(
+        (grant) =>
+          (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+          permitsResource(grant.resources.workspaceIds, authority.workspaceId) &&
+          permitsResource(grant.resources.actions, action) &&
+          permitsResource(grant.resources.agentIds, recipient.id) &&
+          permitsResource(grant.resources.conversationIds, fact.conversationId),
+      );
+    if (scoped("workspace.read")) return true;
+    if (!scoped("workspace.write")) return false;
+    // Write-only recovery exposes only the actual publication's intended recipient fact.
+    const saved = this.state.get<{ receipt: D.CommitReceipt }>(`commit-fact:${fact.factId}`);
+    const receipt = saved && this.state.get<D.CommitReceipt>(`receipt:${saved.receipt.commitId}`);
+    if (
+      !receipt ||
+      !same(saved?.receipt, receipt) ||
+      receipt.sourceFactId !== fact.factId ||
+      fact.event.type !== "workspace.revision.committed" ||
+      !same(fact.event.payload, publicCommitReceipt(receipt))
+    )
+      return false;
+    try {
+      const reservation = this.receiptReservation(ctx, receipt);
+      return (
+        reservation.agentId === recipient.id && reservation.conversationId === fact.conversationId
+      );
+    } catch (error) {
+      if (!(error instanceof WorkspaceError)) throw error;
+      return false;
+    }
   }
   exportData(ctx: D.AuthContext, input: D.ExportRequest): Promise<D.Outcome<D.ExportDescriptor>> {
     return outcome(async () => {

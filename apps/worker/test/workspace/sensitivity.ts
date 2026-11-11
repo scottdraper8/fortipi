@@ -73,6 +73,9 @@ try {
     "host-image",
     "host-start-order",
     "byte-length",
+    "receipt-read",
+    "public-receipt",
+    "fact-conversation",
   ] as const) {
     let changedAuthority = authority;
     let changedComputer = computer;
@@ -112,6 +115,24 @@ try {
       changedWorkspace = workspace.replace(
         'this.receipt(ctx, input, "workspace.write")',
         "this.receipt(ctx, input)",
+      );
+    if (mutant === "receipt-read")
+      changedWorkspace = workspace.replace('return "workspace.write";', 'return "workspace.read";');
+    if (mutant === "public-receipt") {
+      const start = workspace.indexOf("  getCommitReceipt(");
+      const end = workspace.indexOf("  transact(", start);
+      assert.ok(start >= 0 && end > start);
+      changedWorkspace =
+        workspace.slice(0, start) +
+        workspace
+          .slice(start, end)
+          .replace('"workspace.read"', "this.receiptReadAction(ctx, input.path.workspaceId)") +
+        workspace.slice(end);
+    }
+    if (mutant === "fact-conversation")
+      changedWorkspace = workspace.replace(
+        "permitsResource(grant.resources.conversationIds, fact.conversationId)",
+        "true",
       );
     if (mutant === "terminal-scope")
       changedAuthority = authority.replace(
@@ -207,7 +228,13 @@ try {
                           ? "Revoked generation published a revision"
                           : mutant === "writer-receipt"
                             ? "Workspace grant required"
-                            : "Wrong conversation received a terminal proof",
+                            : mutant === "receipt-read"
+                              ? "Write-only historical receipt lookup required public read"
+                              : mutant === "public-receipt"
+                                ? "Writer gained a public read capability"
+                                : mutant === "fact-conversation"
+                                  ? "Unrelated conversation received a workspace fact"
+                                  : "Wrong receipt scope was accepted: x-test-other-conversation",
       ),
       `Mutation failed for an unintended reason: ${result.output.slice(-3000)}`,
     );
