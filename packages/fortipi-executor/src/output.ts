@@ -74,6 +74,9 @@ export class Output {
             text: chunk,
           },
         };
+        // Tiny writes still store a full identity/envelope plus SQLite indexes. Count those
+        // bytes before writing, retaining the same completion/repair reserve as admission.
+        this.ledger.capacity(Buffer.byteLength(canonicalJson(value)) * 2 + 8192, true, false);
         latest.outputBytes += bytes;
         this.ledger.enqueue(this.identity.jobId, "output", latest.sequence, value);
         this.ledger.put(latest);

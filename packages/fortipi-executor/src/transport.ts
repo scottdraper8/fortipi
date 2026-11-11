@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ValidateFunction } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type {
+  ErrorBody,
   ExecutorFrame,
   ExecutorTransferLimits,
   TicketIdentity,
@@ -17,6 +18,7 @@ import {
 } from "fortipi-contract/executor";
 import type { Limits, Profile } from "./config.js";
 import { effectiveLimits, validateOrigin } from "./config.js";
+import type { Ledger } from "./ledger.js";
 import { hash } from "./policy.js";
 
 const ajv = new Ajv2020({ strict: true, allErrors: false });
@@ -39,13 +41,17 @@ export function validate<T>(
 export function frame(data: unknown): ExecutorFrame {
   return validate<ExecutorFrame>("executor-messages.schema.json", "ExecutorFrame", data);
 }
+type QuotaError = Extract<ErrorBody["error"], { code: "quota_exceeded" | "quota_paused" }>;
+type Pressure = QuotaError["details"]["pressure"];
 export class HttpFailure extends Error {
   status: number;
   retryAt?: number;
-  constructor(status: number, retryAt?: number) {
+  pressure?: Pressure;
+  constructor(status: number, retryAt?: number, pressure?: Pressure) {
     super(`executor HTTPS request failed (${status})`);
     this.status = status;
     if (retryAt !== undefined) this.retryAt = retryAt;
+    if (pressure !== undefined) this.pressure = pressure;
   }
 }
 export async function readBounded(response: Response, maximum: number): Promise<Uint8Array> {
@@ -77,8 +83,69 @@ export class HttpTransport {
   jsonBytes = 1048576;
   outputFrameBytes = 16384;
   pausedUntil = 0;
+  pressureHeld = false;
+  pressure?: Pressure;
+  private pressureStatus = 503;
+  private ledger?: Ledger;
   authority?: TicketIdentity;
   revoked = false;
+  bindLedger(ledger: Ledger): void {
+    this.ledger = ledger;
+    const saved = ledger.db.prepare("SELECT value FROM meta WHERE key='https_pressure'").get() as
+      | { value: string }
+      | undefined;
+    if (!saved) return;
+    const state = JSON.parse(saved.value) as {
+      until: number;
+      held: boolean;
+      status: number;
+      pressure?: Pressure;
+    };
+    if (
+      !Number.isSafeInteger(state.until) ||
+      state.until < 0 ||
+      typeof state.held !== "boolean" ||
+      ![429, 503].includes(state.status)
+    )
+      throw new Error("invalid persisted infrastructure pause");
+    if (state.pressure)
+      validate("infrastructure.schema.json", "InfrastructurePressure", state.pressure);
+    this.pausedUntil = state.until;
+    this.pressureHeld = state.held;
+    this.pressureStatus = state.status;
+    if (state.pressure) this.pressure = state.pressure;
+  }
+  private savePressure(): void {
+    this.ledger?.transaction(() =>
+      this.ledger?.db
+        .prepare(
+          "INSERT INTO meta VALUES ('https_pressure',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        )
+        .run(
+          canonicalJson({
+            until: this.pausedUntil,
+            held: this.pressureHeld,
+            status: this.pressureStatus,
+            ...(this.pressure ? { pressure: this.pressure } : {}),
+          }),
+        ),
+    );
+  }
+  /** Explicit local recovery after the operator resolves the reported infrastructure pressure. */
+  clearPressure(): void {
+    const previous = { until: this.pausedUntil, held: this.pressureHeld, pressure: this.pressure };
+    try {
+      this.pausedUntil = 0;
+      this.pressureHeld = false;
+      delete this.pressure;
+      this.savePressure();
+    } catch (error) {
+      this.pausedUntil = previous.until;
+      this.pressureHeld = previous.held;
+      if (previous.pressure) this.pressure = previous.pressure;
+      throw error;
+    }
+  }
   private activeTransfers = 0;
   transferLimits(): ExecutorTransferLimits {
     const chunkBytes = Math.min(this.chunkBytes, this.limits.chunkBytes);
@@ -143,7 +210,12 @@ export class HttpTransport {
     const now = Date.now();
     if (authenticated && this.revoked) throw new Error("executor transport revoked");
     if (deadline <= now) throw new Error("request deadline expired");
-    if (now < this.pausedUntil) throw new HttpFailure(503, this.pausedUntil);
+    if (this.pressureHeld || now < this.pausedUntil)
+      throw new HttpFailure(
+        this.pressureStatus,
+        this.pressureHeld ? undefined : this.pausedUntil,
+        this.pressure,
+      );
     const headers = new Headers(init.headers);
     if (authenticated) headers.set("Authorization", `Bearer ${this.profile.token}`);
     const response = await this.fetcher(new URL(path, this.profile.origin), {
@@ -153,15 +225,58 @@ export class HttpTransport {
       signal: AbortSignal.timeout(Math.min(30000, deadline - now)),
     });
     if (!response.ok) {
+      if (response.status !== 429 && response.status !== 503) {
+        await response.body?.cancel();
+        throw new HttpFailure(response.status);
+      }
+      let error: ErrorBody["error"] | undefined;
+      try {
+        error = validate<ErrorBody>(
+          "common.schema.json",
+          "ErrorBody",
+          JSON.parse(Buffer.from(await readBounded(response, this.jsonBytes)).toString("utf8")),
+        ).error;
+      } catch {
+        // Unstructured provider errors still receive bounded backoff, without fabricated quota data.
+      }
+      const times: number[] = [];
       const retry = response.headers.get("Retry-After");
-      const seconds = retry === null ? undefined : Number(retry);
-      const retryAt = Number.isFinite(seconds)
-        ? now + Math.min(60000, Math.max(1000, (seconds as number) * 1000))
-        : undefined;
-      if (response.status === 429 || response.status === 503)
-        this.pausedUntil = retryAt ?? now + 5000;
-      await response.body?.cancel();
-      throw new HttpFailure(response.status, retryAt);
+      if (retry !== null) {
+        const value = /^\d+(?:\.\d+)?$/.test(retry.trim())
+          ? now + Number(retry) * 1000
+          : Date.parse(retry);
+        if (Number.isSafeInteger(value) && value > now) times.push(value);
+      }
+      let pressure: Pressure | undefined;
+      if (error && "details" in error) {
+        const details = error.details;
+        if (details.retryAfterMs !== undefined) times.push(now + details.retryAfterMs);
+        if (details.pressure) {
+          pressure = details.pressure;
+          if (details.pressure.retryAt !== undefined) times.push(details.pressure.retryAt);
+          if (details.pressure.resetAt !== undefined) times.push(details.pressure.resetAt);
+        }
+      }
+      const held =
+          pressure?.resource === "storage" &&
+          pressure.retryAt === undefined &&
+          pressure.resetAt === undefined,
+        until = Math.max(now + 1000, ...times, times.length ? 0 : now + 5000);
+      // Requests already in flight may finish in either order. A later, shorter response
+      // cannot release a storage hold or shorten another response's known retry bound.
+      if (!this.pressureHeld && (held || until >= this.pausedUntil)) {
+        this.pressureStatus = response.status;
+        if (pressure) this.pressure = pressure;
+        else delete this.pressure;
+      }
+      this.pressureHeld ||= held;
+      this.pausedUntil = this.pressureHeld ? 0 : Math.max(this.pausedUntil, until);
+      this.savePressure();
+      throw new HttpFailure(
+        response.status,
+        this.pressureHeld ? undefined : this.pausedUntil,
+        this.pressure,
+      );
     }
     return response;
   }

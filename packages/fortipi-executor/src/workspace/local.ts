@@ -216,6 +216,9 @@ export class LocalWorkspace {
     });
   }
   authorize(request: LocalWorkspaceRequest): void {
+    // A historical caller lease never overrides loss of this executor's current authority.
+    if (this.staging.http.revoked) throw new Error("executor transport revoked");
+    if (this.staging.http.authority) this.staging.http.assertExecutorAuthority();
     if (
       this.binding.providerKind !== "local" ||
       request.executorId !== this.profile.executorId ||
@@ -481,6 +484,7 @@ export class LocalWorkspace {
         else await remove(path);
       }
       const after = await scan(this.root, this.limits);
+      this.authorizeActive(row, request);
       if (
         row.request.mode.kind !== "staged-change" ||
         after.manifestHash !== row.request.mode.postManifestHash

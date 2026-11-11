@@ -66,6 +66,7 @@ export class ExecutorRuntime implements FrameHandler {
     this.directory = options.directory;
     this.platform = options.platform ?? adapter();
     this.http = options.http ?? new HttpTransport(options.profile);
+    this.http.bindLedger(this.ledger);
     this.roots = options.roots;
     this.approvals = new Approvals(this.ledger);
     if (options.reloadProfile) this.reloadProfile = options.reloadProfile;
@@ -266,6 +267,7 @@ export class ExecutorRuntime implements FrameHandler {
       return;
     if (!this.connected || this.revoked || this.active.size >= this.http.limits.activeMutatingJobs)
       return;
+    if (this.http.pressureHeld || Date.now() < this.http.pausedUntil) return;
     this.active.add(id.jobId);
     let root: SafeRoot | undefined;
     try {
@@ -962,7 +964,12 @@ export class ExecutorRuntime implements FrameHandler {
     }
     if (this.connected)
       for (const row of this.ledger.pending()) if (row.decision === "allow") await this.start(row);
-    if (this.connected && !this.revoked && Date.now() >= this.http.pausedUntil)
+    if (
+      this.connected &&
+      !this.revoked &&
+      !this.http.pressureHeld &&
+      Date.now() >= this.http.pausedUntil
+    )
       for (const identity of this.ledger.identities()) {
         const row = this.ledger.get(identity.jobId);
         if (
