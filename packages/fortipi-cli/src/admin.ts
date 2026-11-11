@@ -10,7 +10,7 @@ import { errorStatuses, routeCatalog, validateProviderAuthPut, wireLimits } from
 import { exactOrigin } from "./config.js";
 import { CliError, check } from "./errors.js";
 import type { Profile } from "./profiles.js";
-import { reserveProtected } from "./profiles.js";
+import { reserveProtected, verifyReserved } from "./profiles.js";
 import { validate } from "./validation.js";
 
 export async function boundedBytes(response: Response, maximum: number): Promise<Uint8Array> {
@@ -42,8 +42,9 @@ export class AdminClient {
   readonly #options: AdminOptions;
   constructor(profile: Profile, options: AdminOptions = {}) {
     exactOrigin(profile.endpoint, options.allowLoopback);
-    this.#profile = profile;
-    this.#options = options;
+    // Bind authority to the validated values, rather than a caller-owned mutable object.
+    this.#profile = { ...profile };
+    this.#options = { ...options };
   }
   async #request(
     route: RouteDefinition,
@@ -151,6 +152,10 @@ export class AdminClient {
     maximum: number,
   ): Promise<{ bytes: number; sha256: string }> {
     validate("AdminArtifactReference", artifact);
+    check(
+      artifact.endpoint === `/v1/admin/artifacts/${artifact.artifactId}`,
+      "artifact_endpoint_mismatch",
+    );
     check(artifact.size <= maximum, "artifact_exceeds_bound");
     const destination = await reserveProtected(output);
     let size = 0;
@@ -159,28 +164,32 @@ export class AdminClient {
       const route = routeCatalog.find((r) => r.operationId === "getAdminArtifact");
       check(route, "missing_artifact_operation", 3);
       const response = await this.#request(route, { id: artifact.artifactId }, {});
-      check(
-        response.status === 200 && response.headers.get("content-length") === String(artifact.size),
-        "artifact_length_mismatch",
-        1,
-      );
       const reader = response.body?.getReader();
       check(reader, "missing_artifact_stream", 1);
       try {
+        check(
+          response.status === 200 &&
+            response.headers.get("content-length") === String(artifact.size),
+          "artifact_length_mismatch",
+          1,
+        );
         for (;;) {
           const chunk = await reader.read();
           if (chunk.done) break;
           size += chunk.value.byteLength;
           check(size <= artifact.size && size <= maximum, "artifact_exceeds_bound", 1);
           hash.update(chunk.value);
+          await verifyReserved(output, destination);
           await destination.writeFile(chunk.value);
         }
       } finally {
         await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
       }
       const digest = hash.digest("hex");
       check(size === artifact.size && digest === artifact.sha256, "artifact_integrity_failed", 1);
       await destination.sync();
+      await verifyReserved(output, destination);
       return { bytes: size, sha256: digest };
     } catch {
       // Retain an empty protected reservation on failure, never a plausible partial export.

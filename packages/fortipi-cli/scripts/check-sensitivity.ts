@@ -52,6 +52,12 @@ try {
   );
   await writeFile(permissionPath, original);
   await run("credentials.test.ts", "real filesystem protection", true);
+  const leakedEnvironment = original.replace('"TERM"', '"TERM", "GITHUB_TOKEN"');
+  assert.notEqual(leakedEnvironment, original);
+  await writeFile(permissionPath, leakedEnvironment);
+  await run("commands.test.ts", "actual pinned Wrangler", false, "GITHUB_TOKEN");
+  await writeFile(permissionPath, original);
+  await run("commands.test.ts", "actual pinned Wrangler", true);
   const oauthPath = join(root, "dist/model-auth.js");
   const oauth = await readFile(oauthPath, "utf8");
   const missingExtension = oauth.replace(
@@ -69,7 +75,7 @@ try {
   await writeFile(oauthPath, oauth);
   await run("model-auth.test.ts", "actual public Pi OpenAI", true);
   console.log(
-    "Permission bypass and lost OAuth extensions detected; restored copies pass. Worker-asset fault awaits genuine5 assets.",
+    "Permission bypass, role-environment leak and lost OAuth extensions detected; restored copies pass. Worker-asset fault awaits genuine5 assets.",
   );
 } finally {
   await rm(root, { recursive: true, force: true });
