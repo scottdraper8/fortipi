@@ -20,6 +20,7 @@ export { AdminClient } from "./admin.js";
 export type { PrepareReceipt } from "./assets.js";
 export type { OperatorConfig } from "./config.js";
 export { operatorConfig, readConfig } from "./config.js";
+export type { SafePressure } from "./errors.js";
 export { CliError } from "./errors.js";
 export type {
   CatalogModel,

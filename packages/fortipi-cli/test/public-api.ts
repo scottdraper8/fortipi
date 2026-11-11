@@ -6,6 +6,7 @@ import type {
   DeploymentReceipt,
   OperatorConfig,
   PrepareReceipt,
+  SafePressure,
 } from "fortipi-cli";
 import { AdminClient, CliError, operatorConfig, readConfig, runCommand } from "fortipi-cli";
 
@@ -20,5 +21,10 @@ export async function consume(
   void loaded;
   return runCommand(["config", "validate", "--config", "operator.json"], context);
 }
-export type PublicDtos = CatalogModel | CredentialDelivery | DeploymentReceipt | PrepareReceipt;
+export type PublicDtos =
+  | CatalogModel
+  | CredentialDelivery
+  | DeploymentReceipt
+  | PrepareReceipt
+  | SafePressure;
 export const publicClasses = [AdminClient, CliError];

@@ -10,10 +10,90 @@ import { AdminClient } from "../dist/admin.js";
 import type { PrepareReceipt } from "../dist/assets.js";
 import { verifyAssets } from "../dist/assets.js";
 import { deploymentReceipt } from "../dist/deployment.js";
+import { CliError, errorDiagnostic } from "../dist/errors.js";
 import { runCommand } from "../dist/index.js";
 import { writeProtected } from "../dist/profiles.js";
 import { wrangler, wranglerBin } from "../dist/wrangler.js";
 import { config, json, server, temp } from "./fixtures.ts";
+
+test("validated infrastructure errors expose actionable measurements without remote strings or invented reset", async (t) => {
+  const canary = "synthetic-remote-secret-canary";
+  let daily = false;
+  let invalid = false;
+  const { api } = await server(t, (_req, res) =>
+    json(
+      res,
+      {
+        error: {
+          code: "quota_exceeded",
+          message: canary,
+          requestId: "request-pressure",
+          retryable: false,
+          details: {
+            retryAfterMs: 1000,
+            setup: canary,
+            supportedContinuations: [canary],
+            pressure: {
+              resource: invalid ? canary : daily ? "requests" : "storage",
+              scope: { kind: "install", id: canary },
+              source: "policy",
+              measurement: daily ? "observed" : "unknown",
+              limit: daily ? 100 : 1024,
+              remaining: 0,
+              reason: canary,
+              action: daily ? "retry-later" : "reclaim-storage",
+              ...(daily ? { resetAt: 1731456000000, retryAt: 1731456001000 } : {}),
+            },
+          },
+        },
+      },
+      429,
+    ),
+  );
+  const failure = async () => {
+    try {
+      await api.call("getUsage", { path: {}, query: {}, body: undefined });
+    } catch (error) {
+      assert.ok(error instanceof CliError);
+      return error;
+    }
+    assert.fail("expected infrastructure pressure");
+  };
+  const storage = await failure();
+  assert.deepEqual(storage.pressure, {
+    resource: "storage",
+    source: "policy",
+    measurement: "unknown",
+    limit: 1024,
+    remaining: 0,
+    action: "reclaim-storage",
+  });
+  assert.equal(storage.pressure?.resetAt, undefined);
+  assert.equal(storage.pressure?.retryAt, undefined);
+  assert.ok(Object.isFrozen(storage.pressure));
+  assert.equal(errorDiagnostic(storage).includes(canary), false);
+  assert.deepEqual(JSON.parse(errorDiagnostic(storage)), {
+    error: { code: "http_429", pressure: storage.pressure },
+  });
+  daily = true;
+  const requests = await failure();
+  assert.deepEqual(requests.pressure, {
+    resource: "requests",
+    source: "policy",
+    measurement: "observed",
+    limit: 100,
+    remaining: 0,
+    action: "retry-later",
+    resetAt: 1731456000000,
+    retryAt: 1731456001000,
+  });
+  assert.equal(errorDiagnostic(requests).includes(canary), false);
+  invalid = true;
+  const rejected = await failure();
+  assert.equal(rejected.code, "invalid_error_response");
+  assert.equal(rejected.pressure, undefined);
+  assert.equal(errorDiagnostic(rejected).includes(canary), false);
+});
 
 test("authenticated origin and identity remain bound when the caller changes its profile", async (t) => {
   let intendedRequests = 0;

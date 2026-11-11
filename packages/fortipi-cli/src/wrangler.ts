@@ -42,6 +42,7 @@ export async function wranglerBin(): Promise<string> {
 }
 export function wranglerEnvironment(request: WranglerRequest): NodeJS.ProcessEnv {
   const env = helperEnvironment();
+  // This filters inherited credentials, not filesystem access: Wrangler checks the OS home for legacy config.
   // Wrangler owns supported CF login storage. Provider and application credentials are excluded.
   if (request.deploymentAuth)
     for (const key of [
