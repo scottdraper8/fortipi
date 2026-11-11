@@ -182,6 +182,63 @@ async function setup(options: { leaseMs?: number; grantMs?: number; operationMs?
   }
 }
 
+async function denyReceiptBeforeForwarding(
+  h: Awaited<ReturnType<typeof setup>>,
+  input: D.LocalReceiptAck,
+  oracle: string,
+): Promise<void> {
+  const seen = new Set(
+    h.channel.frames.flatMap((frame) =>
+      frame.type === "workspace.request"
+        ? [`${frame.requestId}:${frame.payload.correlationId}`]
+        : [],
+    ),
+  );
+  const forwarded =
+    Promise.withResolvers<Extract<D.ExecutorFrame, { type: "workspace.request" }>>();
+  const receive = (event: MessageEvent) => {
+    const frame = JSON.parse(String(event.data)) as D.ExecutorFrame;
+    if (
+      frame.type === "workspace.request" &&
+      frame.payload.request.kind === "receipt" &&
+      !seen.has(`${frame.requestId}:${frame.payload.correlationId}`)
+    )
+      forwarded.resolve(frame);
+  };
+  h.channel.socket.addEventListener("message", receive);
+  const pending = h.cp.requestLocalWorkspace(h.agentAuth, input);
+  try {
+    const first = await Promise.race([
+      pending.then((result) => ({ kind: "result" as const, result })),
+      forwarded.promise.then((frame) => ({ kind: "forwarded" as const, frame })),
+    ]);
+    if (first.kind === "forwarded") {
+      // Reject the synthetic exchange so an orphaned RPC cannot delay assertion cleanup.
+      h.channel.send({
+        type: "workspace.response",
+        requestId: first.frame.requestId,
+        payload: {
+          requestId: first.frame.payload.requestId,
+          correlationId: first.frame.payload.correlationId,
+          response: {
+            error: {
+              code: "unauthorized",
+              message: "Synthetic executor refuses a forged receipt",
+              requestId: first.frame.requestId,
+              retryable: false,
+            },
+          },
+        },
+      });
+      assert.fail(oracle);
+    }
+    assert.equal(first.result.ok, false, oracle);
+  } finally {
+    h.channel.socket.removeEventListener("message", receive);
+    await pending;
+  }
+}
+
 test("native preparation forwards the retained Workspace registration to the actual lease authority while preserving Agent ingress", async () => {
   const h = await setup();
   try {
@@ -414,12 +471,22 @@ for (const expireGrant of [false, true])
         preparationId: intent.preparationId,
         receipt,
       };
-      for (const altered of [
-        { ...input, preparationId: "another" },
-        { ...input, receipt: { ...receipt, commitDigest: "e".repeat(64) } },
-        { ...input, receipt: { ...receipt, jobId: "another" } },
-      ])
-        assert.equal((await h.cp.requestLocalWorkspace(h.agentAuth, altered)).ok, false);
+      // The non-expiring case owns these forged-receipt probes. The expiry case
+      // isolates current authority after a valid native acknowledgment.
+      if (!expireGrant)
+        for (const { name, altered } of [
+          { name: "preparation", altered: { ...input, preparationId: "another" } },
+          {
+            name: "commit digest",
+            altered: { ...input, receipt: { ...receipt, commitDigest: "e".repeat(64) } },
+          },
+          { name: "job", altered: { ...input, receipt: { ...receipt, jobId: "another" } } },
+        ])
+          await denyReceiptBeforeForwarding(
+            h,
+            altered,
+            `forged receipt ${name} must be denied before native forwarding`,
+          );
       await new Promise((resolve) =>
         setTimeout(resolve, Math.max(0, scope.deadline - Date.now() + 15)),
       );

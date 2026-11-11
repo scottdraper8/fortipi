@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { open, rm } from "node:fs/promises";
+import { resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { TextDecoder } from "node:util";
 import { createGunzip } from "node:zlib";
-import { t as listTar } from "tar";
+import { t as listTar, Pack } from "tar";
 import {
   assertRuntimeConfig,
   filePolicy,
@@ -35,6 +38,108 @@ interface Member {
   size: number;
   bytes?: Buffer;
 }
+interface DiagnosticDescriptor extends Descriptor {
+  role: "child" | "config" | "layer";
+  inSelectedGraph: boolean;
+}
+type OCIDiagnostic =
+  | { type: "unknown" }
+  | { type: "oci-index" | "oci-manifest"; descriptors: DiagnosticDescriptor[] };
+
+/** Describe bounded retained metadata only; this never admits an archive member. */
+export function describeOCI(
+  bytes: Buffer | undefined,
+  expectedDigest: string,
+  graph: readonly Descriptor[],
+  budget: number,
+): OCIDiagnostic {
+  const unknown = { type: "unknown" } as const;
+  if (
+    !bytes ||
+    bytes.length > 8192 ||
+    !Number.isSafeInteger(budget) ||
+    budget < 0 ||
+    budget > 16 ||
+    `sha256:${createHash("sha256").update(bytes).digest("hex")}` !== expectedDigest
+  )
+    return unknown;
+  const object = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  const annotations = (value: unknown) =>
+    value === undefined ||
+    (object(value) && Object.values(value).every((item) => typeof item === "string"));
+  try {
+    const value: unknown = JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(bytes));
+    if (!object(value) || value.schemaVersion !== 2 || !annotations(value.annotations))
+      return unknown;
+    const index = value.mediaType === "application/vnd.oci.image.index.v1+json";
+    if (!index && value.mediaType !== manifestTypes[0]) return unknown;
+    const keys = index
+      ? ["schemaVersion", "mediaType", "manifests", "annotations"]
+      : ["schemaVersion", "mediaType", "config", "layers", "annotations"];
+    if (!Object.keys(value).every((key) => keys.includes(key))) return unknown;
+    const values = index ? value.manifests : value.layers;
+    if (!Array.isArray(values) || values.length + (index ? 0 : 1) > budget) return unknown;
+    const descriptors: DiagnosticDescriptor[] = [];
+    const inputs: [unknown, DiagnosticDescriptor["role"]][] = index
+      ? values.map((item) => [item, "child"])
+      : [[value.config, "config"], ...values.map((item): [unknown, "layer"] => [item, "layer"])];
+    for (const [input, role] of inputs) {
+      const types =
+        role === "child"
+          ? ["application/vnd.oci.image.index.v1+json", ...manifestTypes]
+          : role === "config"
+            ? configTypes
+            : [layerType, ...gzipTypes];
+      if (
+        !object(input) ||
+        !Object.keys(input).every((key) =>
+          ["mediaType", "digest", "size", "annotations", "platform"].includes(key),
+        ) ||
+        typeof input.mediaType !== "string" ||
+        !types.includes(input.mediaType) ||
+        typeof input.digest !== "string" ||
+        !/^sha256:[a-f0-9]{64}$/.test(input.digest) ||
+        !Number.isSafeInteger(input.size) ||
+        Number(input.size) < 0 ||
+        !annotations(input.annotations)
+      )
+        return unknown;
+      if (input.platform !== undefined) {
+        if (
+          !object(input.platform) ||
+          !Object.entries(input.platform).every(([key, item]) =>
+            ["architecture", "os", "os.version", "variant"].includes(key)
+              ? typeof item === "string"
+              : ["os.features", "features"].includes(key) &&
+                Array.isArray(item) &&
+                item.length <= 16 &&
+                item.every((entry) => typeof entry === "string"),
+          )
+        )
+          return unknown;
+      }
+      const descriptor = {
+        role,
+        mediaType: input.mediaType,
+        digest: input.digest,
+        size: Number(input.size),
+      };
+      descriptors.push({
+        ...descriptor,
+        inSelectedGraph: graph.some(
+          (selected) =>
+            selected.mediaType === descriptor.mediaType &&
+            selected.digest === descriptor.digest &&
+            selected.size === descriptor.size,
+        ),
+      });
+    }
+    return { type: index ? "oci-index" : "oci-manifest", descriptors };
+  } catch {
+    return unknown;
+  }
+}
 export interface SavedImage {
   manifest: Descriptor;
   config: Descriptor;
@@ -43,15 +148,126 @@ export interface SavedImage {
   loadedIdentityKind: "config" | "manifest";
 }
 
-/** Hash the actual Docker-save OCI graph, independently of exporter metadata labels. */
-export async function inspectImageArchive(
-  file: string,
+/** Physically convey only the validated selected graph; the final strict audit is separate. */
+export async function canonicalizeImageArchive(
+  input: string,
+  output: string,
   imageId: string,
-  options: { filesystem?: boolean; pruning?: PrunePolicy } = {},
-): Promise<{ saved: SavedImage; filesystem: Map<string, FsEntry>; configuration: ImageConfig }> {
-  assert.match(imageId, /^sha256:[a-f0-9]{64}$/);
+): Promise<SavedImage> {
+  assert.notEqual(resolve(input), resolve(output), "Archive rewrite needs a separate output");
+  const { members, directories } = await imageMembers(input);
+  const { saved } = await inspectImageArchive(input, imageId);
+  assert.equal(members.get("index.json")?.digest, `sha256:${saved.indexSha256}`);
+  for (const item of [saved.manifest, saved.config, ...saved.layers]) {
+    const member = members.get(`blobs/sha256/${item.digest.slice(7)}`);
+    assert.ok(member && member.digest === item.digest && member.size === item.size);
+  }
+  const manifest = metadata<Manifest>(members, `blobs/sha256/${saved.manifest.digest.slice(7)}`);
+  const config = metadata<{ rootfs: { diff_ids: string[] } }>(
+    members,
+    `blobs/sha256/${saved.config.digest.slice(7)}`,
+  );
+  const keep = reachableMembers(members, saved.manifest, manifest, config.rootfs.diff_ids);
+  const discard = new Set<string>();
+  for (const [path, member] of members) {
+    const blob = /^blobs\/sha256\/([a-f0-9]{64})$/.exec(path);
+    if (blob) assert.equal(member.digest, `sha256:${blob[1]}`, "Export blob name/hash mismatch");
+    if (keep.has(path)) continue;
+    assert.ok(blob, "Unknown export member cannot be omitted");
+    discard.add(path);
+  }
+  for (const path of directories)
+    assert.ok(
+      [...keep].some((file) => file.startsWith(`${path}/`)),
+      "Unknown export directory",
+    );
+
+  const target = await open(output, "wx", 0o600);
+  const pack = new Pack({ strict: true });
+  let outputFailed = false;
+  let active: { resume(): unknown } | undefined;
+  pack.on("error", () => {
+    outputFailed = true;
+    active?.resume();
+  });
+  const writing = pipeline(pack, target.createWriteStream()).catch(() => {
+    outputFailed = true;
+    active?.resume();
+  });
+  try {
+    const seen = new Set<string>();
+    let changed = false;
+    await listTar({
+      file: input,
+      strict: true,
+      noResume: true,
+      onReadEntry(entry) {
+        active = entry;
+        if (entry.type === "Directory" && (entry.path === "." || entry.path === "./"))
+          return entry.resume();
+        const path = entry.path.replace(/^\.\//, "").replace(/\/$/, "");
+        const original = members.get(path);
+        if (
+          outputFailed ||
+          seen.has(path) ||
+          !(entry.type === "File"
+            ? original && entry.size === original.size
+            : entry.type === "Directory" && directories.has(path))
+        ) {
+          changed = true;
+          return entry.resume();
+        }
+        seen.add(path);
+        if (discard.has(path)) {
+          const hash = createHash("sha256");
+          let size = 0;
+          entry.on("data", (bytes: Buffer) => {
+            hash.update(bytes);
+            size += bytes.length;
+          });
+          entry.on("end", () => {
+            if (size !== original?.size || `sha256:${hash.digest("hex")}` !== original.digest)
+              changed = true;
+          });
+          return entry.resume();
+        }
+        pack.add(entry);
+      },
+    });
+    pack.end();
+    await writing;
+    assert.ok(!outputFailed && !changed, "Export changed during canonicalization");
+    assert.equal(seen.size, members.size + directories.size, "Export members changed");
+    const result = await imageMembers(output);
+    assert.equal(result.members.size, keep.size, "Canonical member set changed");
+    assert.deepEqual(result.directories, directories, "Canonical directories changed");
+    for (const path of keep) {
+      const before = members.get(path);
+      const after = result.members.get(path);
+      assert.ok(before && after, "Missing retained export member");
+      assert.equal(after.size, before.size, "Retained export size changed");
+      assert.equal(after.digest, before.digest, "Retained export payload changed");
+    }
+    return saved;
+  } catch (error) {
+    pack.destroy();
+    active?.resume();
+    await writing;
+    await rm(output);
+    throw error;
+  }
+}
+
+interface Manifest {
+  schemaVersion: number;
+  mediaType: string;
+  config: Descriptor;
+  layers: Descriptor[];
+}
+async function imageMembers(file: string) {
   const members = new Map<string, Member>();
   const names = new Set<string>();
+  const directories = new Set<string>();
   let invalid = false;
   let buffered = 0;
   await listTar({
@@ -72,7 +288,10 @@ export async function inspectImageArchive(
       )
         invalid = true;
       names.add(path);
-      if (entry.type !== "File") return entry.resume();
+      if (entry.type !== "File") {
+        directories.add(path);
+        return entry.resume();
+      }
       const hash = createHash("sha256");
       const parts: Buffer[] = [];
       const keep = entry.size <= 1024 * 1024 && buffered + entry.size <= 16 * 1024 * 1024;
@@ -96,6 +315,80 @@ export async function inspectImageArchive(
     },
   });
   assert.equal(invalid, false, "Unsafe, duplicate or truncated image archive member");
+  return { members, directories };
+}
+function metadata<T>(members: Map<string, Member>, path: string): T {
+  const bytes = members.get(path)?.bytes;
+  assert.ok(bytes, "Missing or oversized image metadata");
+  try {
+    return JSON.parse(bytes.toString("utf8")) as T;
+  } catch {
+    throw new Error("Malformed image metadata");
+  }
+}
+function reachableMembers(
+  members: Map<string, Member>,
+  selected: Descriptor,
+  manifest: Manifest,
+  diffIds: string[],
+): Set<string> {
+  const json = <T>(path: string) => metadata<T>(members, path);
+  const allowed = new Set([
+    "index.json",
+    "oci-layout",
+    `blobs/sha256/${selected.digest.slice(7)}`,
+    `blobs/sha256/${manifest.config.digest.slice(7)}`,
+    ...manifest.layers.map((layer) => `blobs/sha256/${layer.digest.slice(7)}`),
+  ]);
+  if (members.has("manifest.json")) {
+    const compatibility = json<{ Config: string; Layers: string[] }[]>("manifest.json");
+    assert.equal(compatibility.length, 1, "Multiple compatibility images conveyed");
+    const item = compatibility[0];
+    assert.ok(item);
+    assert.equal(
+      members.get(item.Config)?.digest,
+      manifest.config.digest,
+      "Compatibility config changed",
+    );
+    assert.equal(item.Layers.length, manifest.layers.length, "Compatibility layers changed");
+    allowed.add("manifest.json");
+    allowed.add(item.Config);
+    for (const [index, path] of item.Layers.entries()) {
+      assert.ok(
+        members.get(path)?.digest === manifest.layers[index]?.digest ||
+          members.get(path)?.digest === diffIds[index],
+        "Compatibility layer is not a verified layer",
+      );
+      allowed.add(path);
+    }
+  }
+  if (members.has("repositories")) {
+    const repositories = json<Record<string, Record<string, string>>>("repositories");
+    assert.ok(
+      repositories && typeof repositories === "object" && !Array.isArray(repositories),
+      "Invalid compatibility repositories",
+    );
+    for (const tags of Object.values(repositories)) {
+      assert.ok(
+        tags && typeof tags === "object" && !Array.isArray(tags),
+        "Invalid compatibility tags",
+      );
+      for (const digest of Object.values(tags))
+        assert.match(digest, /^[a-f0-9]{64}$/, "Invalid compatibility repository identity");
+    }
+    allowed.add("repositories");
+  }
+  return allowed;
+}
+
+/** Hash the actual Docker-save OCI graph, independently of exporter metadata labels. */
+export async function inspectImageArchive(
+  file: string,
+  imageId: string,
+  options: { filesystem?: boolean; pruning?: PrunePolicy } = {},
+): Promise<{ saved: SavedImage; filesystem: Map<string, FsEntry>; configuration: ImageConfig }> {
+  assert.match(imageId, /^sha256:[a-f0-9]{64}$/);
+  const { members } = await imageMembers(file);
   function json<T>(path: string): T {
     const bytes = members.get(path)?.bytes;
     assert.ok(bytes, `Missing or oversized image metadata ${path}`);
@@ -171,51 +464,44 @@ export async function inspectImageArchive(
         !options.pruning.forbiddenLayers.includes(diff),
         "Original binary-bearing base DiffID conveyed",
       );
-    const allowed = new Set([
-      "index.json",
-      "oci-layout",
-      `blobs/sha256/${selected.digest.slice(7)}`,
-      `blobs/sha256/${manifest.config.digest.slice(7)}`,
-      ...manifest.layers.map((layer) => `blobs/sha256/${layer.digest.slice(7)}`),
-    ]);
-    if (members.has("manifest.json")) {
-      const compatibility = json<{ Config: string; Layers: string[] }[]>("manifest.json");
-      assert.equal(compatibility.length, 1, "Multiple compatibility images conveyed");
-      const item = compatibility[0];
-      assert.ok(item);
-      assert.equal(
-        members.get(item.Config)?.digest,
-        manifest.config.digest,
-        "Compatibility config changed",
+    const allowed = reachableMembers(members, selected, manifest, config.rootfs.diff_ids);
+    const unexpected = [...members].filter(([path]) => !allowed.has(path));
+    let descriptorBudget = 16;
+    if (unexpected.length)
+      console.error(
+        JSON.stringify({
+          probe: "image-unreferenced-members",
+          members: unexpected.slice(0, 4).map(([path, member]) => {
+            const blob = /^blobs\/sha256\/([a-f0-9]{64})$/.exec(path);
+            if (blob) {
+              const description = describeOCI(
+                member.bytes?.length === member.size ? member.bytes : undefined,
+                `sha256:${blob[1]}`,
+                [selected, manifest.config, ...manifest.layers],
+                descriptorBudget,
+              );
+              if (description.type !== "unknown")
+                descriptorBudget -= description.descriptors.length;
+              return {
+                class: "oci-blob",
+                declaredSha256: `sha256:${blob[1]}`,
+                actualSha256: member.digest,
+                size: member.size,
+                ...description,
+              };
+            }
+            return {
+              class:
+                /^(?:[a-f0-9]{64}\/(?:json|VERSION|layer\.tar)|index\.json|oci-layout|manifest\.json|repositories)$/.test(
+                  path,
+                )
+                  ? "known-layout"
+                  : "other",
+              nameSha256: createHash("sha256").update(path).digest("hex"),
+            };
+          }),
+        }),
       );
-      assert.equal(item.Layers.length, manifest.layers.length, "Compatibility layers changed");
-      allowed.add("manifest.json");
-      allowed.add(item.Config);
-      for (const [index, path] of item.Layers.entries()) {
-        assert.ok(
-          members.get(path)?.digest === manifest.layers[index]?.digest ||
-            members.get(path)?.digest === config.rootfs.diff_ids[index],
-          "Compatibility layer is not a verified layer",
-        );
-        allowed.add(path);
-      }
-    }
-    if (members.has("repositories")) {
-      const repositories = json<Record<string, Record<string, string>>>("repositories");
-      assert.ok(
-        repositories && typeof repositories === "object" && !Array.isArray(repositories),
-        "Invalid compatibility repositories",
-      );
-      for (const tags of Object.values(repositories)) {
-        assert.ok(
-          tags && typeof tags === "object" && !Array.isArray(tags),
-          "Invalid compatibility tags",
-        );
-        for (const digest of Object.values(tags))
-          assert.match(digest, /^[a-f0-9]{64}$/, "Invalid compatibility repository identity");
-      }
-      allowed.add("repositories");
-    }
     for (const path of members.keys())
       assert.ok(allowed.has(path), "Unexpected or unreferenced conveyed image file/blob");
   }

@@ -222,6 +222,12 @@ export interface ExecutionRequest {
   capabilities: string[];
   approval?: T.ApprovalOperation;
 }
+/** Private CP-to-Workspace proof; never a public credential or arbitrary revision selector. */
+export interface ExecutorWorkspaceAccess {
+  assignment: T.Assignment;
+  /** Exact retained current lease observation; the original assignment/digests stay immutable. */
+  lease: T.Lease;
+}
 export interface PreparedExecution {
   preparationId: string;
   request: ExecutionRequest;

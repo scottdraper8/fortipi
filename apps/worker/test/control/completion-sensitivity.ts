@@ -108,12 +108,12 @@ try {
     const path = join(directory, "apps/worker/src/control", mutation.file);
     const original = await readFile(path, "utf8");
     assert.match(original, mutation.pattern);
-    await writeFile(path, original.replace(mutation.pattern, mutation.replacement));
     const run = () =>
       spawnSync(
         process.execPath,
         [
           "--test",
+          "--test-reporter=tap",
           `--test-name-pattern=${mutation.testPattern}`,
           resolve("apps/worker/test/control", mutation.testFile),
         ],
@@ -128,25 +128,35 @@ try {
           },
         },
       );
-    const failed = run();
-    if (!(failed.stdout + failed.stderr).includes(mutation.oracle))
-      process.stdout.write(
-        `${JSON.stringify({ probe: "fault-subprocess", pattern: mutation.testPattern, status: failed.status, signal: failed.signal, error: failed.error?.name, errorCode: failed.error && "code" in failed.error ? failed.error.code : undefined, stdoutBytes: failed.stdout?.length, stderrBytes: failed.stderr?.length })}\n`,
+    const completed = (result: ReturnType<typeof run>, phase: string, status: 0 | 1) => {
+      assert.equal(
+        result.error,
+        undefined,
+        `${phase} subprocess must complete without timeout or spawn failure`,
       );
-    assert.equal(failed.status, 1, `Fault must fail behavior: ${failed.stdout}\n${failed.stderr}`);
-    assert.ok(
-      (failed.stdout + failed.stderr).includes(mutation.oracle),
-      `Named oracle must fail: ${failed.stdout}\n${failed.stderr}`,
-    );
-    await writeFile(path, original);
+      assert.equal(result.signal, null, `${phase} subprocess must exit normally`);
+      assert.equal(result.status, status, `${phase}: ${result.stdout}\n${result.stderr}`);
+      assert.match(result.stdout, /# tests [1-9]\d*\r?\n/, `${phase} must select actual tests`);
+      assert.match(result.stdout, /# cancelled 0\r?\n/);
+      assert.match(result.stdout, /# skipped 0\r?\n/);
+    };
+    completed(run(), "Unmodified source-override baseline must pass", 0);
+    try {
+      await writeFile(path, original.replace(mutation.pattern, mutation.replacement));
+      const failed = run();
+      completed(failed, "Fault must fail behavior", 1);
+      assert.match(failed.stdout, /name: 'AssertionError'/);
+      assert.ok(
+        (failed.stdout + failed.stderr).includes(mutation.oracle),
+        `Named oracle must fail: ${failed.stdout}\n${failed.stderr}`,
+      );
+    } finally {
+      await writeFile(path, original);
+    }
     const restored = run();
-    assert.equal(
-      restored.status,
-      0,
-      `Restored source must pass: ${restored.stdout}\n${restored.stderr}`,
-    );
+    completed(restored, "Restored source must pass", 0);
     process.stdout.write(
-      `Observed behavioral failure and restored pass: ${mutation.file} / ${mutation.oracle}\n`,
+      `Observed source-override baseline, named failure and restored pass: ${mutation.file} / ${mutation.oracle}\n`,
     );
   }
 } finally {

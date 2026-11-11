@@ -337,6 +337,11 @@ export class ExecutionLedger {
       const response = await this.send(ctx, row.row, "start", prepared);
       if (!response.ok) return row.row.observation;
       const observation = (await response.json()) as D.ExecutionObservation;
+      requireThat(
+        observation.state !== "waiting_for_local_policy" && observation.state !== "preparing",
+        "interrupted",
+        "Cloud runtime cannot report native local consent",
+      );
       await this.owner.mutex.run(() => {
         const current = this.row(ctx, prepared.request.identity);
         if (observation.state !== "not_started" && observation.runtimeUuid) {
@@ -368,6 +373,11 @@ export class ExecutionLedger {
       const response = await this.send(ctx, row, "query", identity);
       if (!response.ok) return { identity, state: "unknown" };
       const observation = (await response.json()) as D.ExecutionObservation;
+      requireThat(
+        observation.state !== "waiting_for_local_policy" && observation.state !== "preparing",
+        "interrupted",
+        "Cloud runtime cannot report native local consent",
+      );
       const runtimeId = observation.state === "not_started" ? undefined : observation.runtimeUuid;
       if (runtimeId)
         await this.owner.mutex.run(() => {
@@ -407,6 +417,12 @@ export class ExecutionLedger {
   ): Promise<D.Outcome<D.PreparedResult>> {
     return outcome(async () => {
       const row = await this.owner.mutex.run(() => this.row(ctx, identity));
+      requireThat(
+        row.observation.state !== "waiting_for_local_policy" &&
+          row.observation.state !== "preparing",
+        "interrupted",
+        "Cloud runtime cannot report native local consent",
+      );
       if (row.observation.state !== "not_started" && row.observation.result?.uploadId)
         return row.observation.result;
       const response = await this.send(ctx, row, "collect", identity);

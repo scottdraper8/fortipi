@@ -279,6 +279,29 @@ function accepted(name: string, value: unknown) {
 function rejected(name: string, value: unknown) {
   assert.equal(get(name)(value), false, name);
 }
+test("executor job transfer queries cannot select another owner, base or credential", () => {
+  const query = { executionId: identity.executionId, assignmentDigest: hash, connectionEpoch: 1 };
+  accepted("ExecutorJobQuery", query);
+  for (const key of Object.keys(query))
+    rejected("ExecutorJobQuery", { ...query, [key]: undefined });
+  for (const [key, value] of Object.entries({
+    revision: "other_revision",
+    workspaceId: "other_workspace",
+    credential,
+    lease,
+    token: "not_a_credential",
+  }))
+    rejected("ExecutorJobQuery", { ...query, [key]: value });
+  for (const connectionEpoch of [0, -1, 1.5, "1", Number.MAX_SAFE_INTEGER + 1])
+    rejected("ExecutorJobQuery", { ...query, connectionEpoch });
+  const chunk = { ...query, length: 262144, sha256: hash };
+  accepted("ExecutorJobChunkQuery", chunk);
+  for (const key of Object.keys(chunk))
+    rejected("ExecutorJobChunkQuery", { ...chunk, [key]: undefined });
+  for (const length of [0, 262145, 1.5, "1"])
+    rejected("ExecutorJobChunkQuery", { ...chunk, length });
+  rejected("ExecutorJobChunkQuery", { ...chunk, revision: "other_revision" });
+});
 test("concrete provider, backend and authority configurations", () => {
   for (const c of [
     { kind: "computer" },
@@ -558,6 +581,18 @@ test("explicit approval and reconciliation bind exact operations and new-job aut
     state: "pending",
   });
   rejected("ApprovalOperation", { ...operation, baseRevision: undefined });
+  const pending = { identity, state: "waiting_for_local_policy", operation };
+  accepted("ExecutionObservation", pending);
+  accepted("ExecutorFrame", { type: "job.query_result", requestId: "query_1", payload: pending });
+  rejected("ExecutionObservation", { ...pending, operation: undefined });
+  rejected("ExecutionObservation", { ...pending, proof: { kind: "durable-no-late-start" } });
+  rejected("ExecutionObservation", { ...pending, result: { state: "succeeded" } });
+  const preparing = { ...pending, state: "preparing" };
+  accepted("ExecutionObservation", preparing);
+  accepted("ExecutorFrame", { type: "job.query_result", requestId: "query_2", payload: preparing });
+  rejected("ExecutionObservation", { ...preparing, operation: undefined });
+  rejected("ExecutionObservation", { ...preparing, backendExecutionId: "not_started_yet" });
+  rejected("ExecutionObservation", { ...preparing, result: { state: "succeeded" } });
   accepted("ReconcileInput", {
     requestId: "request_1",
     expectedVersion: 4,

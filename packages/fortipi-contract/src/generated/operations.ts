@@ -1025,6 +1025,131 @@ export interface OperationMap {
       | { status: 503; body: OperationError<"quota_paused"> }
       | { status: 409; body: OperationError<"conflict"> };
   };
+  getExecutorJobManifest: {
+    request: {
+      operationId: "getExecutorJobManifest";
+      path: { jobId: string };
+      query: T.ExecutorJobQuery;
+      body: undefined;
+    };
+    response:
+      | { status: 200; body: T.ManifestResponse }
+      | { status: 400; body: OperationError<"invalid_request"> }
+      | { status: 401; body: OperationError<"unauthenticated"> }
+      | { status: 403; body: OperationError<"unauthorized"> }
+      | { status: 404; body: OperationError<"not_found"> }
+      | { status: 429; body: OperationError<"rate_limited"> }
+      | { status: 429; body: OperationError<"quota_exceeded"> }
+      | { status: 500; body: OperationError<"internal"> }
+      | { status: 503; body: OperationError<"unavailable"> }
+      | { status: 503; body: OperationError<"quota_paused"> }
+      | { status: 409; body: OperationError<"conflict"> }
+      | { status: 413; body: OperationError<"payload_too_large"> }
+      | { status: 501; body: OperationError<"unsupported"> }
+      | { status: 409; body: OperationError<"workspace.conflict"> }
+      | { status: 409; body: OperationError<"interrupted"> }
+      | { status: 503; body: OperationError<"unavailable_executor"> };
+  };
+  getExecutorJobBlob: {
+    request: {
+      operationId: "getExecutorJobBlob";
+      path: { jobId: string; sha256: string };
+      query: T.ExecutorJobQuery;
+      body: undefined;
+    };
+    response:
+      | { status: 200; body: Uint8Array }
+      | { status: 400; body: OperationError<"invalid_request"> }
+      | { status: 401; body: OperationError<"unauthenticated"> }
+      | { status: 403; body: OperationError<"unauthorized"> }
+      | { status: 404; body: OperationError<"not_found"> }
+      | { status: 429; body: OperationError<"rate_limited"> }
+      | { status: 429; body: OperationError<"quota_exceeded"> }
+      | { status: 500; body: OperationError<"internal"> }
+      | { status: 503; body: OperationError<"unavailable"> }
+      | { status: 503; body: OperationError<"quota_paused"> }
+      | { status: 409; body: OperationError<"conflict"> }
+      | { status: 413; body: OperationError<"payload_too_large"> }
+      | { status: 501; body: OperationError<"unsupported"> }
+      | { status: 409; body: OperationError<"workspace.conflict"> }
+      | { status: 409; body: OperationError<"interrupted"> }
+      | { status: 503; body: OperationError<"unavailable_executor"> };
+  };
+  beginExecutorJobUpload: {
+    request: {
+      operationId: "beginExecutorJobUpload";
+      path: { jobId: string };
+      query: T.ExecutorJobQuery;
+      body: T.UploadBegin;
+    };
+    response:
+      | { status: 201; body: T.UploadStatus }
+      | { status: 400; body: OperationError<"invalid_request"> }
+      | { status: 401; body: OperationError<"unauthenticated"> }
+      | { status: 403; body: OperationError<"unauthorized"> }
+      | { status: 404; body: OperationError<"not_found"> }
+      | { status: 429; body: OperationError<"rate_limited"> }
+      | { status: 429; body: OperationError<"quota_exceeded"> }
+      | { status: 500; body: OperationError<"internal"> }
+      | { status: 503; body: OperationError<"unavailable"> }
+      | { status: 503; body: OperationError<"quota_paused"> }
+      | { status: 409; body: OperationError<"conflict"> }
+      | { status: 413; body: OperationError<"payload_too_large"> }
+      | { status: 501; body: OperationError<"unsupported"> }
+      | { status: 409; body: OperationError<"workspace.conflict"> }
+      | { status: 409; body: OperationError<"interrupted"> }
+      | { status: 503; body: OperationError<"unavailable_executor"> };
+  };
+  putExecutorJobUploadChunk: {
+    request: {
+      operationId: "putExecutorJobUploadChunk";
+      path: { jobId: string; uploadId: string; sha256: string; chunkIndex: number };
+      query: T.ExecutorJobChunkQuery;
+      body: Uint8Array;
+    };
+    response:
+      | { status: 204; body: undefined }
+      | { status: 400; body: OperationError<"invalid_request"> }
+      | { status: 401; body: OperationError<"unauthenticated"> }
+      | { status: 403; body: OperationError<"unauthorized"> }
+      | { status: 404; body: OperationError<"not_found"> }
+      | { status: 429; body: OperationError<"rate_limited"> }
+      | { status: 429; body: OperationError<"quota_exceeded"> }
+      | { status: 500; body: OperationError<"internal"> }
+      | { status: 503; body: OperationError<"unavailable"> }
+      | { status: 503; body: OperationError<"quota_paused"> }
+      | { status: 409; body: OperationError<"conflict"> }
+      | { status: 413; body: OperationError<"payload_too_large"> }
+      | { status: 501; body: OperationError<"unsupported"> }
+      | { status: 409; body: OperationError<"workspace.conflict"> }
+      | { status: 409; body: OperationError<"interrupted"> }
+      | { status: 503; body: OperationError<"unavailable_executor"> };
+  };
+  validateExecutorJobUpload: {
+    request: {
+      operationId: "validateExecutorJobUpload";
+      path: { jobId: string; uploadId: string };
+      query: T.ExecutorJobQuery;
+      body: undefined;
+    };
+    response:
+      | { status: 200; body: T.UploadValidation }
+      | { status: 400; body: OperationError<"invalid_request"> }
+      | { status: 401; body: OperationError<"unauthenticated"> }
+      | { status: 403; body: OperationError<"unauthorized"> }
+      | { status: 404; body: OperationError<"not_found"> }
+      | { status: 429; body: OperationError<"rate_limited"> }
+      | { status: 429; body: OperationError<"quota_exceeded"> }
+      | { status: 500; body: OperationError<"internal"> }
+      | { status: 503; body: OperationError<"unavailable"> }
+      | { status: 503; body: OperationError<"quota_paused"> }
+      | { status: 409; body: OperationError<"conflict"> }
+      | { status: 413; body: OperationError<"payload_too_large"> }
+      | { status: 501; body: OperationError<"unsupported"> }
+      | { status: 409; body: OperationError<"workspace.conflict"> }
+      | { status: 409; body: OperationError<"interrupted"> }
+      | { status: 503; body: OperationError<"unavailable_executor"> };
+  };
   getExecutorTransferInputChunk: {
     request: {
       operationId: "getExecutorTransferInputChunk";

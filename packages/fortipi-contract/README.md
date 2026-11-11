@@ -2,10 +2,31 @@
 
 Protocol **1.0**, schema **1.0.0**. Package versions are independent. The fifteen
 [JSON Schema 2020-12 documents](./schemas/common.schema.json) are authoritative;
-[OpenAPI 3.1](./openapi.yaml) describes all 69 HTTP operations, their exact
+[OpenAPI 3.1](./openapi.yaml) describes all 74 HTTP operations, their exact
 path/query/body, success/error statuses, audience, grant action, and byte limits.
 `src/route-catalog.ts` owns route allocation, not handlers. OpenAPI uses JSON syntax
 (valid YAML 1.2), so the same bytes can serve `/v1/openapi.json`.
+
+The five `/v1/executor/jobs/{jobId}` transfer operations use executor credentials
+and the exact execution ID, assignment digest and current connection epoch.
+The server derives the workspace, binding, leased base and original registered
+owner from the retained attempted assignment. Its one current owner grant must
+cover dispatch, the reserved actions, tool and all resources. These routes grant
+access only to that execution's Computer working copy; they do not grant general
+workspace reads or allow the executor to commit the canonical revision.
+
+An existing native assignment awaiting local consent returns the closed
+`waiting_for_local_policy` observation with its exact approval operation. This is
+FortiPi's own wire state. It does not alter a model SDK, prove that restarting is
+safe, or turn an unknown execution into a pending one. Consumers validate the
+operation and current identity, preserve the lease/deadline, and reject delayed
+waiting responses that would regress a newer running, result or terminal state.
+After local approval, the current native incarnation reports `preparing` while
+that durable assignment is queued or its working copy is being materialized,
+before the winning start claim. This state carries the same exact operation;
+it neither claims a running child nor permits replay after a crash. An uncertain
+claim still reports unknown. Cloud adapters reject both native preparation and
+local-consent observations.
 
 Generate with `node packages/fortipi-contract/scripts/generate.ts`, then run the
 same command with `--check`. Generation resolves only local allowlisted schema
@@ -595,7 +616,7 @@ Public package declarations retain full checks.
 
 | Claim                    | Oracle / actual observation                                                                                                                                                             | Sensitivity / limit                                                                                                                                                                              |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Route/schema coverage    | Independently enumerated69 method/path pairs, exact generated matrices, every ref resolved by real strict Ajv2020; browser bundles resolve no dependencies                              | No HTTP handlers, network auth or deployment proved                                                                                                                                              |
+| Route/schema coverage    | Independently enumerated74 method/path pairs, exact generated matrices, every ref resolved by real strict Ajv2020; browser bundles resolve no dependencies                              | No HTTP handlers, network auth or deployment proved                                                                                                                                              |
 | Schema/wire semantics    | Fixed valid/invalid config, grant, local, transfer, OAuth, event and boundary fixtures accept/reject as specified                                                                       | Temporal authority/CAS/no-follow/durability remain consumer obligations                                                                                                                          |
 | Event compatibility      | Unknown durable cursor advances; malformed known/volatile-sequence frames reject                                                                                                        | Disposable schema mutation removes known-type exclusions; malformed-known oracle actually fails, restore passes                                                                                  |
 | Deterministic generation | Real generator and --check compare all outputs without writes                                                                                                                           | Disposable declaration and OpenAPI drift each fail; regenerated/restored check passes                                                                                                            |

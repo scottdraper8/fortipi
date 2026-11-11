@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
+import {
+  observeHarnessFetch,
+  verifyApplicationNamespace,
+  verifyGatewayEgress,
+} from "../../../../tools/unstale/verify-app-network.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const directory = resolve(root, "apps/worker/dist/container");
@@ -96,6 +101,45 @@ try {
   checkLoadedImage();
   process.stdout.write(
     `${JSON.stringify({ imageId: metadata.imageId, localExecution: true, realFuse: body.fuse, cloudVerified: false })}\n`,
+  );
+  const parentNamespace = await readlink("/proc/self/ns/net");
+  const observation = observeHarnessFetch();
+  let trace: ReturnType<typeof observation.stop> | undefined;
+  let namespaceStable = false;
+  let network: Awaited<ReturnType<typeof verifyApplicationNamespace>>;
+  try {
+    network = await verifyApplicationNamespace(metadata.imageId);
+  } finally {
+    trace = observation.stop();
+    try {
+      namespaceStable = parentNamespace === (await readlink("/proc/self/ns/net"));
+    } catch {
+      namespaceStable = false;
+    }
+    process.stdout.write(`${JSON.stringify({ ...trace, namespaceStable })}\n`);
+  }
+  verifyGatewayEgress(harness.getLogs(), network, trace && { ...trace, namespaceStable });
+  assert.ok(
+    trace?.complete && namespaceStable,
+    "Harness host-fetch observation is incomplete or unknown",
+  );
+  process.stdout.write(
+    `${JSON.stringify({
+      probe: "application-namespace-https",
+      client: "host Node client in actual application network namespace",
+      path: "Cloudflare sidecar -> Computer HTTP gateway -> protected worker egress",
+      imageId: metadata.imageId,
+      appPid: network.appPid,
+      authorityVerifiedBeforeAfter: true,
+      allowedBefore: network.allowedBefore,
+      deniedStatus: network.deniedStatus,
+      allowedAfter: network.allowedAfter,
+      tlsAuthorized: true,
+      applicationDns: "pinned-sidecar-synthetic",
+      stepSecurityGatewayUpstreamSinkhole: true,
+      gatewayForwardingVerified: true,
+      providerDenialLogRequired: true,
+    })}\n`,
   );
 } finally {
   try {

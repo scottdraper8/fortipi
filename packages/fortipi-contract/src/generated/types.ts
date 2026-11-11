@@ -55,6 +55,8 @@ export type FortiPiValue =
   | ExecutionObservation
   | ExecutorDescription
   | ExecutorFrame
+  | ExecutorJobChunkQuery
+  | ExecutorJobQuery
   | ExecutorPage
   | ExecutorTransferLimits
   | ExportInput
@@ -1251,6 +1253,16 @@ export type ExecutionObservation =
       backendExecutionId?: Id;
       runtimeUuid?: Id;
       result?: PreparedResult;
+    }
+  | {
+      identity: ExecutionIdentity;
+      state: "waiting_for_local_policy";
+      operation: ApprovalOperation;
+    }
+  | {
+      identity: ExecutionIdentity;
+      state: "preparing";
+      operation: ApprovalOperation;
     };
 export type ExecutorFrame =
   | {
@@ -2570,6 +2582,18 @@ export interface TransferStatus {
   verifiedChunks: number[];
   bytes: number;
   reason?: string;
+}
+export interface ExecutorJobChunkQuery {
+  executionId: Id;
+  assignmentDigest: Sha256;
+  connectionEpoch: number;
+  length: number;
+  sha256: Sha256;
+}
+export interface ExecutorJobQuery {
+  executionId: Id;
+  assignmentDigest: Sha256;
+  connectionEpoch: number;
 }
 export interface ExecutorPage {
   /**

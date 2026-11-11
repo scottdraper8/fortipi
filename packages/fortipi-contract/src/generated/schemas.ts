@@ -4324,6 +4324,34 @@ export const executorMessagesSchema = {
         },
       ],
     },
+    ExecutorJobQuery: {
+      title: "ExecutorJobQuery",
+      type: "object",
+      properties: {
+        executionId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        assignmentDigest: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+        },
+        connectionEpoch: { type: "integer", minimum: 1, maximum: 9007199254740991 },
+      },
+      required: ["executionId", "assignmentDigest", "connectionEpoch"],
+      additionalProperties: false,
+    },
+    ExecutorJobChunkQuery: {
+      title: "ExecutorJobChunkQuery",
+      type: "object",
+      properties: {
+        executionId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        assignmentDigest: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+        },
+        connectionEpoch: { type: "integer", minimum: 1, maximum: 9007199254740991 },
+        length: { type: "integer", minimum: 1, maximum: 262144 },
+        sha256: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256" },
+      },
+      required: ["executionId", "assignmentDigest", "connectionEpoch", "length", "sha256"],
+      additionalProperties: false,
+    },
   },
 } as const;
 export const infrastructureSchema = {
@@ -4755,6 +4783,38 @@ export const jobsSchema = {
             },
           },
           required: ["identity", "state"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          description:
+            "FortiPi native executor observation of an existing durable assignment awaiting local approval. Never a no-start proof or authority to dispatch again; cloud adapters do not emit this state.",
+          properties: {
+            identity: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity",
+            },
+            state: { const: "waiting_for_local_policy" },
+            operation: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation",
+            },
+          },
+          required: ["identity", "state", "operation"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          description:
+            "FortiPi native executor has the existing durable allowed assignment queued for preparation or materializing its working copy in the current process incarnation, before the winning start claim. No process-running or safe-restart proof; never emitted after an uncertain claim or by cloud adapters.",
+          properties: {
+            identity: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity",
+            },
+            state: { const: "preparing" },
+            operation: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation",
+            },
+          },
+          required: ["identity", "state", "operation"],
           additionalProperties: false,
         },
       ],
@@ -7378,6 +7438,10 @@ export const schemaRefs = {
     "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/JobCommitted",
   ExecutorFrame:
     "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/ExecutorFrame",
+  ExecutorJobQuery:
+    "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/ExecutorJobQuery",
+  ExecutorJobChunkQuery:
+    "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/ExecutorJobChunkQuery",
   CapabilityStatus:
     "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/CapabilityStatus",
   InfrastructurePolicy:
