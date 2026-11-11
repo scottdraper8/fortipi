@@ -1,4 +1,5 @@
 {
+  "compatibility_flags": ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
   "durable_objects": {
     "bindings": [
       {
