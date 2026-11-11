@@ -12,20 +12,23 @@ Select production and add secrets:
 Restrict the token to the one target account. Account permissions:
 - Account Settings: Read
 - Workers Scripts: Edit (Worker deployment, bindings, Durable Object migrations and secrets)
-- Workers R2 Storage: Edit (workspace snapshots/artifacts)
+- Workers R2 Storage: Edit (optional future R2 backend; unused by the initial release)
 - Workers Tail: Read (deployment diagnosis)
 - Workers AI: Edit (model discovery/testing and optional direct API use)
 - Containers: Edit (optional native Linux executor deployment/testing)
 
 No zone permissions are needed for the initial workers.dev origin.
-The initial Computer workspace uses Durable Object storage and does not require R2 activation. R2 permissions are optional for later large-artifact storage. Optional native Containers require Workers Paid. Use existing entitlements; do not change subscription plans without an explicit user decision.
+The initial Computer workspace uses Durable Object storage and does not require R2 activation. R2 permissions are optional for later large-artifact storage. Both Dynamic Workers/Loader (cloud JavaScript execution) and native Containers require Workers Paid. Free/unknown configurations omit unavailable paid bindings; full cloud execution acceptance needs existing paid entitlements. Do not change subscription plans without an explicit user decision.
 Workers AI uses a binding at runtime; no third-party model key is required for the first live smoke test.
 External model-provider credentials remain configurable server-side; request one only if the user chooses that provider.
+
+The parent provisioned `production` secret `FORTIPI_ADMIN_TOKEN` using random material piped directly into encrypted GitHub secret storage, without displaying or writing its value to disk. Preserve it across deployments. Trusted deployment uploads it through Wrangler stdin; trusted live tests mint temporary scoped client/executor credentials through the public application API and revoke them afterward. No additional static client/executor GitHub secrets are needed, and ordinary Actions tokens do not administer secrets.
 
 Primary references:
 https://developers.cloudflare.com/fundamentals/api/reference/permissions/
 https://developers.cloudflare.com/agents/harnesses/pi/
 https://developers.cloudflare.com/containers/
+https://developers.cloudflare.com/dynamic-workers/pricing/
 
 ## npm
 Release environment: https://github.com/scottdraper8/fortipi/settings/environments
