@@ -281,6 +281,7 @@ export function buildRegistry(deps: {
       };
       const existing = await jobs.store.get<{ jobId: string; digest: string }>("job-task", key);
       if (!existing) {
+        await jobs.authority.physical.beforeGrowth(auth, resources);
         const capacity = unwrap(
           await jobs.authority.control.reserveCapacity(auth, {
             operationId: intent.operationId,

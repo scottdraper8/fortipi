@@ -128,6 +128,14 @@ export class Controls {
           admission.conversationId,
         );
         if (!intent.capacity) {
+          await authority.physical.beforeGrowth(
+            auth,
+            scope({
+              agentIds: [authority.agentId],
+              conversationIds: [admission.conversationId],
+              actions: [action],
+            }),
+          );
           intent.capacity = unwrap(
             await authority.control.reserveCapacity(auth, {
               operationId: id,

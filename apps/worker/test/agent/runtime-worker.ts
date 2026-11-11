@@ -10,7 +10,7 @@ import { commitDigest } from "fortipi-contract";
 import { AgentSession } from "../../src/agent/agent-session.js";
 import { Authority, type ControlPort } from "../../src/agent/authority.js";
 import type { ConversationRow } from "../../src/agent/store.js";
-import { unwrap } from "../../src/api/common.js";
+import { scope, unwrap } from "../../src/api/common.js";
 import { routeRequest } from "../../src/api/router.js";
 import type * as D from "../../src/boundary/dto.js";
 import type { Env } from "../../src/boundary/env.js";
@@ -21,6 +21,7 @@ import { nativeContext, nativeProof } from "../../src/execution/native-proof.js"
 import { FreshJobDoc } from "../../src/execution/new-job.js";
 import { defaultModel } from "../../src/models/factory.js";
 import { configuredModel } from "../../src/models/selection.js";
+import { samplingOracle } from "./sampling-oracle.js";
 
 export { WorkspaceProxy } from "@cloudflare/computer";
 export { LinuxContainerHost } from "../../src/container/linux-container-host.js";
@@ -107,6 +108,17 @@ export class ControlPlane extends RealControlPlane {
       this.store.get<{ reservation: D.CapacityReservation }>("capacity_reservation", reservationId)
         ?.reservation.state ?? "missing"
     );
+  }
+  physicalAllocation(kind: "agent" | "workspace", objectId: string) {
+    return {
+      controlBytes: this.store.storage.sql.databaseSize,
+      allocation: this.store.get<{
+        estimate: number;
+        pending: number;
+        measured: number;
+        sequence: number;
+      }>("storage_allocation", `${kind}:${objectId}`),
+    };
   }
   registrationDebug(auth: D.AuthContext, identity: D.ExecutionIdentity) {
     const registration = this.store.get<D.AuthorityRegistration>(
@@ -866,6 +878,7 @@ export class TestAgentSession extends AgentSession {
     try {
       const original = this.authority.control;
       const control: ControlPort = {
+        fetch: (request) => original.fetch(request),
         authorize: (input) => original.authorize(input),
         reserveCapacity: (ctx, input) => original.reserveCapacity(ctx, input),
         settleCapacity: (ctx, input) => original.settleCapacity(ctx, input),
@@ -941,6 +954,33 @@ export class TestAgentSession extends AgentSession {
       objectBytes: this.store.policy.bounds.objectBytes,
       headroomFraction: this.store.policy.bounds.headroomFraction,
     });
+  }
+  async sampleOracle(auth: D.AuthContext, completedReservationId: string) {
+    await this.lifecycle.start();
+    return JSON.stringify(
+      await samplingOracle(
+        this.store,
+        this.authority,
+        await this.pi.pi(),
+        auth,
+        completedReservationId,
+      ),
+    );
+  }
+  async physicalSample(auth: D.AuthContext, conversationId?: string) {
+    await this.lifecycle.start();
+    await this.authority.physical.beforeGrowth(
+      auth,
+      scope({
+        agentIds: [this.agentId],
+        conversationIds: conversationId ? [conversationId] : [],
+        actions: [conversationId ? "messages.submit" : "conversations.create"],
+      }),
+    );
+    return JSON.stringify(await this.store.get("meta", "storage-report"));
+  }
+  async lastPhysicalSample() {
+    return JSON.stringify(await this.store.get("meta", "storage-report"));
   }
   socketReport() {
     return JSON.stringify(

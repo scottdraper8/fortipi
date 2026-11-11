@@ -143,7 +143,13 @@ export class Projection {
       );
       if (settled.ok) {
         admission.state = "settled";
-        await store.put("admission", admission.key, admission);
+        await store.transaction(async (tx) => {
+          await store.put("admission", admission.key, admission, tx);
+          await this.conversations.host.authority.physical.completed(
+            (admission.continuation?.capacity ?? admission.capacity).reservationId,
+            tx,
+          );
+        });
       } else {
         const retryAt = Date.now() + (settled.details?.retryAfterMs ?? 30000);
         await store.put("settlement-pressure", admission.key, {

@@ -122,6 +122,14 @@ export class Conversations {
           parent ? "conversations.fork" : "conversations.create",
           parent?.conversation.conversationId,
         );
+        await this.host.authority.physical.beforeGrowth(
+          auth,
+          scope({
+            agentIds: [this.host.agentId],
+            conversationIds: parent ? [parent.conversation.conversationId] : [],
+            actions: [parent ? "conversations.fork" : "conversations.create"],
+          }),
+        );
         const capacity = unwrap(
           await this.host.authority.control.reserveCapacity(auth, {
             operationId: `create_${await digest({ key })}`,
@@ -336,7 +344,10 @@ export class Conversations {
         ),
       );
     intent.state = "complete";
-    await store.put("creation", intent.key, intent);
+    await store.transaction(async (tx) => {
+      await store.put("creation", intent.key, intent, tx);
+      if (capacity) await this.host.authority.physical.completed(capacity.reservationId, tx);
+    });
     return conversation;
   }
   async submit(
@@ -454,6 +465,7 @@ export class Conversations {
     }
     const model = intent.model;
     check(model, "interrupted", "Admission model unavailable");
+    await this.host.authority.physical.beforeGrowth(auth, resources);
     const capacity = unwrap(
       await this.host.authority.control.reserveCapacity(auth, {
         operationId: intent.operationId,

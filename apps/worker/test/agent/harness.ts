@@ -22,7 +22,7 @@ export async function eventually<T>(
   assert.fail("Expected runtime state did not commit");
 }
 export async function harness(
-  options: { events?: number; traffic?: "free"; origin?: string } = {},
+  options: { events?: number; traffic?: "free"; origin?: string; main?: string } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-agent-"));
   const configPath = join(directory, "wrangler.json");
@@ -38,7 +38,7 @@ export async function harness(
     configPath,
     JSON.stringify({
       name: "fortipi-agent",
-      main: resolve("apps/worker/test/agent/runtime-worker.ts"),
+      main: options.main ?? resolve("apps/worker/test/agent/runtime-worker.ts"),
       compatibility_date: "2026-11-10",
       compatibility_flags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
       vars: {

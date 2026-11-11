@@ -312,6 +312,10 @@ export class FreshJobs {
           limits = target.transferLimits;
         }
         await this.#current(auth, record, old);
+        await authority.physical.beforeGrowth(jobAuth, {
+          ...resources,
+          actions: ["jobs.dispatch"],
+        });
         const capacity = unwrap(
           await authority.control.reserveCapacity(jobAuth, {
             operationId: record.operation.operationId,

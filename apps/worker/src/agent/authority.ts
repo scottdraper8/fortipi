@@ -1,9 +1,11 @@
 import { check, permits, scope, unwrap } from "../api/common.js";
 import type { ControlPlaneRpc } from "../boundary/control-plane.js";
 import type * as D from "../boundary/dto.js";
+import { PhysicalStorage } from "./physical-storage.js";
 import type { Sql, Store } from "./store.js";
 export type ControlPort = Pick<
   ControlPlaneRpc,
+  | "fetch"
   | "authorize"
   | "reserveCapacity"
   | "settleCapacity"
@@ -22,10 +24,12 @@ export class Authority {
   readonly store: Store;
   readonly control: ControlPort;
   readonly agentId: string;
+  readonly physical: PhysicalStorage;
   constructor(store: Store, control: ControlPort, agentId: string) {
     this.store = store;
     this.control = control;
     this.agentId = agentId;
+    this.physical = new PhysicalStorage(store, this, control);
   }
   async current(ctx: D.AuthContext, resources: D.ResourceScope, tx?: Sql): Promise<void> {
     const now = Date.now();
