@@ -17,7 +17,12 @@ import type { Manifest } from "../../dist/workspace/manifest.js";
 /** Actual Node WebSocket peer; synthetic HTTP authority, no Worker/CP substitute. */
 export async function sessionFixture(
   profile: Profile,
-  options: { register: boolean; fault?: "protocol" | "binary"; afterRegister?: ExecutorFrame[] },
+  options: {
+    register: boolean;
+    fault?: "protocol" | "binary";
+    afterRegister?: ExecutorFrame[];
+    acknowledge?: boolean;
+  },
 ) {
   const peers = new Set<Duplex>(),
     tickets = new Set<string>();
@@ -136,6 +141,32 @@ export async function sessionFixture(
           JSON.parse(bytes.toString()),
         );
         received.push(value);
+        if (value.type === "job.query") {
+          const reason = Buffer.from("Executor cannot send command frames");
+          const close = Buffer.alloc(reason.length + 2);
+          close.writeUInt16BE(1008);
+          reason.copy(close, 2);
+          send(socket, close, 8);
+          return;
+        }
+        if (
+          options.acknowledge &&
+          (value.type === "job.output" || value.type === "job.prepared_result")
+        )
+          send(
+            socket,
+            Buffer.from(
+              JSON.stringify({
+                type: value.type === "job.output" ? "job.output_ack" : "job.result_ack",
+                requestId: value.requestId,
+                payload: {
+                  deliveryId: value.requestId,
+                  sequence: value.payload.sequence,
+                  persisted: true,
+                },
+              }),
+            ),
+          );
         if (value.type === "executor.register" && options.register) {
           send(
             socket,

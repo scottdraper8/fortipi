@@ -251,6 +251,131 @@ for (const mode of ["assignment", "workspace", "authority", "ack"] as const)
     }
   });
 
+test("native reconnect replays durable deliveries and answers server queries without sending command frames or rerunning effects", async () => {
+  const f = await fixture();
+  const server = await sessionFixture(f.profile, { register: true, acknowledge: true });
+  let runtime: ExecutorRuntime | undefined;
+  let controller: AbortController | undefined, connected: Promise<void> | undefined;
+  let watchdog: ReturnType<typeof setTimeout> | undefined;
+  try {
+    f.profile.origin = server.origin;
+    const http = new HttpTransport(f.profile, fetch, true);
+    authenticateFixture(http);
+    runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http,
+    });
+    await runtime.initialize();
+    const local = runtime.locals.get("root");
+    if (!local) throw new Error("local missing");
+    await importRoot(local);
+    runtime.connected = true;
+    const marker = join(f.path, "reconnect-effect"),
+      a = await assignment(nodeCommand(fixtureChild, "append", marker, "native-output"));
+    await local.request(prepare(a, f.initial.manifestHash));
+    await runtime.assignOnce(a);
+    const approval = runtime.approvals.list()[0];
+    if (!approval) throw new Error("approval missing");
+    runtime.approvals.decide(a.identity.jobId, approval.digest, "allow");
+    await runtime.tick();
+    await eventually(
+      () => !!f.ledger.get(a.identity.jobId)?.result,
+      "actual native result missing",
+    );
+    const row = f.ledger.get(a.identity.jobId),
+      retained = f.ledger.outbox();
+    assert.ok(row?.result);
+    assert.ok(retained.some((value) => value.type === "job.output"));
+    assert.ok(retained.some((value) => value.type === "job.prepared_result"));
+    const reopened = await Ledger.open(f.directory, "ledger", f.ledger.limits);
+    try {
+      assert.deepEqual(reopened.outbox(), retained);
+    } finally {
+      reopened.close();
+    }
+    const session = new SessionTransport(http, runtime);
+    runtime.session = session;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const queryId = `control_query_${attempt}`;
+      server.options.afterRegister = [
+        { type: "job.query", requestId: queryId, payload: a.identity },
+      ];
+      controller = new AbortController();
+      watchdog = setTimeout(() => controller?.abort(), 5000);
+      connected = session.connect(controller.signal, {
+        type: "executor.register",
+        requestId: `native_register_${attempt}`,
+        payload: {
+          executorId: f.profile.executorId,
+          generation: f.profile.executorGeneration,
+          protocolVersion: "1.0",
+          schemaVersion: "1.0.0",
+          capabilities: [],
+          platform: process.platform as "linux" | "darwin" | "win32",
+          caseBehavior: "sensitive",
+          rootBindingIds: ["root"],
+          confinement: "host",
+          transferLimits: http.transferLimits(),
+        },
+      });
+      await Promise.race([
+        eventually(
+          () =>
+            f.ledger.outbox().length === 0 &&
+            server.received.some(
+              (value) => value.type === "job.query_result" && value.requestId === queryId,
+            ),
+          "durable replay/query response missing",
+        ),
+        connected.then(() => {
+          throw new Error("session closed before durable replay acknowledgment");
+        }),
+      ]);
+      assert.equal(controller.signal.aborted, false);
+      assert.equal(
+        server.received.some((value) => value.type === "job.query"),
+        false,
+        "only the control plane sends query commands",
+      );
+      const query = server.received.find(
+        (value) => value.type === "job.query_result" && value.requestId === queryId,
+      );
+      assert.ok(query?.type === "job.query_result" && query.payload.state === "pending_sync");
+      assert.deepEqual(query.payload.result, row.result);
+      for (const delivery of retained)
+        assert.equal(
+          server.received.filter((value) => value.requestId === delivery.requestId).length,
+          1,
+          "acked output/result must not replay on the next connection",
+        );
+      assert.equal(await readFile(marker, "utf8"), "effect\n");
+      assert.equal(f.ledger.get(a.identity.jobId)?.bodyHash, row.bodyHash);
+      assert.equal(runtime.children.size, 0);
+      controller.abort();
+      await connected;
+      connected = undefined;
+      clearTimeout(watchdog);
+    }
+    const final = await Ledger.open(f.directory, "ledger", f.ledger.limits);
+    try {
+      assert.equal(final.outbox().length, 0);
+      assert.equal(final.get(a.identity.jobId)?.bodyHash, row.bodyHash);
+    } finally {
+      final.close();
+    }
+  } finally {
+    controller?.abort();
+    await connected?.catch(() => {});
+    clearTimeout(watchdog);
+    await runtime?.shutdown();
+    await server.close();
+    await f.cleanup();
+  }
+});
+
 test("local-stage status waits for actual empty or multichunk durable consumer proof and current authority", async () => {
   for (const mode of ["empty", "multichunk", "revoked", "fenced"] as const) {
     const f = await fixture();

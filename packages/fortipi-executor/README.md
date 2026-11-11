@@ -59,8 +59,10 @@ The canonical operation/assignment hashes must validate before admission or
 approval. The additional received-body hash detects conflicting duplicates.
 Renewed expiry/version and socket epochs do not change immutable identity.
 Credential generation, executor generation, binding version and connection epoch
-are separate. Reconnecting changes only the connection epoch and sends queries
-and persisted deliveries. An absent attempt is unknown. Cancellation before
+are separate. Reconnecting changes only the connection epoch and retransmits
+persisted deliveries. The control plane sends reconciliation queries; the executor
+answers from its existing ledger and never sends query commands or replays assigns.
+An absent attempt is unknown. Cancellation before
 assignment stores a no-late-start tombstone. A previous start intent or running
 row becomes unknown after restart; PID reuse never authorizes a kill or a rerun.
 

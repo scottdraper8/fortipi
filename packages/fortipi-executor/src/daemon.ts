@@ -56,7 +56,6 @@ export class ExecutorRuntime implements FrameHandler {
   active = new Set<string>();
   transfers = new Set<string>();
   stageRetryAt = new Map<string, number>();
-  queryIndex = 0;
   private stopping = false;
   private activities = new Set<Promise<unknown>>();
   private workspaceRequests = new Map<string, Promise<LocalWorkspaceResponse | ErrorBody>>();
@@ -727,18 +726,9 @@ export class ExecutorRuntime implements FrameHandler {
     if (this.session) for (const pending of this.ledger.outbox()) this.session.send(pending);
   }
   reconnectFrames(): ExecutorFrame[] {
-    const identities = this.ledger.identities().slice(this.queryIndex, this.queryIndex + 32);
-    this.queryIndex += identities.length;
-    return [
-      ...identities.map(
-        (identity): ExecutorFrame => ({
-          type: "job.query",
-          requestId: randomUUID(),
-          payload: identity,
-        }),
-      ),
-      ...this.ledger.outbox(),
-    ];
+    // Execution queries are control-plane commands. Reply from the existing
+    // ledger when queried; reconnect only retransmits durable native deliveries.
+    return this.ledger.outbox();
   }
   async disconnected(): Promise<void> {
     this.connected = false;
@@ -751,7 +741,6 @@ export class ExecutorRuntime implements FrameHandler {
     this.http.assertExecutorAuthority();
     if (value.type === "executor.registered") {
       this.connected = true;
-      this.queryIndex = 0;
       Object.assign(this.ledger.limits, effectiveLimits(this.ledger.limits, this.http.limits));
       this.staging.limits = this.http.limits;
       this.snapshots.limits = this.http.limits;
