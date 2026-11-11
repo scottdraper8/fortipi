@@ -175,6 +175,11 @@ account passwords are logged; the account and synthetic files are removed in
 `finally`. The fixture refuses local/self-hosted execution, uses noninteractive
 sudo on POSIX and in-process random credentials on Windows, and has a two-minute
 CI step bound. Its actual three-OS results are required in the canonical report.
+POSIX uses a SHA-256-checked copy of the current public Node executable inside
+the synthetic public lab, so the runner's home permissions cannot prevent the
+positive control from starting. It changes no runner-home permissions. Failed
+launch/control diagnostics disclose only fixed categories, including when
+Windows PowerShell wraps stderr in CLIXML.
 Windows permission utilities use typed SID ACL operations from .NET Framework
 and direct filesystem attributes, without cmdlet module autoload or account-name
 translation. The native diagnostic emits bounded stage timings without identities

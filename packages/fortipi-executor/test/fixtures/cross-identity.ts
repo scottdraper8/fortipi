@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { chmod, mkdtemp, open, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
+import { createReadStream } from "node:fs";
+import {
+  chmod,
+  copyFile,
+  mkdtemp,
+  open,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -52,9 +63,28 @@ async function run(command: string, args: string[], timeout = 20000): Promise<st
   } catch (error) {
     // Never forward execFile's command/output-bearing Error (including credentials or file bytes).
     const e = error as { code?: string | number; killed?: boolean; stderr?: string };
-    const stage = e.stderr?.match(/^cross-identity Windows stage=[a-z-]+ native=[0-9]+$/)?.[0];
+    // Windows PowerShell may wrap stderr in CLIXML. Extract ONLY our fixed categories,
+    // never the XML, command, exception messages, paths, environment or credential bytes.
+    const stage = e.stderr?.match(
+      /cross-identity Windows stage=(?:load-account-api|create-context|find-account|create-account|group-membership|resolve-identity|baseline|permission-fault|restored) native=-?[0-9]{1,10} detail=(?:none|identity|public-control|file-open|child-runtime) type=[A-Za-z0-9_]+ hresult=-?[0-9]{1,10}/,
+    )?.[0];
+    const control = e.stderr?.match(
+      /unprivileged identity control failed|public read control failed|unexpected file-open failure/,
+    )?.[0];
+    const launch = /sudo: unable to execute [^\r\n]*: Permission denied/.test(e.stderr ?? "")
+      ? "sudo execute denied"
+      : undefined;
+    const parser = /ParserError/.test(e.stderr ?? "") ? "PowerShell parser failure" : undefined;
     throw new Error(
-      `cross-identity child failed: code=${e.code ?? "unknown"}, timedOut=${e.killed === true}${stage ? `; ${stage}` : ""}`,
+      `cross-identity child failed: code=${e.code ?? "unknown"}, timedOut=${e.killed === true}${[
+        stage,
+        control,
+        launch,
+        parser,
+      ]
+        .filter(Boolean)
+        .map((s) => `; ${s}`)
+        .join("")}`,
     );
   }
 }
@@ -141,6 +171,24 @@ try {
       `$p=${literal(root)};$a=[System.Security.AccessControl.DirectorySecurity]::new();$me=[System.Security.Principal.WindowsIdentity]::GetCurrent().User;$a.SetOwner($me);$a.SetAccessRuleProtection($true,$false);foreach($sid in @($me.Value,'S-1-5-18','S-1-5-32-545')){$rights=if($sid -eq 'S-1-5-32-545'){'ReadAndExecute'}else{'FullControl'};$a.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new([System.Security.Principal.SecurityIdentifier]::new($sid),$rights,'ContainerInherit,ObjectInherit','None','Allow'))};[System.IO.Directory]::SetAccessControl($p,$a)`,
     );
   } else await chmod(root, 0o755);
+  let executable = process.execPath;
+  if (process.platform !== "win32") {
+    // Hosted macOS's Node can live below the runner's private home. Copy ONLY the
+    // actual public executable into our public lab; do not change that home's ACL.
+    executable = join(root, "node");
+    await copyFile(process.execPath, executable);
+    await chmod(executable, 0o755);
+    const digest = async (path: string) => {
+      const sha = createHash("sha256");
+      for await (const bytes of createReadStream(path)) sha.update(bytes);
+      return sha.digest("hex");
+    };
+    assert.equal(
+      await digest(executable),
+      await digest(process.execPath),
+      "public probe executable must be byte-identical",
+    );
+  }
   const directory = join(root, "state");
   await secureDirectory(directory);
   const profile = join(directory, "profile.json");
@@ -226,8 +274,7 @@ try {
     const uid = reportedUid >>> 0; // macOS may print nobody's uid_t as signed -2.
     assert.ok(Number.isSafeInteger(uid) && uid > 0 && uid !== process.getuid?.());
     const code = worker({ uid, ownerUid: process.getuid?.(), control, nonce, targets });
-    const probe = () =>
-      run("/usr/bin/sudo", ["-n", "-u", "nobody", "--", process.execPath, "-e", code]);
+    const probe = () => run("/usr/bin/sudo", ["-n", "-u", "nobody", "--", executable, "-e", code]);
     baseline = check(await probe());
     try {
       await chmod(exported, 0o644);
@@ -249,19 +296,24 @@ try {
       whoami: win32.join(environment.SystemRoot ?? "", "System32/whoami.exe"),
     });
     const script = `
-$ctx=$null;$account=$null;$users=$null;$admins=$null;$secret=$null;$rng=$null;$created=$false;$ok=$false;$stage='account';$cleanup=$true;$saved=$null
+$ctx=$null;$account=$null;$users=$null;$admins=$null;$secret=$null;$rng=$null;$created=$false;$ok=$false;$stage='load-account-api';$cleanup=$true;$saved=$null;$detail='none'
 try {
   [void][System.Reflection.Assembly]::Load('System.DirectoryServices.AccountManagement, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089')
+  $stage='create-context'
   $ctx=[System.DirectoryServices.AccountManagement.PrincipalContext]::new([System.DirectoryServices.AccountManagement.ContextType]::Machine)
   $name='fpi'+[Guid]::NewGuid().ToString('N').Substring(0,12)
+  $stage='find-account'
   $existing=[System.DirectoryServices.AccountManagement.UserPrincipal]::FindByIdentity($ctx,$name)
   if($null -ne $existing){$existing.Dispose();throw 'account collision'}
   $rng=[System.Security.Cryptography.RandomNumberGenerator]::Create();$bytes=[byte[]]::new(32);$rng.GetBytes($bytes)
   $password=[Convert]::ToBase64String($bytes)+'Aa1!';[Array]::Clear($bytes,0,$bytes.Length)
   $secret=[System.Security.SecureString]::new();foreach($ch in $password.ToCharArray()){$secret.AppendChar($ch)};$secret.MakeReadOnly()
+  $stage='create-account'
   $account=[System.DirectoryServices.AccountManagement.UserPrincipal]::new($ctx);$account.SamAccountName=$name;$account.Name=$name;$account.SetPassword($password);$password=$null;$account.Enabled=$true;$account.Save();$created=$true
+  $stage='group-membership'
   $users=[System.DirectoryServices.AccountManagement.GroupPrincipal]::FindByIdentity($ctx,[System.DirectoryServices.AccountManagement.IdentityType]::Sid,'S-1-5-32-545');if(!$users.Members.Contains($account)){$users.Members.Add($account);$users.Save()}
   $admins=[System.DirectoryServices.AccountManagement.GroupPrincipal]::FindByIdentity($ctx,[System.DirectoryServices.AccountManagement.IdentityType]::Sid,'S-1-5-32-544');if($admins.Members.Contains($account)){throw 'privileged test account'}
+  $stage='resolve-identity'
   $source=[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(code).toString("base64")}')).Replace('__EXPECTED_SID__',$account.Sid.Value).Replace('__OWNER_SID__',[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
   $source64=[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($source))
   function Probe {
@@ -273,7 +325,7 @@ try {
       $p.StartInfo.EnvironmentVariables.Clear();$p.StartInfo.EnvironmentVariables['SystemRoot']=${literal(environment.SystemRoot ?? "")};$p.StartInfo.EnvironmentVariables['WINDIR']=${literal(environment.SystemRoot ?? "")};$p.StartInfo.EnvironmentVariables['PATH']=${literal(environment.PATH ?? "")};$p.StartInfo.EnvironmentVariables['TEMP']=${literal(root)};$p.StartInfo.EnvironmentVariables['TMP']=${literal(root)}
       [void]$p.Start();$out=$p.StandardOutput.ReadToEndAsync();$err=$p.StandardError.ReadToEndAsync()
       if(!$p.WaitForExit(15000)){$p.Kill();$p.WaitForExit();throw 'child deadline'}
-      $text=$out.GetAwaiter().GetResult();[void]$err.GetAwaiter().GetResult();if($p.ExitCode -ne 0 -or $text.Length -gt 16384){throw 'child control failed'}
+      $text=$out.GetAwaiter().GetResult();$stderr=$err.GetAwaiter().GetResult();if($p.ExitCode -ne 0 -or $text.Length -gt 16384){$script:detail='child-runtime';if($stderr.Contains('unprivileged identity control failed')){$script:detail='identity'};if($stderr.Contains('public read control failed')){$script:detail='public-control'};if($stderr.Contains('unexpected file-open failure')){$script:detail='file-open'};throw 'child control failed'}
       return $text
     } finally { $p.Dispose() }
   }
@@ -282,7 +334,7 @@ try {
   try {$wide=[System.IO.File]::GetAccessControl($path);$wide.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new([System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-545'),'Read','Allow'));[System.IO.File]::SetAccessControl($path,$wide);$weakened=Probe}
   finally {[System.IO.File]::SetAccessControl($path,$saved);$saved=$null}
   $stage='restored';$restored=Probe;$ok=$true
-} catch { $native=0;$failure=$_.Exception;while($null -ne $failure){if($failure -is [System.ComponentModel.Win32Exception]){$native=$failure.NativeErrorCode};$failure=$failure.InnerException};[Console]::Error.Write('cross-identity Windows stage='+$stage+' native='+$native) }
+} catch { $native=0;$failure=$_.Exception;$kind=$failure.GetType().Name;$hresult=$failure.HResult;while($null -ne $failure){if($failure -is [System.ComponentModel.Win32Exception]){$native=$failure.NativeErrorCode};$failure=$failure.InnerException};[Console]::Error.Write('cross-identity Windows stage='+$stage+' native='+$native+' detail='+$detail+' type='+$kind+' hresult='+$hresult) }
 finally {
   if($null -ne $saved){try{[System.IO.File]::SetAccessControl(${literal(exported)},$saved)}catch{$cleanup=$false}}
   if($created){try{$account.Delete();$remaining=[System.DirectoryServices.AccountManagement.UserPrincipal]::FindByIdentity($ctx,$name);if($null -ne $remaining){$remaining.Dispose();$cleanup=$false}}catch{$cleanup=$false}}
