@@ -20,6 +20,14 @@ try {
   for (const mutation of [
     {
       file: "dispatch.ts",
+      pattern:
+        /tools: \[assignment\.tool\],\s*\.\.\.\(identity\.target\.kind === "executor"\s*\? \{ executorIds: \[identity\.target\.executorId\] \}\s*: \{ backendIds: \[identity\.target\.backendId\] \}\),/,
+      replacement: "tools: [],",
+      test: "dispatch-authorization.test.ts",
+      oracle: "query authority must cover the retained tool and target as well as job resources",
+    },
+    {
+      file: "dispatch.ts",
       pattern: /requireGrant\(ctx, "jobs\.dispatch", grantResources\);/,
       replacement: "",
       test: "dispatch-authorization.test.ts",
