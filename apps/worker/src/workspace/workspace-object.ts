@@ -2720,6 +2720,79 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
       const envelope = JSON.parse(raw) as InternalContext;
       const { auth } = envelope;
       const url = new URL(request.url);
+      if (url.pathname === "/__fortipi/operational-metadata") {
+        requireThat(
+          request.method === "GET",
+          "invalid_request",
+          "Operational metadata requires GET",
+        );
+        const keys = ["revision", "agentId", "conversationId"];
+        requireThat(
+          [...url.searchParams.keys()].every((key) => keys.includes(key)) &&
+            keys.every(
+              (key) =>
+                url.searchParams.getAll(key).length === 1 &&
+                /^[A-Za-z0-9_-]{1,128}$/.test(url.searchParams.get(key) ?? ""),
+            ),
+          "invalid_request",
+          "Operational metadata requires an exact base and agent scope",
+        );
+        const metadata = await this.mutex.run(() => {
+          const authority = this.current();
+          authorize(this.state, auth, authority.workspaceId, "workspace.write");
+          requireThat(
+            !this.state.get("child") && this.isSelf(authority.workspaceId),
+            "unauthorized",
+            "Only the workspace authority accepts operational metadata",
+          );
+          requireThat(
+            auth.grants.some(
+              (grant) =>
+                (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+                permitsResource(grant.resources.workspaceIds, authority.workspaceId) &&
+                permitsResource(grant.resources.agentIds, url.searchParams.get("agentId") ?? "") &&
+                permitsResource(
+                  grant.resources.conversationIds,
+                  url.searchParams.get("conversationId") ?? "",
+                ) &&
+                permitsResource(grant.resources.actions, "jobs.dispatch") &&
+                permitsResource(grant.resources.actions, "workspace.write"),
+            ),
+            "unauthorized",
+            "One current dispatch and workspace write grant required",
+          );
+          const binding = authority.binding;
+          requireThat(
+            binding.revision === url.searchParams.get("revision") &&
+              this.revision(binding.revision).manifestHash === binding.manifestHash,
+            "workspace.conflict",
+            "Operational metadata base revision changed",
+            { reason: "expected_revision" },
+          );
+          requireThat(
+            binding.config.kind === "computer" || binding.config.kind === "local",
+            "conflict",
+            "Unknown workspace provider",
+          );
+          const result: D.WorkspaceBinding = {
+            workspaceId: authority.workspaceId,
+            bindingVersion: binding.bindingVersion,
+            revision: binding.revision,
+            manifestHash: binding.manifestHash,
+            availability: binding.availability,
+            config:
+              binding.config.kind === "computer"
+                ? { kind: "computer" }
+                : {
+                    kind: "local",
+                    executorId: binding.config.executorId,
+                    rootBindingId: binding.config.rootBindingId,
+                  },
+          };
+          return result;
+        });
+        return Response.json(metadata, { headers: { "Cache-Control": "no-store" } });
+      }
       if (url.pathname === "/__fortipi/terminal-proof") {
         requireThat(request.method === "POST", "invalid_request", "Terminal proof requires POST");
         const input = await boundedJson<unknown>(request, 65_536);
