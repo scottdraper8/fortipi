@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compile, type JSONSchema } from "json-schema-to-typescript";
@@ -8,6 +9,7 @@ import { errorStatuses, type RouteDefinition, routeCatalog } from "../src/route-
 
 type Schema = { [key: string]: unknown };
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const biomeLauncher = createRequire(import.meta.url).resolve("@biomejs/biome/bin/biome");
 const check = process.argv.includes("--check");
 assert.ok(process.argv.slice(2).every((arg) => arg === "--check"));
 const files = (await readdir(resolve(root, "schemas")))
@@ -348,8 +350,9 @@ for (const [path, content] of Object.entries(outputs)) {
   // Use the foundation formatter for byte-identical checked-in TypeScript/JSON. JSON syntax is YAML1.2.
   const extension = path.endsWith(".yaml") ? "json" : "ts";
   const result = spawnSync(
-    resolve(root, "../../node_modules/.bin/biome"),
+    process.execPath,
     [
+      biomeLauncher,
       "format",
       `--stdin-file-path=generated.${extension}`,
       "--indent-style=space",
