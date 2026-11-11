@@ -356,6 +356,10 @@ test("only an original connect refusal to the verified policy endpoint permits t
     Object.assign(new AggregateError(items, "diagnostic-private-aggregate"), {
       code: "ECONNREFUSED",
     });
+  const methodPoison = aggregate([{ ...endpoint }]);
+  Object.defineProperty(methodPoison.errors, "every", {
+    value: () => "diagnostic-private-injected",
+  });
   const evidence: ApplicationNetworkEvidence = {
     imageId: `sha256:${"a".repeat(64)}`,
     appPid: 42,
@@ -377,6 +381,7 @@ test("only an original connect refusal to the verified policy endpoint permits t
     for (const [cause, expected] of [
       [endpoint, true],
       [aggregate(Array.from({ length: 4 }, () => ({ ...endpoint }))), true],
+      [methodPoison, true],
       [{ code: "ECONNREFUSED" }, false],
       [{ ...endpoint, address: "127.0.0.1" }, false],
       [{ ...endpoint, port: 80 }, false],

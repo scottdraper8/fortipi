@@ -87,27 +87,39 @@ function connectFailure(error: unknown): { causeCode: string; stepSecurityEndpoi
         ? code
         : "UNKNOWN";
     const failures = cause instanceof AggregateError ? cause.errors : [cause];
-    const stepSecurityEndpoint =
+    // Snapshot one numeric bound; never invoke methods supplied on the error's array.
+    const count: unknown = Array.isArray(failures) ? failures.length : undefined;
+    let stepSecurityEndpoint = false;
+    if (
       causeCode === "ECONNREFUSED" &&
-      Array.isArray(failures) &&
-      failures.length > 0 &&
-      failures.length <= 4 &&
-      failures.every(
-        (failure: unknown) =>
-          typeof failure === "object" &&
-          failure !== null &&
-          !(failure instanceof AggregateError) &&
-          !("errors" in failure) &&
-          "code" in failure &&
-          failure.code === "ECONNREFUSED" &&
-          "syscall" in failure &&
-          failure.syscall === "connect" &&
-          "port" in failure &&
-          failure.port === 443 &&
-          "address" in failure &&
-          typeof failure.address === "string" &&
-          isStepSecuritySinkhole([failure.address]),
-      );
+      typeof count === "number" &&
+      count >= 1 &&
+      count <= 4 &&
+      Number.isInteger(count)
+    ) {
+      stepSecurityEndpoint = true;
+      for (let index = 0; index < count; index++) {
+        const failure: unknown = failures[index];
+        if (
+          typeof failure !== "object" ||
+          failure === null ||
+          failure instanceof AggregateError ||
+          "errors" in failure ||
+          !("code" in failure) ||
+          failure.code !== "ECONNREFUSED" ||
+          !("syscall" in failure) ||
+          failure.syscall !== "connect" ||
+          !("port" in failure) ||
+          failure.port !== 443 ||
+          !("address" in failure) ||
+          typeof failure.address !== "string" ||
+          !isStepSecuritySinkhole([failure.address])
+        ) {
+          stepSecurityEndpoint = false;
+          break;
+        }
+      }
+    }
     return { causeCode, stepSecurityEndpoint };
   } catch {
     return unknown;
