@@ -6,7 +6,13 @@ import { ContainerBackend, withWorkspaceContainer } from "@cloudflare/computer/b
 export { WorkspaceProxy };
 
 class Host extends DurableObject {}
-export class ProbeHost extends withWorkspaceContainer(Host) {}
+export class ProbeHost extends withWorkspaceContainer(Host) {
+  preparedImage(): string {
+    const image = this.ctx.container?.images.computerd;
+    if (!image) throw new Error("Prepared computerd image required");
+    return image;
+  }
+}
 interface ProbeEnv {
   WORKSPACES: DurableObjectNamespace<BackendProbe>;
   LINUX_CONTAINERS?: DurableObjectNamespace<ProbeHost>;
@@ -96,7 +102,11 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
   }
 }
 export default {
-  fetch(request: Request, env: ProbeEnv): Promise<Response> {
+  async fetch(request: Request, env: ProbeEnv): Promise<Response> {
+    if (new URL(request.url).pathname === "/prepared-image") {
+      if (!env.LINUX_CONTAINERS) return new Response(null, { status: 404 });
+      return Response.json(await env.LINUX_CONTAINERS.getByName("probe-host").preparedImage());
+    }
     return env.WORKSPACES.getByName("backend-probe").fetch(request);
   },
 };

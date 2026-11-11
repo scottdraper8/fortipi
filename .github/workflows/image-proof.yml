@@ -116,7 +116,7 @@ jobs:
           pnpm exec tsc -p packages/fortipi-contract/tsconfig.json
           pnpm exec tsc -p apps/worker/tsconfig.json --noEmit
           pnpm exec tsc -p tsconfig.tools.json --noEmit
-          node --test tools/unstale/verify-container-egress.test.ts
+          node --test tools/unstale/verify-container-egress.test.ts apps/worker/test/backends/image-archive.test.ts
       - name: Provision reviewed Docker (${{ matrix.mode }})
         run: node tools/unstale/provision-docker.ts ${{ matrix.provision_args }}
       - name: Build the pinned image and collect its actual inventory

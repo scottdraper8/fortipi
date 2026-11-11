@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { verifyControls } from "./verify-container-egress.ts";
+import { privateBridgeDns, verifyControls } from "./verify-container-egress.ts";
 
 test("an allowed target on both sides is required to distinguish refusal from broken networking", () => {
   verifyControls(0, 1, 0);
@@ -13,6 +13,16 @@ test("a reachable denied target and Docker setup failures cannot count as policy
   for (const status of [0, 125, 126, 127, 137]) {
     assert.throws(() => verifyControls(0, status, 0));
   }
+});
+
+test("rootless bridge DNS must be the pinned private gateway, without external fallback", () => {
+  assert.equal(privateBridgeDns("nameserver 10.0.2.1\n"), "10.0.2.1");
+  for (const value of [
+    "nameserver 8.8.8.8",
+    "nameserver 127.0.0.53",
+    "nameserver 10.0.2.1\nnameserver 8.8.8.8",
+  ])
+    assert.throws(() => privateBridgeDns(value));
 });
 
 test("input diagnostics preserve the request/error while withholding signed URL and auth data", async () => {

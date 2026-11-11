@@ -22,6 +22,9 @@ installer scripts and exact platform-tool metadata. `source-revision.json` binds
 its archive hash, Git commit, Node/pnpm/tar versions, root manifest/lock and platform
 metadata. `source-kit-recipe/` additionally carries the image recipe and metadata
 for independent comparison, including `debian.ts`.
+The recipe also includes `image-archive.ts`, which hashes the actual saved OCI
+manifest, config and layers. The saved manifest identity is distinct from an
+exporter config identity and from any future published registry manifest.
 
 Use a fresh checkout of the recorded commit from the published FortiPi repository
 (`https://github.com/scottdraper8/fortipi`), preserving its Git identity. Compare

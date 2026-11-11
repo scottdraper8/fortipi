@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { isIPv4 } from "node:net";
+import { dirname, resolve } from "node:path";
 import { repository } from "../../scripts/build-workspaces.ts";
 
 export function verifyControls(before: number, denied: number, after: number): void {
@@ -11,6 +12,11 @@ export function verifyControls(before: number, denied: number, after: number): v
     denied === 1 || denied === 124,
     "Denied target connected or container/timeout setup failed",
   );
+}
+
+export function privateBridgeDns(resolv: string): string {
+  assert.equal(resolv.trim(), "nameserver 10.0.2.1", "Pinned RootlessKit gateway DNS changed");
+  return "10.0.2.1";
 }
 
 const commands = {
@@ -25,6 +31,38 @@ async function main(): Promise<void> {
     await readFile(`${repository}/apps/worker/dist/container/image-metadata.json`, "utf8"),
   ) as { imageId: string; sourceCommit: string };
   assert.match(metadata.imageId, /^sha256:[a-f0-9]{64}$/);
+  const dockerEnv = {
+    HOME: process.env.HOME,
+    PATH: process.env.PATH,
+    DOCKER_HOST: process.env.DOCKER_HOST,
+    DOCKER_CONFIG: process.env.DOCKER_CONFIG,
+  };
+  const options = JSON.parse(
+    execFileSync("docker", ["info", "--format", "{{json .SecurityOptions}}"], {
+      encoding: "utf8",
+      timeout: 10_000,
+      maxBuffer: 16 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+      env: dockerEnv,
+    }),
+  ) as string[];
+  const bridgeDns: string[] = [];
+  if (options.includes("name=rootless")) {
+    const host = dockerEnv.DOCKER_HOST ?? "";
+    assert.ok(host.startsWith("unix:///"), "Private local Docker API required");
+    const state = resolve(dirname(host.slice("unix://".length)), "state/resolv.conf");
+    const nameserver = privateBridgeDns(await readFile(state, "utf8"));
+    // The pinned gateway forwards through the protected host resolver. Detached-mode
+    // legacy bridge DNS would otherwise strip host loopback and fall back to public DNS.
+    bridgeDns.push("--dns", nameserver);
+    console.log(
+      JSON.stringify({
+        probe: "rootless-bridge-dns",
+        nameserver,
+        upstream: "protected-host-resolver",
+      }),
+    );
+  }
   const probe = (network: "bridge" | "host", target: keyof typeof commands) =>
     new Promise<number>((accept, reject) => {
       const started = new Date().toISOString();
@@ -35,6 +73,7 @@ async function main(): Promise<void> {
           "--rm",
           "--network",
           network,
+          ...(network === "bridge" ? bridgeDns : []),
           "--read-only",
           "--cap-drop=ALL",
           "--entrypoint",
@@ -46,12 +85,7 @@ async function main(): Promise<void> {
           commands[target],
         ],
         {
-          env: {
-            HOME: process.env.HOME,
-            PATH: process.env.PATH,
-            DOCKER_HOST: process.env.DOCKER_HOST,
-            DOCKER_CONFIG: process.env.DOCKER_CONFIG,
-          },
+          env: dockerEnv,
           timeout: 25_000,
           killSignal: "SIGKILL",
           maxBuffer: 16 * 1024,
