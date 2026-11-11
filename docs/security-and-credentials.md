@@ -407,6 +407,67 @@ the task's timed due date until confirmed reclamation or a new configuration
 permits repair. Matching configuration/settlement retries do not clear that hold.
 These are local policy/receiver observations, not account-wide quota telemetry.
 
+## Administrative immutable copies
+
+`createExport` and `createBackup` require a current admin and one grant covering
+the selected Agent/conversation/Workspace data and the actual create action.
+They do not synthesize ordinary read or capacity grants. The coordinator is an
+ECMAScript-private ControlPlane field, reached through existing admitted API,
+fetch and alarm paths; it adds no public RPC helper or binding. Legacy revocation
+operation lookup remains available.
+
+Acceptance persists the request digest, operation ID, peer export IDs and fresh
+public artifact IDs before contacting a producer. Identical retries keep that
+intent; changed payloads conflict. Each peer must retain an immutable cut under
+the logical create action. CP fetches only that trusted owner's private admin
+artifact path with an actual registered context, never a caller URL or ordinary
+read fallback. A source-local artifact ID is copy metadata, not a public CP ID.
+Workspace reconstruction indexes remain byte-identical: restoration joins their
+parts to public references by immutable SHA-256, size and exact Workspace scope,
+without rewriting index bytes or retaining producer IDs as public identities.
+
+Actual export bytes live only in bounded SQLite BLOB chunks, never Store JSON.
+Each continuation copies at most64KiB, verifies actual range bytes, and commits
+bytes and progress atomically. Whole length/SHA verification precedes the atomic
+publication of immutable indexes and completed status. There are at most16 public
+artifacts, each within the effective artifact cap and16MiB wire ceiling; their
+total respects the requested and current policy budget. Live pointers, partial
+descriptors, offline peers, corruption and refused growth cannot complete a
+backup. No credential, configuration, provider-auth table or wholesale SQL dump
+is selected by CP; producer-specific payload exclusion remains a producer duty.
+
+Before new BLOB growth, admission combines actual CP `sql.databaseSize` with
+existing reserved/consumed install counters and conservative growth slack,
+preserving both object and install repair headroom. CP physical bytes are not
+charged again as estimated/observed ledger usage. This is bounded local policy
+accounting, not account-wide billing or free-space telemetry. Current credentials,
+grants and floors are checked after awaits and for byte progress. A server-only
+repair deadline may advance for the same retained intent; original authentication
+time and credential expiry never advance.
+
+Validated receiver quota errors retain their timing through existing durable
+repair holds, including bounded private HTTP error bodies. Unknown storage pressure
+leaves the copy due date absent until actual reclamation or a new configuration
+CAS; duplicate configuration receipts do not release it. The retained request row
+provides an independent cleanup wake at the copy lifetime: expiry stops the copy
+without retrying its receiver. This does not invent a receiver reset or extend
+the copy, byte-retention or request-deduplication lifetimes.
+
+Downloads require a current admin with `artifacts.read` over the stored artifact's
+data resources. They verify retained whole bytes before responding and check
+current authority per pull, with finite ranges, measured SHA/length, backpressure
+and cancellation. Limits are64 retained operations,4 active copies,5min copy
+lifetime,1h byte retention and2h request deduplication. Existing alarms perform
+bounded continuation and incremental garbage collection; SQLite file-size
+reclamation is not inferred from deleting rows.
+
+The admin tests exercise actual CP/workerd/SQLite under a controlled immutable
+peer producer, including managed pinned Wrangler HTTP, a lost acceptance reply
+and partial-copy process-tree SIGKILL/reopen. They do not establish actual Agent/Pi
+payload exclusion, production routing or deployed backup recovery. The bounded
+GC check advances only test-owned retained expiry metadata; it does not claim an
+hour-long wall-clock observation.
+
 ## Provider authentication
 
 Workers AI remains a separate binding. Standard API keys use configured server
