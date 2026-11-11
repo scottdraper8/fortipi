@@ -66,6 +66,29 @@ void test("actual Pi renderer handles keyboard navigation, composer send, focus,
     await wait(() => controller.connection === "offline");
     terminal.key("/reconnect\r");
     await wait(() => controller.connection === "online");
+    const entered = Promise.withResolvers<void>();
+    const artifact = Promise.withResolvers<Uint8Array>();
+    let artifactSignal: AbortSignal | undefined;
+    controller.projection.artifacts.set("artifact_1", {
+      workspaceId: "ws_1",
+      revision: "r_1",
+      sha256: "a".repeat(64),
+      size: 18,
+      endpoint: `/v1/workspaces/ws_1/blobs/${"a".repeat(64)}?revision=r_1`,
+      owner: { kind: "cloud" },
+    });
+    controller.client.artifacts.read = async (_reference, options) => {
+      artifactSignal = options?.signal;
+      entered.resolve();
+      return artifact.promise;
+    };
+    terminal.key("/artifact artifact_1\r");
+    await entered.promise;
+    controller.changeClient(service.client());
+    artifact.resolve(new TextEncoder().encode("stale origin content"));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(controller.detail, "");
+    assert.equal(artifactSignal?.aborted, true);
     terminal.key("/ids\r");
     await wait(() => controller.view === "ids");
     assert(terminal.output.includes("FortiPi"));
@@ -74,6 +97,7 @@ void test("actual Pi renderer handles keyboard navigation, composer send, focus,
     await running;
     assert(terminal.stopped);
   } finally {
+    terminal.key("\u0003");
     controller.close();
     await service.close();
   }

@@ -41,6 +41,52 @@ void test("smoke fails on rejected admission instead of reporting completion", a
   }
 });
 
+void test("smoke requires task-correlated message.completed and canonical task.completed, never similar committed output", async () => {
+  for (const fault of [
+    "committed-only",
+    "missing-task",
+    "wrong-task",
+    "noncanonical-task",
+  ] as const) {
+    const service = new FixtureService();
+    await service.start();
+    service.mapEvent = (event) => {
+      if (event.type === "message.completed") {
+        if (fault === "committed-only") return { ...event, type: "message.committed" };
+        if (fault === "missing-task") {
+          const { taskId: _taskId, ...uncorrelated } = event;
+          return uncorrelated;
+        }
+        if (fault === "wrong-task") return { ...event, taskId: "unrelated_task" };
+      }
+      if (fault === "noncanonical-task" && event.type === "task.completed")
+        return { ...event, type: "task.running" };
+      return event;
+    };
+    const controller = new Controller(service.client());
+    const phases: string[] = [];
+    try {
+      await assert.rejects(
+        smoke(controller, {
+          timeoutMs: 1000,
+          observe: (phase) => {
+            phases.push(phase);
+          },
+        }),
+        { code: "smoke_deadline" },
+      );
+      // Admission and terminal-looking task data arrived; rejection is the completion oracle.
+      assert.equal(service.admissions.size, 1);
+      assert.equal(controller.projection.tasks.get("task_1")?.status.state, "completed");
+      assert(!phases.includes("offline"));
+      assert(!phases.includes("passed"));
+    } finally {
+      controller.close();
+      await service.close();
+    }
+  }
+});
+
 void test("native one-use upgrade failures are redacted and an aborted attempt does not open another socket", async () => {
   const service = new FixtureService();
   await service.start();

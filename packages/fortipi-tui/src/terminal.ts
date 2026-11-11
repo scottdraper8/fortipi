@@ -1,5 +1,3 @@
-import { writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import type { Terminal } from "@earendil-works/pi-tui";
 import {
   Editor,
@@ -238,19 +236,9 @@ export async function runTerminal(controller: Controller, options: TerminalOptio
       case "/read":
         await controller.read(args[0] ?? "", args[1] ?? "", args.slice(2).join(" "));
         break;
-      case "/artifact": {
-        const reference = controller.projection.artifacts.get(args[0] ?? "");
-        if (!reference) throw new FortiPiError("artifact_id_required");
-        const bytes = await controller.client.artifacts.read(reference);
-        if (args[1]) {
-          await writeFile(resolve(args.slice(1).join(" ")), bytes, { flag: "wx", mode: 0o600 });
-          controller.notice = "Artifact saved (new file)";
-        } else {
-          controller.view = "workspace";
-          controller.detail = `${reference.size} bytes; bounded preview:\n${new TextDecoder().decode(bytes.slice(0, 32768))}`;
-        }
+      case "/artifact":
+        await controller.artifact(args[0] ?? "", args[1] ? args.slice(1).join(" ") : undefined);
         break;
-      }
       case "/ids":
         controller.view = "ids";
         focus = 2;

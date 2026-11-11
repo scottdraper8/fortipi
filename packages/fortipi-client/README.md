@@ -51,7 +51,7 @@ not prove assistant/task/workspace completion.
 | `tickets`       | mint (fresh scoped client-stream ticket)                                                         |
 | `artifacts`     | read, stream (bounded, verified bytes from the exact descriptor route/revision)                  |
 
-`client.operations` supplies all **66** canonical operation IDs directly, with
+`client.operations` supplies every generated canonical operation ID directly, with
 generated path/query/body input and success value types. Administrative/executor
 operations require their own explicit credentials and grants; the TUI uses only
 ordinary application resources. The two upgrade operations return a native socket

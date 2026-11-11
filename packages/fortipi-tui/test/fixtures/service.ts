@@ -50,6 +50,7 @@ export class FixtureService {
   origin = "";
   busy = false;
   delayApproval: Promise<void> | undefined;
+  mapEvent: (event: DurableEvent) => DurableEvent = (event) => event;
   private serial = 0;
   private readonly server = createServer((req, res) => {
     void this.handle(req, res).catch(() => {
@@ -183,7 +184,7 @@ export class FixtureService {
   }
   private append(type: string, payload: unknown, taskId: string): void {
     const sequence = this.events.length + 1;
-    const event: DurableEvent = {
+    const event = this.mapEvent({
       protocolVersion: "1.0",
       schemaVersion: "1.0.0",
       deploymentId: protocol.deploymentId,
@@ -195,7 +196,7 @@ export class FixtureService {
       type,
       payload,
       taskId,
-    } as DurableEvent;
+    } as DurableEvent);
     this.events.push(event);
     this.snapshot.lastEventSeq = sequence;
     for (const peer of this.subscribers) this.sendJson(peer, event);

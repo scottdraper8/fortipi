@@ -91,6 +91,30 @@ void test("approval displays exact context, re-fetches it before action, and ref
       operationDigest: approval.operation.operationDigest,
       decision: "reject",
     });
+    service.approvals.set(approval.approvalId, approval);
+    service.approvals.set("approval_2", { ...approval, approvalId: "approval_2" });
+    await controller.approval(approval.approvalId);
+    const get = controller.client.approvals.get;
+    const entered = Promise.withResolvers<void>();
+    const delayed = Promise.withResolvers<void>();
+    let first = true;
+    controller.client.approvals.get = async (...args) => {
+      const hold = first;
+      first = false;
+      const value = await get(...args);
+      if (hold) {
+        entered.resolve();
+        await delayed.promise;
+      }
+      return value;
+    };
+    const decision = controller.decide("approve");
+    await entered.promise;
+    await controller.approval("approval_2");
+    delayed.resolve();
+    await assert.rejects(decision, { code: "stale_approval_context" });
+    assert.equal(service.decisions.length, 1);
+    assert.equal(controller.selectedApproval?.approvalId, "approval_2");
     let release: () => void = () => {};
     service.delayApproval = new Promise<void>((resolve) => {
       release = resolve;
@@ -146,6 +170,28 @@ void test("reconciliation requires current evidence/version and explicit separat
       authorizationId: "explicit_authority",
     });
     assert.equal(service.admissions.size, 0);
+    service.jobs.set("job_2", { ...job, jobId: "job_2" });
+    const get = controller.client.jobs.get;
+    const entered = Promise.withResolvers<void>();
+    const delayed = Promise.withResolvers<void>();
+    let first = true;
+    controller.client.jobs.get = async (...args) => {
+      const hold = first;
+      first = false;
+      const value = await get(...args);
+      if (hold) {
+        entered.resolve();
+        await delayed.promise;
+      }
+      return value;
+    };
+    const reconcile = controller.reconcile({ kind: "acknowledge-unknown" }, "old context");
+    await entered.promise;
+    await controller.job("job_2");
+    delayed.resolve();
+    await assert.rejects(reconcile, { code: "stale_job_context" });
+    assert.equal(service.reconciliations.length, 2);
+    assert.equal(controller.selectedJob?.jobId, "job_2");
   } finally {
     controller.close();
     await service.close();

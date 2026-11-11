@@ -56,6 +56,154 @@ void test("malformed known frames cannot fall through to extension handling; vol
   assert.throws(() => validation.frame(event(1, "message.completed")), { code: "invalid_wire" });
   assert.throws(() => validation.frame({ ...delta(), eventSeq: 1 }), { code: "invalid_wire" });
 });
+void test("snapshot handler failure pauses without opening a socket or retrying the consumer", async () => {
+  let snapshots = 0;
+  const client = new FortiPiClient({
+    endpoint: "https://example.test",
+    credentials: async () => "synthetic",
+    fetch: async (url) => {
+      const path = new URL(String(url)).pathname;
+      if (path.endsWith("/protocol")) return json(protocol);
+      if (path.endsWith("/tickets")) return json(ticketReceipt(), 201);
+      return json(snapshot);
+    },
+    webSocket: () => {
+      assert.fail("failed snapshot must not subscribe");
+    },
+  });
+  const sub = client.conversations.subscribe("conv_1", {
+    maxReconnects: 0,
+    onSnapshot: () => {
+      snapshots++;
+      throw new Error("consumer could not replace projection");
+    },
+    onEvent: () => assert.fail("failed snapshot must not deliver events"),
+  });
+  await assert.rejects(sub.ready, { code: "handler_failed" });
+  await assert.rejects(sub.done, { code: "handler_failed" });
+  assert.equal(snapshots, 1);
+  assert.equal(sub.cursor, 0);
+});
+
+void test("subscribe cannot report online before the complete high-water receipt", async () => {
+  const statuses: string[] = [];
+  const client = new FortiPiClient({
+    endpoint: "https://example.test",
+    credentials: async () => "synthetic",
+    fetch: async (url) => {
+      const path = new URL(String(url)).pathname;
+      if (path.endsWith("/protocol")) return json(protocol);
+      if (path.endsWith("/tickets")) return json(ticketReceipt(), 201);
+      if (path.endsWith("/events")) return json(replay([], 0));
+      return json(snapshot);
+    },
+    webSocket: () => {
+      const socket = new FixtureSocket();
+      socket.onSend = (command) =>
+        socket.frame({
+          type: "ack",
+          requestId: (command as { requestId: string }).requestId,
+          operationId: "replayEvents",
+          // Schema-valid, but event 1 is missing and no continuation is advertised.
+          receipt: replay([], 0, 1),
+        });
+      return socket;
+    },
+  });
+  const sub = client.conversations.subscribe("conv_1", {
+    maxReconnects: 0,
+    onSnapshot: () => {},
+    onEvent: () => assert.fail("incomplete barrier has no events"),
+    onStatus: (status) => {
+      statuses.push(status);
+    },
+  });
+  try {
+    await assert.rejects(sub.ready, { code: "invalid_replay" });
+    await assert.rejects(sub.done, { code: "invalid_replay" });
+    assert(!statuses.includes("online"));
+    assert.equal(sub.cursor, 0);
+  } finally {
+    sub.close();
+    await sub.done.catch(() => {});
+  }
+});
+
+void test("asynchronous binary frames stay ordered and queue overflow preserves the unapplied cursor", async () => {
+  for (const overflow of [false, true]) {
+    let release: () => void = () => {};
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    class SlowBlob extends Blob {
+      override async arrayBuffer(): Promise<ArrayBuffer> {
+        await blocked;
+        return super.arrayBuffer();
+      }
+    }
+    const socket = new FixtureSocket();
+    socket.onSend = (command) =>
+      socket.frame({
+        type: "ack",
+        operationId: "replayEvents",
+        requestId: (command as { requestId: string }).requestId,
+        receipt: replay([], 0),
+      });
+    const applied: string[] = [];
+    let caughtUp: () => void = () => {};
+    const complete = new Promise<void>((resolve) => {
+      caughtUp = resolve;
+    });
+    const client = new FortiPiClient({
+      endpoint: "https://example.test",
+      credentials: async () => "synthetic",
+      fetch: async (url) => {
+        const path = new URL(String(url)).pathname;
+        if (path.endsWith("/protocol"))
+          return json({ ...protocol, limits: { ...protocol.limits, socketBufferFrames: 2 } });
+        if (path.endsWith("/tickets")) return json(ticketReceipt(), 201);
+        if (path.endsWith("/events")) return json(replay([], 0));
+        return json(snapshot);
+      },
+      webSocket: () => socket,
+    });
+    const sub = client.conversations.subscribe("conv_1", {
+      maxReconnects: 0,
+      onSnapshot: () => {},
+      onEvent: (event) => {
+        applied.push(event.eventId);
+        if (applied.length === 2) caughtUp();
+      },
+    });
+    try {
+      await sub.ready;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      socket.emit("message", { data: new SlowBlob([JSON.stringify(event(1))]) });
+      socket.emit("message", { data: new TextEncoder().encode(JSON.stringify(event(2))).buffer });
+      if (overflow) socket.frame(event(3));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.deepEqual(applied, []);
+      assert.equal(sub.cursor, 0);
+      release();
+      if (overflow) {
+        await assert.rejects(sub.done, { code: "stream_overflow" });
+        assert.equal(sub.cursor, 0);
+        assert.deepEqual(applied, []);
+      } else {
+        await complete;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        assert.deepEqual(applied, ["event_1", "event_2"]);
+        assert.equal(sub.cursor, 2);
+      }
+    } finally {
+      release();
+      sub.close();
+      await sub.done.catch(() => {});
+    }
+    assert.equal(socket.readyState, 3);
+    assert([...socket.listeners.values()].every((listeners) => listeners.size === 0));
+  }
+});
 void test("live gap repairs stored history before resubscribe; each upgrade uses a fresh ticket", async () => {
   const applied: string[] = [],
     tickets: string[] = [],

@@ -96,7 +96,12 @@ export function subscribe(
       value.retainedFloor > value.lastEventSeq
     )
       throw new FortiPiError("invalid_wire");
-    await options.onSnapshot(value);
+    try {
+      await options.onSnapshot(value);
+    } catch (error) {
+      // Preserve protocol errors raised by snapshot/replay adapters; consumer errors pause.
+      throw error instanceof FortiPiError ? error : new FortiPiError("handler_failed");
+    }
     checkAbort(signal);
     cursor.replace(value.lastEventSeq);
     verifiedPrevious.clear();
@@ -178,7 +183,8 @@ export function subscribe(
       value.after > cursor.value ||
       value.nextAfter < value.after ||
       value.nextAfter > value.through ||
-      value.through > value.lastEventSeq
+      value.through > value.lastEventSeq ||
+      value.hasMore !== value.nextAfter < value.through
     )
       throw new FortiPiError("invalid_replay");
     let sequence = value.after;

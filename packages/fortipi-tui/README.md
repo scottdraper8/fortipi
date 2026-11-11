@@ -99,6 +99,11 @@ snapshot. It inspects/cancels a smoke-owned already-terminal task and requires t
 canonical disposition. Failure/missing grants/timeout exits nonzero. Output contains
 only phases and IDs. Smoke creates real conversation activity; use a suitable agent.
 
+Completion specifically requires `message.completed` with an assistant payload and
+an outer envelope `taskId` equal to the admitted receipt's `taskId`, together with
+canonical `task.completed` for that same task. Neither timestamps, similar output,
+`message.committed` nor another task's completion establishes that association.
+
 The optional inherited `FORTIPI_TUI_OBSERVE_FD` (descriptor >=3) emits bounded
 redacted view/focus/connection/cursor/applied-ID observations. It cannot issue
 commands. Owner10/parent should independently install the actual tarball into an

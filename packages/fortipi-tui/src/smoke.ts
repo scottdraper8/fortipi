@@ -49,7 +49,8 @@ async function completed(
       !!task &&
       terminal(task) &&
       (task.status.state !== "completed" ||
-        controller.projection.assistantTasks.has(receipt.taskId))
+        (controller.projection.assistantTasks.has(receipt.taskId) &&
+          controller.projection.completedTasks.has(receipt.taskId)))
     );
   });
   if (controller.projection.tasks.get(receipt.taskId)?.status.state !== "completed")

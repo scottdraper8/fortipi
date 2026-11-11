@@ -25,6 +25,7 @@ export class Projection {
   readonly workspaceState = new Map<string, string>();
   readonly appliedIds: string[] = [];
   readonly assistantTasks = new Set<string>();
+  readonly completedTasks = new Set<string>();
   readonly generic: string[] = [];
   workspace: WorkspaceBinding | undefined;
   cursor = 0;
@@ -44,6 +45,7 @@ export class Projection {
     this.workspaceState.clear();
     this.appliedIds.length = 0;
     this.assistantTasks.clear();
+    this.completedTasks.clear();
     this.generic.length = 0;
     this.cursor = snapshot.lastEventSeq;
   }
@@ -79,7 +81,7 @@ export class Projection {
       event.taskId &&
       (event as KnownDurableEvent & { type: "message.completed" }).payload.role === "assistant"
     )
-      this.recordAssistantTask(event.taskId);
+      this.recordTask(this.assistantTasks, event.taskId);
     if (
       !isKnownEventType(event.type) ||
       event.type.startsWith("message.") ||
@@ -92,8 +94,12 @@ export class Projection {
     switch (known.type) {
       case "message.committed":
       case "message.completed": {
-        if (known.payload.role === "assistant" && known.taskId)
-          this.recordAssistantTask(known.taskId);
+        if (
+          known.type === "message.completed" &&
+          known.payload.role === "assistant" &&
+          known.taskId
+        )
+          this.recordTask(this.assistantTasks, known.taskId);
         if (!this.snapshot) break;
         const messages = this.snapshot.messages;
         const index = messages.findIndex(
@@ -120,6 +126,11 @@ export class Projection {
       case "task.waiting":
       case "task.completed":
       case "task.interrupted":
+        if (
+          known.type === "task.completed" &&
+          known.payload.conversationId === known.conversationId
+        )
+          this.recordTask(this.completedTasks, known.payload.taskId);
         this.tasks.set(known.payload.taskId, known.payload);
         if (this.snapshot) this.snapshot.conversation.taskState = known.payload.status;
         break;
@@ -184,12 +195,12 @@ export class Projection {
       this.output.delete(key);
     }
   }
-  private recordAssistantTask(taskId: string): void {
-    this.assistantTasks.add(taskId);
-    while (this.assistantTasks.size > 100) {
-      const first = this.assistantTasks.values().next().value;
+  private recordTask(tasks: Set<string>, taskId: string): void {
+    tasks.add(taskId);
+    while (tasks.size > 100) {
+      const first = tasks.values().next().value;
       if (!first) break;
-      this.assistantTasks.delete(first);
+      tasks.delete(first);
     }
   }
 }

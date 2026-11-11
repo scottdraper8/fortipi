@@ -3,9 +3,10 @@ import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { FortiPiClient } from "fortipi-client/node";
 import { routeCatalog } from "fortipi-contract";
+import type { UploadBegin } from "fortipi-contract/client";
 import { json, protocol } from "./fixtures/wire.ts";
 
-void test("all 66 canonical operations are callable typed surfaces; scoped resources retain transfer and revision identity", async () => {
+void test("all generated operations are callable typed surfaces; scoped resources retain transfer and revision identity", async () => {
   const requests: { url: URL; body: unknown }[] = [];
   const bytes = new TextEncoder().encode("independent bytes");
   const hash = createHash("sha256").update(bytes).digest("hex");
@@ -39,7 +40,6 @@ void test("all 66 canonical operations are callable typed surfaces; scoped resou
       });
     },
   });
-  assert.equal(Object.keys(client.operations).length, 66);
   assert.deepEqual(
     Object.keys(client.operations).sort(),
     routeCatalog.map((route) => route.operationId).sort(),
@@ -74,6 +74,12 @@ void test("all 66 canonical operations are callable typed surfaces; scoped resou
     size: bytes.length,
     endpoint: `/v1/workspaces/ws_1/blobs/${hash}?revision=r_1`,
     owner: { kind: "cloud" },
+    chunks: {
+      chunkBytes: 9,
+      chunkHashes: [bytes.slice(0, 9), bytes.slice(9)].map((chunk) =>
+        createHash("sha256").update(chunk).digest("hex"),
+      ),
+    },
   });
   assert.deepEqual(result, bytes);
   await assert.rejects(
@@ -130,17 +136,38 @@ void test("public commit consumes the opaque validated stage and original lease;
     storeRef: { stageId: "opaque_stage" },
   };
   const requests: unknown[] = [];
+  const begin: UploadBegin = {
+    requestId: "begin_1",
+    baseRevision: "r_1",
+    lease,
+    operationId: "op_1",
+    commitId: "commit_1",
+    manifestHash: hash,
+    manifest: { version: 1, entries: [] },
+    mutations: [],
+    blobs: [],
+  };
+  const opened = {
+    uploadId: "up_1",
+    state: "open",
+    baseRevision: "r_1",
+    manifestHash: hash,
+    receivedChunks: [],
+    expiresAt: Date.now() + 30000,
+  };
   const client = new FortiPiClient({
     endpoint: "https://example.test",
     credentials: async () => "synthetic",
     fetch: async (url, init) => {
       if (String(url).endsWith("/v1/protocol")) return json(protocol);
       if (init?.method === "POST") requests.push(JSON.parse(String(init.body)));
+      if (String(url).endsWith("/uploads")) return json(opened, 201);
       return json(receipt);
     },
   });
+  assert.deepEqual(await client.uploads.begin("ws_1", begin), opened);
   assert.deepEqual(await client.uploads.commit("ws_1", "up_1", commit), receipt);
-  assert.deepEqual(requests, [commit]);
+  assert.deepEqual(requests, [begin, commit]);
   assert.deepEqual(
     await client.uploads.receipt("ws_1", "commit_1", { commitDigest: hash }),
     receipt,

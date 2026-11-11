@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { ConnectionStatus, CursorScope, Subscription } from "fortipi-client/node";
 import { cursorScopeKey, type FortiPiClient, FortiPiError } from "fortipi-client/node";
 import type {
@@ -485,6 +487,7 @@ export class Controller {
       signal: this.selection.signal,
     });
     if (generation !== this.generation) return;
+    if (this.selectedApproval !== shown) throw new FortiPiError("stale_approval_context");
     this.selectedApproval = current;
     if (
       current.state !== "pending" ||
@@ -506,7 +509,7 @@ export class Controller {
       },
       { signal: this.selection.signal },
     );
-    if (generation !== this.generation) return;
+    if (generation !== this.generation || this.selectedApproval !== current) return;
     this.selectedApproval = result;
     this.projection.approvals.set(result.approvalId, result);
     this.detail = JSON.stringify(result, null, 2);
@@ -530,6 +533,7 @@ export class Controller {
     const generation = this.generation;
     const current = await this.client.jobs.get(shown.jobId, { signal: this.selection.signal });
     if (generation !== this.generation) return;
+    if (this.selectedJob !== shown) throw new FortiPiError("stale_job_context");
     if (current.version !== shown.version) {
       this.selectedJob = current;
       this.detail = JSON.stringify(current, null, 2);
@@ -546,7 +550,7 @@ export class Controller {
       },
       { signal: this.selection.signal },
     );
-    if (generation !== this.generation) return;
+    if (generation !== this.generation || this.selectedJob !== shown) return;
     this.notice = `Reconciliation ${receipt.disposition}${receipt.newJobId ? ` new job ${receipt.newJobId}` : ""}; external effects are not rolled back`;
     this.detail = JSON.stringify(receipt, null, 2);
     this.changed();
@@ -585,6 +589,22 @@ export class Controller {
       this.detail = `${path} @ ${revision}\n${new TextDecoder().decode(bytes)}`;
       this.changed();
     }
+  }
+  async artifact(id: string, destination?: string): Promise<void> {
+    const reference = this.projection.artifacts.get(id);
+    if (!reference) throw new FortiPiError("artifact_id_required");
+    const generation = this.generation;
+    const bytes = await this.client.artifacts.read(reference, { signal: this.selection.signal });
+    if (generation !== this.generation) return;
+    if (destination) {
+      await writeFile(resolve(destination), bytes, { flag: "wx", mode: 0o600 });
+      if (generation !== this.generation) return;
+      this.notice = "Artifact saved (new file)";
+    } else {
+      this.view = "workspace";
+      this.detail = `${reference.size} bytes; bounded preview:\n${new TextDecoder().decode(bytes.slice(0, 32768))}`;
+    }
+    this.changed();
   }
   ids(): string {
     return [
