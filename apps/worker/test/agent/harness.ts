@@ -21,7 +21,9 @@ export async function eventually<T>(
   }
   assert.fail("Expected runtime state did not commit");
 }
-export async function harness(options: { events?: number; traffic?: "free" } = {}) {
+export async function harness(
+  options: { events?: number; traffic?: "free"; origin?: string } = {},
+) {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-agent-"));
   const configPath = join(directory, "wrangler.json");
   const policy = structuredClone(freeInfrastructurePolicy);
@@ -42,6 +44,7 @@ export async function harness(options: { events?: number; traffic?: "free" } = {
       vars: {
         FORTIPI_ADMIN_TOKEN: bootstrap,
         FORTIPI_CONFIG: { version: 1, infrastructure: policy },
+        ...(options.origin ? { FORTIPI_ALLOWED_ORIGINS: [options.origin] } : {}),
       },
       durable_objects: {
         bindings: [

@@ -93,7 +93,7 @@ function cors(request: Request, env: Env): Headers {
     headers.set("Vary", "Origin");
     headers.set(
       "Access-Control-Expose-Headers",
-      "X-Request-Id,Content-Length,Content-Range,Accept-Ranges,ETag,Retry-After",
+      "X-Request-Id,Content-Length,Content-Range,X-Content-SHA256,Accept-Ranges,ETag,Retry-After",
     );
   }
   return headers;

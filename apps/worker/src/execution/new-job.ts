@@ -377,6 +377,19 @@ export class FreshJobs {
           Object.keys(doc.children).length < cap,
           "quota_paused",
           "Fresh job reference capacity exhausted",
+          {
+            retryAfterMs: 0,
+            pressure: {
+              resource: "concurrency",
+              scope: { kind: "object" },
+              source: "policy",
+              measurement: "observed",
+              limit: cap,
+              remaining: 0,
+              reason: "Fresh job reference capacity exhausted",
+              action: "reduce-work",
+            },
+          },
         );
         const child = await tx.createTask(
           task,

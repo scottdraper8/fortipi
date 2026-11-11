@@ -25,7 +25,7 @@ test("actual Pi generation follows each persisted Agent selection rather than an
         content,
         busyBehavior: "followUp",
       });
-      assert.equal(sent.status, 202);
+      assert.equal(sent.status, 202, JSON.stringify(sent.body));
       const actual = await eventually(
         async () =>
           JSON.parse(await probe.inspectionJson(cid)) as {

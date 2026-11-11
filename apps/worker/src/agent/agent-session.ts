@@ -36,6 +36,7 @@ import { FreshJobs } from "../execution/new-job.js";
 import { Reconciliation } from "../execution/reconciliation.js";
 import { buildRegistry, type DispatchTask } from "../execution/registry.js";
 import { bootstrapModels, buildModels } from "../models/factory.js";
+import { retainedModelConfigurations } from "../models/retained.js";
 import { configuredModel } from "../models/selection.js";
 import { Authority } from "./authority.js";
 import { Controls } from "./controls.js";
@@ -78,6 +79,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
   readonly exports: AgentExports;
   readonly #sockets: WebSockets;
   readonly #socketLanes = new Lanes();
+  readonly #modelLanes = new Lanes();
   readonly #hintIds = new Set<number>();
   #hintScheduled = false;
   #observation: CommitObservation | undefined;
@@ -116,7 +118,10 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         const harness = await Harness.open(
           storage,
           {
-            models,
+            models: () => {
+              check(this.#modelRegistry, "interrupted", "Model registry unavailable");
+              return this.#modelRegistry;
+            },
             registry,
             onWake,
             settings: { afterFailedRun: "keep", progress: { persistWithinMs: 1000 } },
@@ -203,10 +208,10 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       .use(this.#sockets);
   }
   async #models() {
-    const selected = await this.store.get<D.ModelConfig>("meta", "selected-model");
-    if (!selected && !this.#testModelBuilder)
+    const { configurations } = await retainedModelConfigurations(this.store);
+    if (configurations.length === 0 && !this.#testModelBuilder)
       return { ok: true as const, value: bootstrapModels() };
-    return this.#modelBuilder(selected ? [selected] : [], this.env, {
+    return this.#modelBuilder(configurations, this.env, {
       agentId: this.agentId,
       deploymentId: this.env.CONTROL_PLANE.idFromName("control").toString(),
     });
@@ -214,9 +219,10 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
   #selectedModel(auth: D.AuthContext): Promise<D.ModelConfig> {
     return configuredModel(this.env.CONTROL_PLANE.getByName("control"), this.agentId, auth);
   }
-  async #installSelectedModel(selected: D.ModelConfig, auth: D.AuthContext): Promise<void> {
+  async #installSelectedModel(selected: D.ModelConfig, auth: D.AuthContext) {
+    const retained = await retainedModelConfigurations(this.store, selected);
     const replacement = unwrap(
-      await this.#modelBuilder([selected], this.env, {
+      await this.#modelBuilder(retained.configurations, this.env, {
         agentId: this.agentId,
         deploymentId: auth.deploymentId,
       }),
@@ -228,9 +234,18 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       "Selected model unavailable",
     );
     check(provider && this.#modelRegistry, "unsupported", "Selected model provider unavailable");
-    this.#modelRegistry.setProvider(provider);
+    return { models: replacement, catalog: retained.catalog };
   }
   async #selectModel(
+    auth: D.AuthContext,
+    action: string,
+    conversationId?: string,
+  ): Promise<D.ModelConfig> {
+    return this.#modelLanes.run("selection", () =>
+      this.#selectModelSerial(auth, action, conversationId),
+    );
+  }
+  async #selectModelSerial(
     auth: D.AuthContext,
     action: string,
     conversationId?: string,
@@ -248,11 +263,15 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       !same(old ?? null, selected) ||
       !this.#modelRegistry?.getModel(selected.providerId, selected.modelId)
     ) {
-      await this.#installSelectedModel(selected, auth);
+      const installed = await this.#installSelectedModel(selected, auth);
       await this.store.transaction(async (tx) => {
         await this.authority.current(auth, resources, tx);
         await this.store.put("meta", "selected-model", selected, tx);
+        await this.store.put("meta", "model-catalog", installed.catalog, tx);
+        await this.authority.current(auth, resources, tx);
       });
+      await this.authority.current(auth, resources);
+      this.#modelRegistry = installed.models;
     }
     return selected;
   }

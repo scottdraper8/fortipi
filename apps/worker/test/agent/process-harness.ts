@@ -144,7 +144,13 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     if (signal === "SIGKILL") assert.equal(current.signalCode, signal);
     child = undefined;
   }
-  await start();
+  try {
+    await start();
+  } catch (error) {
+    await stop("SIGTERM");
+    await rm(directory, { recursive: true, force: true });
+    throw error;
+  }
   return {
     api,
     crash: () => stop("SIGKILL"),

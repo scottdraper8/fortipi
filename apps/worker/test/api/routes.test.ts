@@ -128,3 +128,22 @@ test("assigned-job transfers require the executor audience before owner forwardi
     await h.close();
   }
 });
+
+test("CORS exposes the checksum required by public byte clients", async () => {
+  const origin = "https://client.example";
+  const h = await harness({ origin });
+  try {
+    const response = await h.server.fetch("http://fortipi.local/health", {
+      headers: { Origin: origin },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Access-Control-Allow-Origin"), origin);
+    const exposed = response.headers.get("Access-Control-Expose-Headers")?.toLowerCase().split(",");
+    assert.ok(
+      exposed?.includes("x-content-sha256"),
+      "Browser clients must be permitted to read the verified byte checksum",
+    );
+  } finally {
+    await h.close();
+  }
+});

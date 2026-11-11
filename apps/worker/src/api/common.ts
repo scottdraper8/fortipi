@@ -29,21 +29,53 @@ export function failure(error: unknown, requestId: string): D.Outcome<never> & {
       : new ServiceError("interrupted", "Operation interrupted; recover the existing identity", {
           reason: "uncertain_effects",
         });
-  const details =
-    known.details ??
-    (["conflict", "workspace.conflict", "interrupted"].includes(known.code)
-      ? { reason: "uncertain_effects" as const }
-      : ["unavailable", "unavailable_executor", "rate_limited"].includes(known.code)
-        ? { retryAfterMs: 1000 }
-        : undefined);
-  return {
-    ok: false,
-    code: known.code,
+  const base = {
+    ok: false as const,
     message: known.message,
     requestId,
     retryable: false,
-    ...(details ? { details } : {}),
-  } as D.Outcome<never> & { ok: false };
+  };
+  const code = known.code,
+    details = known.details;
+  switch (code) {
+    case "quota_exceeded":
+    case "quota_paused":
+      if (!details?.pressure)
+        return {
+          ...base,
+          code: "internal",
+          message: "Infrastructure pressure evidence unavailable",
+        };
+      return {
+        ...base,
+        code,
+        // Zero means an operator/workload change is needed, not a storage reset
+        // or permission to retry an uncertain side effect automatically.
+        details: {
+          ...details,
+          pressure: details.pressure,
+          retryAfterMs: details.retryAfterMs ?? 0,
+        },
+      };
+    case "rate_limited":
+    case "unavailable":
+    case "unavailable_executor":
+      return {
+        ...base,
+        code,
+        details: { ...details, retryAfterMs: details?.retryAfterMs ?? 1000 },
+      };
+    case "conflict":
+    case "workspace.conflict":
+    case "interrupted":
+      return {
+        ...base,
+        code,
+        details: { ...details, reason: details?.reason ?? "uncertain_effects" },
+      };
+    default:
+      return { ...base, code, ...(details ? { details } : {}) };
+  }
 }
 export async function outcome<T>(
   requestId: string,
@@ -70,6 +102,7 @@ export function pressure(
   reason: string,
 ): D.ErrorDetails {
   return {
+    retryAfterMs: 0,
     pressure: {
       resource,
       scope: { kind: "object" },

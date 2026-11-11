@@ -8,6 +8,8 @@ An admission reserves infrastructure capacity and persists its operation, messag
 
 The selected model comes from the persisted Agent configuration through an authenticated private ControlPlane fetch after readiness. Factory startup performs no ControlPlane network call or OAuth refresh. API-key bindings and the ControlPlane OAuth delegate remain separate from application and executor credentials. Model usage budgets are not implemented.
 
+Pi reads the complete current Models registry through its supported dynamic accessor, keeping credential resolution with the registry that created each provider. A bounded nonsecret catalog and indexed outstanding admission/allocation configurations restore required providers after process replacement. A provider authentication-mode change conflicts while outstanding work needs an incompatible configuration. Environment keys never select a model or provider implicitly.
+
 The router's physical ControlPlane calls depend on the route owner. Every authenticated JSON route first calls `authenticate`. Agent and Workspace routes also register the actual recipient before calling it. Control-owned JSON routes call `handleApi` directly after authentication; they do not register an unrelated Agent or add another router authorization call. Streams go directly to ControlPlane's atomic ticket redemption and query-free forwarding. Control-owned byte routes currently authenticate in the router and again in the separate owner fetch; both physical calls count.
 
 | Operation                         | Additional ControlPlane calls in the Agent owner                                                                                                 |
