@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { isIPv4 } from "node:net";
 import { repository } from "../../scripts/build-workspaces.ts";
 
 export function verifyControls(before: number, denied: number, after: number): void {
@@ -15,6 +16,7 @@ export function verifyControls(before: number, denied: number, after: number): v
 const commands = {
   allowed: "exec 3<>/dev/tcp/registry.npmjs.org/443",
   denied: "exec 3<>/dev/tcp/example.com/443",
+  registryDns: "/usr/bin/getent ahostsv4 registry.npmjs.org",
 } as const;
 
 async function main(): Promise<void> {
@@ -54,7 +56,7 @@ async function main(): Promise<void> {
           killSignal: "SIGKILL",
           maxBuffer: 16 * 1024,
         },
-        (error) => {
+        (error, stdout) => {
           if (error && (error.killed || typeof error.code !== "number")) {
             reject(
               new Error(`Container ${network}/${target} probe could not execute within its bound`),
@@ -64,24 +66,41 @@ async function main(): Promise<void> {
           const exitCode = typeof error?.code === "number" ? error.code : 0;
           console.log(
             JSON.stringify({
-              probe: "container-tcp",
+              probe: target === "registryDns" ? "container-dns" : "container-tcp",
               network,
               target,
-              port: 443,
+              ...(target === "registryDns" ? {} : { port: 443 }),
               started,
               finished: new Date().toISOString(),
               exitCode,
               imageId: metadata.imageId,
+              ...(target === "registryDns"
+                ? {
+                    ipv4AddressCount: new Set(
+                      stdout.split("\n").flatMap((line) => {
+                        const address = line.split(/\s+/)[0];
+                        return address && isIPv4(address) ? [address] : [];
+                      }),
+                    ).size,
+                  }
+                : {}),
             }),
           );
           accept(exitCode);
         },
       );
     });
+  const controls: { network: "bridge" | "host"; before: number; denied: number; after: number }[] =
+    [];
   for (const network of ["bridge", "host"] as const) {
     const before = await probe(network, "allowed");
     const denied = await probe(network, "denied");
     const after = await probe(network, "allowed");
+    await probe(network, "registryDns");
+    controls.push({ network, before, denied, after });
+  }
+  // Observe both real paths even when one is broken; neither failure becomes success.
+  for (const { network, before, denied, after } of controls) {
     verifyControls(before, denied, after);
     console.log(
       JSON.stringify({
