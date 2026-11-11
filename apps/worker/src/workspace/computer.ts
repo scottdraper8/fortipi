@@ -42,7 +42,10 @@ export class ComputerStore {
   writable(): D.StoreState {
     const state = this.current();
     requireThat(
-      state.state === "writable" && !this.runtimePinned && Date.now() < state.allocation.deadline,
+      state.state === "writable" &&
+        !this.runtimePinned &&
+        !this.state.get("scratch-quiescent") &&
+        Date.now() < state.allocation.deadline,
       "conflict",
       "Child is sealed, expired, active or retired",
     );
@@ -199,6 +202,15 @@ export class ComputerStore {
       await this.computer?.close();
       this.computer = undefined;
       return this.workspace(backends);
+    });
+  }
+  /** Close the owned runtime writer lane before retaining readonly output. */
+  async quiesce(): Promise<void> {
+    await this.mutex.run(async () => {
+      await this.computer?.close();
+      this.computer = undefined;
+      this.state.put("scratch-quiescent", true);
+      this.runtimePinned = false;
     });
   }
   async materialize(entry: D.ManifestEntry, stream?: ReadableStream<Uint8Array>): Promise<void> {

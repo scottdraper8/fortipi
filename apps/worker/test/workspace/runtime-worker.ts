@@ -5,6 +5,7 @@ import type { Env } from "../../src/boundary/env.js";
 import { outcome } from "../../src/workspace/errors.js";
 import { jobSnapshot } from "../../src/workspace/job-snapshot.js";
 import { admitLocalUpload } from "../../src/workspace/local-admission.js";
+import { WorkspaceStorage } from "../../src/workspace/storage.js";
 import { hashInventory } from "../../src/workspace/streams.js";
 import {
   internalHeader,
@@ -14,6 +15,11 @@ import {
 /** Actual binding application plus a test-only post-transaction response barrier. */
 export class WorkspaceObject extends WorkspaceBase {
   #releaseSnapshot: (() => void) | undefined;
+  override stub(name: string): ReturnType<WorkspaceBase["stub"]> {
+    if (name.startsWith("fortipi:child:") && this.state.get("test-storage-track"))
+      this.state.put(`test-storage-activation:${name}`, true);
+    return super.stub(name);
+  }
   override async readStored(
     ctx: D.AuthContext,
     revision: Parameters<WorkspaceBase["readStored"]>[1],
@@ -209,6 +215,70 @@ export class WorkspaceObject extends WorkspaceBase {
   }
   override async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (path === "/__test/storage-facts")
+      return Response.json({
+        bytes: this.state.bytes,
+        charge: new WorkspaceStorage(this).charge(),
+        census: this.state.get("storage-census"),
+        report: this.state.get("storage-report"),
+      });
+    if (path === "/__test/storage-role")
+      return Response.json(
+        await outcome(() => {
+          new WorkspaceStorage(this).admitChild("scratch");
+          return true;
+        }),
+      );
+    if (path === "/__test/storage-change" || path === "/__test/storage-revoke") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      if (path.endsWith("change")) {
+        const lease = this.current().lease;
+        if (lease)
+          await this.releaseLease(auth, {
+            requestId: "release-during-census",
+            lease,
+            reason: "completed",
+          });
+      } else
+        await this.invalidateGeneration(
+          {
+            kind: "control-recovery",
+            deploymentId: auth.deploymentId,
+            revocationId: "sample-floor",
+            recipient: { kind: "workspace", id: "workspace" },
+            actions: ["invalidate"],
+            deadline: auth.deadline,
+          },
+          {
+            revocationId: "sample-floor",
+            subject: {
+              kind: "credential",
+              credentialId: auth.credentialId,
+              minimumGeneration: auth.generation + 1,
+            },
+          },
+        );
+      this.state.put("test-storage-midawait", path);
+      return new Response(null, { status: 204 });
+    }
+    if (path === "/__fortipi/storage-sample" && this.state.get("child")) {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      const response = await super.fetch(request);
+      if (response.ok && ["storage-change", "storage-revoke"].includes(auth.requestId)) {
+        const allocation = this.state.get<D.StoreState>("child")?.allocation;
+        if (!allocation) throw new Error("Known actual child required");
+        await this.stub(allocation.authorityId).fetch(
+          new Request("https://fixture.internal/__test/" + auth.requestId, {
+            headers: { [internalHeader]: JSON.stringify({ auth }) },
+          }),
+        );
+      }
+      return response;
+    }
     if (path === "/__test/snapshot-cancelled")
       return Response.json(this.state.get("test-snapshot-cancelled") ?? false);
     if (path === "/__test/job-snapshot-stream") {
@@ -609,6 +679,20 @@ export default {
       });
     }
     const authority = env.WORKSPACES.getByName("workspace");
+    if (url.pathname.startsWith("/storage-")) {
+      const childId = request.headers.get("x-test-storage-child");
+      const recipient = childId ? env.WORKSPACES.getByName(childId) : authority;
+      return recipient.fetch(
+        new Request(
+          `https://workspace.internal/${url.pathname === "/storage-sample" ? "__fortipi/storage-sample" : `__test/${url.pathname.slice(1)}`}${url.search}`,
+          {
+            method: request.method,
+            headers: { [internalHeader]: JSON.stringify({ auth: ctx }) },
+            ...(request.body ? { body: request.body } : {}),
+          },
+        ),
+      );
+    }
     if (
       url.pathname === "/snapshot-barrier" ||
       url.pathname === "/snapshot-release" ||

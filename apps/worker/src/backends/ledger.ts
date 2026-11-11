@@ -23,6 +23,7 @@ import {
 import type { ComputerStore } from "../workspace/computer.js";
 import { outcome, requireThat, unwrap } from "../workspace/errors.js";
 import { checkedManifest, snapshotBytes } from "../workspace/manifest.js";
+import { WorkspaceStorage } from "../workspace/storage.js";
 import { chunkBytes } from "../workspace/streams.js";
 import {
   boundedJson,
@@ -43,6 +44,7 @@ interface RecordEntry {
   runtimeId?: string;
   observationKey: string;
   hostId?: string;
+  storageQuiescent?: boolean;
   collection?: { requestId: string; commitId: string; manifestHash: string };
 }
 interface Envelope {
@@ -68,7 +70,7 @@ export class ExecutionLedger {
   pins(allocation: D.StoreAllocation): boolean {
     if (allocation.role !== "scratch") return false;
     const row = this.owner.state.get<RecordEntry>(`execution:${allocation.executionId}`);
-    return Boolean(row && row.state !== "prepared" && row.result?.sync.status !== "complete");
+    return Boolean(row && row.state !== "prepared" && row.storageQuiescent !== true);
   }
   private config(ctx: D.AuthContext): Exclude<D.BackendConfig, { kind: "native" }> {
     requireThat(
@@ -234,6 +236,12 @@ export class ExecutionLedger {
           installCapacity.reservationId,
         ),
       );
+      await new WorkspaceStorage(this.owner).reserveCollection(
+        ctx,
+        request.identity.executionId,
+        (snapshotBytes(base.manifest) + this.owner.policy.bounds.outputBytesPerJob) * 3 +
+          1024 * 1024,
+      );
       const allocation = unwrap(
         await this.owner.allocateStore(ctx, {
           authorityId: request.workspaceId,
@@ -250,6 +258,7 @@ export class ExecutionLedger {
         }),
       );
       unwrap(await this.owner.stub(allocation.childId).initializeStore(ctx, allocation));
+      await new WorkspaceStorage(this.owner).initialized(ctx, allocation);
       for (const entry of base.manifest.entries) {
         const response = await this.owner.childFetch(ctx, allocation, "/materialize", {
           method: "PUT",
@@ -722,12 +731,24 @@ export class ExecutionLedger {
         .result()
         .then(async (result) => {
           this.result = result;
-          this.active = result.sync.status !== "complete";
-          store.runtimePinned = result.sync.status !== "complete";
           if (this.host) this.host.queryOnly = true;
+          const synchronized =
+            result.sync.status === "complete" &&
+            result.sync.skipped.length === 0 &&
+            result.skipped.length === 0;
+          // Callback admission closes before disconnecting the actual SDK runtime. No later
+          // native callback or scratch mutation can reopen this child's writer lane.
+          const quiescent = synchronized && config.kind === "cloud-js";
+          if (quiescent) {
+            this.active = false;
+            this.container = undefined;
+            await store.quiesce();
+            this.workspace = undefined;
+          }
           const evidence = {
             identity,
             result,
+            quiescent,
             ...(this.host?.runtime ? { runtimeId: this.host.runtime.runtimeId } : {}),
           };
           if (result.sync.status === "complete")
@@ -857,6 +878,7 @@ export class ExecutionLedger {
       result: WorkspaceRuntimeResult<"utf8">;
       proof: string;
       runtimeId?: string;
+      quiescent?: boolean;
     }>(request, wireLimits.jsonBytes);
     requireThat(
       new TextEncoder().encode(JSON.stringify(observed.result)).length <=
@@ -877,6 +899,11 @@ export class ExecutionLedger {
       );
       row.result = observed.result;
       row.state = observed.result.sync.status === "complete" ? "terminal" : "unknown";
+      row.storageQuiescent =
+        observed.quiescent === true &&
+        observed.result.sync.status === "complete" &&
+        observed.result.sync.skipped.length === 0 &&
+        observed.result.skipped.length === 0;
       if (observed.runtimeId) {
         requireThat(
           !row.runtimeId || row.runtimeId === observed.runtimeId,
