@@ -13,6 +13,9 @@ import {
   assertDistinctStores,
   assertEmptyStore,
   assertImportedImage,
+  assertRecipientPostBinding,
+  assertRecipientTag,
+  recipientFailure,
   singleImportedImage,
 } from "./recipient.ts";
 
@@ -251,9 +254,165 @@ test("unprotected recipient invocation fails before Docker and emits only a fini
       assert.deepEqual(JSON.parse(String(error.stderr)), {
         probe: "recipient-import",
         stage: "prerequisite",
+        reason: "prerequisite",
         passed: false,
       });
       return true;
     },
   );
+});
+
+const canary = "PRIVATE_CANARY_never_emit_91d7";
+function rejected(reason: string, action: () => void): Error {
+  let caught: unknown;
+  try {
+    action();
+  } catch (error) {
+    caught = error;
+  }
+  assert.ok(caught instanceof Error, "The original guard must still reject");
+  const result = recipientFailure("imported-identity", caught);
+  assert.deepEqual(result, {
+    probe: "recipient-import",
+    stage: "imported-identity",
+    reason,
+    passed: false,
+  });
+  assert.equal(JSON.stringify(result).includes(canary), false);
+  assert.equal(JSON.stringify(caught).includes(canary), false);
+  assert.equal(caught.message.includes(canary), false);
+  for (const field of ["actual", "expected", "cause"])
+    assert.equal(Object.hasOwn(caught, field), false);
+  return caught;
+}
+
+test("finite reasons distinguish every store separation and empty-store guard without emitting paths or counts", () => {
+  const builder = {
+    id: "builder",
+    root: `/${canary}/builder`,
+    host: `unix:///${canary}/builder.sock`,
+    pid: 10,
+    start: "100",
+    rootless: false,
+    networkNamespace: "net:[100]",
+  };
+  const recipient = {
+    id: "recipient",
+    root: `/${canary}/recipient`,
+    host: `unix:///${canary}/recipient.sock`,
+    pid: 11,
+    start: "101",
+    rootless: false,
+    networkNamespace: "net:[100]",
+  };
+  assertDistinctStores(builder, recipient);
+  assertDistinctStores(builder, { ...recipient, pid: builder.pid });
+  for (const [reason, changed] of [
+    ["same-id", { ...recipient, id: builder.id }],
+    ["same-root", { ...recipient, root: builder.root }],
+    ["same-socket", { ...recipient, host: builder.host }],
+    ["same-process", { ...recipient, pid: builder.pid, start: builder.start }],
+    ["same-namespace", { ...recipient, rootless: true }],
+  ] as const)
+    rejected(reason, () => assertDistinctStores(builder, changed));
+  const empty = ["Images", "Containers", "Local Volumes", "Build Cache"].map((Type) => ({
+    Type,
+    TotalCount: "0",
+  }));
+  assertEmptyStore(empty);
+  for (const [index, reason] of [
+    "store-images",
+    "store-containers",
+    "store-volumes",
+    "store-build-cache",
+  ].entries())
+    rejected(reason, () =>
+      assertEmptyStore(
+        empty.map((row, ordinal) => ({
+          ...row,
+          TotalCount: ordinal === index ? canary : "0",
+        })),
+      ),
+    );
+  for (const rows of [
+    [],
+    empty.slice(0, 3),
+    [...empty, { Type: "Images", TotalCount: "0" }],
+    [{ Type: canary, TotalCount: canary }],
+  ])
+    rejected("store-types", () => assertEmptyStore(rows));
+});
+
+test("finite reasons identify empty, excessive, malformed and multiple imported image IDs", () => {
+  for (const [reason, ids] of [
+    ["empty-ids", []],
+    ["empty-ids", [""]],
+    ["id-format", [canary]],
+    ["id-count", Array.from({ length: 9 }, () => digest("a"))],
+    ["multiple-ids", [digest("a"), digest("b")]],
+  ] as [string, string[]][])
+    rejected(reason, () => singleImportedImage(ids));
+  assert.equal(singleImportedImage([digest("a"), digest("a")]), digest("a"));
+});
+
+test("finite reasons preserve selected graph, platform, DiffID and runtime configuration comparisons", () => {
+  for (const [reason, changed] of [
+    ["id-format", { ...image, Id: canary }],
+    ["graph-id", { ...image, Id: digest("f") }],
+    ["os", { ...image, Os: canary }],
+    ["arch", { ...image, Architecture: canary }],
+    ["rootfs", { ...image, RootFS: { ...image.RootFS, Type: canary } }],
+    ["diffids", { ...image, RootFS: { ...image.RootFS, Layers: [canary] } }],
+    ["runtime-config", { ...image, Config: { ...config, Entrypoint: [canary] } }],
+    ["config-fields", { ...image, Config: { ...config, [canary]: canary } }],
+    ["config-equality", { ...image, Config: { ...config, Env: [...config.Env].reverse() } }],
+  ] as [string, typeof image][])
+    rejected(reason, () => assertImportedImage(changed, graph));
+  assert.equal(assertImportedImage(image, graph), image.Id);
+});
+
+test("tag and postbinding failures retain their equality guards and expose only finite reasons", () => {
+  const binding = {
+    id: "daemon",
+    root: `/${canary}`,
+    host: `unix:///${canary}.sock`,
+    pid: 10,
+    start: "100",
+    rootless: false,
+    networkNamespace: "net:[100]",
+  };
+  assertRecipientTag(image.Id, image.Id);
+  assertRecipientPostBinding(binding, { ...binding });
+  rejected("tag", () => assertRecipientTag(canary, image.Id));
+  for (const changed of [
+    { ...binding, id: canary },
+    { ...binding, root: `/${canary}/changed` },
+    { ...binding, host: `unix:///${canary}/changed` },
+    { ...binding, pid: 11 },
+    { ...binding, start: "101" },
+    { ...binding, rootless: true },
+    { ...binding, networkNamespace: "net:[101]" },
+  ])
+    rejected("postbinding", () => assertRecipientPostBinding(changed, binding));
+});
+
+test("foreign errors and tainted reason properties cannot bypass the finite diagnostic vocabulary", () => {
+  const foreign = Object.assign(new Error(canary, { cause: canary }), {
+    reason: "same-id",
+    actual: canary,
+    expected: canary,
+  });
+  assert.deepEqual(recipientFailure("recipient-empty", foreign), {
+    probe: "recipient-import",
+    stage: "recipient-empty",
+    reason: "unknown",
+    passed: false,
+  });
+  assert.equal(
+    JSON.stringify(recipientFailure("recipient-empty", foreign, "receipt")).includes(canary),
+    false,
+  );
+  const genuine = rejected("tag", () => assertRecipientTag(canary, image.Id));
+  Object.assign(genuine, { reason: canary });
+  assert.equal(recipientFailure("imported-identity", genuine).reason, "unknown");
 });

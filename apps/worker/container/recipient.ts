@@ -18,6 +18,83 @@ const directory = resolve(repository, "apps/worker/dist/container");
 const receiptPath = resolve(directory, "recipient-proof.json");
 const imageTag = "fortipi-computerd:verified";
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
+const reasons = [
+  "unknown",
+  "prerequisite",
+  "source-audit",
+  "docker-binding",
+  "builder-idle",
+  "receipt",
+  "receipt-phase",
+  "source-match",
+  "same-id",
+  "same-root",
+  "same-socket",
+  "same-process",
+  "same-namespace",
+  "store-query",
+  "store-types",
+  "store-images",
+  "store-containers",
+  "store-volumes",
+  "store-build-cache",
+  "import",
+  "image-list",
+  "empty-ids",
+  "id-count",
+  "id-format",
+  "multiple-ids",
+  "image-inspect",
+  "graph-id",
+  "os",
+  "arch",
+  "rootfs",
+  "diffids",
+  "runtime-config",
+  "config-fields",
+  "config-equality",
+  "tag",
+  "postbinding",
+  "archive-stability",
+  "metadata-stability",
+  "receipt-stability",
+  "receipt-write",
+] as const;
+type Reason = (typeof reasons)[number];
+type Stage =
+  | "prerequisite"
+  | "source-audit"
+  | "docker-binding"
+  | "builder-idle"
+  | "recipient-empty"
+  | "import"
+  | "imported-identity";
+
+class RecipientProofError extends Error {
+  readonly reason: Reason;
+  constructor(reason: Reason) {
+    super("Recipient proof rejected");
+    this.name = "RecipientProofError";
+    this.reason = reason;
+  }
+}
+// Discard assertion details here; never retain actual/expected, message or cause.
+function checked(reason: Reason, assertion: () => void): void {
+  try {
+    assertion();
+  } catch {
+    throw new RecipientProofError(reason);
+  }
+}
+export function recipientFailure(stage: Stage, error: unknown, fallback: Reason = "unknown") {
+  const reason = error instanceof RecipientProofError ? error.reason : fallback;
+  return {
+    probe: "recipient-import",
+    stage,
+    reason: reasons.includes(reason) ? reason : "unknown",
+    passed: false,
+  };
+}
 const env = {
   HOME: process.env.HOME,
   PATH: process.env.PATH,
@@ -109,36 +186,62 @@ async function sourceProof() {
 
 /** Require every reported disk-use class to be empty, including builder cache. */
 export function assertEmptyStore(rows: { Type: string; TotalCount: string }[]): void {
-  assert.deepEqual(rows.map((row) => row.Type).sort(), [
-    "Build Cache",
-    "Containers",
-    "Images",
-    "Local Volumes",
-  ]);
-  for (const row of rows) assert.equal(String(row.TotalCount), "0", "Recipient store is not empty");
+  checked("store-types", () =>
+    assert.deepEqual(rows.map((row) => row.Type).sort(), [
+      "Build Cache",
+      "Containers",
+      "Images",
+      "Local Volumes",
+    ]),
+  );
+  const classes: Record<string, Reason> = {
+    Images: "store-images",
+    Containers: "store-containers",
+    "Local Volumes": "store-volumes",
+    "Build Cache": "store-build-cache",
+  };
+  for (const row of rows)
+    checked(classes[row.Type] ?? "unknown", () =>
+      assert.equal(String(row.TotalCount), "0", "Recipient store is not empty"),
+    );
 }
 export function assertDistinctStores(builder: Daemon, recipient: Daemon): void {
-  assert.notEqual(builder.id, recipient.id, "Recipient daemon is the builder");
-  assert.notEqual(builder.root, recipient.root, "Recipient store is the builder store");
-  assert.notEqual(builder.host, recipient.host, "Recipient API is the builder API");
-  assert.ok(
-    builder.pid !== recipient.pid || builder.start !== recipient.start,
-    "Recipient process is the builder",
+  checked("same-id", () =>
+    assert.notEqual(builder.id, recipient.id, "Recipient daemon is the builder"),
+  );
+  checked("same-root", () =>
+    assert.notEqual(builder.root, recipient.root, "Recipient store is the builder store"),
+  );
+  checked("same-socket", () =>
+    assert.notEqual(builder.host, recipient.host, "Recipient API is the builder API"),
+  );
+  checked("same-process", () =>
+    assert.ok(
+      builder.pid !== recipient.pid || builder.start !== recipient.start,
+      "Recipient process is the builder",
+    ),
   );
   if (recipient.rootless)
-    assert.notEqual(
-      builder.networkNamespace,
-      recipient.networkNamespace,
-      "Rootless recipient namespace is the builder namespace",
+    checked("same-namespace", () =>
+      assert.notEqual(
+        builder.networkNamespace,
+        recipient.networkNamespace,
+        "Rootless recipient namespace is the builder namespace",
+      ),
     );
 }
 
 /** Save-by-ID need not restore a tag; select only the sole image in the empty store. */
 export function singleImportedImage(ids: string[]): string {
-  assert.ok(ids.length > 0 && ids.length <= 8, "Missing or ambiguous imported images");
-  for (const id of ids) assert.match(id, digestPattern);
+  checked(ids.length === 0 ? "empty-ids" : "id-count", () =>
+    assert.ok(ids.length > 0 && ids.length <= 8, "Missing or ambiguous imported images"),
+  );
+  for (const id of ids)
+    checked(ids.length === 1 && id === "" ? "empty-ids" : "id-format", () =>
+      assert.match(id, digestPattern),
+    );
   const unique = [...new Set(ids)];
-  assert.equal(unique.length, 1, "Multiple imported images");
+  checked("multiple-ids", () => assert.equal(unique.length, 1, "Multiple imported images"));
   const id = unique[0];
   assert.ok(id);
   return id;
@@ -146,7 +249,7 @@ export function singleImportedImage(ids: string[]): string {
 
 // Docker inspect can expose inert API defaults absent from OCI Config.
 function configuration(config: ImageConfig): unknown {
-  assertRuntimeConfig(config);
+  checked("runtime-config", () => assertRuntimeConfig(config));
   const keys = [
     "Env",
     "User",
@@ -161,22 +264,24 @@ function configuration(config: ImageConfig): unknown {
   ];
   for (const [key, value] of Object.entries(config)) {
     if (keys.includes(key)) continue;
-    assert.ok(
-      (["Hostname", "Domainname", "Image"].includes(key) && value === "") ||
-        ([
-          "AttachStdin",
-          "AttachStdout",
-          "AttachStderr",
-          "Tty",
-          "OpenStdin",
-          "StdinOnce",
-          "ArgsEscaped",
-          "NetworkDisabled",
-        ].includes(key) &&
-          value === false) ||
-        (["OnBuild", "Healthcheck"].includes(key) &&
-          (value === null || (key === "OnBuild" && Array.isArray(value) && value.length === 0))),
-      "Unexpected recipient configuration field",
+    checked("config-fields", () =>
+      assert.ok(
+        (["Hostname", "Domainname", "Image"].includes(key) && value === "") ||
+          ([
+            "AttachStdin",
+            "AttachStdout",
+            "AttachStderr",
+            "Tty",
+            "OpenStdin",
+            "StdinOnce",
+            "ArgsEscaped",
+            "NetworkDisabled",
+          ].includes(key) &&
+            value === false) ||
+          (["OnBuild", "Healthcheck"].includes(key) &&
+            (value === null || (key === "OnBuild" && Array.isArray(value) && value.length === 0))),
+        "Unexpected recipient configuration field",
+      ),
     );
   }
   return {
@@ -196,21 +301,32 @@ export function assertImportedImage(
   actual: Inspection,
   expected: { saved: SavedImage; configuration: ImageConfig; diffIds: string[] },
 ): string {
-  assert.match(actual.Id, digestPattern);
-  assert.ok(
-    [expected.saved.manifest.digest, expected.saved.config.digest].includes(actual.Id),
-    "Imported identity is outside the selected graph",
+  checked("id-format", () => assert.match(actual.Id, digestPattern));
+  checked("graph-id", () =>
+    assert.ok(
+      [expected.saved.manifest.digest, expected.saved.config.digest].includes(actual.Id),
+      "Imported identity is outside the selected graph",
+    ),
   );
-  assert.equal(actual.Os, "linux");
-  assert.equal(actual.Architecture, "amd64");
-  assert.equal(actual.RootFS.Type, "layers");
-  assert.deepEqual(actual.RootFS.Layers, expected.diffIds, "Imported DiffIDs changed");
-  assert.deepEqual(
-    configuration(actual.Config),
-    configuration(expected.configuration),
-    "Imported runtime config changed",
+  checked("os", () => assert.equal(actual.Os, "linux"));
+  checked("arch", () => assert.equal(actual.Architecture, "amd64"));
+  checked("rootfs", () => assert.equal(actual.RootFS.Type, "layers"));
+  checked("diffids", () =>
+    assert.deepEqual(actual.RootFS.Layers, expected.diffIds, "Imported DiffIDs changed"),
+  );
+  const actualConfig = configuration(actual.Config);
+  const expectedConfig = configuration(expected.configuration);
+  checked("config-equality", () =>
+    assert.deepEqual(actualConfig, expectedConfig, "Imported runtime config changed"),
   );
   return actual.Id;
+}
+
+export function assertRecipientTag(actualId: string, expectedId: string): void {
+  checked("tag", () => assert.equal(actualId, expectedId));
+}
+export function assertRecipientPostBinding(actual: Daemon, expected: Daemon): void {
+  checked("postbinding", () => assert.deepEqual(actual, expected));
 }
 
 async function binding(): Promise<Daemon> {
@@ -423,18 +539,22 @@ export async function verifyRecipientFixture(): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  let stage = "prerequisite";
+  let stage: Stage = "prerequisite";
+  let reason: Reason = "prerequisite";
   try {
     assert.equal(process.platform, "linux");
     assert.equal(process.env.GITHUB_ACTIONS, "true");
     assert.ok(process.argv.length === 3 && ["capture", "load"].includes(process.argv[2] ?? ""));
     await command("/usr/bin/systemctl", ["is-active", "--quiet", "agent.service"]);
     stage = "source-audit";
+    reason = "source-audit";
     const source = await sourceProof();
     stage = "docker-binding";
+    reason = "docker-binding";
     const current = await binding();
     if (process.argv[2] === "capture") {
       stage = "builder-idle";
+      reason = "builder-idle";
       assert.equal(
         await docker(["container", "ls", "--all", "--quiet"]),
         "",
@@ -452,28 +572,39 @@ async function main(): Promise<void> {
       await writeFile(receiptPath, `${JSON.stringify(receipt)}\n`, { flag: "wx", mode: 0o600 });
     } else {
       stage = "recipient-empty";
+      reason = "receipt";
       const receipt = await readReceipt();
+      reason = "receipt-phase";
       assert.equal(receipt.phase, "builder");
+      reason = "source-match";
       matchSource(receipt, source);
       assertDistinctStores(receipt.builder, current);
-      assertEmptyStore(
-        (await docker(["system", "df", "--format", "{{json .}}"]))
-          .split("\n")
-          .map((line) => JSON.parse(line)),
-      );
+      reason = "store-query";
+      const diskUsage = await docker(["system", "df", "--format", "{{json .}}"]);
+      reason = "store-types";
+      assertEmptyStore(diskUsage.split("\n").map((line) => JSON.parse(line)));
       stage = "import";
+      reason = "import";
       await loadArchive(source.metadata.archiveSha256);
       stage = "imported-identity";
+      reason = "image-list";
       const selected = singleImportedImage(
         (await docker(["image", "ls", "--all", "--quiet", "--no-trunc"])).split("\n"),
       );
+      reason = "image-inspect";
       const imageId = assertImportedImage(await inspection(selected), source.graph);
+      reason = "tag";
       await docker(["image", "tag", imageId, imageTag]);
-      assert.equal((await inspection()).Id, imageId);
-      assert.deepEqual(await binding(), current);
+      assertRecipientTag((await inspection()).Id, imageId);
+      reason = "postbinding";
+      assertRecipientPostBinding(await binding(), current);
+      reason = "archive-stability";
       assert.equal(await digest(resolve(directory, "image.tar")), source.metadata.archiveSha256);
+      reason = "metadata-stability";
       assert.equal(await digest(resolve(directory, "image-metadata.json")), source.metadataSha256);
+      reason = "receipt-stability";
       assert.deepEqual(await readReceipt(), receipt, "Recipient capture receipt changed");
+      reason = "receipt-write";
       await writeFile(
         receiptPath,
         `${JSON.stringify({ ...receipt, phase: "loaded", recipient: current, imageId })}\n`,
@@ -488,8 +619,8 @@ async function main(): Promise<void> {
         archiveSha256: source.metadata.archiveSha256,
       }),
     );
-  } catch {
-    console.error(JSON.stringify({ probe: "recipient-import", stage, passed: false }));
+  } catch (error) {
+    console.error(JSON.stringify(recipientFailure(stage, error, reason)));
     process.exitCode = 1;
   }
 }
