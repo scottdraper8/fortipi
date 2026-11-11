@@ -151,6 +151,10 @@ grid must match. Membership is immutable and bounded to sixteen artifacts and
 the current effective output/storage limits. Cross-job reuse conflicts. The
 metadata survives inbox acknowledgment; exact retries after original credential
 revocation retain the original transport receipt.
+Native artifact endpoints may retain one matching original `revision` query on
+the exact workspace/artifact path. Index validation rejects mismatched, duplicate,
+extra, fragment, absolute or cross-scope endpoints and stores the original
+reference unchanged; it does not rewrite endpoint strings, digests or hashes.
 An authenticated current publisher can retain bounded evidence for a historical
 execution generation in private quarantine. That acknowledgment never creates a
 public artifact index, authorizes historical bytes, or starts another process.

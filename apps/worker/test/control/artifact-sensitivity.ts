@@ -19,6 +19,14 @@ try {
   );
   for (const mutation of [
     {
+      file: "artifact-index.ts",
+      pattern: /artifactEndpointMatches\(\s*reference,\s*(`[^`]+`),?\s*\)/,
+      replacement: "reference.endpoint === $1",
+      test: "native-artifacts.test.ts",
+      testPattern: "native artifact index is atomic",
+      oracle: "artifact endpoint must accept its single matching original revision query",
+    },
+    {
       file: "relay.ts",
       pattern: /if \(producer\)(\s+check\()/,
       replacement: 'if (producer || request.method === "GET")$1',

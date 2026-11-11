@@ -15,6 +15,21 @@ export interface NativeArtifact {
   agentId: string;
   conversationId: string;
 }
+function artifactEndpointMatches(reference: D.ByteReference, path: string): boolean {
+  if (reference.endpoint.split("?")[0] !== path || reference.endpoint.includes("#")) return false;
+  try {
+    const endpoint = new URL(reference.endpoint, "https://control.internal");
+    const query = [...endpoint.searchParams];
+    return (
+      endpoint.origin === "https://control.internal" &&
+      endpoint.pathname === path &&
+      query.length <= 1 &&
+      query.every(([key, value]) => key === "revision" && value === reference.revision)
+    );
+  } catch {
+    return false;
+  }
+}
 export function artifactScope(row: NativeArtifact): D.ResourceScope {
   return {
     ...emptyScope(),
@@ -77,8 +92,10 @@ export function indexArtifacts(store: Store, directory: Directory, result: D.Pre
         reference.revision === result.identity.baseRevision &&
         reference.outputSource &&
         reference.chunks &&
-        reference.endpoint ===
+        artifactEndpointMatches(
+          reference,
           `/v1/workspaces/${reservation.workspaceId}/artifacts/${reference.artifactId}`,
+        ),
       "conflict",
       "Artifact metadata does not match its execution",
     );

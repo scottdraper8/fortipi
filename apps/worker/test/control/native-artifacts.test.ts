@@ -136,7 +136,7 @@ test("native artifact index is atomic and immutable; a different reader streams 
       artifactId: id,
       workspaceId: "workspace",
       revision: job.identity.baseRevision,
-      endpoint: `/v1/workspaces/workspace/artifacts/${id}`,
+      endpoint: `/v1/workspaces/workspace/artifacts/${id}${id === artifactId ? `?revision=${encodeURIComponent(job.identity.baseRevision)}` : ""}`,
       sha256: p.sha256,
       size,
       owner: { kind: "local", executorId: "executor" },
@@ -163,6 +163,31 @@ test("native artifact index is atomic and immutable; a different reader streams 
       requestId: uuid(),
       payload: result,
     };
+    const deliver = (f: D.ExecutorFrame) =>
+      h.cp.deliverExecutorFrame(channel.executor, {
+        executorId: "executor",
+        generation: 1,
+        connectionEpoch: channel.epoch,
+        frame: f,
+      });
+    const bareEndpoint = `/v1/workspaces/workspace/artifacts/${artifactId}`;
+    for (const endpoint of [
+      `${bareEndpoint}?revision=wrong_revision`,
+      `${bareEndpoint}?revision=${job.identity.baseRevision}&revision=${job.identity.baseRevision}`,
+      `${bareEndpoint}?revision=${job.identity.baseRevision}&offset=0`,
+      `${bareEndpoint}#fragment`,
+      `https://other.invalid${bareEndpoint}`,
+      `/v1/workspaces/other_workspace/artifacts/${artifactId}?revision=${job.identity.baseRevision}`,
+    ]) {
+      const invalid = structuredClone(result);
+      assert.ok(invalid.output.artifacts[0]);
+      invalid.output.artifacts[0].endpoint = endpoint;
+      assert.equal(
+        (await deliver({ ...frame, payload: invalid })).ok,
+        false,
+        "endpoint must retain exact scope and a single matching revision without extra fields",
+      );
+    }
     await h.cp.refuseArtifactInbox(true);
     assert.equal(
       (
@@ -180,19 +205,25 @@ test("native artifact index is atomic and immutable; a different reader streams 
     assert.equal(await h.cp.rowCount("native_artifact_set"), 0);
     assert.equal(await h.cp.rowCount("inbox"), 0);
     await h.cp.refuseArtifactInbox(false);
+    const accepted = await deliver(frame);
+    assert.equal(
+      accepted.ok,
+      true,
+      "artifact endpoint must accept its single matching original revision query",
+    );
     channel.send(frame);
     await channel.wait("job.result_ack");
     assert.ok(
       await h.cp.artifactRecord(artifactId),
       "result transport ack must follow the durable index transaction",
     );
-    const deliver = (f: D.ExecutorFrame) =>
-      h.cp.deliverExecutorFrame(channel.executor, {
-        executorId: "executor",
-        generation: 1,
-        connectionEpoch: channel.epoch,
-        frame: f,
-      });
+    const indexed = await h.cp.artifactRecord(artifactId);
+    assert.ok(indexed);
+    assert.deepEqual(
+      JSON.parse(indexed).reference,
+      result.output.artifacts[0],
+      "indexing must preserve the native reference and its query without rewriting hashes",
+    );
     const duplicate = value(await deliver(frame));
     assert.equal(duplicate.persisted, true);
     const changed = structuredClone(result);
@@ -385,7 +416,7 @@ test("native artifact index is atomic and immutable; a different reader streams 
       assert.ok(opens.length >= count);
       return opens[count - 1] ?? assert.fail("No transfer open");
     };
-    const first = get();
+    const first = get(artifactId, {}, `?revision=${encodeURIComponent(job.identity.baseRevision)}`);
     const open = await Promise.race([
       waitOpen(1),
       first.then((response) => {
