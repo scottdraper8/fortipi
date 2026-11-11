@@ -673,6 +673,52 @@
           "additionalProperties": false
         }
       ]
+    },
+    "ExecutorJobQuery": {
+      "title": "ExecutorJobQuery",
+      "type": "object",
+      "properties": {
+        "executionId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "assignmentDigest": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "connectionEpoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["executionId", "assignmentDigest", "connectionEpoch"],
+      "additionalProperties": false
+    },
+    "ExecutorJobChunkQuery": {
+      "title": "ExecutorJobChunkQuery",
+      "type": "object",
+      "properties": {
+        "executionId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "assignmentDigest": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "connectionEpoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 262144
+        },
+        "sha256": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        }
+      },
+      "required": ["executionId", "assignmentDigest", "connectionEpoch", "length", "sha256"],
+      "additionalProperties": false
     }
   }
 }

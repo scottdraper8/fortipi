@@ -68,6 +68,7 @@ function route<const R extends RouteDefinition>(entry: R): R {
 const C = "/v1/conversations/{id}";
 const W = "/v1/workspaces/{workspaceId}";
 const A = "/v1/admin";
+const E = "/v1/executor/jobs/{jobId}";
 export const routeCatalog = [
   route({
     operationId: "getHealth",
@@ -789,6 +790,89 @@ export const routeCatalog = [
     noStore: true,
     description:
       "Executor-audience one-use ticket binds reserved generation. Heartbeat15s, disconnect after3 misses; reconnect queries only.",
+  }),
+  route({
+    operationId: "getExecutorJobManifest",
+    method: "GET",
+    path: `${E}/manifest`,
+    owner: "control",
+    audience: "executor",
+    action: "transfers.input",
+    query: "ExecutorJobQuery",
+    body: null,
+    response: "ManifestResponse",
+    success: [200],
+    errors: workspaceErrors,
+    noStore: true,
+    description:
+      "Exact attempted assignment and current connection epoch only. Server derives the Computer workspace, binding, leased base and current registered owner; no general workspace read authority.",
+  }),
+  route({
+    operationId: "getExecutorJobBlob",
+    method: "GET",
+    path: `${E}/blobs/{sha256}`,
+    owner: "control",
+    audience: "executor",
+    action: "transfers.input",
+    query: "ExecutorJobQuery",
+    body: null,
+    response: null,
+    success: [200],
+    errors: workspaceErrors,
+    transport: "bytes",
+    noStore: true,
+    description:
+      "Bounded complete file from the assigned leased base manifest only; current executor, epoch, owner, lease and membership are checked throughout delivery. No staged or arbitrary revision reads.",
+  }),
+  route({
+    operationId: "beginExecutorJobUpload",
+    method: "POST",
+    path: `${E}/uploads`,
+    owner: "control",
+    audience: "executor",
+    action: "transfers.output",
+    query: "ExecutorJobQuery",
+    body: "UploadBegin",
+    response: "UploadStatus",
+    success: [201],
+    errors: workspaceErrors,
+    noStore: true,
+    description:
+      "Stage this assigned execution's result under its exact current lease and original operation/base. Idempotent business request, never a canonical commit or permission to restart.",
+  }),
+  route({
+    operationId: "putExecutorJobUploadChunk",
+    method: "PUT",
+    path: `${E}/uploads/{uploadId}/blobs/{sha256}/chunks/{chunkIndex}`,
+    owner: "control",
+    audience: "executor",
+    action: "transfers.output",
+    query: "ExecutorJobChunkQuery",
+    body: null,
+    response: null,
+    success: [204],
+    errors: workspaceErrors,
+    transport: "bytes",
+    noStore: true,
+    bodyBytes: 262144,
+    description:
+      "Bounded immutable chunk of an upload retained for this exact assignment; hash, length, current epoch and owner lease required. Receipt proves staging only.",
+  }),
+  route({
+    operationId: "validateExecutorJobUpload",
+    method: "POST",
+    path: `${E}/uploads/{uploadId}/validate`,
+    owner: "control",
+    audience: "executor",
+    action: "transfers.output",
+    query: "ExecutorJobQuery",
+    body: null,
+    response: "UploadValidation",
+    success: [200],
+    errors: workspaceErrors,
+    noStore: true,
+    description:
+      "Validate only the retained assigned execution's complete upload. Returns an opaque stage identity; only the Agent/Workspace commit protocol can publish it.",
   }),
   route({
     operationId: "getExecutorTransferInputChunk",

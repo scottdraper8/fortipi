@@ -1,5 +1,22 @@
 import type { AuthContext, CapacityReservation, Outcome } from "./dto.js";
 
+/** Private registered-recipient input to CP.fetch POST /internal/storage-sample; closed JSON <=64KiB. */
+export interface StorageSampleInput {
+  sampleId: string;
+  policyVersion: number;
+  sampleSeq: number;
+  observedAt: number;
+  coverage:
+    | { kind: "agent"; bytes: number }
+    | { kind: "workspace"; bytes: number; censusVersion: number };
+  /** At most100 unique bounded IDs of growth reservations preceding the queued sample barrier. */
+  coveredReservationIds: string[];
+}
+export interface StorageSampleReceipt {
+  sampleSeq: number;
+  chargeBytes: number;
+}
+
 export type {
   CapabilityStatus,
   CapacityReservation,
