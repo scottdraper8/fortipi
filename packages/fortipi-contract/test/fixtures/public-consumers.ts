@@ -33,8 +33,17 @@ import type {
   OperationResponse,
   ProviderAuthPut,
   ProviderAuthStatus,
+  ReconcileInput,
   WorkspaceBinding,
 } from "fortipi-contract";
+export const serverAllocatedRetry: ReconcileInput = {
+  requestId: "retry_request",
+  expectedVersion: 1,
+  reason: "Explicit fresh authorization",
+  action: { kind: "new-job", authorizationId: "fresh_authorization" },
+};
+// @ts-expect-error A server-allocated identifier still needs explicit authorization identity.
+export const retryWithoutAuthorization: ReconcileInput["action"] = { kind: "new-job" };
 export function publicFlows(
   identity: ExecutionIdentity,
   receipt: CommitReceipt,

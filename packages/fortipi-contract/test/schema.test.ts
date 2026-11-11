@@ -564,6 +564,12 @@ test("explicit approval and reconciliation bind exact operations and new-job aut
     reason: "Operator authorized distinct job",
     action: { kind: "new-job", newJobId: "job_2", authorizationId: "authorization_2" },
   });
+  accepted("ReconcileInput", {
+    requestId: "request_2",
+    expectedVersion: 4,
+    reason: "Allocate a fresh opaque server job identifier",
+    action: { kind: "new-job", authorizationId: "authorization_3" },
+  });
   rejected("ReconcileInput", {
     requestId: "request_1",
     expectedVersion: 4,
