@@ -383,7 +383,7 @@ export const routeCatalog = [
     success: [202],
     errors: writeErrors,
     description:
-      "Verified receipt/evidence or acknowledged uncertainty. New execution needs separately authorized new-job identity.",
+      "Verified receipt/evidence or acknowledged uncertainty. New execution binds authorizationId to one current covering grant and a fresh job/operation; omit newJobId for durable server allocation. Discard succeeds only after authoritative cleanup; uncertain native effects remain quarantined.",
   }),
   route({
     operationId: "listExecutors",

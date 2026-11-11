@@ -2255,7 +2255,7 @@ export interface ReconcileInput {
       }
     | {
         kind: "new-job";
-        newJobId: Id;
+        newJobId?: Id;
         authorizationId: Id;
       };
 }

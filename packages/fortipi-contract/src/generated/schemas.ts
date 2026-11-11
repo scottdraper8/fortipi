@@ -4792,6 +4792,8 @@ export const jobsSchema = {
             },
             {
               type: "object",
+              description:
+                "Fresh retry: authorizationId is a caller-chosen business/idempotency identity that the server binds to the original job/version, new operation and one current covering grant/credential; it grants no permission and is not an external authorization token. Omit newJobId for durable server allocation before asynchronous work. An explicit newJobId must belong to the selected Agent and be unique.",
               properties: {
                 kind: { const: "new-job" },
                 newJobId: {
@@ -4801,7 +4803,7 @@ export const jobsSchema = {
                   $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
                 },
               },
-              required: ["kind", "newJobId", "authorizationId"],
+              required: ["kind", "authorizationId"],
               additionalProperties: false,
             },
           ],
