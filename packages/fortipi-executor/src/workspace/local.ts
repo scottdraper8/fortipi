@@ -20,7 +20,7 @@ import {
   validateLocalLease,
   workspaceLeaseDigest,
 } from "fortipi-contract/executor";
-import type { Binding, Limits, Profile } from "../config.js";
+import { type Binding, effectiveLimits, type Limits, type Profile } from "../config.js";
 import type { Ledger, LocalRow } from "../ledger.js";
 import { hash } from "../policy.js";
 import { validate } from "../transport.js";
@@ -521,6 +521,44 @@ export class LocalWorkspace {
   }
   async observe(request: LocalObserve): Promise<LocalObservation> {
     const row = this.correlated(request);
+    const observation = row.observation;
+    const mayAttest = () => {
+      if (
+        observation.state !== "applied" ||
+        (observation.receipt && this.binding.manifestHash !== observation.postManifestHash) ||
+        !this.ledger.rootAvailable(this.root.key, request.operationId)
+      )
+        return false;
+      const floor = this.ledger.db
+        .prepare("SELECT value FROM meta WHERE key=?")
+        .get(`fence_${request.rootBindingId}_${request.bindingVersion}`) as
+        | { value: string }
+        | undefined;
+      return !floor || BigInt(request.lease.fence) >= BigInt(floor.value);
+    };
+    const eligible = mayAttest();
+    if (observation.state === "applied") {
+      if (
+        observation.operationId !== row.request.operationId ||
+        observation.operationDigest !== row.request.operationDigest ||
+        observation.preparationId !== row.prepared.preparationId ||
+        observation.commitId !== row.request.commitId ||
+        observation.preManifestHash !== row.prepared.preManifestHash ||
+        (row.request.mode.kind === "native-execution" &&
+          observation.executionId !== row.request.mode.executionId)
+      )
+        throw new Error("uncertain retained observation identity");
+      if (eligible) {
+        if (!row.manifest) throw new Error("uncertain retained post-manifest missing");
+        checkManifest(
+          row.manifest,
+          effectiveLimits(this.limits, this.staging.http.limits, this.profile.limits),
+          this.root.identity.caseBehavior,
+        );
+        if ((await manifestDigest(row.manifest)) !== observation.postManifestHash)
+          throw new Error("workspace.conflict: retained post-manifest mismatch");
+      }
+    }
     // A later committed revision does not rewrite this historical receipt/observation.
     if (row.observation.receipt) {
       try {
@@ -529,9 +567,10 @@ export class LocalWorkspace {
         this.ledger.quarantine(this.root.key);
         throw error;
       }
-      return row.observation;
-    }
-    if (row.observation.state === "applied" || row.observation.state === "prepared") {
+      await this.root.verify();
+      this.authorize(request);
+      if (this.binding.manifestHash !== row.observation.postManifestHash) return row.observation;
+    } else if (row.observation.state === "applied" || row.observation.state === "prepared") {
       try {
         await this.current(row.observation.postManifestHash ?? row.observation.preManifestHash);
       } catch {
@@ -544,6 +583,13 @@ export class LocalWorkspace {
         this.ledger.saveLocal(row);
         this.ledger.quarantine(this.root.key);
       }
+    }
+    if (row.observation.state === "applied") {
+      await this.root.verify();
+      this.authorize(request);
+      if (!eligible || !mayAttest()) return row.observation; // Preserve legacy status without a current attestation.
+      if (!row.manifest) throw new Error("uncertain retained post-manifest missing");
+      return { ...row.observation, postManifest: row.manifest };
     }
     return row.observation;
   }

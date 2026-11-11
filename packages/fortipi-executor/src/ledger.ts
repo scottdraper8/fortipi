@@ -385,6 +385,8 @@ export class Ledger {
     return !pin || (!pin.quarantine && pin.operation === operation);
   }
   saveLocal(row: LocalRow): void {
+    // Wire post-state proofs are derived afresh from the retained manifest, never cached in observations.
+    Reflect.deleteProperty(row.observation, "postManifest");
     const old = this.local(row.request.operationId);
     if (old) {
       const immutable = (r: LocalRow) => {
@@ -415,7 +417,10 @@ export class Ledger {
     const row = this.db.prepare("SELECT data FROM local_ops WHERE id=?").get(id) as
       | { data: string }
       | undefined;
-    return row ? (JSON.parse(row.data) as LocalRow) : undefined;
+    if (!row) return undefined;
+    const local = JSON.parse(row.data) as LocalRow;
+    Reflect.deleteProperty(local.observation, "postManifest");
+    return local;
   }
   saveRecord(table: "stages" | "revisions", id: string, value: unknown): void {
     const bytes = canonicalJson(value);

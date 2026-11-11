@@ -12,6 +12,7 @@ import type {
   TransferDescriptor,
 } from "fortipi-contract/executor";
 import {
+  canonicalJson,
   commitDigest,
   localStageDigest,
   manifestDigest,
@@ -20,8 +21,9 @@ import {
 } from "fortipi-contract/executor";
 import { adapter, defaults } from "../dist/config.js";
 import { ExecutorRuntime } from "../dist/daemon.js";
+import { Ledger } from "../dist/ledger.js";
 import { hash } from "../dist/policy.js";
-import { HttpTransport } from "../dist/transport.js";
+import { frame, HttpTransport } from "../dist/transport.js";
 import { LocalWorkspace } from "../dist/workspace/local.js";
 import type { Manifest } from "../dist/workspace/manifest.js";
 import { scan } from "../dist/workspace/manifest.js";
@@ -31,10 +33,13 @@ import {
   assignment,
   authenticateFixture,
   credential,
+  eventually,
   fixture,
+  fixtureChild,
   importRoot,
   jobRenewals,
   nativeTimeline,
+  nodeCommand,
   prepare,
   receiptScope,
   requestScope,
@@ -285,6 +290,11 @@ test("prepare changes no canonical bytes; apply once, lost ack observes; receipt
       preparationId,
     });
     assert.ok("state" in history && history.state === "applied");
+    assert.equal(
+      "postManifest" in history,
+      false,
+      "later current bytes cannot attest an older retained manifest",
+    );
     assert.ok("receipt" in history && history.receipt?.commitDigest === proof.commitDigest);
     assert.equal(f.local.binding.revision, "r2");
     assert.equal(
@@ -292,7 +302,354 @@ test("prepare changes no canonical bytes; apply once, lost ack observes; receipt
       true,
       "historical observation must not quarantine a later valid revision",
     );
+    const legacy = f.ledger.local(request.operationId);
+    if (!legacy) throw new Error("legacy journal missing");
+    Reflect.deleteProperty(legacy, "manifest");
+    f.ledger.saveLocal(legacy);
+    assert.deepEqual(
+      await f.local.request({ ...requestScope(expired), kind: "observe", preparationId }),
+      history,
+      "unused full metadata is not required to read the historical receipt",
+    );
   } finally {
+    await f.cleanup();
+  }
+});
+test("native retained post-manifest survives lost metadata ack, obeys the full envelope bound and releases only on receipt", async () => {
+  const f = await fixture();
+  let runtime: ExecutorRuntime | undefined,
+    reopened: Ledger | undefined,
+    renewals: ReturnType<typeof jobRenewals> | undefined;
+  try {
+    const http = new HttpTransport(f.profile, fetch, true);
+    authenticateFixture(http);
+    runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http,
+    });
+    await runtime.initialize();
+    const local = runtime.locals.get("root");
+    if (!local) throw new Error("local missing");
+    await importRoot(local);
+    runtime.connected = true;
+    const marker = join(f.path, "native-manifest-effect"),
+      a = await assignment(nodeCommand(fixtureChild, "local-manifest", marker)),
+      request = prepare(a, f.initial.manifestHash),
+      prepared = await local.request(request);
+    assert.ok("preparationId" in prepared);
+    await runtime.assignOnce(a);
+    renewals = jobRenewals(runtime, a);
+    await renewals.renew();
+    const pending = runtime.approvals.list()[0];
+    if (!pending) throw new Error("approval missing");
+    runtime.approvals.decide(a.identity.jobId, pending.digest, "allow");
+    await runtime.tick();
+    await eventually(() => !!f.ledger.get(a.identity.jobId)?.result, "native result missing");
+    const observe = {
+      ...requestScope(request),
+      kind: "observe" as const,
+      preparationId: prepared.preparationId,
+    };
+    const invoke = async (id: string) => {
+      if (!runtime) throw new Error("runtime missing");
+      const response = await runtime.handleWorkspaceFrame({
+        type: "workspace.request",
+        requestId: `outer_${id}`,
+        payload: { requestId: id, correlationId: `correlation_${id}`, request: observe },
+      });
+      frame(response);
+      return response;
+    };
+    const first = await invoke("native_post"),
+      applied = first.payload.response;
+    assert.ok("state" in applied && applied.state === "applied");
+    assert.ok(applied.postManifest);
+    assert.equal(applied.postManifest.entries.length, 12);
+    assert.equal(await manifestDigest(applied.postManifest), applied.postManifestHash);
+    assert.equal(applied.postManifestHash, f.ledger.get(a.identity.jobId)?.result?.manifestHash);
+    for (const entry of applied.postManifest.entries) {
+      assert.equal(entry.type, "file");
+      if (entry.type === "file")
+        assert.equal(
+          entry.sha256,
+          createHash("sha256")
+            .update(await readFile(join(f.rootPath, entry.path)))
+            .digest("hex"),
+        );
+    }
+    assert.equal(f.ledger.rootAvailable(f.root.key), false);
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+    assert.equal(
+      "postManifest" in (f.ledger.local(request.operationId)?.observation ?? {}),
+      false,
+      "no stale wire proof is cached in a journal observation",
+    );
+    await renewals.stop();
+    renewals = undefined;
+    await runtime.shutdown();
+    reopened = await Ledger.open(f.directory, "ledger", f.ledger.limits);
+    const resumedHttp = new HttpTransport(f.profile, fetch, true);
+    authenticateFixture(resumedHttp);
+    runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: reopened,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http: resumedHttp,
+    });
+    await runtime.initialize();
+    const recovered = runtime.locals.get("root");
+    if (!recovered) throw new Error("recovered local missing");
+    const replay = (await invoke("lost_ack")).payload.response;
+    assert.deepEqual(replay, applied);
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+    // Only the enclosing frame overflows: the validated observation body still fits.
+    resumedHttp.jsonBytes = Buffer.byteLength(canonicalJson(applied));
+    const input = {
+      type: "workspace.request",
+      requestId: "outer_overflow",
+      payload: { requestId: "overflow", correlationId: "correlation_overflow", request: observe },
+    };
+    assert.ok(Buffer.byteLength(canonicalJson(input)) < resumedHttp.jsonBytes);
+    assert.ok(Buffer.byteLength(canonicalJson(first)) > resumedHttp.jsonBytes);
+    const oversized = (await invoke("overflow")).payload.response;
+    assert.ok("error" in oversized && oversized.error.code === "payload_too_large");
+    assert.equal(f.ledger.rootAvailable(f.root.key), false);
+    const cached = reopened.db
+      .prepare("SELECT value FROM meta WHERE key='workspace_response_overflow'")
+      .get() as { value: string };
+    assert.equal(JSON.parse(cached.value).error.code, "payload_too_large");
+    resumedHttp.jsonBytes = 1048576;
+    assert.deepEqual((await invoke("after_overflow")).payload.response, applied);
+    const short = {
+        type: "workspace.request" as const,
+        requestId: "x",
+        payload: { requestId: "coalesced", correlationId: "coalesced_corr", request: observe },
+      },
+      long = { ...short, requestId: "q".repeat(128) };
+    resumedHttp.jsonBytes = Buffer.byteLength(
+      canonicalJson({
+        type: "workspace.response",
+        requestId: short.requestId,
+        payload: {
+          requestId: short.payload.requestId,
+          correlationId: short.payload.correlationId,
+          response: applied,
+        },
+      }),
+    );
+    assert.ok(Buffer.byteLength(canonicalJson(long)) < resumedHttp.jsonBytes);
+    const [shortReply, longReply] = await Promise.all([
+      runtime.handleWorkspaceFrame(short),
+      runtime.handleWorkspaceFrame(long),
+    ]);
+    assert.deepEqual(shortReply.payload.response, applied);
+    assert.ok(
+      "error" in longReply.payload.response &&
+        longReply.payload.response.error.code === "payload_too_large",
+      "each coalesced caller must check its own complete outer envelope",
+    );
+    resumedHttp.jsonBytes = 1048576;
+    const proof = await receipt(request, applied);
+    await assert.rejects(
+      recovered.request({
+        ...receiptScope(request),
+        kind: "receipt",
+        preparationId: prepared.preparationId,
+        receipt: { ...proof, manifestHash: "0".repeat(64) },
+      }),
+      /observation mismatch/,
+    );
+    assert.equal(reopened.rootAvailable(f.root.key), false);
+    const ack = await recovered.request({
+      ...receiptScope(request),
+      kind: "receipt",
+      preparationId: prepared.preparationId,
+      receipt: proof,
+    });
+    assert.ok("persisted" in ack && ack.persisted);
+    assert.equal(reopened.rootAvailable(f.root.key), true);
+    assert.equal(recovered.binding.revision, "r1");
+    assert.deepEqual(
+      await recovered.request({
+        ...receiptScope(request),
+        kind: "receipt",
+        preparationId: prepared.preparationId,
+        receipt: proof,
+      }),
+      ack,
+    );
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+    assert.equal(runtime.children.size, 0);
+  } finally {
+    await renewals?.stop();
+    await runtime?.shutdown();
+    reopened?.close();
+    await f.cleanup();
+  }
+});
+test("retained manifest attestation rejects corrupt or oversized metadata and strips stale proof from non-applied states", async () => {
+  const f = await setup();
+  try {
+    authenticateFixture(f.staging.http);
+    const request = await staged(f),
+      prepared = await f.local.request(request);
+    assert.ok("preparationId" in prepared);
+    await f.local.request({
+      ...requestScope(request),
+      kind: "apply",
+      preparationId: prepared.preparationId,
+    });
+    const observe = {
+        ...requestScope(request),
+        kind: "observe" as const,
+        preparationId: prepared.preparationId,
+      },
+      saved = f.ledger.local(request.operationId);
+    if (!saved?.manifest) throw new Error("retained manifest missing");
+    const positive = await f.local.request(observe);
+    assert.ok("state" in positive && positive.state === "applied" && positive.postManifest);
+    const raw = () =>
+      JSON.parse(
+        (
+          f.ledger.db.prepare("SELECT data FROM local_ops WHERE id=?").get(request.operationId) as {
+            data: string;
+          }
+        ).data,
+      );
+    for (const state of ["prepared", "applying", "partial", "unknown", "drift"]) {
+      const stale = structuredClone(saved);
+      Reflect.set(stale.observation, "state", state);
+      Reflect.set(stale.observation, "postManifest", saved.manifest);
+      f.ledger.saveLocal(stale);
+      assert.equal(
+        "postManifest" in raw().observation,
+        false,
+        "non-applied journal writes cannot retain proof",
+      );
+      Reflect.set(stale.observation, "postManifest", saved.manifest);
+      f.ledger.db
+        .prepare("UPDATE local_ops SET data=? WHERE id=?")
+        .run(canonicalJson(stale), request.operationId);
+      assert.equal(
+        "postManifest" in (f.ledger.local(request.operationId)?.observation ?? {}),
+        false,
+        "legacy stale proof cannot escape a journal read",
+      );
+    }
+    f.ledger.saveLocal(structuredClone(saved));
+    const missing = structuredClone(saved);
+    Reflect.deleteProperty(missing, "manifest");
+    f.ledger.saveLocal(missing);
+    await assert.rejects(f.local.request(observe), /retained post-manifest missing/);
+    const wrongIdentity = structuredClone(saved);
+    wrongIdentity.observation.preparationId = "wrong_preparation";
+    f.ledger.saveLocal(wrongIdentity);
+    await assert.rejects(f.local.request(observe), /retained observation identity/);
+    const mismatch = structuredClone(saved);
+    if (!mismatch.manifest) throw new Error("manifest missing");
+    const file = mismatch.manifest.entries[0];
+    if (file?.type !== "file") throw new Error("file missing");
+    file.sha256 = "0".repeat(64);
+    f.ledger.saveLocal(mismatch);
+    await assert.rejects(f.local.request(observe), /retained post-manifest mismatch/);
+    for (const [count, width, expected] of [
+      [513, 4, /workspace capacity/],
+      [4097, 4, /manifest limit/],
+      [512, 1010, /manifest bytes/],
+    ] as const) {
+      const oversized = structuredClone(saved);
+      oversized.manifest = {
+        version: 1,
+        entries: Array.from({ length: count }, (_, index) => ({
+          type: "directory" as const,
+          mode: 493 as const,
+          path: `d${String(index).padStart(4, "0")}_${"x".repeat(width)}`,
+        })),
+      };
+      f.ledger.saveLocal(oversized);
+      await assert.rejects(f.local.request(observe), expected);
+    }
+    f.ledger.saveLocal(structuredClone(saved));
+    // A formerly applied proof must not survive a real later filesystem drift.
+    const staleApplied = structuredClone(saved);
+    Reflect.set(staleApplied.observation, "postManifest", saved.manifest);
+    f.ledger.db
+      .prepare("UPDATE local_ops SET data=? WHERE id=?")
+      .run(canonicalJson(staleApplied), request.operationId);
+    await writeFile(join(f.rootPath, "alpha"), "external drift");
+    const drift = await f.local.request(observe);
+    assert.ok("state" in drift && drift.state === "drift");
+    assert.equal("postManifest" in drift, false);
+    assert.equal("postManifest" in raw().observation, false);
+    assert.equal(f.ledger.rootAvailable(f.root.key), false);
+    assert.equal(f.local.binding.revision, "r0");
+  } finally {
+    await f.cleanup();
+  }
+});
+test("manifest disclosure rechecks actual executor revocation after asynchronous root verification", async () => {
+  const f = await setup();
+  const original = f.root.verify;
+  let runtime: ExecutorRuntime | undefined;
+  try {
+    authenticateFixture(f.staging.http);
+    const request = await staged(f),
+      prepared = await f.local.request(request);
+    assert.ok("preparationId" in prepared);
+    await f.local.request({
+      ...requestScope(request),
+      kind: "apply",
+      preparationId: prepared.preparationId,
+    });
+    runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http: f.staging.http,
+    });
+    const current = runtime;
+    let revoked = false;
+    f.root.verify = async function () {
+      await original.call(this);
+      if (!revoked) {
+        revoked = true;
+        await current.receive({
+          type: "executor.presence",
+          requestId: "manifest_revoke",
+          payload: {
+            executorId: f.profile.executorId,
+            generation: f.profile.executorGeneration,
+            connectionEpoch: 1,
+            platform: adapter().platform,
+            caseBehavior: f.root.identity.caseBehavior,
+            confinement: "host",
+            rootBindingIds: ["root"],
+            capabilities: ["local-workspace"],
+            transferLimits: f.staging.http.transferLimits(),
+            state: "revoking",
+          },
+        });
+      }
+    };
+    await assert.rejects(
+      f.local.request({
+        ...requestScope(request),
+        kind: "observe",
+        preparationId: prepared.preparationId,
+      }),
+      /revoked/,
+    );
+    assert.equal(revoked, true);
+    assert.equal(f.local.binding.revision, "r0");
+    assert.equal(f.ledger.rootAvailable(f.root.key), false);
+  } finally {
+    f.root.verify = original;
+    await runtime?.shutdown();
     await f.cleanup();
   }
 });
@@ -1248,6 +1605,18 @@ test("multi-chunk local stage verifies scoped bytes, shares one SHA only inside 
     await renewals.renew();
     const liveLease = currentLease();
     assert.equal(liveLease.fence, "1");
+    const fresh = await f.local.request({
+      ...requestScope(request),
+      kind: "observe",
+      preparationId: prepared.preparationId,
+    });
+    assert.ok("state" in fresh && fresh.state === "applied");
+    assert.ok(fresh.postManifest);
+    assert.equal(await manifestDigest(fresh.postManifest), postManifestHash);
+    assert.deepEqual(
+      fresh.postManifest.entries.map((entry) => entry.path),
+      ["empty", "one", "two"],
+    );
     await assert.rejects(
       f.local.request({
         ...request,
@@ -1271,8 +1640,12 @@ test("multi-chunk local stage verifies scoped bytes, shares one SHA only inside 
       kind: "observe",
       preparationId: prepared.preparationId,
     });
-    assert.ok("state" in observed);
-    assert.equal(observed.state, "applied");
+    assert.ok("state" in observed && observed.state === "applied");
+    assert.equal(
+      "postManifest" in observed,
+      false,
+      "stale fence retains legacy status without a full-manifest attestation",
+    );
     assert.deepEqual(await f.root.read("one", defaults.fileBytes), bytes);
   } finally {
     try {
