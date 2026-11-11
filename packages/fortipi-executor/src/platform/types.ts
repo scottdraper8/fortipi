@@ -1,5 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import type { Stats } from "node:fs";
+import { win32 } from "node:path";
 
 export interface RootIdentity {
   path: string;
@@ -42,6 +43,10 @@ export function childEnvironment(overrides: Record<string, string> = {}): Record
   for (const name of names) {
     const value = process.env[name];
     if (value !== undefined) result[name] = value;
+  }
+  if (process.platform === "win32" && result.SystemRoot) {
+    result.ComSpec = win32.join(result.SystemRoot, "System32", "cmd.exe");
+    result.PATHEXT = ".COM;.EXE;.BAT;.CMD";
   }
   for (const [name, value] of Object.entries(overrides)) {
     if (!/^(LANG|LC_ALL|TERM|NO_COLOR)$/.test(name) || value.includes("\0"))

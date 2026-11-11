@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { lstat } from "node:fs/promises";
+import { userInfo } from "node:os";
 import { isAbsolute, win32 } from "node:path";
 import { promisify } from "node:util";
 import type { PlatformAdapter } from "./types.js";
@@ -20,20 +21,52 @@ export function powershellArgs(command: string): string[] {
     Buffer.from(command, "utf16le").toString("base64"),
   ];
 }
+/** Fixed OS utility startup paths; never inherit provider/app credentials or user module search paths. */
+export function windowsUtilityEnvironment(): Record<string, string> {
+  const executable = systemFile("WindowsPowerShell\\v1.0\\powershell.exe"),
+    psHome = win32.dirname(executable),
+    root = win32.dirname(win32.dirname(psHome)),
+    home = userInfo().homedir;
+  // psHome is <SystemRoot>/System32/WindowsPowerShell/v1.0; derive SystemRoot from the trusted executable.
+  const systemRoot = win32.dirname(root),
+    local = win32.join(home, "AppData", "Local");
+  return {
+    SystemRoot: systemRoot,
+    WINDIR: systemRoot,
+    USERPROFILE: home,
+    LOCALAPPDATA: local,
+    APPDATA: win32.join(home, "AppData", "Roaming"),
+    TEMP: win32.join(local, "Temp"),
+    TMP: win32.join(local, "Temp"),
+    PATH: [win32.join(systemRoot, "System32"), systemRoot, psHome].join(";"),
+    PSModulePath: win32.join(psHome, "Modules"),
+  };
+}
 function literal(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 async function ps(command: string): Promise<string> {
-  const { stdout } = await exec(
+  const pending = exec(
     systemFile("WindowsPowerShell\\v1.0\\powershell.exe"),
     powershellArgs(`$ErrorActionPreference='Stop';${command}`),
     {
       windowsHide: true,
       timeout: 10000,
       maxBuffer: 65536,
-      env: { SystemRoot: process.env.SystemRoot ?? "" },
+      env: windowsUtilityEnvironment(),
     },
   );
+  pending.child.stdin?.on("error", () => {});
+  pending.child.stdin?.end(); // Public ChildProcess API: PowerShell must receive EOF on redirected stdin.
+  let stdout: string;
+  try {
+    ({ stdout } = await pending);
+  } catch (error) {
+    const e = error as { code?: string | number; signal?: string; killed?: boolean };
+    throw new Error(
+      `Windows permission utility failed (code=${e.code ?? "unknown"}, signal=${e.signal ?? "none"}, killed=${e.killed === true})`,
+    );
+  }
   return stdout.trim();
 }
 export function windows(): PlatformAdapter {

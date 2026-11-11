@@ -5,12 +5,13 @@ import { join } from "node:path";
 import test from "node:test";
 import type { CommitReceipt, LocalObservation, LocalPrepare } from "fortipi-contract/executor";
 import { commitDigest, localStageDigest, manifestDigest } from "fortipi-contract/executor";
-import { defaults } from "../dist/config.js";
+import { adapter, defaults } from "../dist/config.js";
 import { hash } from "../dist/policy.js";
 import { HttpTransport } from "../dist/transport.js";
 import { LocalWorkspace } from "../dist/workspace/local.js";
 import type { Manifest } from "../dist/workspace/manifest.js";
 import { scan } from "../dist/workspace/manifest.js";
+import { Snapshots } from "../dist/workspace/snapshot.js";
 import { Staging } from "../dist/workspace/staging.js";
 import {
   assignment,
@@ -21,7 +22,7 @@ import {
   receiptScope,
   requestScope,
 } from "./fixtures/daemon.ts";
-import { relayFixture } from "./fixtures/transport.ts";
+import { relayFixture, snapshotFixture } from "./fixtures/transport.ts";
 
 async function setup() {
   const f = await fixture(),
@@ -486,6 +487,73 @@ test("a stored preparation cannot be revived after expiry; observational closure
     await assert.rejects(f.local.request(apply), /expired_lease/);
     await assert.rejects(readFile(join(f.rootPath, "alpha")), { code: "ENOENT" });
   } finally {
+    await f.cleanup();
+  }
+});
+test("cloud snapshot bytes materialize and a lost upload acknowledgment retries only the same staged identity", async () => {
+  const f = await fixture(),
+    original = Buffer.from("immutable original bytes"),
+    originalSha = hash(original),
+    manifest: Manifest = {
+      version: 1,
+      entries: [
+        { path: "file", type: "file", mode: 420, size: original.length, sha256: originalSha },
+      ],
+    },
+    baseHash = await manifestDigest(manifest),
+    server = await snapshotFixture(manifest, baseHash, new Map([[originalSha, original]]));
+  try {
+    f.profile.origin = server.origin;
+    const http = new HttpTransport(f.profile, fetch, true),
+      snapshots = new Snapshots(join(f.directory, "scratch"), f.ledger, http, adapter()),
+      a = await assignment("never spawned"),
+      root = await snapshots.materialize(a);
+    assert.equal((await root.read("file", 100)).toString(), "immutable original bytes");
+    const changed = Buffer.alloc(600000, 0x61);
+    await root.write("file", changed, 420);
+    await root.write("empty", Buffer.alloc(0), 420);
+    const requestId = randomUUID(),
+      commitId = randomUUID();
+    await assert.rejects(snapshots.stage(a, root, requestId, commitId));
+    const intent = f.ledger.record<{ requestId: string; commitId: string }>(
+      "stages",
+      `upload_intent_${a.identity.executionId}`,
+    );
+    assert.equal(intent?.requestId, requestId);
+    assert.equal(intent?.commitId, commitId);
+    const result = await snapshots.stage(a, root, randomUUID(), randomUUID());
+    assert.equal(result.uploadId, "server_upload");
+    assert.equal(result.commitId, commitId);
+    assert.equal(result.stageId, "public_stage");
+    assert.deepEqual(server.begins[0], server.begins[1]);
+    assert.equal(
+      server.requests.some((r) => r.endsWith("/commit")),
+      false,
+    );
+    assert.equal(
+      server.requests.filter((r) => r.includes(`/blobs/${hash(Buffer.alloc(0))}/chunks/`)).length,
+      0,
+      "zero bytes need no public PUT",
+    );
+    assert.equal(original.toString(), "immutable original bytes");
+    assert.equal(
+      f.ledger.get(a.identity.jobId),
+      undefined,
+      "snapshot/staging cannot create a native execution",
+    );
+    await assert.rejects(snapshots.cleanup(a, result.manifestHash), /terminal evidence/);
+    await assert.rejects(
+      snapshots.stage(
+        { ...a, identity: { ...a.identity, lease: { ...a.identity.lease, expiresAt: 0 } } },
+        root,
+        requestId,
+        commitId,
+      ),
+      /expired/,
+    );
+    assert.equal(original.toString(), "immutable original bytes");
+  } finally {
+    await server.close();
     await f.cleanup();
   }
 });

@@ -72,6 +72,10 @@ export class SafeRoot {
     )
       throw new Error("workspace root identity changed");
   }
+  private async spelling(path: string): Promise<void> {
+    if (this.platform.platform === "win32" && (await realpath(path)) !== path)
+      throw new Error("noncanonical filesystem alias or case spelling");
+  }
   async ancestors(path: string): Promise<{ path: string; stat: Stats }[]> {
     validateRelativePath(path);
     await this.verify();
@@ -84,6 +88,7 @@ export class SafeRoot {
       current = join(current, part);
       const stat = await lstat(current);
       await this.platform.verifyEntry(current, stat);
+      await this.spelling(current);
       if (!stat.isDirectory()) throw new Error("non-directory ancestor");
       result.push({ path: current, stat });
     }
@@ -94,6 +99,7 @@ export class SafeRoot {
     for (const entry of chain) {
       const stat = await lstat(entry.path);
       await this.platform.verifyEntry(entry.path, stat);
+      await this.spelling(entry.path);
       if (!sameFile(stat, entry.stat)) throw new Error("ancestor replaced");
     }
   }
@@ -108,6 +114,7 @@ export class SafeRoot {
       native = this.native(path),
       before = await lstat(native);
     await this.platform.verifyEntry(native, before);
+    await this.spelling(native);
     await this.recheck(chain);
     if (!sameFile(before, await lstat(native))) throw new Error("entry replaced");
     return before;

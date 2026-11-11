@@ -1,8 +1,10 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import type { Assignment, LocalPrepare } from "fortipi-contract/executor";
 import { assignmentDigest, operationDigest } from "fortipi-contract/executor";
 import type { Profile } from "../../dist/config.js";
@@ -319,4 +321,80 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
   }, "child marker missing");
   void guard;
   process.exit(77); // Abruptly release OS locks without daemon cleanup; test child self-exits shortly.
+}
+if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === "windows-probe") {
+  if (process.platform !== "win32")
+    throw new Error("windows-probe requires an actual Windows host");
+  const { powershellArgs, windowsUtilityEnvironment } = await import(
+      "../../dist/platform/windows.js"
+    ),
+    execute = promisify(execFile),
+    environment = windowsUtilityEnvironment(),
+    executable = win32.join(
+      environment.SystemRoot ?? "",
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "powershell.exe",
+    );
+  const marker = "fortipi-native-probe",
+    command = `$ErrorActionPreference='Stop';[Console]::Out.Write('${marker}')`;
+  let controlledEofPassed = false;
+  for (const controlled of [false, true])
+    for (const eof of [false, true]) {
+      const started = performance.now(),
+        pending = execute(executable, powershellArgs(command), {
+          env: controlled ? environment : { SystemRoot: environment.SystemRoot ?? "" },
+          timeout: 10000,
+          maxBuffer: 8192,
+          windowsHide: true,
+        });
+      pending.child.stdin?.on("error", () => {});
+      if (eof) pending.child.stdin?.end();
+      try {
+        const r = await pending,
+          matched = r.stdout === marker;
+        process.stdout.write(
+          `${JSON.stringify({ phase: "startup", controlledEnvironment: controlled, stdinEof: eof, elapsedMs: Math.round(performance.now() - started), exitCode: 0, markerMatched: matched, stdoutBytes: Buffer.byteLength(r.stdout), stderrBytes: Buffer.byteLength(r.stderr) })}\n`,
+        );
+        if (controlled && eof) controlledEofPassed = matched;
+      } catch (error) {
+        const e = error as {
+          code?: string | number;
+          signal?: string;
+          killed?: boolean;
+          stdout?: string;
+          stderr?: string;
+        };
+        process.stdout.write(
+          `${JSON.stringify({ phase: "startup", controlledEnvironment: controlled, stdinEof: eof, elapsedMs: Math.round(performance.now() - started), exitCode: e.code ?? null, signal: e.signal ?? null, killed: e.killed === true, stdoutBytes: Buffer.byteLength(e.stdout ?? ""), stderrBytes: Buffer.byteLength(e.stderr ?? "") })}\n`,
+        );
+      }
+    }
+  const path = await realpath(await mkdtemp(join(tmpdir(), "fortipi-windows-probe-"))),
+    started = performance.now();
+  let aclPassed = false;
+  try {
+    const p = adapter();
+    await p.protect(path, true);
+    await p.verifyProtection(path, true);
+    const file = join(path, "synthetic.txt");
+    await writeFile(file, "synthetic");
+    await p.protect(file, false);
+    await p.verifyProtection(file, false);
+    aclPassed = true;
+    process.stdout.write(
+      `${JSON.stringify({ phase: "actual-dacl", elapsedMs: Math.round(performance.now() - started), protectedDirectoryAndFile: true })}\n`,
+    );
+  } catch (error) {
+    process.stdout.write(
+      `${JSON.stringify({ phase: "actual-dacl", elapsedMs: Math.round(performance.now() - started), protectedDirectoryAndFile: false, reason: error instanceof Error ? error.message : "unknown" })}\n`,
+    );
+  } finally {
+    await rm(path, { recursive: true, force: true });
+  }
+  process.stdout.write(
+    `${JSON.stringify({ phase: "normal-exit", controlledEofPassed, aclPassed })}\n`,
+  );
+  if (!controlledEofPassed || !aclPassed) process.exitCode = 1;
 }
