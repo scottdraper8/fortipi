@@ -228,5 +228,23 @@
       "source": "https://www.python.org/downloads/release/python-3152/",
       "install": "SHA-pinned setup-python verifies selected GitHub-hosted CPython release; actual OS installation evidence remains CI"
     }
+  },
+  "buildx": {
+    "version": "0.38.2",
+    "source": "3c4cbd35852fc1a476923627a780a7836c28b654",
+    "url": "https://github.com/docker/buildx/releases/download/v0.38.2/buildx-v0.38.2.linux-amd64",
+    "sha256": "7992ec09413b80ff57ba4e081f56fc833d7bac1d5e71143c6c809e7e6065f6d6",
+    "checksumsSha256": "726d5f7e7f79d5848c2cd5f59f368f4bb3eeec3697a40f6363753ab1cc298afe",
+    "license": "Apache-2.0",
+    "licensePath": "tools/unstale/licenses/docker/buildx/3c4cbd35852fc1a476923627a780a7836c28b654/LICENSE",
+    "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "securityReference": "https://github.com/docker/buildx/releases/tag/v0.38.2",
+    "reviewedAt": "2026-11-11T04:20:01.980Z",
+    "advisoryDisposition": {
+      "id": "GHSA-gwr2-q96m-6682",
+      "reference": "https://github.com/docker/buildx/security/advisories/GHSA-gwr2-q96m-6682",
+      "reason": "Publisher description says fixed in v0.37.2 despite stale unbounded structured affected range; exact v0.38.2 is later. CI invokes reviewed Dockerfile build, never bake/rawjson or untrusted definitions. Other published advisories fixed by v0.38.1 or earlier."
+    },
+    "observation": "Official latest non-prerelease; GitHub asset digest and publisher checksum match downloaded Linux amd64 bytes; standalone CI tool only, no product distribution. Actual Linux plugin/default driver build proof remains required."
   }
 }
