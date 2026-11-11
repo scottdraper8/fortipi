@@ -195,6 +195,53 @@ test("real sockets: heartbeat writes nothing, reservation precedes lease, duplic
       1,
       "unknown query never authorizes a second assign",
     );
+    const dispatcher = await h.mint({
+      requestId: uuid(),
+      role: "client",
+      grants: [{ grantId: "dispatch-only", version: 1, resources: scope(["jobs.dispatch"]) }],
+    });
+    const dispatchAuth = await h.auth(dispatcher.token);
+    assert.equal(
+      (await h.cp.queryExecution(dispatchAuth, identity)).ok,
+      false,
+      "dispatch authority does not grant job reads",
+    );
+    value(await h.cp.assignOnce(dispatchAuth, assignment));
+    assert.equal(
+      channel.frames.filter((f) => f.type === "job.assign").length,
+      1,
+      "dispatch-only retry observes the original send claim without a hidden read grant",
+    );
+    const canceller = await h.mint({
+      requestId: uuid(),
+      role: "client",
+      grants: [{ grantId: "cancel-only", version: 1, resources: scope(["jobs.cancel"]) }],
+    });
+    const cancelAuth = await h.auth(canceller.token);
+    assert.equal((await h.cp.queryExecution(cancelAuth, identity)).ok, false);
+    const cancelling = h.cp.cancelExecution(cancelAuth, {
+      identity,
+      requestId: uuid(),
+      reason: "operator-request",
+    });
+    // A rejection must be observed before waiting for a frame the old hidden read gate prevents.
+    const cancellationFrame = await Promise.race([
+      channel.wait("job.cancel"),
+      cancelling.then((result) => {
+        value(result);
+        return undefined;
+      }),
+    ]);
+    assert.ok(
+      cancellationFrame?.type === "job.cancel",
+      "cancel-only authority must reach the actual executor",
+    );
+    channel.send({
+      type: "job.cancel_ack",
+      requestId: cancellationFrame.requestId,
+      payload: { identity, disposition: { state: "unknown", possibleExternalEffects: true } },
+    });
+    assert.equal(value(await cancelling).state, "unknown");
     const recipient = h.env.AGENT_SESSIONS.getByName("agent");
     const resetAt = Date.now() + 2400;
     await recipient.setQuotaFault({

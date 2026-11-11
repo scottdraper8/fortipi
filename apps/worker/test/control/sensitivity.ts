@@ -19,6 +19,13 @@ try {
   );
   for (const mutation of [
     {
+      file: "dispatch.ts",
+      pattern: /requireGrant\(ctx, "jobs\.dispatch", grantResources\);/,
+      replacement: "",
+      test: "dispatch-authorization.test.ts",
+      oracle: "a read-only reservation cannot admit dispatch intent",
+    },
+    {
       file: "executors.ts",
       pattern: /(const epoch = this\.store\.tx\(\(\) => \{)\s*this\.context\(identity\);/,
       replacement: "$1",

@@ -70,6 +70,11 @@ first send before calling `socket.send`. Concurrent duplicates observe that
 claim. Lost acknowledgments, disconnects and restart permit query of the same
 execution, never another assign or a target switch. Cancellation retries retain
 one identity and report actual disposition/possible external effects.
+Intent and assignment require `jobs.dispatch`; cancellation requires `jobs.cancel`
+over the retained agent, conversation, workspace, tool and target together.
+Query requires `jobs.read`. Mutation authority does not grant public job reads,
+and a retained intent or send receipt cannot bypass current credential/executor
+floors.
 
 Public writers use explicit acquire, renew and release lease routes under
 `workspace.write`. Their durable business request binds its body and the first
