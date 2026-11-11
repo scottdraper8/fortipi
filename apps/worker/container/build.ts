@@ -19,8 +19,10 @@ import { paragraphs, requiredPackages } from "./debian.ts";
 import { verifyNativeCompatibility } from "./elf-compatibility.ts";
 import { freezeEmbedded, prepareEmbedded } from "./embedded.ts";
 import { authenticateIndexes } from "./fuse-security.ts";
-import { verifyBuildMetadata, verifyImageArchive } from "./image-archive.ts";
+import { inspectImageArchive, verifyBuildMetadata } from "./image-archive.ts";
+import { filePolicy, type PrunePolicy, pruningPolicy } from "./image-prune.ts";
 import { imageInputs } from "./inputs.ts";
+import { compareRootfs, scanRootfs } from "./rootfs.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const output = resolve(root, "apps/worker/dist/container");
@@ -56,6 +58,8 @@ interface Freeze {
   fusePackagesIndexSha256: string;
   fuseSourcesIndexSha256: string;
   packages: PackagePin[];
+  inputInstalled: PackagePin[];
+  pruning: PrunePolicy;
   installed: PackagePin[];
   sources: SourcePin[];
   layers: { digest: string; size: number }[];
@@ -228,6 +232,19 @@ async function freeze(): Promise<Freeze> {
   const packages = packageFields.map(toPin);
   const layer = layers[1];
   check(layer, "Missing Debian layer");
+  const metadata = JSON.parse(
+    await readFile(resolve(root, "tools/unstale/platform-tools.json"), "utf8"),
+  ) as { images: { digest: string; config: string }[] };
+  const baseConfig = metadata.images.find(
+    (pin) => pin.digest === imageInputs.debian.split("@")[1],
+  )?.config;
+  check(baseConfig, "Missing exact Debian public config");
+  const pruning = await pruningPolicy(
+    resolve(output, `${layer.digest.slice(7)}.tgz`),
+    layer.digest,
+    resolve(output, "downloads", baseConfig.slice(7)),
+    baseConfig,
+  );
   // Select exactly the dpkg status file from the hash-verified official layer.
   const status = command("tar", [
     "-xOf",
@@ -244,7 +261,7 @@ async function freeze(): Promise<Freeze> {
         candidate.name === entry.get("Package") && candidate.version === entry.get("Version"),
     );
     if (!pin) {
-      const recorded = previous.installed.find(
+      const recorded = (previous.inputInstalled ?? previous.installed).find(
         (pin) => pin.name === entry.get("Package") && pin.version === entry.get("Version"),
       );
       if (recorded) {
@@ -286,7 +303,13 @@ async function freeze(): Promise<Freeze> {
   const all = [
     ...installed.filter((pin) => !additions.some((item) => item.name === pin.name)),
     ...additions,
-  ].sort((a, b) => a.name.localeCompare(b.name));
+  ]
+    .filter((pin) => pin.name !== "apt" && pin.name !== "sqv")
+    .sort((a, b) => a.name.localeCompare(b.name));
+  check(
+    installed.length === 78 && all.length === 79,
+    "Unexpected exact input/final package inventory",
+  );
   const sourceFields = [...authenticated.sources, authenticated.fuseSource];
   const sourcePins: SourcePin[] = [];
   const identities = [
@@ -353,6 +376,8 @@ async function freeze(): Promise<Freeze> {
     fusePackagesIndexSha256: authenticated.fusePackagesIndexSha256,
     fuseSourcesIndexSha256: authenticated.fuseSourcesIndexSha256,
     packages: additions,
+    inputInstalled: installed.sort((a, b) => a.name.localeCompare(b.name)),
+    pruning,
     installed: all,
     sources: sourcePins,
     layers,
@@ -606,6 +631,35 @@ async function build(pin: Freeze): Promise<void> {
   );
   const buildkit = command("docker", ["buildx", "inspect", "--bootstrap"]);
   check(buildkit.includes(`v${imageInputs.buildkit}`), "Use reviewed BuildKit");
+  const cleanedMetadata = resolve(output, "cleaned-buildx-metadata.json");
+  command("docker", [
+    "buildx",
+    "build",
+    "--platform",
+    "linux/amd64",
+    "--network=none",
+    "--provenance=false",
+    "--load",
+    "--target",
+    "cleaned",
+    "--metadata-file",
+    cleanedMetadata,
+    "--tag",
+    "fortipi-computerd:cleaned",
+    context,
+  ]);
+  const cleanedId = command("docker", [
+    "image",
+    "inspect",
+    "fortipi-computerd:cleaned",
+    "--format",
+    "{{.Id}}",
+  ]).trim();
+  check(/^sha256:[a-f0-9]{64}$/.test(cleanedId), "Missing actual cleaned image ID");
+  const cleanedArchive = resolve(output, "cleaned-stage.tar");
+  command("docker", ["save", "--output", cleanedArchive, cleanedId]);
+  const cleaned = await inspectImageArchive(cleanedArchive, cleanedId, { filesystem: true });
+  verifyBuildMetadata(JSON.parse(await readFile(cleanedMetadata, "utf8")), cleaned.saved);
   const buildMetadata = resolve(output, "buildx-metadata.json");
   command("docker", [
     "buildx",
@@ -631,7 +685,21 @@ async function build(pin: Freeze): Promise<void> {
   check(/^sha256:[a-f0-9]{64}$/.test(imageId), "Missing actual built image ID");
   const archive = resolve(output, "image.tar");
   command("docker", ["save", "--output", archive, imageId]);
-  const saved = await verifyImageArchive(archive, imageId);
+  const inspected = await inspectImageArchive(archive, imageId, { pruning: pin.pruning });
+  const saved = inspected.saved;
+  compareRootfs(cleaned.filesystem, inspected.filesystem);
+  const statArgs = ["--rm", "--network=none", "--entrypoint", "stat"];
+  const metadataArgs = ["-c", "%u:%g:%a", "/", "/tmp", "/usr/bin/fusermount3"];
+  const stageModes = command("docker", ["run", ...statArgs, cleanedId, ...metadataArgs]);
+  const finalModes = command("docker", ["run", ...statArgs, imageId, ...metadataArgs]);
+  check(
+    stageModes === finalModes && finalModes.trim().split("\n")[2] === "0:0:4755",
+    "Actual root/tmp/helper ownership or permissions changed",
+  );
+  await writeFile(
+    resolve(output, "filesystem-preservation.json"),
+    `${JSON.stringify({ schemaVersion: 1, cleanedImageId: cleanedId, finalImageId: imageId, entries: inspected.filesystem.size, bytesLinksOwnersModesRawXattrsCompared: true, fuseHelperMode: "4755", fuseHelperUid: 0, fuseHelperGid: 0, allConveyedLayersAndBlobsAudited: true, removedExecutablePaths: pin.pruning.executables.length, removedElfHashes: pin.pruning.executables.filter((item) => item.elf).length, runtimeConfigChecked: true, runtimeVerified: false }, null, 2)}\n`,
+  );
   const exporter = verifyBuildMetadata(JSON.parse(await readFile(buildMetadata, "utf8")), saved);
   const builtManifestDigest = saved.manifest.digest;
   const inventory = command("docker", [
@@ -721,7 +789,7 @@ async function build(pin: Freeze): Promise<void> {
   await writeFile(resolve(output, "installed-packages.txt"), inventory);
   await writeFile(
     resolve(output, "image-metadata.json"),
-    `${JSON.stringify({ schemaVersion: 1, sourceCommit, computerSource: imageInputs.source, computerSourceArchiveSha256: imageInputs.sourceArchiveSha256, embeddedNodeVersion: imageInputs.embeddedNodeVersion, embeddedInventorySha256: await fileDigest(resolve(here, "embedded-freeze.json")), licenseInventorySha256: await fileDigest(resolve(output, "license-inventory.json")), sourceKitSha256: await fileDigest(resolve(output, "sources-and-notices.tar")), installedSourceInventorySha256: await fileDigest(resolve(output, "installed-source-inventory.json")), computerVersion: imageInputs.computerVersion, platform: "linux/amd64", inputDigests: [imageInputs.computerd, imageInputs.debian], imageId, builtManifestDigest, builtManifestSource: "docker-save-oci", savedImage: saved, ...exporter, buildMetadataSha256: await fileDigest(buildMetadata), archiveSha256: await fileDigest(archive), inventorySha256: digest(inventory), freezeSha256: digest(await readFile(resolve(here, "debian-freeze.json"))), registryDigest: null, runtimeVerified: false, licenseReviewRequired: true }, null, 2)}\n`,
+    `${JSON.stringify({ schemaVersion: 1, sourceCommit, computerSource: imageInputs.source, computerSourceArchiveSha256: imageInputs.sourceArchiveSha256, embeddedNodeVersion: imageInputs.embeddedNodeVersion, embeddedInventorySha256: await fileDigest(resolve(here, "embedded-freeze.json")), licenseInventorySha256: await fileDigest(resolve(output, "license-inventory.json")), sourceKitSha256: await fileDigest(resolve(output, "sources-and-notices.tar")), filesystemPreservationSha256: await fileDigest(resolve(output, "filesystem-preservation.json")), pruningPolicySha256: digest(JSON.stringify(pin.pruning)), inputInventorySha256: digest(JSON.stringify(pin.inputInstalled)), runtimeImageConfigSha256: digest(JSON.stringify(inspected.configuration)), installedSourceInventorySha256: await fileDigest(resolve(output, "installed-source-inventory.json")), computerVersion: imageInputs.computerVersion, platform: "linux/amd64", inputDigests: [imageInputs.computerd, imageInputs.debian], imageId, builtManifestDigest, builtManifestSource: "docker-save-oci", savedImage: saved, ...exporter, buildMetadataSha256: await fileDigest(buildMetadata), archiveSha256: await fileDigest(archive), inventorySha256: digest(inventory), freezeSha256: digest(await readFile(resolve(here, "debian-freeze.json"))), registryDigest: null, runtimeVerified: false, licenseReviewRequired: true }, null, 2)}\n`,
   );
 }
 async function main(): Promise<void> {
@@ -755,7 +823,7 @@ async function main(): Promise<void> {
     ]),
   );
   await verifyNativeCompatibility(output, embedded.addon, embedded.binary, signedBinaries);
-  await sourceKit(names);
+  await sourceKit(names, pin.pruning);
   if (process.argv.includes("--prepare") || process.argv.includes("--freeze-licenses")) return;
   await build(pin);
   if (process.argv.includes("--verify")) {
@@ -763,7 +831,7 @@ async function main(): Promise<void> {
     command(process.execPath, [fixture, "--image", "fortipi-computerd:verified"]);
   }
 }
-async function sourceKit(sources: NamedSource[]): Promise<void> {
+async function sourceKit(sources: NamedSource[], pruning: PrunePolicy): Promise<void> {
   const recipe = resolve(output, "source-kit-recipe");
   await mkdir(recipe, { recursive: true });
   const recipeFiles = [
@@ -775,6 +843,8 @@ async function sourceKit(sources: NamedSource[]): Promise<void> {
     "embedded.ts",
     "inputs.ts",
     "image-archive.ts",
+    "image-prune.ts",
+    "rootfs.ts",
     "debian-freeze.json",
     "debian-licenses.json",
     "embedded-freeze.json",
@@ -790,6 +860,8 @@ async function sourceKit(sources: NamedSource[]): Promise<void> {
   command("git", ["archive", "--format=tar", "--output", sourceArchive, sourceCommit], {
     cwd: root,
   });
+  const forbidden = filePolicy(pruning).hashes;
+  await scanRootfs(createReadStream(sourceArchive), { paths: new Set(), hashes: forbidden });
   let recipeMatchesCommit = true;
   for (const name of recipeFiles) {
     try {
@@ -844,6 +916,7 @@ async function sourceKit(sources: NamedSource[]): Promise<void> {
   const inventory: Record<string, string> = {};
   await parallel(files, async (path) => {
     inventory[path] = await fileDigest(resolve(output, path));
+    check(!forbidden.has(inventory[path]), "Old runtime binary/layer in source kit");
   });
   inventory["context/notices"] = digest(
     JSON.stringify(await fileHashes(resolve(context, "notices"))),
@@ -861,6 +934,18 @@ async function sourceKit(sources: NamedSource[]): Promise<void> {
     },
     [...files, "context/notices", "source-kit-inventory.json"],
   );
+  const noticeFiles = Object.keys(await fileHashes(resolve(context, "notices"))).map(
+    (path) => `context/notices/${path}`,
+  );
+  const expected = new Set([...files, ...noticeFiles, "source-kit-inventory.json"]);
+  const conveyed = await scanRootfs(createReadStream(resolve(output, "sources-and-notices.tar")), {
+    paths: new Set(),
+    hashes: forbidden,
+  });
+  for (const [path, entry] of conveyed)
+    if (entry.type !== "Directory")
+      check(expected.delete(path), "Unexpected source-kit file or binary archive");
+  check(expected.size === 0, "Missing source-kit file");
 }
 function dpkgField(name: string): string {
   return `${String.fromCharCode(36)}{${name}}`;

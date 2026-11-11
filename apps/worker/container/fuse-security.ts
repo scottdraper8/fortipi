@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { promisify } from "node:util";
+import { promisify, TextDecoder } from "node:util";
 import { type Fields, paragraphs } from "./debian.ts";
 import { imageInputs } from "./inputs.ts";
 

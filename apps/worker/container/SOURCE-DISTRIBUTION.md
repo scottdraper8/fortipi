@@ -6,7 +6,7 @@ this exact kit alongside the image and maintain that access. A developer cache o
 an expiring CI artifact does not satisfy this delivery requirement.
 
 The kit contains the exact Debian source archives, `.dsc` descriptions and Debian
-patch/build files for the installed packages and their recorded `Built-Using` and
+patch/build files for the final installed packages and their recorded `Built-Using` and
 `Static-Built-Using` dependencies. Extract each source using its `.dsc` with
 `dpkg-source -x`, and use its Debian build/install instructions in a compatible
 build environment. Epochs, source versions and binary rebuild versions remain
@@ -22,7 +22,7 @@ installer scripts and exact platform-tool metadata. `source-revision.json` binds
 its archive hash, Git commit, Node/pnpm/tar versions, root manifest/lock and platform
 metadata. `source-kit-recipe/` additionally carries the image recipe and metadata
 for independent comparison, including `debian.ts`.
-The recipe also includes `image-archive.ts`, which hashes the actual saved OCI
+The recipe also includes `image-archive.ts`, `image-prune.ts` and `rootfs.ts`, which hash the actual saved OCI
 manifest, config and layers. The saved manifest identity is distinct from an
 exporter config identity and from any future published registry manifest.
 
@@ -42,6 +42,40 @@ Run `node apps/worker/container/build.ts --prepare` to verify/reconstruct the ki
 or `--verify` for the offline image and runtime fixture. Generated image recipes
 must match their recorded commit; construction-only kits mark mismatches and are
 not distributable images. No model/deployment credentials are needed in this flow.
+
+The final runtime contains **79 packages / 56 source identities / 182 source
+payloads**, including the retained libapt-pkg7.0 library and its apt source.
+`debian-freeze.json.inputInstalled` separately records all78 packages of the
+original immutable Debian input. It is provenance, not a statement that every
+input package or binary is conveyed in the final image. The intermediate stage
+offline-installs the exact frozen additions and normally purges only apt and sqv.
+The final stage starts FROM scratch and copies the cleaned rootfs; deleting in a
+later inherited layer would leave the original executable bytes distributed.
+No autoremove, package-manager force option, floating installer or dependency
+upgrade is used. The image supplies shell/Computer/FUSE execution; scripts that
+require apt or sqv must use a separately reviewed image rebuild and deployment.
+Runtime package installation through apt is not provided.
+
+The final image explicitly sets PATH, PORT, MOUNT_POINT, FUSE_MOUNT, root uid/gid,
+workdir, entrypoint, empty default command, default shell, exposed port and stop
+signal. These restore the prior required behavior instead of inheriting defaults
+from scratch. Image verification compares actual configuration, exact package and
+source inventories, and the cleaned versus final filesystem: retained bytes,
+numeric owners, modes/setuid, symlink and hardlink groups, raw PAX xattrs including
+capabilities. It requires the configured fusermount3 root ownership and4755 mode;
+effective privileges and a working mount still need the supported runtime proof.
+
+Every final saved layer is inspected before whiteout merging. All25 removed
+executable paths, aliases and19 original ELF hashes are forbidden, including
+renamed copies. Original Debian binary-bearing layer digests/DiffIDs and any
+unreferenced conveyed blob/file are rejected. Known Docker compatibility aliases
+must match verified image layers/config. The source kit has an explicit member
+inventory; its Git source archive and direct members are scanned for original
+runtime binary/layer bytes. It ships no base/intermediate image archive or build
+cache. Public input identities/references remain in the source provenance.
+The ignored cleaned-stage image/archive is verification-only and must not be
+included in release packaging. Final-image absence, source delivery and rights
+remain subject to independent artifact review.
 
 The FUSE3 runtime and library are Debian amd64 **3.18.3-1**, selected only from the
 signed SID indexes at `20261110T000000Z`. All other dependencies retain the frozen
@@ -84,7 +118,10 @@ replacement or debugging rights in these notices. Preserve all applicable
 copyright notices, GPL/LGPL texts, GCC exceptions and other component terms.
 
 Release remains blocked until the final image inventory and source kit receive
-independent review, including the static LGPL rebuild/relink mechanism and actual
-interface-compatible shared-library replacement. Publish the actual registry
+independent review and actual interface-compatible shared-library replacement is
+demonstrated through computerd/FUSE. Removing the unused sqv static-Rust consumer
+avoids its static relink burden only when the actual final distributed blobs and
+source kit pass the absence checks. It is not a blanket licensing or security
+approval, and the earlier unpruned image cannot inherit that claim. Publish the actual registry
 manifest digest separately from the local image ID and input digests. Source and
 license evidence does not certify vulnerability status or runtime/FUSE behavior.
