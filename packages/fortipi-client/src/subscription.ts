@@ -12,6 +12,8 @@ import { openStream } from "./transport.js";
 import type { ConnectionStatus, CursorScope } from "./types.js";
 
 export interface SubscriptionOptions {
+  /** Concrete owner used to scope the one-use connection ticket. */
+  agentId: string;
   signal?: AbortSignal;
   /** Only supply after together with the corresponding already applied projection. */
   after?: number;
@@ -47,7 +49,12 @@ export function subscribe(
   let scope = options.scope ? structuredClone(options.scope) : undefined;
   let initialized = options.after !== undefined;
   const verifiedPrevious = new Map<number, string>();
-  if (scope && (scope.origin !== client.http.origin || scope.conversationId !== conversationId)) {
+  if (
+    scope &&
+    (scope.origin !== client.http.origin ||
+      scope.agentId !== options.agentId ||
+      scope.conversationId !== conversationId)
+  ) {
     initialized = false;
     cursor.replace(0);
     scope = undefined;
@@ -74,6 +81,7 @@ export function subscribe(
     }
     const next: CursorScope = {
       origin: client.http.origin,
+      agentId: options.agentId,
       conversationId,
       identity: structuredClone(identity),
     };
@@ -93,6 +101,7 @@ export function subscribe(
     const value = await client.conversations.get(conversationId, { signal });
     if (
       value.conversation.conversationId !== conversationId ||
+      value.conversation.agentId !== options.agentId ||
       value.retainedFloor > value.lastEventSeq
     )
       throw new FortiPiError("invalid_wire");
@@ -230,7 +239,7 @@ export function subscribe(
           onlineSince = 0;
           status(retries ? "reconnecting" : "connecting");
           await client.negotiate(signal);
-          let liveTicket = await client.tickets.mint(conversationId, { signal });
+          let liveTicket = await client.tickets.mint(options.agentId, conversationId, { signal });
           for (let refreshes = 0; ; refreshes++) {
             const epoch = client.http.authenticationEpoch;
             await acceptTicket(liveTicket);
@@ -242,7 +251,7 @@ export function subscribe(
             )
               break;
             if (refreshes >= 2) throw new FortiPiError("unstable_credential_scope");
-            liveTicket = await client.tickets.mint(conversationId, { signal });
+            liveTicket = await client.tickets.mint(options.agentId, conversationId, { signal });
           }
           let requestId = "";
           const connection = openStream(

@@ -70,7 +70,7 @@ export async function smoke(controller: Controller, options: SmokeOptions = {}):
   try {
     observe("discovery");
     await controller.client.negotiate(signal);
-    if (options.conversationId) await controller.open(options.conversationId);
+    if (options.conversationId) await controller.open(options.conversationId, options.agentId);
     else {
       await controller.browse("agents");
       controller.agentId = options.agentId ?? controller.choices[0]?.id;
@@ -88,7 +88,7 @@ export async function smoke(controller: Controller, options: SmokeOptions = {}):
     await controller.disconnect();
     observe("offline", { cursor: saved, taskId: first.taskId });
     second = new Controller(new FortiPiClient(controller.client.http.options));
-    await second.open(conversationId);
+    await second.open(conversationId, controller.agentId);
     second.composer = "Reply briefly with the word replay.";
     const other = await second.send();
     await completed(second, other, signal);
