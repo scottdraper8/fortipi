@@ -1,4 +1,4 @@
-minimum_pre_commit_version: '4.7.0'
+minimum_pre_commit_version: "4.7.0"
 repos:
   - repo: local
     hooks:
@@ -8,13 +8,60 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: fortipi-biome
+        name: Format and lint TypeScript and metadata
+        entry: pnpm exec biome check --no-errors-on-unmatched
+        language: system
+        types_or: [ts, json]
+      - id: fortipi-foundation
+        name: Verify foundation and statically check tooling
+        entry: pnpm run verify:foundation
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: fortipi-pins
+        name: Verify exact pins and reviewed supply chain
+        entry: pnpm run check:pins
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: fortipi-typecheck
+        name: Typecheck every workspace and maintained tool
+        entry: pnpm run typecheck
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: fortipi-schema-drift
+        name: Check canonical schema generation drift
+        entry: pnpm run schema:check
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: fortipi-license-bundles
+        name: Verify licenses and distributed bundle bytes
+        entry: pnpm run check:licenses
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: fortipi-unstale
+        name: Refresh external unstale after dependency changes
+        entry: pnpm run unstale:check
+        language: system
+        pass_filenames: false
+        files: '(^|/)(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$'
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
     hooks:
       - id: check-added-large-files
-        args: ['--maxkb=500']
+        args: ["--maxkb=500"]
       - id: check-merge-conflict
       - id: check-yaml
+        exclude: '(^|/)pnpm-lock\.yaml$'
+      - id: check-yaml
+        alias: fortipi-lock-yaml
+        name: Check pnpm multi-document locks
+        files: '(^|/)pnpm-lock\.yaml$'
+        args: [--allow-multiple-documents]
       - id: check-json
       - id: check-symlinks
       - id: check-case-conflict

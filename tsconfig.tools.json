@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "lib": ["ES2024", "DOM", "DOM.Iterable"]
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "tools/unstale/**/*.ts",
+    "packages/*/scripts/**/*.ts",
+    "packages/*/test/**/*.ts",
+    "apps/worker/container/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": ["**/node_modules/**", "**/dist/**", ".agent-docs/**"]
+}

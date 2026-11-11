@@ -1,0 +1,28 @@
+{
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LINUX_CONTAINERS",
+        "class_name": "LinuxContainerHost"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v2-linux",
+      "new_sqlite_classes": ["LinuxContainerHost"]
+    }
+  ],
+  "containers": [
+    {
+      "class_name": "LinuxContainerHost",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "computerd": {
+          "dockerfile": "./container/Dockerfile",
+          "build_context": "./container"
+        }
+      }
+    }
+  ]
+}

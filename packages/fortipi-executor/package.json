@@ -1,0 +1,38 @@
+{
+  "name": "fortipi-executor",
+  "version": "0.1.0",
+  "description": "FortiPi executor",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/scottdraper8/fortipi.git",
+    "directory": "packages/fortipi-executor"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=26.13.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "licenses"
+  ],
+  "bin": {
+    "fortipi-executor": "./dist/bin.js"
+  },
+  "dependencies": {
+    "fortipi-contract": "workspace:*",
+    "ajv": "8.20.0"
+  }
+}

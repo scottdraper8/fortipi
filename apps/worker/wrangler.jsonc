@@ -1,0 +1,66 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "fortipi",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CONTROL_PLANE",
+        "class_name": "ControlPlane"
+      },
+      {
+        "name": "AGENT_SESSIONS",
+        "class_name": "AgentSession"
+      },
+      {
+        "name": "WORKSPACES",
+        "class_name": "WorkspaceObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ControlPlane", "AgentSession", "WorkspaceObject"]
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vars": {
+    "FORTIPI_CONFIG": {
+      "version": 1,
+      "infrastructure": {
+        "version": 1,
+        "profile": "free",
+        "accountPlan": "unknown",
+        "capabilities": [],
+        "bounds": {
+          "objectBytes": 134217728,
+          "installBytes": 536870912,
+          "headroomFraction": 0.25,
+          "fileBytes": 4194304,
+          "snapshotBytes": 16777216,
+          "stagingBytesPerWorkspace": 16777216,
+          "manifestEntries": 512,
+          "retainedVersions": 8,
+          "workspaceBytes": 67108864,
+          "inlineTailBytes": 32768,
+          "artifactBytes": 1048576,
+          "outputBytesPerJob": 8388608,
+          "conversationEvents": 2000,
+          "conversationBytes": 8388608,
+          "activeMutatingJobs": 1,
+          "queuedAdmissions": 4,
+          "requestsPerPrincipalMinute": 30,
+          "requestsPerInstallMinute": 120,
+          "sqlPageRows": 100,
+          "transferConcurrency": 4
+        }
+      }
+    }
+  }
+}

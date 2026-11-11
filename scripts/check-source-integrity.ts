@@ -22,7 +22,9 @@ for (const line of manifest.trimEnd().split("\n")) {
       throw new Error("Canonical source is outside the repository");
     }
     if (!(await stat(path)).isFile()) throw new Error("Canonical source is not a file");
-    const actual = createHash("sha256").update(await readFile(path)).digest("hex");
+    const actual = createHash("sha256")
+      .update(await readFile(path))
+      .digest("hex");
     if (actual !== expected) throw new Error("Canonical source changed");
   } catch {
     console.error(`Canonical source missing, invalid, or changed: ${JSON.stringify(name)}`);
