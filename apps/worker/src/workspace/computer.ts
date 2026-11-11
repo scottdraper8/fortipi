@@ -67,14 +67,20 @@ export class ComputerStore {
           "conflict",
           "Retired child",
         );
-        return existing;
+        if (this.state.get<boolean>("child-initialized")) return existing;
       }
-      const state: D.StoreState = { allocation, state: "writable", source: "child", version: 1 };
-      this.state.put("child", state);
+      const state: D.StoreState = existing ?? {
+        allocation,
+        state: "writable",
+        source: "child",
+        version: 1,
+      };
+      if (!existing) this.state.put("child", state);
       const ws = this.workspace();
       await ws.fs.mkdir("/.fortipi/blobs", { recursive: true });
       await ws.fs.mkdir("/.fortipi/staging", { recursive: true });
       await ws.fs.mkdir("/workspace", { recursive: true });
+      this.state.put("child-initialized", true);
       return state;
     });
   }

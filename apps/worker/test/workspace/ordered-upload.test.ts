@@ -55,23 +55,31 @@ test("ordered superseded puts, same-upload equal hashes and empty files retain e
       { kind: "put", path: "empty", mode: 420, size: 0, sha256: emptyHash },
     ];
     const manifestHash = await manifestDigest(manifest);
+    const beginInput: D.OperationRequest<"beginUpload"> = {
+      operationId: "beginUpload",
+      path: { workspaceId: "workspace" },
+      query: {},
+      body: {
+        requestId: "interrupt-init-ordered",
+        operationId: lease.operationId,
+        commitId: "ordered-commit",
+        lease,
+        baseRevision: lease.baseRevision,
+        manifest,
+        manifestHash,
+        mutations,
+      },
+    };
+    const interrupted = (await (
+      await server.fetch("/rpc", {
+        method: "POST",
+        body: JSON.stringify({ kind: "begin", input: beginInput }),
+      })
+    ).json()) as D.Outcome<unknown>;
+    assert.equal(interrupted.ok, false, "Initialization fault was not exercised");
     const begun = await call<{ status: 201; body: D.UploadStatus }>({
       kind: "begin",
-      input: {
-        operationId: "beginUpload",
-        path: { workspaceId: "workspace" },
-        query: {},
-        body: {
-          requestId: "ordered-upload",
-          operationId: lease.operationId,
-          commitId: "ordered-commit",
-          lease,
-          baseRevision: lease.baseRevision,
-          manifest,
-          manifestHash,
-          mutations,
-        },
-      },
+      input: beginInput,
     });
     for (const file of [old, bytes])
       for (let offset = 0, index = 0; offset < file.length; offset += 262144, index++) {

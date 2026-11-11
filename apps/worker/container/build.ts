@@ -1,7 +1,16 @@
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, lstat, mkdir, readdir, readFile, readlink, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { c as createTar, x as extractTar } from "tar";
@@ -345,6 +354,8 @@ async function freeze(): Promise<Freeze> {
 }
 async function prepare(pin: Freeze): Promise<void> {
   check(pin.snapshot === imageInputs.snapshot, "Wrong frozen snapshot");
+  // Regenerate derived build evidence; only verified raw content-addressed inputs are reusable.
+  await rm(context, { recursive: true, force: true });
   await mkdir(resolve(context, "packages"), { recursive: true });
   await mkdir(resolve(output, "sources"), { recursive: true });
   await copyFile(resolve(here, "Dockerfile"), resolve(context, "Dockerfile"));
@@ -412,6 +423,7 @@ async function sourceNotices(pin: Freeze): Promise<void> {
         continue;
       }
       const extracted = resolve(output, "source-notice-files", archive.sha256);
+      await rm(extracted, { recursive: true, force: true });
       await mkdir(extracted, { recursive: true });
       const files: string[] = [];
       const destination = extractTar({
@@ -550,6 +562,7 @@ async function build(pin: Freeze): Promise<void> {
   );
   const container = command("docker", ["create", imageId]).trim();
   const licenses = resolve(output, "licenses");
+  await rm(licenses, { recursive: true, force: true });
   await mkdir(licenses, { recursive: true });
   try {
     const status = resolve(output, "installed-status");

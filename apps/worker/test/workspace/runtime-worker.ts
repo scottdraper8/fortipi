@@ -9,6 +9,34 @@ import {
 
 /** Actual binding application plus a test-only post-transaction response barrier. */
 export class WorkspaceObject extends WorkspaceBase {
+  override async initializeStore(
+    ctx: D.AuthContext,
+    input: D.StoreAllocation,
+  ): Promise<D.Outcome<D.StoreState>> {
+    if (
+      input.role === "revision-store" &&
+      input.uploadId === "interrupt-init-ordered" &&
+      !this.state.get("test-init-interrupted")
+    ) {
+      // Fault after the real durable role boundary, before Computer's directory initialization.
+      this.state.put("test-init-interrupted", true);
+      this.state.put("child", {
+        allocation: input,
+        source: "child",
+        state: "writable",
+        version: 1,
+      } satisfies D.StoreState);
+      return {
+        ok: false,
+        code: "interrupted",
+        requestId: ctx.requestId,
+        message: "Injected lost initialization acknowledgment",
+        retryable: false,
+        details: { reason: "uncertain_effects" },
+      };
+    }
+    return super.initializeStore(ctx, input);
+  }
   override async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (path === "/__test/seed") {

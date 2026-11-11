@@ -686,6 +686,14 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         same(lease.credential, credential(ctx)) &&
         lease.registrationId === ctx.registrationId &&
         reservation &&
+        reservation.operationId === lease.operationId &&
+        reservation.target.generation === lease.executorGeneration &&
+        (reservation.target.kind === "executor"
+          ? reservation.target.executorId
+          : reservation.target.backendId) === lease.executorId &&
+        reservation.ownerKind === lease.ownerKind &&
+        (reservation.ownerKind !== "job" ||
+          (lease.ownerKind === "job" && reservation.jobId === lease.jobId)) &&
         (reservation.target.kind !== "executor" ||
           lease.executorGeneration >=
             (this.state.get<number>(`floor:executor:${lease.executorId}`) ?? 0)),
@@ -1304,7 +1312,11 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           );
         return row;
       });
-      if (prior) return { status: 201 as const, body: prior.status };
+      if (prior) {
+        if (prior.status.state === "open" && prior.status.expiresAt > Date.now())
+          unwrap(await this.stub(prior.allocation.childId).initializeStore(ctx, prior.allocation));
+        return { status: 201 as const, body: prior.status };
+      }
       const bytes = uploadStorageBytes(input.body);
       requireThat(
         uploadEntries(input.body).reduce(
@@ -3097,9 +3109,12 @@ function requestRange(request: Request, size: number): { start: number; end: num
   requireThat(!query || same(query, range), "invalid_request", "Header and query range disagree");
   return range;
 }
-export async function boundedJson<T>(request: Request, maximum = 524288): Promise<T> {
+export async function boundedJson<T>(request: Request, maximum = wireLimits.jsonBytes): Promise<T> {
   requireThat(request.body, "invalid_request", "Missing request body");
   const reader = request.body.getReader();
+  const timer = setTimeout(() => {
+    void reader.cancel();
+  }, 30_000);
   const parts: Uint8Array[] = [];
   let length = 0;
   try {
@@ -3111,6 +3126,8 @@ export async function boundedJson<T>(request: Request, maximum = 524288): Promis
       parts.push(next.value);
     }
   } finally {
+    clearTimeout(timer);
+    await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
   const bytes = new Uint8Array(length);
