@@ -146,9 +146,12 @@
         },
         "expiresAt": {
           "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "identity": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/TicketIdentity"
         }
       },
-      "required": ["ticket", "audience", "expiresAt"],
+      "required": ["ticket", "audience", "expiresAt", "identity"],
       "additionalProperties": false
     },
     "CredentialMint": {
@@ -207,25 +210,52 @@
     },
     "CredentialReceipt": {
       "title": "CredentialReceipt",
-      "type": "object",
-      "properties": {
-        "credential": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "credential": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+            },
+            "token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "role": {
+              "enum": ["client", "executor", "admin"]
+            },
+            "expiresAt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "state": {
+              "const": "issued"
+            }
+          },
+          "required": ["credential", "token", "role", "state"],
+          "additionalProperties": false
         },
-        "token": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 512
-        },
-        "role": {
-          "enum": ["client", "executor", "admin"]
-        },
-        "expiresAt": {
-          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        {
+          "type": "object",
+          "properties": {
+            "credential": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+            },
+            "role": {
+              "enum": ["client", "executor", "admin"]
+            },
+            "expiresAt": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            "state": {
+              "const": "already-issued"
+            }
+          },
+          "required": ["credential", "role", "state"],
+          "additionalProperties": false
         }
-      },
-      "required": ["credential", "token", "role"],
-      "additionalProperties": false
+      ],
+      "description": "Raw token is returned exactly once on issuance, never retained or recoverable. Identical retries return only the already-issued public metadata with status201."
     },
     "RevocationInput": {
       "title": "RevocationInput",
@@ -654,6 +684,37 @@
       },
       "required": ["operationId", "revocationId", "state", "pendingRecipients"],
       "additionalProperties": false
+    },
+    "TicketIdentity": {
+      "title": "TicketIdentity",
+      "type": "object",
+      "properties": {
+        "deploymentId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "principalId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "role": {
+          "enum": ["admin", "client", "executor"]
+        },
+        "credential": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+        },
+        "credentialExpiresAt": {
+          "anyOf": [
+            {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["deploymentId", "principalId", "role", "credential", "credentialExpiresAt"],
+      "additionalProperties": false,
+      "description": "Redacted identity from the validated current AuthContext, independent of short ticket expiry. Never reconstructed from a bearer."
     }
   }
 }

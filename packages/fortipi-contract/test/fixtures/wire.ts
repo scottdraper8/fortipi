@@ -2,6 +2,18 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { AnySchema, ValidateFunction } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
+import type {
+  Assignment,
+  AssignmentDigestInput,
+  LocalStagedChange,
+  OperationDigestInput,
+} from "fortipi-contract";
+import {
+  assignmentDigest,
+  localStageDigest,
+  manifestDigest,
+  operationDigest,
+} from "../../dist/executor.js";
 export const schemaDirectory = fileURLToPath(new URL("../../schemas/", import.meta.url));
 export function validators(directory = schemaDirectory) {
   const ajv = new Ajv2020({ strict: true, allErrors: true, validateFormats: false });
@@ -64,6 +76,80 @@ export const identity = {
   baseRevision: "revision_1",
   deadline: 50000,
 };
+/** Explicit requirement preimage, rather than reconstructing the expected value with the helper under test. */
+export async function completeAssignment(): Promise<{
+  assignment: Assignment;
+  operation: OperationDigestInput;
+  assignmentInput: AssignmentDigestInput;
+}> {
+  const operation: OperationDigestInput = {
+    deploymentId: "deployment_1",
+    agentId: "agent_1",
+    conversationId: "conversation_1",
+    tool: "shell.exec",
+    arguments: { argv: ["echo", "hello"] },
+    workspaceId: "workspace_1",
+    baseRevision: "revision_1",
+    target: { kind: "executor", executorId: "executor_1", generation: 4 },
+    policyVersion: 5,
+    grantVersion: 3,
+    deadline: 50000,
+  };
+  const assignmentInput: AssignmentDigestInput = {
+    operation,
+    executionId: "execution_1",
+    reservationId: "reservation_1",
+    leaseId: "lease_1",
+    fence: "7",
+    executorGeneration: 4,
+  };
+  return {
+    operation,
+    assignmentInput,
+    assignment: {
+      operationContext: {
+        deploymentId: "deployment_1",
+        agentId: "agent_1",
+        conversationId: "conversation_1",
+        policyVersion: 5,
+      },
+      identity: {
+        ...identity,
+        operationDigest: await operationDigest(operation),
+        assignmentDigest: await assignmentDigest(assignmentInput),
+      },
+      reservationId: "reservation_1",
+      tool: "shell.exec",
+      arguments: { argv: ["echo", "hello"] },
+      workspaceId: "workspace_1",
+      bindingVersion: 1,
+      rootBindingId: "root_1",
+    },
+  };
+}
+export async function completeLocalStage(): Promise<LocalStagedChange> {
+  const input = {
+    uploadId: "upload_1",
+    manifest: {
+      version: 1 as const,
+      entries: [
+        { path: "result.txt", type: "file" as const, mode: 420 as const, size: 3, sha256: hash },
+        { path: "new-dir", type: "directory" as const, mode: 493 as const },
+      ],
+    },
+    mutations: [
+      { kind: "put" as const, path: "result.txt", sha256: hash, size: 3, mode: 420 as const },
+      { kind: "delete" as const, path: "old.txt" },
+      { kind: "mkdir" as const, path: "new-dir", mode: 493 as const },
+    ],
+  };
+  return {
+    kind: "staged-change",
+    ...input,
+    postManifestHash: await manifestDigest(input.manifest),
+    stagedDigest: await localStageDigest(input),
+  };
+}
 export const scope = {
   operationId: "operation_1",
   operationDigest: hash,

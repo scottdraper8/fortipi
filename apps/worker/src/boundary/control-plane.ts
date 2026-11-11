@@ -4,6 +4,10 @@ export interface ControlPlaneRpc extends InfrastructureReservations {
   readonly contractVersion: "1.0";
   authenticate(input: D.CredentialProof): Promise<D.Outcome<D.AuthContext>>;
   authorize(input: D.AuthorizationRequest): Promise<D.Outcome<D.GrantDecision>>;
+  resolveExecutorGeneration(
+    ctx: D.AuthContext,
+    input: { workspaceId: string; bindingVersion: number; executorId: string },
+  ): Promise<D.Outcome<{ executorId: string; executorGeneration: number }>>;
   handleApi<K extends D.ControlOperationId>(
     ctx: D.AuthContext,
     input: D.OperationRequest<K>,

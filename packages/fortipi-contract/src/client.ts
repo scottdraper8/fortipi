@@ -27,6 +27,8 @@ export type {
   Protocol,
   ReplayPage,
   Task,
+  TicketIdentity,
+  TicketReceipt,
   UnknownDurableEvent,
   VolatileEvent,
 } from "./generated/types.js";

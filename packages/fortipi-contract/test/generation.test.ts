@@ -91,6 +91,55 @@ test("renewal identity and private child disclosure regressions fail their consu
     await writeFile(resolve(temp, "package.json"), '{"type":"module"}\n');
     const cases = [
       {
+        label: "local intent renewal exclusion",
+        path: "dist/compatibility.js",
+        test: "compatibility",
+        pattern: "local intent and final commit",
+        failure: /AssertionError|strictEqual/,
+        mutate: (source: string): string => {
+          const projected = "lease: leaseIdentity";
+          assert.ok(source.includes(projected));
+          return source.replace(projected, "lease: scope.lease");
+        },
+      },
+      {
+        label: "one-time credential redaction",
+        path: "schemas/administration.schema.json",
+        test: "schema",
+        pattern: "credential issuance returns",
+        failure: /CredentialReceipt/,
+        mutate: (source: string): string => {
+          const schema = JSON.parse(source);
+          schema.$defs.CredentialReceipt.oneOf[1].properties.token = { type: "string" };
+          return JSON.stringify(schema);
+        },
+      },
+      {
+        label: "local-stage digest guard",
+        path: "dist/compatibility.js",
+        test: "compatibility",
+        pattern: "local stages carry explicit",
+        failure: /Missing expected rejection/,
+        mutate: (source: string): string => {
+          const guard = "if (input.stagedDigest !== expectedStage)";
+          assert.ok(source.includes(guard), "Missing emitted local-stage digest guard");
+          return source.replace(guard, "if (false)");
+        },
+      },
+      ...["Operation", "Assignment"].map((digest) => ({
+        label: `${digest.toLowerCase()} digest guard`,
+        path: "dist/compatibility.js",
+        test: "compatibility",
+        pattern: "received assignments reconstruct",
+        failure: /Missing expected rejection/,
+        mutate: (source: string): string => {
+          const guard = `if (identity.${digest.toLowerCase()}Digest !== expected${digest})`;
+          assert.ok(source.includes(guard), `Missing emitted ${digest} guard`);
+          return source.replace(guard, "if (false)");
+        },
+      })),
+      {
+        label: "renewal field projection",
         path: "dist/compatibility.js",
         test: "compatibility",
         pattern: "commit identity survives",
@@ -103,6 +152,7 @@ test("renewal identity and private child disclosure regressions fail their consu
         },
       },
       {
+        label: "private seal disclosure",
         path: "schemas/workspaces.schema.json",
         test: "schema",
         pattern: "public commits use only",
@@ -130,7 +180,7 @@ test("renewal identity and private child disclosure regressions fail their consu
       const mutant = run(temp, ...args);
       assert.notEqual(mutant.status, 0, `Undetected mutation: ${challenge.path}`);
       assert.match(mutant.stdout + mutant.stderr, challenge.failure);
-      console.log(`Sensitivity observed: ${challenge.path} -> ${challenge.pattern} failed`);
+      console.log(`Sensitivity observed: ${challenge.label} -> ${challenge.pattern} failed`);
       await writeFile(path, original);
       const restored = run(temp, ...args);
       assert.equal(restored.status, 0, restored.stdout + restored.stderr);

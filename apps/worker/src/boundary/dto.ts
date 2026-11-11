@@ -32,6 +32,17 @@ export interface AuthContext extends T.CredentialRef {
   registrationId?: string;
 }
 export type ResourceAuthContext = AuthContext & { registrationId: string };
+/** CP persists the pending request/registration first; authority checks CAS, digest and floors before acknowledging. */
+export interface WorkspaceBindingApplication {
+  requestId: string;
+  binding: Pick<T.WorkspaceBinding, "workspaceId" | "bindingVersion" | "config">;
+  /** Null is permitted only when initializing an authority without a prior binding. */
+  expectedVersion: number | null;
+  /** Required on rebind. */
+  import?: T.WorkspaceBindingPatch["import"];
+  /** Required iff config.kind is local, with exactly matching executorId; authority validates it. */
+  executor?: { executorId: string; generation: number };
+}
 export interface RecoveryContext {
   kind: "control-recovery";
   deploymentId: string;
@@ -185,6 +196,7 @@ export interface ReleaseReceipt {
   tombstoneId: string;
 }
 export interface ExecutionRequest {
+  operationContext: T.OperationContext;
   reservation: Extract<TargetReservation, { ownerKind: "job" }>;
   identity: T.ExecutionIdentity;
   tool: string;

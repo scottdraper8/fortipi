@@ -97,6 +97,7 @@ export type FortiPiValue =
   | ModelPage
   | Mutation
   | OAuthCredential
+  | OperationContext
   | OperationDigestInput
   | OriginMode
   | PageQuery
@@ -139,6 +140,7 @@ export type FortiPiValue =
   | TaskControl
   | TaskResume
   | TaskState
+  | TicketIdentity
   | TicketInput
   | TicketQuery
   | TicketReceipt
@@ -268,6 +270,7 @@ export type Lease =
       ownerKind: "workspace-operation";
     };
 export type Fence = string;
+export type Sequence = number;
 export type BackendConfig =
   | {
       kind: "cloud-js";
@@ -1199,6 +1202,23 @@ export type CredentialMint =
       grants: Grant[];
       expiresAt?: Timestamp;
     };
+/**
+ * Raw token is returned exactly once on issuance, never retained or recoverable. Identical retries return only the already-issued public metadata with status201.
+ */
+export type CredentialReceipt =
+  | {
+      credential: CredentialRef;
+      token: string;
+      role: "client" | "executor" | "admin";
+      expiresAt?: Timestamp;
+      state: "issued";
+    }
+  | {
+      credential: CredentialRef;
+      role: "client" | "executor" | "admin";
+      expiresAt?: Timestamp;
+      state: "already-issued";
+    };
 export type ErrorCode =
   | "invalid_request"
   | "cursor.invalid"
@@ -1407,6 +1427,40 @@ export type LocalWorkspaceRequest =
   | LocalObserve
   | LocalReceiptAck
   | LocalReadRequest;
+export type ManifestEntry =
+  | {
+      path: RelativePath;
+      type: "file";
+      mode: 420 | 493;
+      size: number;
+      sha256: Sha256;
+    }
+  | {
+      path: RelativePath;
+      type: "directory";
+      mode: 493;
+    };
+/**
+ * NFC normalized valid UTF-8 relative POSIX path, at most1024 UTF-8 bytes. validateRelativePath additionally enforces byte length and normalization; filesystem adapters must enforce no-follow/race checks.
+ */
+export type RelativePath = string;
+export type Mutation =
+  | {
+      kind: "put";
+      path: RelativePath;
+      sha256: Sha256;
+      size: number;
+      mode: 420 | 493;
+    }
+  | {
+      kind: "delete";
+      path: RelativePath;
+    }
+  | {
+      kind: "mkdir";
+      path: RelativePath;
+      mode: 493;
+    };
 export type LocalReadRequest =
   | {
       operationId: Id;
@@ -1594,10 +1648,6 @@ export type TransferDescriptor =
       expiresAt: Timestamp;
       deadline: Timestamp;
     };
-/**
- * NFC normalized valid UTF-8 relative POSIX path, at most1024 UTF-8 bytes. validateRelativePath additionally enforces byte length and normalization; filesystem adapters must enforce no-follow/race checks.
- */
-export type RelativePath = string;
 export type LocalWorkspaceResponse =
   | LocalPrepared
   | LocalObservation
@@ -1653,19 +1703,6 @@ export type LocalReadResult =
       kind: "diff";
       result: WorkspaceDiff;
     };
-export type ManifestEntry =
-  | {
-      path: RelativePath;
-      type: "file";
-      mode: 420 | 493;
-      size: number;
-      sha256: Sha256;
-    }
-  | {
-      path: RelativePath;
-      type: "directory";
-      mode: 493;
-    };
 export type InvalidationSubject =
   | {
       kind: "credential";
@@ -1695,24 +1732,6 @@ export type JobState =
   | "expired"
   | "workspace_conflict"
   | "requires_reconciliation";
-export type Mutation =
-  | {
-      kind: "put";
-      path: RelativePath;
-      uploadId: Id;
-      sha256: Sha256;
-      size: number;
-      mode: 420 | 493;
-    }
-  | {
-      kind: "delete";
-      path: RelativePath;
-    }
-  | {
-      kind: "mkdir";
-      path: RelativePath;
-      mode: 493;
-    };
 export type OriginMode =
   | {
       kind: "browser";
@@ -1722,7 +1741,6 @@ export type OriginMode =
       kind: "native";
     };
 export type RevocationReceipt = RevocationComplete | RevocationPending;
-export type Sequence = number;
 export type StoreAllocation =
   | {
       allocationId: Id;
@@ -1916,6 +1934,7 @@ export interface Assignment {
   bindingVersion: number;
   rootBindingId?: Id;
   approval?: ApprovalOperation;
+  operationContext: OperationContext;
 }
 export interface ExecutionIdentity {
   jobId: Id;
@@ -1931,6 +1950,15 @@ export interface CredentialRef {
   credentialId: Id;
   generation: number;
   grantVersion: number;
+}
+/**
+ * Immutable operation preimage context shared by wire assignments and private cloud/native execution requests. Principal identity is not part of the version1 operation preimage.
+ */
+export interface OperationContext {
+  deploymentId: Id;
+  agentId: Id;
+  conversationId: Id;
+  policyVersion: Sequence;
 }
 export interface AssignmentDigestInput {
   operation: OperationDigestInput;
@@ -2322,12 +2350,6 @@ export interface ResourceScope {
    */
   backendIds: Id[];
 }
-export interface CredentialReceipt {
-  credential: CredentialRef;
-  token: string;
-  role: "client" | "executor" | "admin";
-  expiresAt?: Timestamp;
-}
 export interface TransportAck {
   deliveryId: Id;
   sequence: number;
@@ -2370,6 +2392,11 @@ export interface LocalPrepare {
         uploadId: Id;
         stagedDigest: Sha256;
         postManifestHash: Sha256;
+        manifest: Manifest;
+        /**
+         * @maxItems 4096
+         */
+        mutations: Mutation[];
       }
     | {
         kind: "native-execution";
@@ -2377,6 +2404,13 @@ export interface LocalPrepare {
         executionId: Id;
         assignmentDigest: Sha256;
       };
+}
+export interface Manifest {
+  version: 1;
+  /**
+   * @maxItems 4096
+   */
+  entries: ManifestEntry[];
 }
 export interface LocalApply {
   operationId: Id;
@@ -2453,13 +2487,6 @@ export interface ManifestResponse {
   manifestHash: Sha256;
   manifest: Manifest;
 }
-export interface Manifest {
-  version: 1;
-  /**
-   * @maxItems 4096
-   */
-  entries: ManifestEntry[];
-}
 export interface WorkspaceDiff {
   revision: Revision;
   otherRevision: Revision;
@@ -2530,12 +2557,12 @@ export interface Recipient {
 }
 export interface LocalCommitIntent {
   commitId: Id;
-  commitDigest: Sha256;
   scope: LocalScope;
   preparationId: Id;
   preManifestHash: Sha256;
   expectedPostManifestHash?: Sha256;
   state: "pending_apply";
+  intentDigest: Sha256;
 }
 export interface LocalScope {
   operationId: Id;
@@ -2722,6 +2749,16 @@ export interface StoreSeal {
   manifestHash: Sha256;
   expectedVersion: number;
 }
+/**
+ * Redacted identity from the validated current AuthContext, independent of short ticket expiry. Never reconstructed from a bearer.
+ */
+export interface TicketIdentity {
+  deploymentId: Id;
+  principalId: Id;
+  role: "admin" | "client" | "executor";
+  credential: CredentialRef;
+  credentialExpiresAt: Timestamp | null;
+}
 export interface TicketQuery {
   ticket: string;
 }
@@ -2729,6 +2766,7 @@ export interface TicketReceipt {
   ticket: string;
   audience: "client-stream" | "executor-session";
   expiresAt: Timestamp;
+  identity: TicketIdentity;
 }
 export interface TransferChunkQuery {
   attemptId: Id;

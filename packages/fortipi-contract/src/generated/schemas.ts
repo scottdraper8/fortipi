@@ -99,8 +99,11 @@ export const administrationSchema = {
         expiresAt: {
           $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
         },
+        identity: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/TicketIdentity",
+        },
       },
-      required: ["ticket", "audience", "expiresAt"],
+      required: ["ticket", "audience", "expiresAt", "identity"],
       additionalProperties: false,
     },
     CredentialMint: {
@@ -145,19 +148,41 @@ export const administrationSchema = {
     },
     CredentialReceipt: {
       title: "CredentialReceipt",
-      type: "object",
-      properties: {
-        credential: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            credential: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
+            },
+            token: { type: "string", minLength: 1, maxLength: 512 },
+            role: { enum: ["client", "executor", "admin"] },
+            expiresAt: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
+            },
+            state: { const: "issued" },
+          },
+          required: ["credential", "token", "role", "state"],
+          additionalProperties: false,
         },
-        token: { type: "string", minLength: 1, maxLength: 512 },
-        role: { enum: ["client", "executor", "admin"] },
-        expiresAt: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
+        {
+          type: "object",
+          properties: {
+            credential: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
+            },
+            role: { enum: ["client", "executor", "admin"] },
+            expiresAt: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
+            },
+            state: { const: "already-issued" },
+          },
+          required: ["credential", "role", "state"],
+          additionalProperties: false,
         },
-      },
-      required: ["credential", "token", "role"],
-      additionalProperties: false,
+      ],
+      description:
+        "Raw token is returned exactly once on issuance, never retained or recoverable. Identical retries return only the already-issued public metadata with status201.",
     },
     RevocationInput: {
       title: "RevocationInput",
@@ -448,6 +473,28 @@ export const administrationSchema = {
       },
       required: ["operationId", "revocationId", "state", "pendingRecipients"],
       additionalProperties: false,
+    },
+    TicketIdentity: {
+      title: "TicketIdentity",
+      type: "object",
+      properties: {
+        deploymentId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        principalId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        role: { enum: ["admin", "client", "executor"] },
+        credential: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
+        },
+        credentialExpiresAt: {
+          anyOf: [
+            { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp" },
+            { type: "null" },
+          ],
+        },
+      },
+      required: ["deploymentId", "principalId", "role", "credential", "credentialExpiresAt"],
+      additionalProperties: false,
+      description:
+        "Redacted identity from the validated current AuthContext, independent of short ticket expiry. Never reconstructed from a bearer.",
     },
   },
 } as const;
@@ -3101,6 +3148,22 @@ export const commonSchema = {
         },
       ],
     },
+    OperationContext: {
+      title: "OperationContext",
+      type: "object",
+      properties: {
+        deploymentId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        agentId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        conversationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        policyVersion: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sequence",
+        },
+      },
+      required: ["deploymentId", "agentId", "conversationId", "policyVersion"],
+      additionalProperties: false,
+      description:
+        "Immutable operation preimage context shared by wire assignments and private cloud/native execution requests. Principal identity is not part of the version1 operation preimage.",
+    },
   },
 } as const;
 export const configurationSchema = {
@@ -3632,8 +3695,19 @@ export const executorMessagesSchema = {
         approval: {
           $ref: "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation",
         },
+        operationContext: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/OperationContext",
+        },
       },
-      required: ["identity", "reservationId", "tool", "arguments", "workspaceId", "bindingVersion"],
+      required: [
+        "identity",
+        "reservationId",
+        "tool",
+        "arguments",
+        "workspaceId",
+        "bindingVersion",
+        "operationContext",
+      ],
       additionalProperties: false,
     },
     LeaseUpdate: {
@@ -5435,12 +5509,11 @@ export const workspacesSchema = {
             path: {
               $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/RelativePath",
             },
-            uploadId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
             sha256: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256" },
             size: { type: "integer", minimum: 0, maximum: 67108864 },
             mode: { enum: [420, 493] },
           },
-          required: ["kind", "path", "uploadId", "sha256", "size", "mode"],
+          required: ["kind", "path", "sha256", "size", "mode"],
           additionalProperties: false,
         },
         {
@@ -6112,8 +6185,25 @@ export const workspacesSchema = {
                 postManifestHash: {
                   $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
                 },
+                manifest: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Manifest",
+                },
+                mutations: {
+                  type: "array",
+                  items: {
+                    $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Mutation",
+                  },
+                  maxItems: 4096,
+                },
               },
-              required: ["kind", "uploadId", "stagedDigest", "postManifestHash"],
+              required: [
+                "kind",
+                "uploadId",
+                "stagedDigest",
+                "postManifestHash",
+                "manifest",
+                "mutations",
+              ],
               additionalProperties: false,
             },
             {
@@ -6403,9 +6493,6 @@ export const workspacesSchema = {
       type: "object",
       properties: {
         commitId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-        commitDigest: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
-        },
         scope: {
           $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LocalScope",
         },
@@ -6417,8 +6504,11 @@ export const workspacesSchema = {
           $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
         },
         state: { const: "pending_apply" },
+        intentDigest: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+        },
       },
-      required: ["commitId", "commitDigest", "scope", "preparationId", "preManifestHash", "state"],
+      required: ["commitId", "intentDigest", "scope", "preparationId", "preManifestHash", "state"],
       additionalProperties: false,
     },
     LocalReadRequest: {
@@ -6947,6 +7037,8 @@ export const schemaRefs = {
     "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationComplete",
   RevocationPending:
     "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationPending",
+  TicketIdentity:
+    "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/TicketIdentity",
   Agent: "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/Agent",
   AgentCreate: "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/AgentCreate",
   AgentPatch: "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/AgentPatch",
@@ -7009,6 +7101,7 @@ export const schemaRefs = {
   CommitDigestInput:
     "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CommitDigestInput",
   ProtocolError: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ProtocolError",
+  OperationContext: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/OperationContext",
   WorkspaceConfig:
     "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/WorkspaceConfig",
   BackendConfig: "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/BackendConfig",

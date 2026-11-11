@@ -3,6 +3,10 @@ import type { InfrastructureReservations } from "./infrastructure.js";
 import type { RevisionStoreRpc } from "./revision-store.js";
 export interface WorkspaceObjectRpc extends RevisionStoreRpc, InfrastructureReservations {
   readonly contractVersion: "1.0";
+  applyBinding(
+    ctx: D.ResourceAuthContext,
+    input: D.WorkspaceBindingApplication,
+  ): Promise<D.Outcome<D.WorkspaceBinding>>;
   describe: D.ApiMethod<"describeWorkspace">;
   list: D.ApiMethod<"listWorkspaceFiles">;
   stat: D.ApiMethod<"statWorkspaceFile">;

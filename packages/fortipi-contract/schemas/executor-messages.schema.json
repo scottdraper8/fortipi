@@ -36,6 +36,9 @@
         },
         "approval": {
           "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation"
+        },
+        "operationContext": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/OperationContext"
         }
       },
       "required": [
@@ -44,7 +47,8 @@
         "tool",
         "arguments",
         "workspaceId",
-        "bindingVersion"
+        "bindingVersion",
+        "operationContext"
       ],
       "additionalProperties": false
     },
