@@ -54,10 +54,11 @@ export function roleAllows(ctx: D.AuthContext, action: string): boolean {
       "transfers.output",
       "transfers.status",
     ].includes(action);
-  return (
-    ctx.role === "admin" ||
-    !routeCatalog.some((route) => route.action === action && route.audience === "admin")
-  );
+  if (ctx.role === "admin") return true;
+  // Actions may be shared by application and admin routes. Route audience checks
+  // remain the caller's responsibility; this check gates action authority only.
+  const routes = routeCatalog.filter((route) => route.action === action);
+  return routes.length === 0 || routes.some((route) => route.audience !== "admin");
 }
 export function delegation(ctx: D.AuthContext, grants: D.Grant[], expiresAt?: number): void {
   requireGrant(ctx, "credentials.mint");
