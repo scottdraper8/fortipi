@@ -2,7 +2,7 @@
 
 Protocol **1.0**, schema **1.0.0**. Package versions are independent. The fifteen
 [JSON Schema 2020-12 documents](./schemas/common.schema.json) are authoritative;
-[OpenAPI 3.1](./openapi.yaml) describes all 66 HTTP operations, their exact
+[OpenAPI 3.1](./openapi.yaml) describes all 69 HTTP operations, their exact
 path/query/body, success/error statuses, audience, grant action, and byte limits.
 `src/route-catalog.ts` owns route allocation, not handlers. OpenAPI uses JSON syntax
 (valid YAML 1.2), so the same bytes can serve `/v1/openapi.json`.
@@ -73,7 +73,7 @@ Canonical JSON sorts object keys by UTF-16 code-unit order, preserves array orde
 uses JSON string/number encoding and maps -0 to 0. It rejects nonfinite numbers,
 lone surrogates, accessors, cycles and non-JSON values. SHA-256 input is UTF-8 of
 `fortipi:<domain>:v1\n` followed by canonical JSON. Domains are `manifest`,
-`operation`, `assignment`, `commit`, `local-stage`, `local-intent`; they are not interchangeable. Manifest hashing
+`operation`, `assignment`, `commit`, `local-stage`, `local-intent`, `workspace-lease`; they are not interchangeable. Manifest hashing
 sorts normalized paths by UTF-8 bytes and hashes `{version:1,entries:[...]}`.
 Files carry path/type/mode(420 or493)/size/hash; directories carry path/type/mode493.
 No timestamps, native roots or secrets enter a manifest digest.
@@ -196,6 +196,101 @@ revocation1008; invalid payload1007; oversized1009. Executor heartbeat15s and
 three missed beats disconnect. Event retention, admitted receipts and idempotency
 keys last the conversation lifetime within admitted capacity; reject new work
 before exhaustion. Compaction/reset/forks cannot regenerate original envelopes.
+
+## Public workspace byte leases
+
+Ordinary public writers obtain a lease without a Pi job or hidden management call:
+
+| Operation             | Route / input                                                                                                                                 | Success                                                                              |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| acquireWorkspaceLease | POST `/v1/workspaces/{workspaceId}/leases`, WorkspaceLeaseAcquire `{requestId,operationId,bindingVersion,baseRevision,deadline}`              | 201 existing Lease narrowed to ownerKind workspace-operation, no jobId               |
+| renewWorkspaceLease   | POST `/v1/workspaces/{workspaceId}/leases/{leaseId}/renew`, WorkspaceLeaseRenew `{requestId,lease}`                                           | 200 actual renewed workspace-operation Lease                                         |
+| releaseWorkspaceLease | POST `/v1/workspaces/{workspaceId}/leases/{leaseId}/release`, WorkspaceLeaseRelease `{requestId,lease,reason}`, reason completed or cancelled | 200 closed WorkspaceLeaseReleaseReceipt `{leaseId,released}`; no private tombstoneId |
+
+All three are authenticated control-owned `workspace.write` operations, no-store
+on success/errors, with existing typed error/status conventions. Describe/select a
+binding and base first, acquire, then supply that returned lease to existing upload,
+snapshot or transaction routes. Renew/release carry stable business requestIds;
+renew's expected version is lease.leaseVersion. Path workspaceId/leaseId must match
+the body lease; `validateWorkspaceLeaseSubject` checks that structural correlation
+and non-job ownership after schema parsing. Current credential subject, resource
+access, grants, expiry and floors remain authority checks. No automatic renewal
+scheduler or client UI control is added.
+
+CP derives current authenticated credential, registered workspace recipient, target,
+fence and lease expiry. It selects expiry once, at most30s and bounded by operation
+deadline and current credential/grant expiry, and persists its pending derivation
+before authority RPC. After current auth/floors, a matching receipt/pending retry is
+recovered before current version/base reconsideration; never recalculate expiry,
+allocate another reservation/fence or replace the original input. Changed payload
+under the same ID conflicts. The operation deadline is from the original request,
+not a new AuthContext/RPC deadline. Renewal also persists its derived private
+expiresAt/input before RPC; retries cannot do now+TTL. Source3 durably recovers
+exact requestId/body receipts before CAS after floors. An old receipt never revives
+an expired, released or revoked lease. TargetReservation.expiresAt bounds only the
+first acquisition; it is not the renewal ceiling for an existing lease. Renewal
+requires a still-active lease with current fence, floors and expected version, and
+is bounded by the original immutable operation deadline, now+30s, and current
+credential and matching-grant expiry. Persist that derived expiry and complete
+private input before RPC; matching business-request receipts precede CAS without
+creating a new fence or reviving stale authority. Release's public receipt omits
+the private tombstone ID.
+
+Private TargetRequest's workspace-operation variant requires baseRevision; job
+requests additionally require executionId from the actual stable ExecutionIdentity
+persisted by Agent5 before CP reservation/effects. TargetReservation retains it.
+CP reservation idempotency binds that ID; dispatch/prepare must match the retained
+ID to the actual execution identity before effects. Source3 job local-stage
+descriptors use the retained executionId/jobId with the full unchanged transfer
+scope, without guessing or scanning. This applies to native/cloud/builtin job
+scopes without authorizing a new execution/workspace matrix or late effects.
+Public workspace-operation leases gain no job/execution fields, and existing job
+digest recipes stay unchanged (assignmentDigest already binds executionId).
+Private LeaseRenewal and LeaseRelease both require stable
+requestId, never a fresh AuthContext.requestId. Other private renewal/release fields
+remain, including server-derived expiresAt and internal release tombstone receipts.
+CP exposes generated ApiMethod ports for the three operations; consumers implement
+actual routing/persistence.
+
+Computer's non-job target is exactly `{kind:"backend",backendId:binding.workspaceId,
+generation:binding.bindingVersion}`: a logical workspace storage authority for byte
+leases, not an execution backend or paid capability. It needs workspace.write on
+the workspace, not an unrelated execution-backend grant. There is no backend registry,
+extra counter, guessed generation or config.execution dependency. Local targets use
+the actual binding executorId and keyed current executorGeneration. Job targets remain
+actual execution targets. Actor lease storage must retain target.kind: an executor
+revocation floor must not alias a logical backend ID. Credential/binding floors
+continue to fence both kinds; the public Lease wire gains no target field.
+
+`workspaceLeaseDigest(WorkspaceLeaseDigestInput)` hashes domain `workspace-lease`
+with exactly `{deploymentId,operationId,workspaceId,bindingVersion,baseRevision,
+target,credential,deadline}`. Target kind/id/generation and CredentialRef's three
+fields are explicitly projected. No principal/agent/conversation IDs are invented;
+role/grants/auth-context/expiry/connection observations are excluded. Existing job
+operation/assignment/commit digest recipes are unchanged. LocalScope.operationDigest
+comes from the actual stored non-job reservation digest, never a manifest hash.
+Stage content remains separately bound by enclosing uploadId, normalized manifest
+hash, ordered mutations and the owning request digest. Helpers/types do not prove
+CP/writer durability, auth, fencing, revocation or idempotent replay.
+
+ExecutorTransferLimits is a required closed numeric observation on executor.register
+and ExecutorDescription: `{chunkBytes,fileBytes,snapshotBytes,artifactBytes,manifestEntries}`.
+All are positive integers with ceilings262144/67108864/268435456/16777216/4096.
+Source8 computes actual post-discovery/profile/server/grid values; file/artifact
+must also fit chunkBytes*256. After exact schema validation,
+`validateExecutorTransferLimits` checks that grid relation. No remaining/headroom or
+stageBytes is reported; actual staging uses snapshotBytes. CP persists only validated
+registration observations, not heartbeat writes. Keyed resolveExecutorGeneration
+now also requires `transferLimits:ExecutorTransferLimits|null`; null is only absence
+of a validated numeric observation and never permits a guessed default.
+
+Source3 rejects missing/incompatible grids, per-file/aggregate bytes and entry counts
+before begin allocation. CP rechecks current registered caps before transfer.open
+and bytes; source8 rechecks live caps before each byte. Reads use the actual owner's
+ByteReference grid. These observations do not guarantee remaining capacity, online
+state or future configuration: a runtime backend may still decline after change,
+preserving the old canonical pointer. No service, callback, lookup scan or capability
+string substitutes for this numeric record; authority/floor/grant checks remain.
 
 ## Workspace boundaries and transient transfers
 
@@ -440,7 +535,7 @@ Public package declarations retain full checks.
 
 | Claim                    | Oracle / actual observation                                                                                                                                                             | Sensitivity / limit                                                                                                                                                                              |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Route/schema coverage    | Independently enumerated66 method/path pairs, exact generated matrices, every ref resolved by real strict Ajv2020; browser bundles resolve no dependencies                              | No HTTP handlers, network auth or deployment proved                                                                                                                                              |
+| Route/schema coverage    | Independently enumerated69 method/path pairs, exact generated matrices, every ref resolved by real strict Ajv2020; browser bundles resolve no dependencies                              | No HTTP handlers, network auth or deployment proved                                                                                                                                              |
 | Schema/wire semantics    | Fixed valid/invalid config, grant, local, transfer, OAuth, event and boundary fixtures accept/reject as specified                                                                       | Temporal authority/CAS/no-follow/durability remain consumer obligations                                                                                                                          |
 | Event compatibility      | Unknown durable cursor advances; malformed known/volatile-sequence frames reject                                                                                                        | Disposable schema mutation removes known-type exclusions; malformed-known oracle actually fails, restore passes                                                                                  |
 | Deterministic generation | Real generator and --check compare all outputs without writes                                                                                                                           | Disposable declaration and OpenAPI drift each fail; regenerated/restored check passes                                                                                                            |

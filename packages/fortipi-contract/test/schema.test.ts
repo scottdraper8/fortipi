@@ -11,12 +11,14 @@ import {
   requireCapability,
   validateBrowserOrigin,
   validateChunkInventory,
+  validateExecutorTransferLimits,
   validateLocalLease,
   validateManifest,
   validateProviderAuthPut,
   validateRelativePath,
   validateTransfer,
   validateUploadBlobs,
+  validateWorkspaceLeaseSubject,
 } from "../dist/index.js";
 import {
   credential,
@@ -757,5 +759,142 @@ test("credential issuance returns a token once and retry/rotation receipts forbi
   rejected("RotationReceipt", {
     replacement: { ...metadata, state: "already-issued", token: "synthetic_forbidden" },
     revocation,
+  });
+});
+test("public workspace leases exclude jobs and server metadata and correlate path subjects", () => {
+  const acquire = {
+    requestId: "acquire-business-1",
+    operationId: "workspace_operation_1",
+    bindingVersion: 1,
+    baseRevision: "revision_1",
+    deadline: 50000,
+  };
+  accepted("WorkspaceLeaseAcquire", acquire);
+  for (const field of ["requestId", "operationId", "bindingVersion", "baseRevision", "deadline"]) {
+    const incomplete = { ...acquire };
+    Reflect.deleteProperty(incomplete, field);
+    rejected("WorkspaceLeaseAcquire", incomplete);
+  }
+  for (const extra of [
+    { credential },
+    { target: identity.target },
+    { executorId: "executor_1" },
+    { fence: "1" },
+    { expiresAt: 30000 },
+    { leaseId: "chosen-by-client" },
+    { registrationId: "internal" },
+    { principalId: "forged-subject" },
+    { agentId: "invented" },
+    { conversationId: "invented" },
+    { jobId: "invented" },
+  ])
+    rejected("WorkspaceLeaseAcquire", { ...acquire, ...extra });
+  const { jobId: _job, ...commonLease } = lease;
+  const nonjob = { ...commonLease, ownerKind: "workspace-operation" as const };
+  accepted("WorkspaceOperationLease", nonjob);
+  rejected("WorkspaceOperationLease", lease);
+  rejected("WorkspaceOperationLease", { ...nonjob, jobId: "invented" });
+  const path = { workspaceId: nonjob.workspaceId, leaseId: nonjob.leaseId };
+  assert.doesNotThrow(() => validateWorkspaceLeaseSubject(path, nonjob));
+  assert.throws(
+    () => validateWorkspaceLeaseSubject({ ...path, workspaceId: "other_workspace" }, nonjob),
+    /lease identity/,
+  );
+  assert.throws(
+    () => validateWorkspaceLeaseSubject({ ...path, leaseId: "other_lease" }, nonjob),
+    /lease identity/,
+  );
+  assert.throws(() => validateWorkspaceLeaseSubject(path, lease), /lease identity/);
+  accepted("WorkspaceLeaseRenew", { requestId: "renew-business-1", lease: nonjob });
+  rejected("WorkspaceLeaseRenew", { requestId: "renew-business-1", lease });
+  rejected("WorkspaceLeaseRenew", {
+    requestId: "renew-business-1",
+    lease: nonjob,
+    expiresAt: 40000,
+  });
+  rejected("WorkspaceLeaseRenew", { lease: nonjob });
+  for (const reason of ["completed", "cancelled"])
+    accepted("WorkspaceLeaseRelease", { requestId: "release-business-1", lease: nonjob, reason });
+  for (const reason of ["expired", "reconciled"])
+    rejected("WorkspaceLeaseRelease", { requestId: "release-business-1", lease: nonjob, reason });
+  rejected("WorkspaceLeaseRelease", {
+    requestId: "release-business-1",
+    lease,
+    reason: "completed",
+  });
+  for (const released of [true, false])
+    accepted("WorkspaceLeaseReleaseReceipt", { leaseId: nonjob.leaseId, released });
+  rejected("WorkspaceLeaseReleaseReceipt", {
+    leaseId: nonjob.leaseId,
+    released: true,
+    tombstoneId: "internal",
+  });
+});
+test("executor numeric transfer limits are required closed registration observations", () => {
+  const limits = {
+    chunkBytes: 16384,
+    fileBytes: 4194304,
+    snapshotBytes: 16777216,
+    artifactBytes: 1048576,
+    manifestEntries: 512,
+  };
+  const maxima = {
+    chunkBytes: 262144,
+    fileBytes: 67108864,
+    snapshotBytes: 268435456,
+    artifactBytes: 16777216,
+    manifestEntries: 4096,
+  };
+  for (const valid of [limits, maxima]) {
+    accepted("ExecutorTransferLimits", valid);
+    assert.doesNotThrow(() => validateExecutorTransferLimits(valid));
+  }
+  for (const field of [
+    "chunkBytes",
+    "fileBytes",
+    "snapshotBytes",
+    "artifactBytes",
+    "manifestEntries",
+  ] as const) {
+    const missing = { ...limits };
+    Reflect.deleteProperty(missing, field);
+    rejected("ExecutorTransferLimits", missing);
+    for (const value of [0, -1, 0.5, maxima[field] + 1])
+      rejected("ExecutorTransferLimits", { ...limits, [field]: value });
+  }
+  for (const extra of [{ stageBytes: 1 }, { remainingBytes: 1 }, { headroomFraction: 0.25 }])
+    rejected("ExecutorTransferLimits", { ...limits, ...extra });
+  for (const incompatible of [
+    { ...limits, fileBytes: 4194305 },
+    { ...limits, artifactBytes: 4194305 },
+  ]) {
+    accepted("ExecutorTransferLimits", incompatible);
+    assert.throws(() => validateExecutorTransferLimits(incompatible), /executor transfer grid/);
+  }
+  const payload = {
+    executorId: "executor_1",
+    generation: 4,
+    protocolVersion: "1.0",
+    schemaVersion: "1.0.0",
+    capabilities: ["workspace"],
+    platform: "linux",
+    caseBehavior: "sensitive",
+    rootBindingIds: ["root_1"],
+    confinement: "host",
+    transferLimits: limits,
+  };
+  accepted("ExecutorFrame", { type: "executor.register", requestId: "request_1", payload });
+  rejected("ExecutorFrame", {
+    type: "executor.register",
+    requestId: "request_1",
+    payload: { ...payload, transferLimits: undefined },
+  });
+  const { protocolVersion: _protocol, schemaVersion: _schema, ...description } = payload;
+  accepted("ExecutorDescription", { ...description, connectionEpoch: 1, state: "online" });
+  rejected("ExecutorDescription", {
+    ...description,
+    connectionEpoch: 1,
+    state: "online",
+    transferLimits: null,
   });
 });

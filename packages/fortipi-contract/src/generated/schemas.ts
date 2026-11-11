@@ -28,6 +28,9 @@ export const administrationSchema = {
           maxItems: 100,
         },
         state: { enum: ["online", "offline", "revoking"] },
+        transferLimits: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits",
+        },
       },
       required: [
         "executorId",
@@ -39,6 +42,7 @@ export const administrationSchema = {
         "capabilities",
         "rootBindingIds",
         "state",
+        "transferLimits",
       ],
       additionalProperties: false,
     },
@@ -495,6 +499,21 @@ export const administrationSchema = {
       additionalProperties: false,
       description:
         "Redacted identity from the validated current AuthContext, independent of short ticket expiry. Never reconstructed from a bearer.",
+    },
+    ExecutorTransferLimits: {
+      title: "ExecutorTransferLimits",
+      type: "object",
+      properties: {
+        chunkBytes: { type: "integer", minimum: 1, maximum: 262144 },
+        fileBytes: { type: "integer", minimum: 1, maximum: 67108864 },
+        snapshotBytes: { type: "integer", minimum: 1, maximum: 268435456 },
+        artifactBytes: { type: "integer", minimum: 1, maximum: 16777216 },
+        manifestEntries: { type: "integer", minimum: 1, maximum: 4096 },
+      },
+      required: ["chunkBytes", "fileBytes", "snapshotBytes", "artifactBytes", "manifestEntries"],
+      additionalProperties: false,
+      description:
+        "Validated numeric registration observation, not remaining capacity or a future availability promise. fileBytes/artifactBytes must also fit chunkBytes*256; source8 computes all effective profile/server bounds and actors recheck before bytes.",
     },
   },
 } as const;
@@ -3183,6 +3202,37 @@ export const commonSchema = {
       required: ["chunkBytes", "chunkHashes"],
       additionalProperties: false,
     },
+    WorkspaceLeaseDigestInput: {
+      title: "WorkspaceLeaseDigestInput",
+      type: "object",
+      properties: {
+        deploymentId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        bindingVersion: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sequence",
+        },
+        baseRevision: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+        },
+        target: { $ref: "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/BackendRef" },
+        credential: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
+        },
+        deadline: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp" },
+      },
+      required: [
+        "deploymentId",
+        "operationId",
+        "workspaceId",
+        "bindingVersion",
+        "baseRevision",
+        "target",
+        "credential",
+        "deadline",
+      ],
+      additionalProperties: false,
+    },
   },
 } as const;
 export const configurationSchema = {
@@ -3803,6 +3853,9 @@ export const executorMessagesSchema = {
                   maxItems: 100,
                 },
                 confinement: { enum: ["host", "isolated"] },
+                transferLimits: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits",
+                },
               },
               required: [
                 "executorId",
@@ -3814,6 +3867,7 @@ export const executorMessagesSchema = {
                 "caseBehavior",
                 "rootBindingIds",
                 "confinement",
+                "transferLimits",
               ],
               additionalProperties: false,
             },
@@ -5247,44 +5301,7 @@ export const workspacesSchema = {
           additionalProperties: false,
         },
         {
-          type: "object",
-          properties: {
-            leaseId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-            operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-            credential: {
-              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
-            },
-            registrationId: {
-              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
-            },
-            leaseVersion: { type: "integer", minimum: 0, maximum: 9007199254740991 },
-            workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-            executorId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-            executorGeneration: { type: "integer", minimum: 0, maximum: 9007199254740991 },
-            fence: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence" },
-            baseRevision: {
-              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
-            },
-            expiresAt: {
-              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
-            },
-            ownerKind: { const: "workspace-operation" },
-          },
-          required: [
-            "leaseId",
-            "operationId",
-            "credential",
-            "registrationId",
-            "leaseVersion",
-            "workspaceId",
-            "executorId",
-            "executorGeneration",
-            "fence",
-            "baseRevision",
-            "expiresAt",
-            "ownerKind",
-          ],
-          additionalProperties: false,
+          $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceOperationLease",
         },
       ],
     },
@@ -7018,6 +7035,98 @@ export const workspacesSchema = {
       required: ["sha256", "chunks"],
       additionalProperties: false,
     },
+    WorkspaceOperationLease: {
+      type: "object",
+      properties: {
+        leaseId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        credential: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
+        },
+        registrationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        leaseVersion: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+        workspaceId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        executorId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        executorGeneration: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+        fence: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence" },
+        baseRevision: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+        },
+        expiresAt: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
+        },
+        ownerKind: { const: "workspace-operation" },
+      },
+      required: [
+        "leaseId",
+        "operationId",
+        "credential",
+        "registrationId",
+        "leaseVersion",
+        "workspaceId",
+        "executorId",
+        "executorGeneration",
+        "fence",
+        "baseRevision",
+        "expiresAt",
+        "ownerKind",
+      ],
+      additionalProperties: false,
+      title: "WorkspaceOperationLease",
+      description: "Existing non-job Lease wire variant; no new fields. Job identity is forbidden.",
+    },
+    WorkspaceLeaseAcquire: {
+      title: "WorkspaceLeaseAcquire",
+      type: "object",
+      properties: {
+        requestId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        operationId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        bindingVersion: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sequence",
+        },
+        baseRevision: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+        },
+        deadline: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp" },
+      },
+      required: ["requestId", "operationId", "bindingVersion", "baseRevision", "deadline"],
+      additionalProperties: false,
+    },
+    WorkspaceLeaseRenew: {
+      title: "WorkspaceLeaseRenew",
+      type: "object",
+      properties: {
+        requestId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        lease: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceOperationLease",
+        },
+      },
+      required: ["requestId", "lease"],
+      additionalProperties: false,
+    },
+    WorkspaceLeaseRelease: {
+      title: "WorkspaceLeaseRelease",
+      type: "object",
+      properties: {
+        requestId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        lease: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceOperationLease",
+        },
+        reason: { enum: ["completed", "cancelled"] },
+      },
+      required: ["requestId", "lease", "reason"],
+      additionalProperties: false,
+    },
+    WorkspaceLeaseReleaseReceipt: {
+      title: "WorkspaceLeaseReleaseReceipt",
+      type: "object",
+      properties: {
+        leaseId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        released: { type: "boolean" },
+      },
+      required: ["leaseId", "released"],
+      additionalProperties: false,
+    },
   },
 } as const;
 export const schemaRegistry = {
@@ -7081,6 +7190,8 @@ export const schemaRefs = {
     "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/RevocationPending",
   TicketIdentity:
     "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/TicketIdentity",
+  ExecutorTransferLimits:
+    "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits",
   Agent: "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/Agent",
   AgentCreate: "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/AgentCreate",
   AgentPatch: "https://fortipi.dev/schemas/1.0.0/agents.schema.json#/$defs/AgentPatch",
@@ -7145,6 +7256,8 @@ export const schemaRefs = {
   ProtocolError: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ProtocolError",
   OperationContext: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/OperationContext",
   ChunkInventory: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ChunkInventory",
+  WorkspaceLeaseDigestInput:
+    "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/WorkspaceLeaseDigestInput",
   WorkspaceConfig:
     "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/WorkspaceConfig",
   BackendConfig: "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/BackendConfig",
@@ -7279,6 +7392,16 @@ export const schemaRefs = {
     "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStoreReference",
   LeaseIdentity: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LeaseIdentity",
   UploadBlobPlan: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/UploadBlobPlan",
+  WorkspaceOperationLease:
+    "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceOperationLease",
+  WorkspaceLeaseAcquire:
+    "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceLeaseAcquire",
+  WorkspaceLeaseRenew:
+    "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceLeaseRenew",
+  WorkspaceLeaseRelease:
+    "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceLeaseRelease",
+  WorkspaceLeaseReleaseReceipt:
+    "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceLeaseReleaseReceipt",
 } as const;
 export const knownEventTypes = [
   "conversation.created",

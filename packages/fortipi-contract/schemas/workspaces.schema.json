@@ -144,64 +144,7 @@
           "additionalProperties": false
         },
         {
-          "type": "object",
-          "properties": {
-            "leaseId": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-            },
-            "operationId": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-            },
-            "credential": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
-            },
-            "registrationId": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-            },
-            "leaseVersion": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
-            },
-            "workspaceId": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-            },
-            "executorId": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
-            },
-            "executorGeneration": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
-            },
-            "fence": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence"
-            },
-            "baseRevision": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
-            },
-            "expiresAt": {
-              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
-            },
-            "ownerKind": {
-              "const": "workspace-operation"
-            }
-          },
-          "required": [
-            "leaseId",
-            "operationId",
-            "credential",
-            "registrationId",
-            "leaseVersion",
-            "workspaceId",
-            "executorId",
-            "executorGeneration",
-            "fence",
-            "baseRevision",
-            "expiresAt",
-            "ownerKind"
-          ],
-          "additionalProperties": false
+          "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceOperationLease"
         }
       ]
     },
@@ -2594,6 +2537,136 @@
         }
       },
       "required": ["sha256", "chunks"],
+      "additionalProperties": false
+    },
+    "WorkspaceOperationLease": {
+      "type": "object",
+      "properties": {
+        "leaseId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "credential": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef"
+        },
+        "registrationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "leaseVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "workspaceId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "executorId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "executorGeneration": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "fence": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Fence"
+        },
+        "baseRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "expiresAt": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        },
+        "ownerKind": {
+          "const": "workspace-operation"
+        }
+      },
+      "required": [
+        "leaseId",
+        "operationId",
+        "credential",
+        "registrationId",
+        "leaseVersion",
+        "workspaceId",
+        "executorId",
+        "executorGeneration",
+        "fence",
+        "baseRevision",
+        "expiresAt",
+        "ownerKind"
+      ],
+      "additionalProperties": false,
+      "title": "WorkspaceOperationLease",
+      "description": "Existing non-job Lease wire variant; no new fields. Job identity is forbidden."
+    },
+    "WorkspaceLeaseAcquire": {
+      "title": "WorkspaceLeaseAcquire",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "operationId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "bindingVersion": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sequence"
+        },
+        "baseRevision": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision"
+        },
+        "deadline": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
+        }
+      },
+      "required": ["requestId", "operationId", "bindingVersion", "baseRevision", "deadline"],
+      "additionalProperties": false
+    },
+    "WorkspaceLeaseRenew": {
+      "title": "WorkspaceLeaseRenew",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "lease": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceOperationLease"
+        }
+      },
+      "required": ["requestId", "lease"],
+      "additionalProperties": false
+    },
+    "WorkspaceLeaseRelease": {
+      "title": "WorkspaceLeaseRelease",
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "lease": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/WorkspaceOperationLease"
+        },
+        "reason": {
+          "enum": ["completed", "cancelled"]
+        }
+      },
+      "required": ["requestId", "lease", "reason"],
+      "additionalProperties": false
+    },
+    "WorkspaceLeaseReleaseReceipt": {
+      "title": "WorkspaceLeaseReleaseReceipt",
+      "type": "object",
+      "properties": {
+        "leaseId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "released": {
+          "type": "boolean"
+        }
+      },
+      "required": ["leaseId", "released"],
       "additionalProperties": false
     }
   }

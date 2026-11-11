@@ -33,6 +33,9 @@ const expected = [
   "POST /v1/workspaces",
   "GET /v1/workspaces/{workspaceId}",
   "PATCH /v1/workspaces/{workspaceId}",
+  "POST /v1/workspaces/{workspaceId}/leases",
+  "POST /v1/workspaces/{workspaceId}/leases/{leaseId}/renew",
+  "POST /v1/workspaces/{workspaceId}/leases/{leaseId}/release",
   ...["manifest", "list", "stat", "read", "diff"].map(
     (p) => `GET /v1/workspaces/{workspaceId}/${p}`,
   ),
@@ -68,6 +71,7 @@ const expected = [
 test("full independently enumerated route surface and resolvable schema/OpenAPI refs", () => {
   assert.deepEqual(routeCatalog.map((r) => `${r.method} ${r.path}`).sort(), expected.sort());
   assert.equal(new Set(routeCatalog.map((r) => r.operationId)).size, expected.length);
+  assert.equal(routeCatalog.length, 69);
   const spec = JSON.parse(readFileSync(new URL("../openapi.yaml", import.meta.url), "utf8"));
   assert.equal(spec.openapi, "3.1.0");
   const { get, ajv } = validators();
@@ -94,7 +98,8 @@ test("full independently enumerated route surface and resolvable schema/OpenAPI 
     if (
       route.path.includes("/auth") ||
       route.path.includes("/credentials") ||
-      route.path.includes("/transfers/")
+      route.path.includes("/transfers/") ||
+      route.path.includes("/leases")
     )
       for (const response of Object.values(op.responses) as {
         headers: Record<string, { schema: { const?: string } }>;
@@ -172,6 +177,24 @@ test("semantic status matrix keeps cursor/range/quota errors at their actual rou
     assert.ok(r);
     return r;
   };
+  for (const [id, status, body] of [
+    ["acquireWorkspaceLease", 201, "WorkspaceLeaseAcquire"],
+    ["renewWorkspaceLease", 200, "WorkspaceLeaseRenew"],
+    ["releaseWorkspaceLease", 200, "WorkspaceLeaseRelease"],
+  ] as const) {
+    const route = get(id);
+    assert.equal(route.owner, "control");
+    assert.equal(route.audience, "application");
+    assert.equal(route.action, "workspace.write");
+    assert.equal(route.body, body);
+    assert.deepEqual(route.success, [status]);
+    assert.equal(route.query, "Empty");
+    assert.ok(route.errors.some((e) => e === "workspace.conflict"));
+    assert.equal(
+      route.response,
+      id === "releaseWorkspaceLease" ? "WorkspaceLeaseReleaseReceipt" : "WorkspaceOperationLease",
+    );
+  }
   assert.ok(get("replayEvents").errors.some((e) => e === "cursor.expired"));
   assert.equal(errorStatuses["cursor.expired"], 410);
   assert.equal(

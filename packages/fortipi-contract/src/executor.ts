@@ -18,13 +18,16 @@ export {
   schemaVersion,
   validateAssignment,
   validateChunkInventory,
+  validateExecutorTransferLimits,
   validateLocalLease,
   validateLocalStage,
   validateManifest,
   validateRelativePath,
   validateTransfer,
   validateUploadBlobs,
+  validateWorkspaceLeaseSubject,
   wireLimits,
+  workspaceLeaseDigest,
 } from "./compatibility.js";
 export {
   commonSchema,
@@ -43,6 +46,7 @@ export type {
   ExecutionIdentity,
   ExecutionObservation,
   ExecutorFrame,
+  ExecutorTransferLimits,
   Invalidation,
   InvalidationAck,
   JobCommitted,
@@ -67,4 +71,5 @@ export type {
   TransportAck,
   UploadBegin,
   UploadBlobPlan,
+  WorkspaceLeaseDigestInput,
 } from "./generated/types.js";

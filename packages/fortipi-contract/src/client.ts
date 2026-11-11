@@ -3,6 +3,8 @@ export {
   nextEventCursor,
   protocolVersion,
   schemaVersion,
+  validateWorkspaceLeaseSubject,
+  workspaceLeaseDigest,
 } from "./compatibility.js";
 export type { OperationId, OperationRequest, OperationResponse } from "./generated/operations.js";
 export {
@@ -23,6 +25,7 @@ export type {
   ConversationProjection,
   DurableEvent,
   ErrorBody,
+  ExecutorTransferLimits,
   Job,
   KnownDurableEvent,
   MessageSubmit,
@@ -35,4 +38,10 @@ export type {
   UploadBegin,
   UploadBlobPlan,
   VolatileEvent,
+  WorkspaceLeaseAcquire,
+  WorkspaceLeaseDigestInput,
+  WorkspaceLeaseRelease,
+  WorkspaceLeaseReleaseReceipt,
+  WorkspaceLeaseRenew,
+  WorkspaceOperationLease,
 } from "./generated/types.js";

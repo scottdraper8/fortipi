@@ -118,12 +118,24 @@ interface TargetScope {
   target: T.BackendRef;
   actions: string[];
   deadline: number;
+  /** First-acquisition admission cutoff only; existing-lease renewal uses the immutable operation deadline. */
   expiresAt: number;
 }
 export type TargetRequest = TargetScope &
   (
-    | { ownerKind: "job"; jobId: string; agentId: string; conversationId: string }
-    | { ownerKind: "workspace-operation"; agentId?: string; conversationId?: string }
+    | {
+        ownerKind: "job";
+        jobId: string;
+        executionId: string;
+        agentId: string;
+        conversationId: string;
+      }
+    | {
+        ownerKind: "workspace-operation";
+        baseRevision: string;
+        agentId?: string;
+        conversationId?: string;
+      }
   );
 interface ReservationAuthority {
   reservationId: string;
@@ -182,11 +194,15 @@ export interface ResultDelivery {
   deliveryId: string;
 }
 export interface LeaseRenewal {
+  /** Stable business identity; persist this entire derived input before authority RPC. */
+  requestId: string;
   lease: T.Lease;
   expectedLeaseVersion: number;
+  /** Bounded by operation deadline, now+30s and current credential/matching-grant expiry, not reservation.expiresAt. */
   expiresAt: number;
 }
 export interface LeaseRelease {
+  requestId: string;
   lease: T.Lease;
   reason: "completed" | "cancelled" | "expired" | "reconciled";
 }

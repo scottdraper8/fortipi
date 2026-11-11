@@ -4,10 +4,17 @@ export interface ControlPlaneRpc extends InfrastructureReservations {
   readonly contractVersion: "1.0";
   authenticate(input: D.CredentialProof): Promise<D.Outcome<D.AuthContext>>;
   authorize(input: D.AuthorizationRequest): Promise<D.Outcome<D.GrantDecision>>;
+  /** Keyed current binding/executor lookup; null limits means no validated numeric registration observation. */
   resolveExecutorGeneration(
     ctx: D.AuthContext,
     input: { workspaceId: string; bindingVersion: number; executorId: string },
-  ): Promise<D.Outcome<{ executorId: string; executorGeneration: number }>>;
+  ): Promise<
+    D.Outcome<{
+      executorId: string;
+      executorGeneration: number;
+      transferLimits: D.ExecutorTransferLimits | null;
+    }>
+  >;
   handleApi<K extends D.ControlOperationId>(
     ctx: D.AuthContext,
     input: D.OperationRequest<K>,
@@ -16,6 +23,9 @@ export interface ControlPlaneRpc extends InfrastructureReservations {
   createAgent: D.ApiMethod<"createAgent">;
   describeAgent: D.ApiMethod<"describeAgent">;
   configureAgent: D.ApiMethod<"configureAgent">;
+  acquireWorkspaceLease: D.ApiMethod<"acquireWorkspaceLease">;
+  renewWorkspaceLease: D.ApiMethod<"renewWorkspaceLease">;
+  releaseWorkspaceLease: D.ApiMethod<"releaseWorkspaceLease">;
   mintCredential: D.ApiMethod<"mintCredential">;
   revokeCredential: D.ApiMethod<"revokeCredential">;
   rotateCredential: D.ApiMethod<"rotateCredential">;
