@@ -1,4 +1,5 @@
 import type * as D from "../../../src/boundary/dto.js";
+import { permits, roleAllows } from "../../../src/control/authorization.js";
 import { same } from "../../../src/control/store.js";
 import { TestRecipient as BaseRecipient } from "./recipients.js";
 import type { FixtureControl } from "./worker.js";
@@ -185,29 +186,32 @@ export class TestRecipient extends BaseRecipient {
     const body = await request.text();
     await this.ctx.storage.put("proof-last", { path, auth, body });
     const payload = JSON.parse(body) as D.JobCommitted;
-    const authorized = await this.env.CONTROL_PLANE.getByName("control").authorize({
-      principal: auth,
-      action: workspace
-        ? auth.grants.some(
-            (g) =>
-              g.resources.actions.includes("workspace.write") || g.resources.actions.includes("*"),
-          )
-          ? "workspace.write"
-          : "workspace.read"
-        : "jobs.dispatch",
-      resources: {
-        agentIds: ["agent"],
-        conversationIds: ["conversation"],
-        workspaceIds: ["workspace"],
-        executorIds: ["executor"],
-        backendIds: [],
-        tools: [],
-        actions: [],
-      },
-    });
+    const action = workspace
+      ? auth.grants.some(
+          (g) =>
+            g.resources.actions.includes("workspace.write") || g.resources.actions.includes("*"),
+        )
+        ? "workspace.write"
+        : "workspace.read"
+      : "jobs.dispatch";
+    const resources = {
+      agentIds: ["agent"],
+      conversationIds: ["conversation"],
+      workspaceIds: ["workspace"],
+      executorIds: ["executor"],
+      backendIds: [],
+      tools: [],
+      actions: [action],
+    };
+    // Match the real private proof peers: local current authority, no nested CP admission.
+    const current = async () =>
+      auth.deadline > Date.now() &&
+      (auth.credentialExpiresAt === null || auth.credentialExpiresAt > Date.now()) &&
+      auth.generation >= (await this.floor(`credential:${auth.credentialId}`)) &&
+      roleAllows(auth, action) &&
+      permits(auth.grants, resources, action);
     if (
-      !authorized.ok ||
-      !authorized.value.allowed ||
+      !(await current()) ||
       new TextEncoder().encode(body).length > 65536 ||
       !auth.registrationId ||
       (agent && path !== `/__fortipi/terminal-proof/${payload.identity.jobId}`)
@@ -218,6 +222,7 @@ export class TestRecipient extends BaseRecipient {
       return new Response(" ".repeat(65537), { headers: { "Cache-Control": "no-store" } });
     if (mode === "hold") await new Promise((resolve) => setTimeout(resolve, 800));
     if (mode === "hold-grant") await new Promise((resolve) => setTimeout(resolve, 2500));
+    if (!(await current())) return new Response(null, { status: 403 });
     const stored = await this.ctx.storage.get<D.JobCommitted>("proof");
     if (mode === "wrong-event" && stored)
       return Response.json(
