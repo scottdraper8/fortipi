@@ -13,26 +13,13 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { release, tmpdir, userInfo } from "node:os";
-import { basename, delimiter, resolve } from "node:path";
+import { basename, delimiter, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { repository } from "../../scripts/build-workspaces.ts";
 import { json } from "../../scripts/check-pins.ts";
 import { archiveEntries, hash } from "./review-supply-chain.ts";
 
-assert.equal(process.platform, "linux", "Docker CI provisioning requires an actual Linux job");
-assert.equal(process.arch, "x64", "Docker CI provisioning requires an actual x64 job");
-assert.ok(
-  process.env.GITHUB_ACTIONS === "true" &&
-    process.env.GITHUB_JOB &&
-    process.env.GITHUB_PATH &&
-    process.env.GITHUB_ENV,
-  "This provisioner is only for isolated GitHub Linux runners",
-);
-assert.ok(
-  process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--rootless"),
-  "Usage: node tools/unstale/provision-docker.ts [--rootless]",
-);
-const rootless = process.argv[2] === "--rootless";
 const policy = await json<{
   docker: { url: string; sha256: string; version: string; buildkit: string };
   buildx: {
@@ -47,7 +34,17 @@ const policy = await json<{
     url: string;
     sha256: string;
     files: Record<string, string>;
-    rootlesskit: { version: string; source: string; go: string };
+    rootlesskit: {
+      version: string;
+      source: string;
+      go: string;
+      sourceArchiveSha256: string;
+      goModSha256: string;
+      goSumSha256: string;
+      moduleGraphSha256: string;
+      packageGraphSha256: string;
+      binarySha256: string;
+    };
     licenses: { path: string; sha256: string }[];
     uidmap: { version: string; binaries: Record<string, string> };
   };
@@ -86,10 +83,171 @@ async function optionalSetting(path: string): Promise<string | undefined> {
   }
 }
 
-async function rootlessPrerequisites(directory: string, env: NodeJS.ProcessEnv): Promise<void> {
+// Same supported upstream target on CI and in independent cross-build verification.
+export async function prepareRootlesskit(directory: string, compiler = "go"): Promise<void> {
+  const pin = policy.rootless.rootlesskit;
+  assert.equal(pin.go, "go1.27.4");
+  const source = resolve(directory, "rootlesskit-source");
+  await mkdir(source, { mode: 0o700 });
+  const raw = await download(
+    `https://codeload.github.com/rootless-containers/rootlesskit/tar.gz/${pin.source}`,
+    pin.sourceArchiveSha256,
+    "rootlesskit-source.tgz",
+  );
+  const prefix = `rootlesskit-${pin.source}/`;
+  for (const [name, bytes] of archiveEntries(raw)) {
+    assert.ok(name.startsWith(prefix), "Unexpected RootlessKit source root");
+    const target = resolve(source, name.slice(prefix.length));
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, bytes);
+  }
+  const env = {
+    HOME: process.env.HOME,
+    CODEX_HOME: process.env.CODEX_HOME,
+    LANG: "C",
+    PATH: process.env.PATH,
+    GOENV: "off",
+    GOTOOLCHAIN: "local",
+    GOAUTH: "off",
+    GOVCS: "*:off",
+    GOPATH: resolve(directory, "go"),
+    GOMODCACHE: resolve(directory, "go/pkg/mod"),
+    GOCACHE: resolve(directory, "go/cache"),
+    GOPROXY: "https://proxy.golang.org",
+    GOSUMDB: "sum.golang.org",
+    CGO_ENABLED: "0",
+    GOOS: "linux",
+    GOARCH: "amd64",
+    GOAMD64: "v1",
+  };
+  const go = async (args: string[]) => {
+    try {
+      return (
+        await exec(compiler, args, {
+          cwd: source,
+          env,
+          timeout: 300_000,
+          killSignal: "SIGKILL",
+          maxBuffer: 256 * 1024,
+        })
+      ).stdout;
+    } catch {
+      throw new Error(
+        `RootlessKit source build: go ${args[0]} failed; no credentials or VCS fallback enabled`,
+      );
+    }
+  };
+  assert.match(await go(["version"]), /^go version go1\.27\.4 /);
+  const checkInputs = async () => {
+    assert.equal(hash(await readFile(resolve(source, "go.mod"))), pin.goModSha256);
+    assert.equal(hash(await readFile(resolve(source, "go.sum"))), pin.goSumSha256);
+  };
+  await checkInputs();
+  await go(["mod", "download"]); // Public proxy plus Go's authenticated checksum database.
+  assert.match(await go(["mod", "verify"]), /all modules verified/);
+  await checkInputs();
+  const normalize = (text: string) =>
+    `${text
+      .trim()
+      .split("\n")
+      .map((line) => line.trim())
+      .sort()
+      .join("\n")}\n`;
+  const modules = normalize(
+    await go([
+      "list",
+      "-mod=readonly",
+      "-m",
+      "-f",
+      "{{.Path}} {{.Version}} {{.Sum}} {{.GoModSum}}",
+      "all",
+    ]),
+  );
+  const packages = normalize(
+    await go(["list", "-mod=readonly", "-deps", "-f", "{{.ImportPath}}", "./cmd/rootlesskit"]),
+  );
+  assert.equal(hash(Buffer.from(modules)), pin.moduleGraphSha256, "Frozen Go module graph changed");
+  assert.equal(
+    hash(Buffer.from(packages)),
+    pin.packageGraphSha256,
+    "Selected Linux Go package graph changed",
+  );
+  assert.ok(
+    !packages
+      .split("\n")
+      .some(
+        (path) =>
+          path === "golang.org/x/net/html" || path.startsWith("golang.org/x/crypto/openpgp"),
+      ),
+    "Affected HTML/OpenPGP packages entered the build",
+  );
+  const binary = resolve(directory, "rootlesskit");
+  await go([
+    "build",
+    "-mod=readonly",
+    "-trimpath",
+    "-buildvcs=false",
+    "-ldflags=-s -w",
+    "-o",
+    binary,
+    "./cmd/rootlesskit",
+  ]);
+  await checkInputs();
+  assert.equal(
+    hash(await readFile(binary)),
+    pin.binarySha256,
+    "Reviewed RootlessKit source-build output changed",
+  );
+  const build = await go(["version", "-m", binary]);
+  assert.ok(
+    build.includes(": go1.27.4\n") &&
+      build.includes("GOOS=linux") &&
+      build.includes("CGO_ENABLED=0"),
+  );
+  await writeFile(
+    resolve(directory, "rootlesskit-build.json"),
+    `${JSON.stringify({ source: pin.source, sourceArchiveSha256: pin.sourceArchiveSha256, compiler: pin.go, binarySha256: pin.binarySha256, modules, packages, build }, null, 2)}\n`,
+  );
+}
+
+type IdRange = { first: number; count: number };
+export function verifyIdMap(text: string, host: number, ranges: IdRange[]): void {
+  assert.ok(Number.isSafeInteger(host) && host > 0, "Host identity must be nonroot");
+  const rows = text
+    .trim()
+    .split("\n")
+    .map((line) => line.trim().split(/\s+/).map(Number));
+  assert.deepEqual(
+    rows[0],
+    [0, host, 1],
+    "Namespace root must map only to the nonroot job identity",
+  );
+  let next = 1;
+  for (const [inside, outside, count] of rows.slice(1)) {
+    assert.ok(
+      inside === next &&
+        outside !== undefined &&
+        count !== undefined &&
+        Number.isSafeInteger(count) &&
+        count > 0 &&
+        ranges.some((r) => outside >= r.first && outside + count <= r.first + r.count),
+      "Unexpected subordinate namespace mapping",
+    );
+    next += count;
+  }
+  assert.ok(next >= 65_537, "Actual namespace requires at least 65,536 subordinate IDs");
+}
+
+async function rootlessPrerequisites(
+  directory: string,
+  env: NodeJS.ProcessEnv,
+): Promise<IdRange[][]> {
   const user = userInfo();
   assert.ok(
-    user.uid > 0 && process.geteuid?.() === user.uid,
+    user.uid > 0 &&
+      user.gid > 0 &&
+      process.geteuid?.() === user.uid &&
+      process.getegid?.() === user.gid,
     "rootless prerequisite: nonroot job user",
   );
   const kernel = /^(\d+)\.(\d+)/.exec(release());
@@ -106,28 +264,88 @@ async function rootlessPrerequisites(directory: string, env: NodeJS.ProcessEnv):
     Number(await optionalSetting("/proc/sys/user/max_user_namespaces")) > 0,
     "rootless prerequisite: host has available user namespaces",
   );
-  for (const [path, id] of [
-    ["/etc/subuid", user.uid],
-    ["/etc/subgid", user.gid],
+  const allocated: IdRange[][] = [];
+  // CVE-2024-56433: an NSS namespace with remote identities cannot be validated here.
+  const nss = await readFile("/etc/nsswitch.conf", "utf8");
+  const localFilesystems = new Set(
+    "ext4 xfs btrfs overlay squashfs vfat ramfs tmpfs devtmpfs devpts proc sysfs cgroup cgroup2 pstore securityfs debugfs tracefs bpf configfs fusectl mqueue hugetlbfs efivarfs binfmt_misc nsfs".split(
+      " ",
+    ),
+  );
+  assert.ok(
+    (await readFile("/proc/self/mountinfo", "utf8"))
+      .trim()
+      .split("\n")
+      .every((line) => {
+        const [mount, properties] = line.split(" - ");
+        const type = properties?.split(" ")[0];
+        return (
+          type !== undefined &&
+          (localFilesystems.has(type) ||
+            (type === "autofs" && mount?.split(" ")[4] === "/proc/sys/fs/binfmt_misc"))
+        );
+      }),
+    "rootless prerequisite: local host filesystems required; remote numeric ownership cannot be checked for CVE-2024-56433",
+  );
+  for (const database of ["passwd", "group"]) {
+    const sources = new RegExp(`^${database}:\\s*(.+)$`, "m")
+      .exec(nss)?.[1]
+      ?.split("#")[0]
+      ?.trim()
+      .split(/\s+/);
+    assert.ok(
+      sources?.length && sources.every((source) => ["files", "systemd"].includes(source)),
+      "rootless prerequisite: local-only host account sources required to exclude subordinate-ID collisions",
+    );
+  }
+  for (const [path, id, database] of [
+    ["/etc/subuid", user.uid, "passwd"],
+    ["/etc/subgid", user.gid, "group"],
   ] as const) {
     const ranges = (await readFile(path, "utf8")).trim().split("\n");
-    assert.ok(
-      ranges.some((line) => {
-        const [name, first, count] = line.split(":");
-        const start = Number(first);
-        const size = Number(count);
-        return (
-          (name === user.username || name === String(user.uid)) &&
-          Number.isSafeInteger(start) &&
+    const selected: IdRange[] = [];
+    for (const line of ranges) {
+      const [name, first, count] = line.split(":");
+      if (name !== user.username && name !== String(user.uid)) continue;
+      const start = Number(first);
+      const size = Number(count);
+      assert.ok(
+        Number.isSafeInteger(start) &&
           Number.isSafeInteger(size) &&
           start > 0 &&
           size >= 65_536 &&
           start + size <= 2 ** 32 &&
-          (id < start || id >= start + size)
-        );
-      }),
-      `rootless prerequisite: ${path} needs >=65,536 subordinate IDs for this user`,
-    );
+          (id < start || id >= start + size),
+        `rootless prerequisite: invalid subordinate range in ${path}`,
+      );
+      selected.push({ first: start, count: size });
+    }
+    assert.ok(selected.length, `rootless prerequisite: ${path} needs >=65,536 subordinate IDs`);
+    const identities = (await command("/usr/bin/getent", [database], env))
+      .trim()
+      .split("\n")
+      .map((line) => Number(line.split(":")[2]));
+    for (const range of selected) {
+      assert.ok(
+        identities.every(
+          (id) => Number.isSafeInteger(id) && (id < range.first || id >= range.first + range.count),
+        ),
+        "rootless prerequisite: subordinate IDs collide with host identities (CVE-2024-56433)",
+      );
+      assert.ok(
+        ranges.every((line) => {
+          const [name, first, count] = line.split(":");
+          return (
+            name === user.username ||
+            name === String(user.uid) ||
+            Number(first) + Number(count) <= range.first ||
+            Number(first) >= range.first + range.count
+          );
+        }),
+        "rootless prerequisite: subordinate allocations overlap another user",
+      );
+    }
+    allocated.push(selected);
   }
   assert.equal(
     (
@@ -208,303 +426,347 @@ async function rootlessPrerequisites(directory: string, env: NodeJS.ProcessEnv):
   console.log(
     `Rootless host prerequisites verified: Linux ${release()}, uidmap ${policy.rootless.uidmap.version}, actual FUSE/TUN devices; mount proof pending`,
   );
+  return allocated;
 }
-assert.equal(policy.docker.version, "29.9.3");
-assert.equal(policy.docker.buildkit, "0.34.2");
-assert.equal(
-  policy.docker.url,
-  "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.3.tgz",
-);
-await mkdir(resolve(repository, "dist/toolchain"), { recursive: true });
-const directory = rootless
-  ? await mkdtemp(resolve(repository, "dist/toolchain/docker-rootless-"))
-  : resolve(repository, "dist/toolchain/docker");
-await mkdir(directory, { recursive: true });
-if (rootless)
-  assert.match(
-    directory,
-    /^\/[A-Za-z0-9_./-]+$/,
-    "rootless prerequisite: simple absolute checkout path",
+
+async function main(): Promise<void> {
+  assert.equal(process.platform, "linux", "Docker CI provisioning requires an actual Linux job");
+  assert.equal(process.arch, "x64", "Docker CI provisioning requires an actual x64 job");
+  assert.ok(
+    process.env.GITHUB_ACTIONS === "true" &&
+      process.env.GITHUB_JOB &&
+      process.env.GITHUB_PATH &&
+      process.env.GITHUB_ENV,
+    "This provisioner is only for isolated GitHub Linux runners",
   );
-const raw = await download(policy.docker.url, policy.docker.sha256, "docker-29.9.3.tgz");
-for (const [path, bytes] of archiveEntries(raw)) {
-  assert.match(path, /^docker\/[a-z0-9-]+$/);
-  const target = resolve(directory, basename(path));
-  await writeFile(target, bytes);
-  await chmod(target, 0o755);
-}
-if (rootless) {
+  assert.ok(
+    process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--rootless"),
+    "Usage: node tools/unstale/provision-docker.ts [--rootless]",
+  );
+  const rootless = process.argv[2] === "--rootless";
+  let allocated: IdRange[][] = [];
+  assert.equal(policy.docker.version, "29.9.3");
+  assert.equal(policy.docker.buildkit, "0.34.2");
   assert.equal(
-    policy.rootless.url,
-    "https://download.docker.com/linux/static/stable/x86_64/docker-rootless-extras-29.9.3.tgz",
+    policy.docker.url,
+    "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.3.tgz",
   );
-  assert.equal(policy.rootless.rootlesskit.version, "3.3.0");
-  for (const license of policy.rootless.licenses)
-    assert.equal(
-      hash(await readFile(resolve(repository, license.path))),
-      license.sha256,
-      "Rootless tooling license changed",
+  await mkdir(resolve(repository, "dist/toolchain"), { recursive: true });
+  const directory = rootless
+    ? await mkdtemp(resolve(repository, "dist/toolchain/docker-rootless-"))
+    : resolve(repository, "dist/toolchain/docker");
+  await mkdir(directory, { recursive: true });
+  if (rootless)
+    assert.match(
+      directory,
+      /^\/[A-Za-z0-9_./-]+$/,
+      "rootless prerequisite: simple absolute checkout path",
     );
-  const entries = archiveEntries(
-    await download(
-      policy.rootless.url,
-      policy.rootless.sha256,
-      "docker-rootless-extras-29.9.3.tgz",
-    ),
-  );
-  assert.deepEqual(
-    [...entries.keys()].sort(),
-    ["dockerd-rootless-setuptool.sh", "dockerd-rootless.sh", "rootlesskit"].map(
-      (name) => `docker-rootless-extras/${name}`,
-    ),
-  );
-  assert.deepEqual(Object.keys(policy.rootless.files).sort(), [
-    "dockerd-rootless-setuptool.sh",
-    "dockerd-rootless.sh",
-    "rootlesskit",
-  ]);
-  for (const [name, expected] of Object.entries(policy.rootless.files)) {
-    const bytes = entries.get(`docker-rootless-extras/${name}`);
-    assert.ok(bytes);
-    assert.equal(hash(bytes), expected, `${name}: reviewed identity changed`);
-    if (name === "rootlesskit") {
-      for (const identity of [
-        `mod\tgithub.com/rootless-containers/rootlesskit/v3\tv${policy.rootless.rootlesskit.version}\t`,
-        `build\tvcs.revision=${policy.rootless.rootlesskit.source}\n`,
-        "build\tvcs.modified=false\n",
-        policy.rootless.rootlesskit.go,
-      ])
-        assert.ok(bytes.includes(identity), "RootlessKit embedded source/build identity changed");
-    }
-    if (name === "dockerd-rootless-setuptool.sh") continue; // No home/context/systemd installer.
-    await writeFile(resolve(directory, name), bytes, { mode: 0o755 });
+  const raw = await download(policy.docker.url, policy.docker.sha256, "docker-29.9.3.tgz");
+  for (const [path, bytes] of archiveEntries(raw)) {
+    assert.match(path, /^docker\/[a-z0-9-]+$/);
+    const target = resolve(directory, basename(path));
+    await writeFile(target, bytes);
+    await chmod(target, 0o755);
   }
-}
-assert.equal(policy.buildx.version, "0.38.2");
-assert.equal(
-  policy.buildx.url,
-  "https://github.com/docker/buildx/releases/download/v0.38.2/buildx-v0.38.2.linux-amd64",
-);
-assert.equal(
-  hash(await readFile(resolve(repository, policy.buildx.licensePath))),
-  policy.buildx.licenseSha256,
-  "Buildx license identity changed",
-);
-const plugins = resolve(directory, "cli-plugins");
-// Rootless job state must not collide with a previous daemon or inherit Docker credentials.
-const session = rootless ? await mkdtemp(resolve(tmpdir(), "fortipi-docker-")) : directory;
-if (rootless)
-  assert.match(
-    session,
-    /^\/[A-Za-z0-9_./-]+$/,
-    "rootless prerequisite: simple absolute temporary path",
-  );
-const config = resolve(session, "config");
-await mkdir(plugins, { recursive: true });
-await mkdir(config, { recursive: true });
-const buildx = await download(
-  policy.buildx.url,
-  policy.buildx.sha256,
-  "buildx-v0.38.2.linux-amd64",
-);
-await writeFile(resolve(plugins, "docker-buildx"), buildx);
-await chmod(resolve(plugins, "docker-buildx"), 0o755);
-await writeFile(resolve(config, "config.json"), JSON.stringify({ cliPluginsExtraDirs: [plugins] }));
-const env: NodeJS.ProcessEnv = {
-  ...(rootless
-    ? Object.fromEntries(
-        Object.entries(process.env).filter(([key]) => ["HOME", "CODEX_HOME", "LANG"].includes(key)),
-      )
-    : process.env),
-  PATH: `${directory}${delimiter}${rootless ? "/usr/bin:/bin:/usr/sbin:/sbin" : (process.env.PATH ?? "")}`,
-  DOCKER_HOST: `unix://${session}/docker.sock`,
-  DOCKER_CONFIG: config,
-  BUILDX_CONFIG: resolve(config, "buildx"),
-  BUILDX_BUILDER: "default",
-};
-for (const name of [
-  "DOCKER_CONTEXT",
-  "DOCKER_TLS",
-  "DOCKER_TLS_VERIFY",
-  "DOCKER_CERT_PATH",
-  "BUILDKIT_HOST",
-])
-  delete env[name];
-if (rootless) {
-  assert.ok(
-    env.HOME?.startsWith("/"),
-    "rootless prerequisite: retain the job user's original HOME",
-  );
-  Object.assign(env, {
-    XDG_RUNTIME_DIR: resolve(session, "runtime"),
-    XDG_CONFIG_HOME: resolve(session, "xdg-config"),
-    DOCKERD: resolve(directory, "dockerd"),
-    DOCKERD_ROOTLESS_ROOTLESSKIT_STATE_DIR: resolve(session, "state"),
-    DOCKERD_ROOTLESS_ROOTLESSKIT_NET: "gvisor-tap-vsock",
-    DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER: "builtin",
-    DOCKERD_ROOTLESS_ROOTLESSKIT_DISABLE_HOST_LOOPBACK: "true",
-    DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS: "--subid-source=static",
-  });
-  await mkdir(env.XDG_RUNTIME_DIR ?? "", { mode: 0o700 });
-  await mkdir(env.XDG_CONFIG_HOME ?? "", { mode: 0o700 });
-  try {
-    await rootlessPrerequisites(directory, env);
-  } catch (error) {
-    throw new Error(
-      `rootless prerequisite failed: ${error instanceof Error ? error.message : "unavailable host baseline"}`,
-    );
-  }
-  assert.match(
-    (await command(resolve(directory, "rootlesskit"), ["--version"], env)).trim(),
-    /^rootlesskit version 3\.3\.0(?:\s|$)/,
-  );
-  assert.match(
-    await command(resolve(directory, "rootlesskit"), ["--help"], env),
-    /gvisor-tap-vsock/,
-  );
-}
-for (const name of ["docker", "dockerd"])
-  assert.match(await command(resolve(directory, name), ["--version"], env), /\b29\.9\.3(?:,|\s|$)/);
-await command("sudo", ["-n", "systemctl", "stop", "docker.service", "docker.socket"], env);
-const log = rootless ? undefined : await open(resolve(directory, "daemon.log"), "w");
-const daemonConfig = resolve(config, "daemon.json");
-if (rootless) await writeFile(daemonConfig, "{}\n", { mode: 0o600 });
-const daemon = spawn(
-  rootless ? resolve(directory, "dockerd-rootless.sh") : "sudo",
-  [
-    ...(rootless
-      ? [
-          "--rootless",
-          "--config-file",
-          daemonConfig,
-          "--storage-driver",
-          "overlay2",
-          "--log-level",
-          "error",
-        ]
-      : ["-n", resolve(directory, "dockerd")]),
-    "--host",
-    `unix://${session}/docker.sock`,
-    "--data-root",
-    `${session}/data`,
-    "--exec-root",
-    `${session}/exec`,
-    "--pidfile",
-    `${session}/daemon.pid`,
-  ],
-  // Rootless output goes to /dev/null: bounded at zero, no logger keeping Node alive.
-  { env, detached: true, stdio: ["ignore", log?.fd ?? "ignore", log?.fd ?? "ignore"] },
-);
-let stopped: string | undefined;
-daemon.once("error", () => {
-  stopped = "spawn error";
-});
-daemon.once("exit", (code, signal) => {
-  stopped = `exit ${signal ?? code}`;
-});
-daemon.unref();
-await log?.close();
-try {
-  let ready = false;
-  const deadline = Date.now() + 60_000;
-  while (!stopped && Date.now() < deadline) {
-    try {
-      assert.equal(
-        (
-          await command(
-            resolve(directory, "docker"),
-            ["version", "--format", "{{.Server.Version}}"],
-            env,
-            3_000,
-          )
-        ).trim(),
-        "29.9.3",
-      );
-      ready = true;
-      break;
-    } catch {
-      await new Promise((accept) => setTimeout(accept, 500));
-    }
-  }
-  assert.ok(
-    ready,
-    rootless
-      ? `rootless prerequisite: pinned nonroot daemon unavailable (${stopped ?? "60s deadline"}); check host namespace/AppArmor/iptables/storage support; daemon output discarded`
-      : "Pinned Docker daemon failed; inspect ignored daemon.log",
-  );
   if (rootless) {
-    const options = JSON.parse(
-      await command(
-        resolve(directory, "docker"),
-        ["info", "--format", "{{json .SecurityOptions}}"],
-        env,
+    assert.equal(
+      policy.rootless.url,
+      "https://download.docker.com/linux/static/stable/x86_64/docker-rootless-extras-29.9.3.tgz",
+    );
+    assert.equal(policy.rootless.rootlesskit.version, "3.3.0");
+    for (const license of policy.rootless.licenses)
+      assert.equal(
+        hash(await readFile(resolve(repository, license.path))),
+        license.sha256,
+        "Rootless tooling license changed",
+      );
+    const entries = archiveEntries(
+      await download(
+        policy.rootless.url,
+        policy.rootless.sha256,
+        "docker-rootless-extras-29.9.3.tgz",
       ),
-    ) as string[];
-    assert.ok(options.includes("name=rootless"), "Daemon is not actually rootless");
-    const pid = (await readFile(resolve(session, "daemon.pid"), "utf8")).trim();
-    assert.match(pid, /^[1-9]\d*$/);
-    for (const processId of [String(daemon.pid), pid]) {
-      const status = await readFile(`/proc/${processId}/status`, "utf8");
-      const uids = /^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/m.exec(status);
-      assert.ok(
-        uids?.slice(1).every((uid) => Number(uid) === process.getuid?.()),
-        "RootlessKit and dockerd must run as the nonroot job user on the host",
+    );
+    assert.deepEqual(
+      [...entries.keys()].sort(),
+      ["dockerd-rootless-setuptool.sh", "dockerd-rootless.sh", "rootlesskit"].map(
+        (name) => `docker-rootless-extras/${name}`,
+      ),
+    );
+    assert.deepEqual(Object.keys(policy.rootless.files).sort(), [
+      "dockerd-rootless-setuptool.sh",
+      "dockerd-rootless.sh",
+      "rootlesskit",
+    ]);
+    for (const [name, expected] of Object.entries(policy.rootless.files)) {
+      const bytes = entries.get(`docker-rootless-extras/${name}`);
+      assert.ok(bytes);
+      assert.equal(hash(bytes), expected, `${name}: reviewed identity changed`);
+      if (name !== "dockerd-rootless.sh") continue; // Reject the old-Go binary; no setuptool installer.
+      await writeFile(resolve(directory, name), bytes, { mode: 0o755 });
+    }
+    await prepareRootlesskit(directory);
+  }
+  assert.equal(policy.buildx.version, "0.38.2");
+  assert.equal(
+    policy.buildx.url,
+    "https://github.com/docker/buildx/releases/download/v0.38.2/buildx-v0.38.2.linux-amd64",
+  );
+  assert.equal(
+    hash(await readFile(resolve(repository, policy.buildx.licensePath))),
+    policy.buildx.licenseSha256,
+    "Buildx license identity changed",
+  );
+  const plugins = resolve(directory, "cli-plugins");
+  // Rootless job state must not collide with a previous daemon or inherit Docker credentials.
+  const session = rootless ? await mkdtemp(resolve(tmpdir(), "fortipi-docker-")) : directory;
+  if (rootless)
+    assert.match(
+      session,
+      /^\/[A-Za-z0-9_./-]+$/,
+      "rootless prerequisite: simple absolute temporary path",
+    );
+  const config = resolve(session, "config");
+  await mkdir(plugins, { recursive: true });
+  await mkdir(config, { recursive: true });
+  const buildx = await download(
+    policy.buildx.url,
+    policy.buildx.sha256,
+    "buildx-v0.38.2.linux-amd64",
+  );
+  await writeFile(resolve(plugins, "docker-buildx"), buildx);
+  await chmod(resolve(plugins, "docker-buildx"), 0o755);
+  await writeFile(
+    resolve(config, "config.json"),
+    JSON.stringify({ cliPluginsExtraDirs: [plugins] }),
+  );
+  const env: NodeJS.ProcessEnv = {
+    ...(rootless
+      ? { HOME: process.env.HOME, CODEX_HOME: process.env.CODEX_HOME, LANG: process.env.LANG }
+      : process.env),
+    PATH: `${directory}${delimiter}${rootless ? "/usr/bin:/bin:/usr/sbin:/sbin" : (process.env.PATH ?? "")}`,
+    DOCKER_HOST: `unix://${session}/docker.sock`,
+    DOCKER_CONFIG: config,
+    BUILDX_CONFIG: resolve(config, "buildx"),
+    BUILDX_BUILDER: "default",
+  };
+  for (const name of [
+    "DOCKER_CONTEXT",
+    "DOCKER_TLS",
+    "DOCKER_TLS_VERIFY",
+    "DOCKER_CERT_PATH",
+    "BUILDKIT_HOST",
+  ])
+    delete env[name];
+  if (rootless) {
+    assert.ok(
+      env.HOME?.startsWith("/"),
+      "rootless prerequisite: retain the job user's original HOME",
+    );
+    Object.assign(env, {
+      XDG_RUNTIME_DIR: resolve(session, "runtime"),
+      XDG_CONFIG_HOME: resolve(session, "xdg-config"),
+      DOCKERD: resolve(directory, "dockerd"),
+      DOCKERD_ROOTLESS_ROOTLESSKIT_STATE_DIR: resolve(session, "state"),
+      DOCKERD_ROOTLESS_ROOTLESSKIT_NET: "gvisor-tap-vsock",
+      DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER: "builtin",
+      DOCKERD_ROOTLESS_ROOTLESSKIT_DISABLE_HOST_LOOPBACK: "true",
+      DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS: "--subid-source=static",
+    });
+    await mkdir(env.XDG_RUNTIME_DIR ?? "", { mode: 0o700 });
+    await mkdir(env.XDG_CONFIG_HOME ?? "", { mode: 0o700 });
+    try {
+      allocated = await rootlessPrerequisites(directory, env);
+    } catch (error) {
+      throw new Error(
+        `rootless prerequisite failed: ${error instanceof Error ? error.message : "unavailable host baseline"}`,
       );
     }
+    assert.match(
+      (await command(resolve(directory, "rootlesskit"), ["--version"], env)).trim(),
+      /^rootlesskit version 3\.3\.0(?:\s|$)/,
+    );
+    assert.match(
+      await command(resolve(directory, "rootlesskit"), ["--help"], env),
+      /gvisor-tap-vsock/,
+    );
   }
-  const activeBuildx = (
-    await command(resolve(directory, "docker"), ["buildx", "version"], env)
-  ).trim();
-  const identity = /^github\.com\/docker\/buildx v(\d+\.\d+\.\d+) ([a-f0-9]{7,40})$/.exec(
-    activeBuildx,
+  for (const name of ["docker", "dockerd"])
+    assert.match(
+      await command(resolve(directory, name), ["--version"], env),
+      /\b29\.9\.3(?:,|\s|$)/,
+    );
+  await command("sudo", ["-n", "systemctl", "stop", "docker.service", "docker.socket"], env);
+  const log = await open(resolve(session, "daemon.log"), rootless ? "wx" : "w", 0o600);
+  const daemonConfig = resolve(config, "daemon.json");
+  if (rootless) await writeFile(daemonConfig, "{}\n", { mode: 0o600 });
+  const daemon = spawn(
+    rootless ? resolve(directory, "dockerd-rootless.sh") : "sudo",
+    [
+      ...(rootless
+        ? [
+            "--rootless",
+            "--config-file",
+            daemonConfig,
+            "--storage-driver",
+            "overlay2",
+            "--log-level",
+            "error",
+          ]
+        : ["-n", resolve(directory, "dockerd")]),
+      "--host",
+      `unix://${session}/docker.sock`,
+      "--data-root",
+      `${session}/data`,
+      "--exec-root",
+      `${session}/exec`,
+      "--pidfile",
+      `${session}/daemon.pid`,
+    ],
+    { env, detached: true, stdio: ["ignore", log.fd, log.fd] },
   );
-  const builder = await command(
-    resolve(directory, "docker"),
-    ["buildx", "inspect", "default", "--timeout", "15s"],
-    env,
-  );
-  assert.match(builder, /^Driver:\s+docker\s*$/m, "Must use the default embedded Docker driver");
-  assert.match(builder, /^Status:\s+running\s*$/m);
-  assert.equal(
-    /^BuildKit(?: version)?:\s+v?(\d+\.\d+\.\d+)/m.exec(builder)?.[1],
-    policy.docker.buildkit,
-    "Embedded BuildKit identity changed",
-  );
-  assert.equal(
-    identity?.[1],
-    policy.buildx.version,
-    "The active plugin must be the reviewed version",
-  );
-  assert.ok(
-    identity?.[2] && policy.buildx.source.startsWith(identity[2]),
-    "Buildx source identity changed",
-  );
-  await writeFile(process.env.GITHUB_PATH, `${directory}\n`, { flag: "a" });
-  await writeFile(
-    process.env.GITHUB_ENV,
-    `DOCKER_HOST=${env.DOCKER_HOST}\nDOCKER_CONFIG=${config}\nBUILDX_CONFIG=${env.BUILDX_CONFIG}\nBUILDX_BUILDER=default\nDOCKER_CONTEXT=\nDOCKER_TLS=\nDOCKER_TLS_VERIFY=\nDOCKER_CERT_PATH=\nBUILDKIT_HOST=\n`,
-    { flag: "a" },
-  );
-  console.log(
-    `Docker CLI/Engine 29.9.3 (${rootless ? "rootless" : "rootful"}), Buildx 0.38.2/default embedded BuildKit ${policy.docker.buildkit} verified; actual image/FUSE evidence is still required`,
-  );
-} catch (error) {
-  if (rootless && daemon.pid && !stopped) {
-    try {
-      process.kill(-daemon.pid, "SIGTERM");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  let stopped: string | undefined;
+  daemon.once("error", () => {
+    stopped = "spawn error";
+  });
+  daemon.once("exit", (code, signal) => {
+    stopped = `exit ${signal ?? code}`;
+  });
+  daemon.unref();
+  await log.close();
+  try {
+    let ready = false;
+    const deadline = Date.now() + 60_000;
+    while (!stopped && Date.now() < deadline) {
+      try {
+        assert.equal(
+          (
+            await command(
+              resolve(directory, "docker"),
+              ["version", "--format", "{{.Server.Version}}"],
+              env,
+              3_000,
+            )
+          ).trim(),
+          "29.9.3",
+        );
+        ready = true;
+        break;
+      } catch {
+        await new Promise((accept) => setTimeout(accept, 500));
+      }
     }
-    const deadline = Date.now() + 5_000;
-    while (!stopped && Date.now() < deadline)
-      await new Promise((accept) => setTimeout(accept, 100));
-    if (!stopped) {
+    assert.ok(
+      ready,
+      rootless
+        ? `rootless prerequisite: pinned nonroot daemon unavailable (${stopped ?? "60s deadline"}); inspect private ${session}/daemon.log`
+        : "Pinned Docker daemon failed; inspect ignored daemon.log",
+    );
+    if (rootless) {
+      const options = JSON.parse(
+        await command(
+          resolve(directory, "docker"),
+          ["info", "--format", "{{json .SecurityOptions}}"],
+          env,
+        ),
+      ) as string[];
+      assert.ok(options.includes("name=rootless"), "Daemon is not actually rootless");
+      const pid = (await readFile(resolve(session, "daemon.pid"), "utf8")).trim();
+      assert.match(pid, /^[1-9]\d*$/);
+      assert.equal(
+        pid,
+        (await readFile(resolve(session, "state/child_pid"), "utf8")).trim(),
+        "Daemon PID must be RootlessKit's actual child",
+      );
+      for (const processId of [String(daemon.pid), pid]) {
+        const status = await readFile(`/proc/${processId}/status`, "utf8");
+        const uids = /^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/m.exec(status);
+        assert.ok(
+          uids?.slice(1).every((uid) => Number(uid) === process.getuid?.()),
+          "RootlessKit and dockerd must run as the nonroot job user on the host",
+        );
+      }
+      assert.equal(await realpath(`/proc/${daemon.pid}/exe`), resolve(directory, "rootlesskit"));
+      assert.equal(await realpath(`/proc/${pid}/exe`), resolve(directory, "dockerd"));
+      assert.ok(allocated[0] && allocated[1]);
+      verifyIdMap(await readFile(`/proc/${pid}/uid_map`, "utf8"), userInfo().uid, allocated[0]);
+      verifyIdMap(await readFile(`/proc/${pid}/gid_map`, "utf8"), userInfo().gid, allocated[1]);
+    }
+    const activeBuildx = (
+      await command(resolve(directory, "docker"), ["buildx", "version"], env)
+    ).trim();
+    const identity = /^github\.com\/docker\/buildx v(\d+\.\d+\.\d+) ([a-f0-9]{7,40})$/.exec(
+      activeBuildx,
+    );
+    const builder = await command(
+      resolve(directory, "docker"),
+      ["buildx", "inspect", "default", "--timeout", "15s"],
+      env,
+    );
+    assert.match(builder, /^Driver:\s+docker\s*$/m, "Must use the default embedded Docker driver");
+    assert.match(builder, /^Status:\s+running\s*$/m);
+    assert.equal(
+      /^BuildKit(?: version)?:\s+v?(\d+\.\d+\.\d+)/m.exec(builder)?.[1],
+      policy.docker.buildkit,
+      "Embedded BuildKit identity changed",
+    );
+    assert.equal(
+      identity?.[1],
+      policy.buildx.version,
+      "The active plugin must be the reviewed version",
+    );
+    assert.ok(
+      identity?.[2] && policy.buildx.source.startsWith(identity[2]),
+      "Buildx source identity changed",
+    );
+    await writeFile(process.env.GITHUB_PATH, `${directory}\n`, { flag: "a" });
+    await writeFile(
+      process.env.GITHUB_ENV,
+      `DOCKER_HOST=${env.DOCKER_HOST}\nDOCKER_CONFIG=${config}\nBUILDX_CONFIG=${env.BUILDX_CONFIG}\nBUILDX_BUILDER=default\nDOCKER_CONTEXT=\nDOCKER_TLS=\nDOCKER_TLS_VERIFY=\nDOCKER_CERT_PATH=\nBUILDKIT_HOST=\n`,
+      { flag: "a" },
+    );
+    console.log(
+      `Docker CLI/Engine 29.9.3 (${rootless ? "rootless" : "rootful"}), Buildx 0.38.2/default embedded BuildKit ${policy.docker.buildkit} verified; actual image/FUSE evidence is still required`,
+    );
+  } catch (error) {
+    // Only a bounded startup tail, from the credential-free child environment.
+    const diagnostics = await open(resolve(session, "daemon.log"), "r");
+    try {
+      const size = (await diagnostics.stat()).size;
+      const tail = Buffer.alloc(Math.min(size, 16 * 1024));
+      await diagnostics.read(tail, 0, tail.length, Math.max(0, size - tail.length));
+      await writeFile(resolve(session, "startup-diagnostics.txt"), tail, { mode: 0o600 });
+      console.error(
+        `Bounded daemon startup diagnostics: ${resolve(session, "startup-diagnostics.txt")}`,
+      );
+      if (rootless) console.error(tail.toString("utf8"));
+    } finally {
+      await diagnostics.close();
+    }
+    if (rootless && daemon.pid) {
+      try {
+        process.kill(-daemon.pid, "SIGTERM");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+      const deadline = Date.now() + 5_000;
+      while (Date.now() < deadline) {
+        try {
+          process.kill(-daemon.pid, 0);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ESRCH") break;
+          throw error;
+        }
+        await new Promise((accept) => setTimeout(accept, 100));
+      }
       try {
         process.kill(-daemon.pid, "SIGKILL");
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
       }
     }
+    throw error;
   }
-  throw error;
 }
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

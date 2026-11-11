@@ -260,8 +260,20 @@
       "version": "3.3.0",
       "source": "888c3189e9cdf34dcdb19011e1c7c34eb94b5393",
       "sourceArchiveSha256": "e560e4d46b8e168ea02d34d1cd95306eaa6361568a09d8b8ac92d37f4f5e7c59",
-      "go": "go1.26.10",
-      "network": "integrated gvisor-tap-vsock v0.8.9; builtin port driver; host loopback disabled; static subids"
+      "go": "go1.27.4",
+      "network": "integrated gvisor-tap-vsock v0.8.9; builtin port driver; host loopback disabled; static subids",
+      "goModSha256": "8a762e6528b50abc4b3acda217ae9a47a66403256cd6a082ee83cb32686d78ed",
+      "goSumSha256": "49fa8eae49c87e1a9ce14108aab2a472fa6f85138b2974119a6474f21966aa24",
+      "moduleGraphSha256": "778ecced479a0077d52a3ffa777d950d3f4db3a95e90e5e1d626e2580f2dafac",
+      "packageGraphSha256": "0924e4b1977fa8181eae460e97de68710acc000364bb93f7c98e06a38ed2efa1",
+      "binarySha256": "1b8af4b5adb98dd16854aa0c239863e40d25f9e2bb5c0d81a43d9b283d3871fc",
+      "build": "Original upstream ./cmd/rootlesskit; go build -mod=readonly -trimpath -buildvcs=false -ldflags=-s -w; CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1; public proxy.golang.org and authenticated sum.golang.org; GOAUTH=off/GOVCS=*:off/GOTOOLCHAIN=local/GOENV=off; frozen source/module/package/output hashes",
+      "upstreamBinaryRejected": {
+        "url": "https://github.com/rootless-containers/rootlesskit/releases/download/v3.3.0/rootlesskit-x86_64.tar.gz",
+        "sha256": "0e757c8f80510d764df8c9a5f169805580b48d02329f0a200900e261ecec27ed",
+        "go": "go1.26.9",
+        "reason": "Latest stable publisher binary and Docker extras Go1.26.10 predate GO-2026-6859 fix; neither binary is installed or executed."
+      }
     },
     "scriptSource": "https://github.com/moby/moby/blob/a46e6fa73efcb25d5298ef798ba865744dc5485a/contrib/dockerd-rootless.sh",
     "licenses": [
@@ -286,7 +298,7 @@
         "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
       },
       {
-        "path": "tools/unstale/licenses/golang/go/go1.26.10/LICENSE",
+        "path": "tools/unstale/licenses/golang/go/go1.27.4/LICENSE",
         "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
       }
     ],
@@ -298,7 +310,13 @@
         "newuidmap": "9035472d2a4ab77d5df65b8b500054330e1e6c1ba58d6ddfdf7234b4e6d8b038",
         "newgidmap": "32011f9ee3aeda7c26c6aacc0a6046013aa958c35d468fd15d0dd34788f2bcc5"
       },
-      "observation": "Require already-installed exact Ubuntu noble-updates amd64 package and root-owned setuid binary hashes; no package installation. Dynamic host libraries and actual runner baseline remain Linux review."
+      "observation": "Require already-installed exact Ubuntu noble-updates amd64 package and root-owned setuid binary hashes; no package installation. Dynamic host libraries and actual runner baseline remain Linux review.",
+      "securityReview": {
+        "source": "https://ubuntu.com/security/cves.json?package=shadow",
+        "sha256": "f4456ab0fbec620506472e44d29fff45aedbfa9e8842cbd4b9519a4016fda38e",
+        "latestStable": "Launchpad noble amd64 Published: 1:4.13+dfsg1-4ubuntu3.2 Updates; 3.3 is Proposed, not selected",
+        "finding": "CVE-2024-56433 remains deferred; require local-only files/systemd NSS, local host filesystems, and enumeration of passwd/group to reject host-ID and other-user subordinate allocation collisions; validate actual daemon uid_map/gid_map. Filter Ubuntu records by exact source package shadow (substring search also returns unrelated shadowsocks). No host-wide security certification."
+      }
     },
     "securityReferences": [
       "https://github.com/rootless-containers/rootlesskit/releases/tag/v3.3.0",
@@ -307,30 +325,30 @@
       "https://docs.docker.com/engine/security/rootless/",
       "https://docs.docker.com/engine/security/rootless/troubleshoot/"
     ],
-    "observation": "Optional CI-only proposal. Official archive SHA and embedded source/build metadata verified statically on macOS; no executable runtime, signature, attestation, Linux, image or FUSE approval. No selected tooling bytes enter product images. Exact advisory reachability and license review in canonical phase3/thread-1/rootless-ci-followup.md; independent parent review required.",
+    "observation": "Optional CI-only exact upstream source build with Go1.27.4, frozen verified source/module/package graph and cross-built Linux output hash. No Linux daemon/image/FUSE or signature/attestation approval. No selected tool bytes enter product images.",
     "securityReview": {
-      "checkedAt": "2026-11-11T04:53:12.231Z",
+      "checkedAt": "2026-11-11T05:11:48.839Z",
       "rootlesskitPublishedAdvisories": 0,
       "networkPublishedAdvisories": 0,
       "osvModuleQueries": 28,
       "findings": [
         {
           "ids": ["GO-2026-5932"],
-          "affected": "golang.org/x/crypto v0.57.0; OpenPGP packages",
-          "observation": "OpenPGP package names absent from selected binary. Proposed nonapplicability for parent review; module-version finding is retained."
+          "affected": "golang.org/x/crypto v0.57.0 OpenPGP packages",
+          "observation": "All affected OpenPGP imports absent from actual Go1.27.4 Linux/amd64 cmd/rootlesskit go list -deps package graph; graph hash checked before building. Module remains unchanged."
         },
         {
           "ids": ["GO-2026-6860", "GO-2026-6866"],
-          "affected": "golang.org/x/net v0.60.0; HTML parser/renderer",
-          "observation": "HTML package names absent from selected binary. Proposed nonapplicability for parent review; module-version findings are retained."
+          "affected": "golang.org/x/net v0.60.0 HTML parser/renderer",
+          "observation": "Affected golang.org/x/net/html absent from actual selected Go package graph; hash checked before building. No module upgrades or source patches."
         },
         {
           "ids": ["GO-2026-6859"],
-          "affected": "Go 1.26.10 net/http; concurrent MaxBytesReader response-header writes",
-          "observation": "MaxBytesReader symbol text is present. Scan of 3,829 non-test Go files in all 27 embedded modules found no API uses outside two documentation comments. No direct application use found; source review suggests the stated race is not exercised. Independent parent review required; no blanket stdlib/security suppression."
+          "affected": "Rejected publisher/extras Go1.26.9/1.26.10 stdlib net/http",
+          "observation": "Fixed by rebuilding unmodified RootlessKit3.3.0 with pinned Go1.27.4. No absent-symbol or direct-call grep waiver."
         }
       ],
-      "scope": "Static source/package reachability observations, not govulncheck, runtime exploit testing, signature verification or security approval. Revalidate before Linux use.",
+      "scope": "Exact selected source/module/package/build identity; 363 selected packages, 170 module-graph entries, 26 linked dependency modules plus RootlessKit main. Go verifies public module checksums through sumdb; original go.mod/go.sum stay unchanged. Actual Linux runtime/StepSecurity proof remains required.",
       "sources": [
         {
           "id": "GO-2026-5932",
@@ -352,7 +370,36 @@
           "url": "https://vuln.go.dev/ID/GO-2026-6859.json",
           "sha256": "9eb1590c57233fd8a63e8ad737d12cbdef5572eed86ffee05897291fff12a9ce"
         }
-      ]
+      ],
+      "selectedBuildOsV": {
+        "queries": 28,
+        "findings": [
+          {
+            "module": "golang.org/x/crypto",
+            "version": "v0.57.0",
+            "id": "GO-2026-5932"
+          },
+          {
+            "module": "golang.org/x/net",
+            "version": "v0.60.0",
+            "id": "GO-2026-6860"
+          },
+          {
+            "module": "golang.org/x/net",
+            "version": "v0.60.0",
+            "id": "GO-2026-6866"
+          }
+        ],
+        "responseSha256": "d9c5d47a52acc575318177b881d23cda7cb0805390b2853daccf2d5e73ca0a7f"
+      },
+      "inheritedTooling": {
+        "dockerArchiveSha256": "3fb5d1f13014c18cc54945bc177c58a9056a482dada031e17d12cf2e6922c973",
+        "version": "29.9.3",
+        "cliCompiler": "go1.26.10",
+        "daemonCompiler": "go1.26.10",
+        "finding": "GO-2026-6859",
+        "status": "BLOCKED: existing Docker CLI/daemon built with affected Go stdlib; no compiled callgraph/supported upstream fix reviewed for these binaries. RootlessKit source rebuild fixes only RootlessKit. Docker pins are outside this delegated additive rootless block; parent must resolve before approval/use."
+      }
     }
   }
 }
