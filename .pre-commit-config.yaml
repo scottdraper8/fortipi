@@ -12,7 +12,7 @@ repos:
         name: Format and lint TypeScript and metadata
         entry: pnpm exec biome check --no-errors-on-unmatched
         language: system
-        types_or: [ts, json]
+        types_or: [ts, json, yaml, markdown]
       - id: fortipi-foundation
         name: Verify foundation and statically check tooling
         entry: pnpm run verify:foundation

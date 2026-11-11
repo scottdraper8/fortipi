@@ -25,7 +25,8 @@
       "!packages/*/LICENSE",
       "!packages/*/THIRD_PARTY_NOTICES.md",
       "!packages/*/licenses",
-      "!packages/fortipi-cli/worker-assets"
+      "!packages/fortipi-cli/worker-assets",
+      "!packages/fortipi-contract/openapi.yaml"
     ]
   },
   "formatter": {
