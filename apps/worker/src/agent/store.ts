@@ -130,6 +130,7 @@ export class Store {
       CREATE INDEX IF NOT EXISTS fp_records_job_conversation_v1 ON fp_records_v1(kind,json_extract(data,'$.job.conversationId'),id) WHERE kind='job';
       CREATE INDEX IF NOT EXISTS fp_records_model_pending_v1 ON fp_records_v1(kind,json_extract(data,'$.state')) WHERE kind='admission' OR kind='creation';
       CREATE INDEX IF NOT EXISTS fp_records_intent_model_v1 ON fp_records_v1(kind,json_extract(data,'$.state')) WHERE kind='admission-intent';
+      CREATE INDEX IF NOT EXISTS fp_records_resume_admission_v1 ON fp_records_v1(json_extract(data,'$.admission')) WHERE kind='control' AND json_extract(data,'$.input.operationId')='resumeTask';
       CREATE TABLE IF NOT EXISTS fp_events_v1(conversation TEXT NOT NULL, seq INTEGER NOT NULL, source TEXT NOT NULL, data TEXT NOT NULL, bytes INTEGER NOT NULL, PRIMARY KEY(conversation,seq), UNIQUE(conversation,source));
       CREATE TABLE IF NOT EXISTS fp_sources_v1(conversation TEXT NOT NULL, source TEXT NOT NULL, seq INTEGER NOT NULL, event_id TEXT NOT NULL, PRIMARY KEY(conversation,source));
       CREATE TABLE IF NOT EXISTS fp_messages_v1(conversation TEXT NOT NULL, id TEXT NOT NULL, position INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY(conversation,id));

@@ -187,20 +187,28 @@ export class Projection {
         const permanent =
           error instanceof ServiceError &&
           (error.code === "unauthorized" || error.code === "unauthenticated");
+        const retryAfterMs =
+          error instanceof ServiceError ? error.details?.retryAfterMs : undefined;
+        const held =
+          permanent ||
+          (error instanceof ServiceError && error.retryable === false) ||
+          retryAfterMs === 0;
+        const retryAt = held
+          ? null
+          : Date.now() +
+            (typeof retryAfterMs === "number" &&
+            Number.isSafeInteger(retryAfterMs) &&
+            retryAfterMs > 0
+              ? retryAfterMs
+              : 30000);
         const current = await store.get<AdmissionIntent>("admission-intent", row.id);
-        if (current)
-          await store.put(
-            "admission-intent",
-            row.id,
-            current,
-            undefined,
-            permanent ? null : Date.now() + 30000,
-          );
+        if (current) await store.put("admission-intent", row.id, current, undefined, retryAt);
         await store.put("admission-pressure", row.id, {
           code: error instanceof ServiceError ? error.code : "interrupted",
           requiresCurrentAuthority: permanent,
+          retryAt,
         });
-        if (!permanent) remaining = true;
+        if (!held) remaining = true;
       }
       processed++;
     }
