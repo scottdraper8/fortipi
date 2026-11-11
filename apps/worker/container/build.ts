@@ -5,6 +5,7 @@ import {
   copyFile,
   lstat,
   mkdir,
+  open,
   readdir,
   readFile,
   readlink,
@@ -14,6 +15,7 @@ import {
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { c as createTar, x as extractTar } from "tar";
+import { requiredPackages } from "./debian.ts";
 import { freezeEmbedded, prepareEmbedded } from "./embedded.ts";
 import { imageInputs } from "./inputs.ts";
 
@@ -219,9 +221,16 @@ function builtUsing(value: string | undefined): { name: string; version: string 
   });
 }
 async function freeze(): Promise<Freeze> {
+  const previous = JSON.parse(
+    await readFile(resolve(here, "debian-freeze.json"), "utf8"),
+  ) as Freeze;
+  check(
+    previous.snapshot === imageInputs.snapshot,
+    "Freeze must retain its approved dated snapshot",
+  );
   const layers = await verifyOCI();
   const base = `https://snapshot.debian.org/archive/debian/${imageInputs.snapshot}/`;
-  const release = await download(`${base}dists/trixie/Release`);
+  const release = await download(`${base}dists/trixie/Release`, previous.releaseSha256);
   const releaseText =
     new TextDecoder().decode(release).split("SHA256:\n")[1]?.split("SHA512:")[0] ?? "";
   async function index(path: string): Promise<{ text: string; sha256: string }> {
@@ -240,7 +249,13 @@ async function freeze(): Promise<Freeze> {
   }
   const binaries = await index("main/binary-amd64/Packages.xz");
   const sources = await index("main/source/Sources.xz");
-  const packages = paragraphs(binaries.text).map(toPin);
+  check(
+    binaries.sha256 === previous.packagesIndexSha256 &&
+      sources.sha256 === previous.sourcesIndexSha256,
+    "Approved snapshot index drift",
+  );
+  const packageFields = paragraphs(binaries.text);
+  const packages = packageFields.map(toPin);
   const layer = layers[1];
   check(layer, "Missing Debian layer");
   // Select exactly the dpkg status file from the hash-verified official layer.
@@ -250,14 +265,22 @@ async function freeze(): Promise<Freeze> {
     "var/lib/dpkg/status",
   ]);
   const installed: PackagePin[] = [];
-  for (const entry of paragraphs(status).filter(
+  const baseFields = paragraphs(status).filter(
     (item) => item.get("Status") === "install ok installed",
-  )) {
+  );
+  for (const entry of baseFields) {
     let pin = packages.find(
       (candidate) =>
         candidate.name === entry.get("Package") && candidate.version === entry.get("Version"),
     );
     if (!pin) {
+      const recorded = previous.installed.find(
+        (pin) => pin.name === entry.get("Package") && pin.version === entry.get("Version"),
+      );
+      if (recorded) {
+        installed.push(recorded);
+        continue;
+      }
       pin = toPin(entry);
       const response = await fetch(
         `https://snapshot.debian.org/mr/binary/${encodeURIComponent(pin.name)}/${encodeURIComponent(pin.version)}/binfiles`,
@@ -281,12 +304,15 @@ async function freeze(): Promise<Freeze> {
     }
     installed.push(pin);
   }
-  const additions = Object.entries(imageInputs.packages).map(([name, version]) => {
-    const pin = packages.find((entry) => entry.name === name && entry.version === version);
+  const roots = Object.entries(imageInputs.packages).map(([name, version]) => {
+    const pin = packageFields.find(
+      (entry) => entry.get("Package") === name && entry.get("Version") === version,
+    );
     check(pin, `Snapshot missing ${name}=${version}`);
     return pin;
   });
-  // dpkg's offline dependency check is an additional build gate; no network solver changes these inputs.
+  const additions = requiredPackages(baseFields, roots, packageFields).map(toPin);
+  // The immutable-index closure is checked independently by the image's offline dpkg install.
   const all = [
     ...installed.filter((pin) => !additions.some((item) => item.name === pin.name)),
     ...additions,
@@ -310,6 +336,13 @@ async function freeze(): Promise<Freeze> {
       (entry) => entry.get("Package") === pin.source && entry.get("Version") === pin.sourceVersion,
     );
     if (!fields) {
+      const recorded = previous.sources.find(
+        (source) => source.name === pin.source && source.version === pin.sourceVersion,
+      );
+      if (recorded) {
+        sourcePins.push(recorded);
+        return;
+      }
       const response = await fetch(
         `https://snapshot.debian.org/mr/package/${encodeURIComponent(pin.source)}/${encodeURIComponent(pin.sourceVersion)}/srcfiles`,
         { signal: AbortSignal.timeout(30_000) },
@@ -352,7 +385,7 @@ async function freeze(): Promise<Freeze> {
     layers,
   };
 }
-async function prepare(pin: Freeze): Promise<void> {
+async function prepare(pin: Freeze): Promise<NamedSource[]> {
   check(pin.snapshot === imageInputs.snapshot, "Wrong frozen snapshot");
   // Regenerate derived build evidence; only verified raw content-addressed inputs are reusable.
   await rm(context, { recursive: true, force: true });
@@ -399,7 +432,91 @@ async function prepare(pin: Freeze): Promise<void> {
       await writeFile(resolve(output, "sources", entry.filename.split("/").at(-1) ?? ""), bytes);
     },
   );
+  const names = await sourceNames(pin);
   await sourceNotices(pin);
+  return names;
+}
+interface NamedSource {
+  name: string;
+  version: string;
+  descriptor: string;
+  files: { name: string; sha256: string; size: number }[];
+}
+async function sourceNames(pin: Freeze): Promise<NamedSource[]> {
+  const result: NamedSource[] = [];
+  const assigned = new Map<string, string>();
+  for (const source of pin.sources) {
+    let descriptor: SourcePin["files"][number] | undefined;
+    let fields: Map<string, string> | undefined;
+    for (const file of source.files) {
+      const path = resolve(output, "sources", file.filename.split("/").at(-1) ?? "");
+      const handle = await open(path, "r");
+      const prefix = Buffer.alloc(4096);
+      try {
+        await handle.read(prefix, 0, prefix.length, 0);
+      } finally {
+        await handle.close();
+      }
+      if (!/^Format:/m.test(prefix.toString("utf8"))) continue;
+      check(file.size <= 1_048_576, "Source descriptor exceeds bound");
+      const row = paragraphs(await readFile(path, "utf8")).find((row) => row.has("Source"));
+      check(
+        !descriptor && row?.get("Source") === source.name && row.get("Version") === source.version,
+        "Source descriptor identity drift",
+      );
+      descriptor = file;
+      fields = row;
+    }
+    check(descriptor && fields, `Source descriptor missing: ${source.name}`);
+    const descriptorName = `${source.name}_${source.version.replace(/^\d+:/, "")}.dsc`;
+    const names = new Map<string, { name: string; sha256: string; size: number }>();
+    names.set(descriptor.sha256, {
+      name: descriptorName,
+      sha256: descriptor.sha256,
+      size: descriptor.size,
+    });
+    for (const line of (fields.get("Checksums-Sha256") ?? "").trim().split("\n")) {
+      const [sha256, length, name] = line.trim().split(/\s+/);
+      check(
+        sha256 && name && /^[A-Za-z0-9][A-Za-z0-9_.+~-]*$/.test(name) && !name.includes(".."),
+        "Unsafe descriptor sibling name",
+      );
+      const actual = source.files.find(
+        (file) => file.sha256 === sha256 && file.size === Number(length),
+      );
+      check(actual, `Descriptor source/checksum missing: ${source.name}/${name}`);
+      names.set(sha256, { name, sha256, size: actual.size });
+    }
+    check(
+      names.size === source.files.length,
+      `Descriptor does not name every frozen source: ${source.name}`,
+    );
+    for (const file of source.files) {
+      const named = names.get(file.sha256);
+      check(named, "Unnamed frozen source");
+      check(
+        !assigned.has(named.name) || assigned.get(named.name) === named.sha256,
+        "Conflicting source sibling filename",
+      );
+      assigned.set(named.name, named.sha256);
+      const original = resolve(output, "sources", file.filename.split("/").at(-1) ?? "");
+      const destination = resolve(output, "sources", named.name);
+      if (original !== destination) await copyFile(original, destination);
+      check(
+        (await fileDigest(destination)) === named.sha256 &&
+          (await lstat(destination)).size === named.size,
+        "Renamed source identity drift",
+      );
+    }
+    result.push({
+      name: source.name,
+      version: source.version,
+      descriptor: descriptorName,
+      files: [...names.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  }
+  await writeFile(resolve(output, "source-names.json"), `${JSON.stringify(result, null, 2)}\n`);
+  return result;
 }
 async function sourceNotices(pin: Freeze): Promise<void> {
   const inventory: Record<string, Record<string, string>> = {};
@@ -498,6 +615,14 @@ async function sourceNotices(pin: Freeze): Promise<void> {
   await writeFile(resolve(destination, "source-license-inventory.json"), bytes);
 }
 async function build(pin: Freeze): Promise<void> {
+  const source = JSON.parse(await readFile(resolve(output, "source-revision.json"), "utf8")) as {
+    recipeMatchesCommit: boolean;
+    sourceCommit: string;
+  };
+  check(
+    source.recipeMatchesCommit,
+    "Commit the reviewed image recipe before building a distributable image",
+  );
   const version = JSON.parse(command("docker", ["version", "--format", "{{json .}}"])) as {
     Client: { Version: string };
     Server: { Version: string };
@@ -622,7 +747,7 @@ async function build(pin: Freeze): Promise<void> {
   } finally {
     command("docker", ["rm", container]);
   }
-  const sourceCommit = command("git", ["rev-parse", "HEAD"], { cwd: root }).trim();
+  const sourceCommit = source.sourceCommit;
   const licenseInventory = await fileHashes(licenses);
   await writeFile(
     resolve(output, "license-inventory.json"),
@@ -650,9 +775,9 @@ async function main(): Promise<void> {
   }
   const pin = JSON.parse(await readFile(resolve(here, "debian-freeze.json"), "utf8")) as Freeze;
   await verifyOCI();
-  await prepare(pin);
+  const names = await prepare(pin);
   await prepareEmbedded(download);
-  await sourceKit(pin);
+  await sourceKit(names);
   if (process.argv.includes("--prepare") || process.argv.includes("--freeze-licenses")) return;
   await build(pin);
   if (process.argv.includes("--verify")) {
@@ -660,12 +785,13 @@ async function main(): Promise<void> {
     command(process.execPath, [fixture, "--image", "fortipi-computerd:verified"]);
   }
 }
-async function sourceKit(pin: Freeze): Promise<void> {
+async function sourceKit(sources: NamedSource[]): Promise<void> {
   const recipe = resolve(output, "source-kit-recipe");
   await mkdir(recipe, { recursive: true });
   const recipeFiles = [
     "Dockerfile",
     "build.ts",
+    "debian.ts",
     "embedded.ts",
     "inputs.ts",
     "debian-freeze.json",
@@ -674,18 +800,63 @@ async function sourceKit(pin: Freeze): Promise<void> {
     "SOURCE-DISTRIBUTION.md",
   ];
   for (const name of recipeFiles) await copyFile(resolve(here, name), resolve(recipe, name));
+  await copyFile(
+    resolve(root, "tools/unstale/platform-tools.json"),
+    resolve(recipe, "platform-tools.json"),
+  );
+  const sourceCommit = command("git", ["rev-parse", "HEAD"], { cwd: root }).trim();
+  const sourceArchive = resolve(output, "fortipi-source.tar");
+  command("git", ["archive", "--format=tar", "--output", sourceArchive, sourceCommit], {
+    cwd: root,
+  });
+  let recipeMatchesCommit = true;
+  for (const name of recipeFiles) {
+    try {
+      if (
+        digest(
+          command("git", ["show", `${sourceCommit}:apps/worker/container/${name}`], { cwd: root }),
+        ) !== (await fileDigest(resolve(here, name)))
+      )
+        recipeMatchesCommit = false;
+    } catch {
+      recipeMatchesCommit = false;
+    }
+  }
+  for (const name of [
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "tools/unstale/platform-tools.json",
+  ]) {
+    if (
+      digest(command("git", ["show", `${sourceCommit}:${name}`], { cwd: root })) !==
+      (await fileDigest(resolve(root, name)))
+    )
+      recipeMatchesCommit = false;
+  }
+  const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")) as {
+    packageManager: string;
+    fortipi: { toolchain: { node: string; pnpm: string } };
+    devDependencies: { tar: string };
+  };
+  await writeFile(
+    resolve(output, "source-revision.json"),
+    `${JSON.stringify({ sourceCommit, sourceArchiveSha256: await fileDigest(sourceArchive), recipeMatchesCommit, node: manifest.fortipi.toolchain.node, pnpm: manifest.fortipi.toolchain.pnpm, packageManager: manifest.packageManager, tar: manifest.devDependencies.tar, packageJsonSha256: await fileDigest(resolve(root, "package.json")), lockSha256: await fileDigest(resolve(root, "pnpm-lock.yaml")), platformMetadataSha256: await fileDigest(resolve(root, "tools/unstale/platform-tools.json")) }, null, 2)}\n`,
+  );
   const embedded = JSON.parse(await readFile(resolve(here, "embedded-freeze.json"), "utf8")) as {
     components: { name: string; version: string }[];
   };
   const files = [
-    ...pin.sources.flatMap((source) =>
-      source.files.map((entry) => `sources/${entry.filename.split("/").at(-1)}`),
-    ),
+    ...sources.flatMap((source) => source.files.map((entry) => `sources/${entry.name}`)),
+    "source-names.json",
+    "fortipi-source.tar",
+    "source-revision.json",
     "computer-source.tgz",
     ...embedded.components.map(
       (pin) => `embedded-${pin.name.replaceAll("/", "_")}-${pin.version}.tgz`,
     ),
     ...recipeFiles.map((name) => `source-kit-recipe/${name}`),
+    "source-kit-recipe/platform-tools.json",
   ].sort();
   const inventory: Record<string, string> = {};
   await parallel(files, async (path) => {

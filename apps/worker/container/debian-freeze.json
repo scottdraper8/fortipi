@@ -5,20 +5,20 @@
   "sourcesIndexSha256": "6002f81f463a2d976d84b34170367cc16da2d60bd0ba9ab9d868d6e1c1a935d9",
   "packages": [
     {
-      "name": "fuse3",
-      "version": "3.17.2-3",
-      "filename": "pool/main/f/fuse3/fuse3_3.17.2-3_amd64.deb",
-      "sha256": "4866550a235224b538a66fcaf95c8a796b6968d21c6f231086e142350b302eea",
-      "source": "fuse3",
-      "sourceVersion": "3.17.2-3",
+      "name": "adduser",
+      "version": "3.152",
+      "filename": "pool/main/a/adduser/adduser_3.152_all.deb",
+      "sha256": "e50984d2e1ef6300e3fd51303839842189a077b10cb5cadff1923df10c61c493",
+      "source": "adduser",
+      "sourceVersion": "3.152",
       "builtUsing": [],
       "staticBuiltUsing": []
     },
     {
-      "name": "libfuse3-4",
+      "name": "fuse3",
       "version": "3.17.2-3",
-      "filename": "pool/main/f/fuse3/libfuse3-4_3.17.2-3_amd64.deb",
-      "sha256": "92e2d521ff872755a13aa69dba7b24025a7dc0f0f5aa708c9a86cd3565f570da",
+      "filename": "pool/main/f/fuse3/fuse3_3.17.2-3_amd64.deb",
+      "sha256": "4866550a235224b538a66fcaf95c8a796b6968d21c6f231086e142350b302eea",
       "source": "fuse3",
       "sourceVersion": "3.17.2-3",
       "builtUsing": [],
@@ -33,9 +33,29 @@
       "sourceVersion": "2.9.9-9",
       "builtUsing": [],
       "staticBuiltUsing": []
+    },
+    {
+      "name": "libfuse3-4",
+      "version": "3.17.2-3",
+      "filename": "pool/main/f/fuse3/libfuse3-4_3.17.2-3_amd64.deb",
+      "sha256": "92e2d521ff872755a13aa69dba7b24025a7dc0f0f5aa708c9a86cd3565f570da",
+      "source": "fuse3",
+      "sourceVersion": "3.17.2-3",
+      "builtUsing": [],
+      "staticBuiltUsing": []
     }
   ],
   "installed": [
+    {
+      "name": "adduser",
+      "version": "3.152",
+      "filename": "pool/main/a/adduser/adduser_3.152_all.deb",
+      "sha256": "e50984d2e1ef6300e3fd51303839842189a077b10cb5cadff1923df10c61c493",
+      "source": "adduser",
+      "sourceVersion": "3.152",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
     {
       "name": "apt",
       "version": "3.0.4",
@@ -1157,6 +1177,22 @@
           "filename": "pool/main/a/acl/acl_2.3.2-2.debian.tar.xz",
           "sha256": "e27b6e194c0a7554595d76f96acdceb800631bdc46c36457b73bc7e4a0c5f2ee",
           "size": 24296
+        }
+      ]
+    },
+    {
+      "name": "adduser",
+      "version": "3.152",
+      "files": [
+        {
+          "filename": "pool/main/a/adduser/adduser_3.152.dsc",
+          "sha256": "5ad23648a879d006e7a57d351720d4cbbbe3fb5e274ea52beb4f619896b9d520",
+          "size": 1678
+        },
+        {
+          "filename": "pool/main/a/adduser/adduser_3.152.tar.xz",
+          "sha256": "484cdde2d48053be40657b564375469fc577e89f3b984b01aed247b6081355b8",
+          "size": 334252
         }
       ]
     },
