@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
@@ -438,9 +439,12 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
 if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === "windows-probe") {
   if (process.platform !== "win32")
     throw new Error("windows-probe requires an actual Windows host");
-  const { powershellArgs, windowsUtilityEnvironment, verifyWindowsSqliteSidecar } = await import(
-      "../../dist/platform/windows.js"
-    ),
+  const {
+      powershellArgs,
+      windowsUtilityEnvironment,
+      verifyWindowsSqliteSidecar,
+      WindowsAttributeReader,
+    } = await import("../../dist/platform/windows.js"),
     execute = promisify(execFile),
     environment = windowsUtilityEnvironment(),
     executable = win32.join(
@@ -598,6 +602,7 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     started = performance.now();
   let aclPassed = false;
   let sidecarPassed = false;
+  let attributeReaderPassed = false;
   let operation = "protect-directory";
   try {
     const p = adapter();
@@ -611,6 +616,125 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     aclPassed = true;
     process.stdout.write(
       `${JSON.stringify({ phase: "actual-dacl", elapsedMs: Math.round(performance.now() - started), protectedDirectoryAndFile: true })}\n`,
+    );
+    operation = "attribute-reader";
+    const { lstat, mkdir: makeDirectory, symlink } = await import("node:fs/promises");
+    const entry = join(path, "reader-'$[data];λ.txt"),
+      otherPath = join(path, "other-root");
+    await writeFile(entry, "actual synthetic entry");
+    await makeDirectory(otherPath);
+    await writeFile(join(otherPath, "other.txt"), "different root bytes");
+    const regular = await lstat(entry),
+      batchStarted = performance.now();
+    for (let index = 0; index < 44; index++) await p.verifyEntry(entry, regular);
+    const fresh44ChecksMs = performance.now() - batchStarted;
+    await rm(entry);
+    await symlink(otherPath, entry, "junction");
+    // Stale regular-file Stats intentionally bypass the early symlink predicate:
+    // only a fresh GetAttributes of the actual mutated path can reject this.
+    const mixed = await Promise.allSettled([
+      p.verifyEntry(file, await lstat(file)),
+      p.verifyEntry(entry, regular),
+    ]);
+    assert.equal(mixed[0]?.status, "fulfilled");
+    assert.equal(mixed[1]?.status, "rejected");
+    if (mixed[1]?.status === "rejected")
+      assert.match(String(mixed[1].reason), /reparse point rejected/);
+    await rm(entry);
+    await assert.rejects(p.verifyEntry(entry, regular), /Windows attribute query failed/);
+    await writeFile(entry, "actual synthetic entry");
+    await p.verifyEntry(entry, await lstat(entry));
+    const owner = await SafeRoot.open(path, p),
+      other = await SafeRoot.open(otherPath, adapter()),
+      reads = await Promise.all([owner.read("synthetic.txt", 64), other.read("other.txt", 64)]);
+    assert.equal(reads[0]?.toString(), "synthetic");
+    assert.equal(reads[1]?.toString(), "different root bytes");
+    assert.equal((await SafeRoot.open(path, adapter())).key, owner.key);
+    for (const fault of ["eof", "crash"] as const) {
+      const children: { closed: boolean; code: number | null; signal: NodeJS.Signals | null }[] =
+        [];
+      const reader = new WindowsAttributeReader((child) => {
+        const observed = {
+          closed: false,
+          code: null as number | null,
+          signal: null as NodeJS.Signals | null,
+        };
+        children.push(observed);
+        child.once("close", (code, signal) => {
+          observed.closed = true;
+          observed.code = code;
+          observed.signal = signal;
+        });
+        if (children.length === 1) {
+          // A malformed prefix makes the real fixed reader exit normally before
+          // the following correlated query receives any reply.
+          if (fault === "eof") child.stdin.write("probe-eof\n");
+          else child.kill(); // Only this actual live helper handle, never a recovered PID.
+        }
+      });
+      await assert.rejects(
+        reader.query(file),
+        /Windows attribute reader (?:exited or failed|write failed)/,
+      );
+      assert.equal(children.length, 1);
+      assert.equal((await reader.query(file)) & 1024, 0);
+      await eventually(
+        () => children.every((child) => child.closed),
+        "attribute reader failed idle cleanup",
+        2000,
+      );
+      if (fault === "eof") {
+        assert.equal(children[0]?.code, 0);
+        assert.equal(children[0]?.signal, null);
+      }
+      assert.equal(children[1]?.code, 0);
+      assert.equal(children[1]?.signal, null);
+      assert.equal((await reader.query(file)) & 1024, 0);
+      await eventually(
+        () => children.every((child) => child.closed),
+        "reopened attribute reader failed idle cleanup",
+        2000,
+      );
+      assert.equal(children.length, 3);
+      assert.equal(children[2]?.code, 0);
+      assert.equal(children[2]?.signal, null);
+    }
+    let helperStarts = 0,
+      helperClosed = false,
+      reading = true;
+    let readFailure: unknown;
+    const independent = new WindowsAttributeReader((child) => {
+      helperStarts++;
+      child.once("close", () => {
+        helperClosed = true;
+      });
+    });
+    await independent.query(file);
+    const keepReading = (async () => {
+      while (reading) {
+        await independent.query(file);
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      }
+    })().catch((error: unknown) => {
+      readFailure = error;
+    });
+    const job = p.spawn(p.shell("[System.Threading.Thread]::Sleep(10000)", path, environment));
+    job.stdout?.resume();
+    job.stderr?.resume();
+    try {
+      assert.equal((await p.cancel(job, 50)).state, "stopped");
+    } finally {
+      reading = false;
+      await keepReading;
+      if (job.exitCode === null && job.signalCode === null) job.kill();
+    }
+    if (readFailure) throw readFailure;
+    assert.equal(helperStarts, 1, "job-tree cancellation must not kill the separate utility");
+    assert.equal((await independent.query(file)) & 1024, 0);
+    await eventually(() => helperClosed, "independent helper failed idle cleanup", 2000);
+    attributeReaderPassed = true;
+    process.stdout.write(
+      `${JSON.stringify({ phase: "attribute-reader", fresh44ChecksMs, freshReparseRejected: true, missingRejected: true, multipleRoots: true, correlatedReplies: true, eofCrashFailClosed: true, restartPassed: true, idleNormalExit: true, independentOfJobTree: true })}\n`,
     );
     operation = "sqlite-sidecar-eligibility";
     const { link, mkdir, readFile, stat } = await import("node:fs/promises");
@@ -700,7 +824,8 @@ if (process.argv[1] && resolve(process.argv[1]) === self && process.argv[2] === 
     await rm(path, { recursive: true, force: true });
   }
   process.stdout.write(
-    `${JSON.stringify({ phase: "normal-exit", controlledEofPassed, bclPassed, aclPassed, sidecarPassed })}\n`,
+    `${JSON.stringify({ phase: "normal-exit", controlledEofPassed, bclPassed, aclPassed, sidecarPassed, attributeReaderPassed })}\n`,
   );
-  if (!controlledEofPassed || !bclPassed || !aclPassed || !sidecarPassed) process.exitCode = 1;
+  if (!controlledEofPassed || !bclPassed || !aclPassed || !sidecarPassed || !attributeReaderPassed)
+    process.exitCode = 1;
 }

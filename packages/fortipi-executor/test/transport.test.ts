@@ -13,7 +13,7 @@ import type {
   TransferDescriptor,
 } from "fortipi-contract/executor";
 import { commitDigest, validateTransfer } from "fortipi-contract/executor";
-import { adapter, privateWrite } from "../dist/config.js";
+import { adapter, loadProfile, privateWrite } from "../dist/config.js";
 import { ExecutorRuntime } from "../dist/daemon.js";
 import { Guard, Ledger } from "../dist/ledger.js";
 import { Output } from "../dist/output.js";
@@ -564,12 +564,19 @@ test("zero local-read open proves the actual retained owner file, rejecting a mi
     f.profile.origin = server.origin;
     const http = new HttpTransport(f.profile, fetch, true);
     authenticateFixture(http);
+    const profilePath = join(f.directory, "synthetic-owner-profile.json");
+    await privateWrite(profilePath, JSON.stringify(f.profile));
+    let profileReloads = 0;
     runtime = new ExecutorRuntime({
       profile: f.profile,
       ledger: f.ledger,
       directory: f.directory,
       roots: new Map([["root", f.root]]),
       http,
+      reloadProfile: async () => {
+        profileReloads++;
+        return loadProfile(profilePath, adapter(), true);
+      },
     });
     await runtime.initialize();
     const local = runtime.locals.get("root");
@@ -644,13 +651,19 @@ test("zero local-read open proves the actual retained owner file, rejecting a mi
       assert.deepEqual(missing.payload.verifiedChunks, []);
     }
     await timeline.measure("restore_owner", () => f.root.write(request.path, Buffer.alloc(0), 420));
-    const proofStart = performance.now();
+    const proofStart = performance.now(),
+      beforeReloads = profileReloads;
     await timeline.measure("actual_owner_proof", () =>
       activeRuntime.transfer(descriptor, "actual_owner_open"),
     );
     assert.ok(
       performance.now() - proofStart < 10000,
       "actual owner proof must finish within the existing relay's 10s open bound",
+    );
+    assert.equal(
+      profileReloads,
+      beforeReloads + 1,
+      "owner proof includes the actual protected profile reload",
     );
     const verified = captured.at(-1);
     assert.equal(verified?.type, "transfer.status");

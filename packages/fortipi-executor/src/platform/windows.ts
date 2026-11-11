@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
 import { lstat, realpath } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { isAbsolute, resolve, win32 } from "node:path";
@@ -69,6 +69,136 @@ async function ps(command: string): Promise<string> {
   }
   return stdout.trim();
 }
+// Every request reads current OS attributes. Reusing the fixed BCL reader avoids
+// starting PowerShell for every pre/post filesystem check; no attribute is cached.
+const attributeProgram = `$ErrorActionPreference='Stop';while($null -ne ($line=[Console]::ReadLine())){$parts=$line.Split(':',2);if($parts.Length -ne 2 -or $parts[0] -notmatch '^[0-9]{1,16}$'){break};$id=$parts[0];try{$p=[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($parts[1]));$a=[int][System.IO.File]::GetAttributes($p);[Console]::Out.WriteLine($id+':'+$a.ToString([System.Globalization.CultureInfo]::InvariantCulture))}catch{[Console]::Out.WriteLine($id+':error')};[Console]::Out.Flush()}`;
+/** Internal OS utility; the native probe observes its actual child for crash/EOF controls. */
+export class WindowsAttributeReader {
+  private readonly started: ((child: ChildProcessWithoutNullStreams) => void) | undefined;
+  constructor(started?: (child: ChildProcessWithoutNullStreams) => void) {
+    this.started = started;
+  }
+  private child: ChildProcessWithoutNullStreams | undefined;
+  private sequence = 0;
+  private buffer = "";
+  private idle?: NodeJS.Timeout;
+  private pending = new Map<
+    number,
+    {
+      resolve: (attributes: number) => void;
+      reject: (error: Error) => void;
+      timer: NodeJS.Timeout;
+    }
+  >();
+  private fail(child: ChildProcessWithoutNullStreams, message: string): void {
+    if (this.child !== child) return;
+    this.child = undefined;
+    clearTimeout(this.idle);
+    this.buffer = "";
+    for (const request of this.pending.values()) {
+      clearTimeout(request.timer);
+      request.reject(new Error(message));
+    }
+    this.pending.clear();
+    child.stdin.destroy();
+    child.stdout.destroy();
+    child.stderr.destroy();
+    child.kill();
+  }
+  private idleClose(child: ChildProcessWithoutNullStreams): void {
+    clearTimeout(this.idle);
+    this.idle = setTimeout(() => {
+      if (this.child !== child || this.pending.size) return;
+      this.child = undefined;
+      this.buffer = "";
+      child.stdin.end(); // Actual EOF lets the fixed reader exit normally.
+      const reap = setTimeout(() => child.kill(), 1000);
+      child.once("close", () => clearTimeout(reap));
+    }, 100);
+  }
+  private start(): ChildProcessWithoutNullStreams {
+    const child = spawn(
+      systemFile("WindowsPowerShell\\v1.0\\powershell.exe"),
+      powershellArgs(attributeProgram),
+      { windowsHide: true, env: windowsUtilityEnvironment(), stdio: "pipe" },
+    );
+    this.child = child;
+    this.sequence = 0;
+    let stderrBytes = 0;
+    const failed = () => this.fail(child, "Windows attribute reader exited or failed");
+    child.on("error", failed);
+    child.on("close", failed);
+    child.stdin.on("error", failed);
+    child.stdout.on("error", failed);
+    child.stdout.on("end", failed);
+    child.stderr.on("error", failed);
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (data: string) => {
+      if (this.child !== child) return;
+      this.buffer += data;
+      if (this.buffer.length > 8192) {
+        this.fail(child, "Windows attribute reply exceeded bound");
+        return;
+      }
+      let end = this.buffer.indexOf("\n");
+      while (end !== -1) {
+        const line = this.buffer.slice(0, end).replace(/\r$/, "");
+        this.buffer = this.buffer.slice(end + 1);
+        const match = /^(\d{1,16}):(-?\d{1,10}|error)$/.exec(line);
+        const request = match && this.pending.get(Number(match[1]));
+        if (!match || !request) {
+          this.fail(child, "Windows attribute reply correlation failed");
+          return;
+        }
+        const attributes = Number(match[2]);
+        if (match[2] !== "error" && (attributes < -2147483648 || attributes > 2147483647)) {
+          this.fail(child, "Windows attribute reply value exceeded bound");
+          return;
+        }
+        this.pending.delete(Number(match[1]));
+        clearTimeout(request.timer);
+        if (match[2] === "error") request.reject(new Error("Windows attribute query failed"));
+        else request.resolve(attributes);
+        end = this.buffer.indexOf("\n");
+      }
+      if (!this.pending.size) this.idleClose(child);
+    });
+    child.stderr.on("data", (data: Buffer) => {
+      stderrBytes += data.length;
+      if (stderrBytes > 65536) this.fail(child, "Windows attribute diagnostic exceeded bound");
+    });
+    try {
+      this.started?.(child);
+    } catch {
+      this.fail(child, "Windows attribute observer failed");
+      throw new Error("Windows attribute observer failed");
+    }
+    return child;
+  }
+  query(path: string): Promise<number> {
+    if (Buffer.byteLength(path, "utf8") > 131072 || path.includes("\0"))
+      return Promise.reject(new Error("Windows attribute path exceeds bound"));
+    if (this.pending.size >= 64) return Promise.reject(new Error("Windows attribute reader busy"));
+    clearTimeout(this.idle);
+    const child = this.child ?? this.start(),
+      id = ++this.sequence;
+    if (!Number.isSafeInteger(id)) {
+      this.fail(child, "Windows attribute sequence exhausted");
+      return Promise.reject(new Error("Windows attribute sequence exhausted"));
+    }
+    return new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => this.fail(child, "Windows attribute query timed out"), 10000);
+      this.pending.set(id, { resolve, reject, timer });
+      // Only base64 path data enters stdin. No caller text is executable PowerShell.
+      try {
+        child.stdin.write(`${id}:${Buffer.from(path, "utf8").toString("base64")}\n`);
+      } catch {
+        this.fail(child, "Windows attribute reader write failed");
+      }
+    });
+  }
+}
+const attributeReader = new WindowsAttributeReader();
 interface Dacl {
   owner: string;
   me: string;
@@ -179,9 +309,7 @@ export function windows(): PlatformAdapter {
         (stat.isFile() && stat.nlink !== 1)
       )
         throw new Error("unsafe workspace link");
-      const attributes = Number(
-        await ps(`[Console]::Out.Write([int][System.IO.File]::GetAttributes(${literal(path)}))`),
-      );
+      const attributes = await attributeReader.query(path);
       if (!Number.isInteger(attributes) || (attributes & 1024) !== 0)
         throw new Error("reparse point rejected");
     },

@@ -79,6 +79,11 @@ executable, no profile/interactive startup, UTF-16LE encoded commands and
 `taskkill /T` with force escalation. Cancellation uses only a live ChildProcess
 from this daemon incarnation. Descendants can escape a group/tree or outlive its
 leader; cancellation cannot roll back effects and may report unknown.
+Windows reparse checks use a private fixed BCL attribute reader with fresh OS
+queries for every operation. Paths enter only as encoded stdin data; no attributes
+are cached. Replies are correlated and bounded, failures reject the read, and an
+idle reader receives EOF and exits. This utility is a sibling of native jobs and
+is not a target of job-tree cancellation. DACL inspections remain independent.
 Shutdown stops admissions, attempts cancellation and drains pending result and
 transfer work before closing SQLite. Unconfirmed live children retain unknown
 status and quarantined roots; a later exit cannot publish through a closed ledger.
