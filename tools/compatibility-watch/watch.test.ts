@@ -202,12 +202,12 @@ test("public HTTP failure, timeout, malformed JSON and size limits fail closed w
   );
   try {
     const request = githubRequest();
-    for (let i = 0; i < 48; i++) await request("repos/owner/runtime/releases/latest");
+    for (let i = 0; i < 64; i++) await request("repos/owner/runtime/releases/latest");
     await assert.rejects(
       request("repos/owner/runtime/releases/latest"),
       /Run request\/time bound reached/,
     );
-    assert.equal(boundedFetch.mock.callCount(), 48);
+    assert.equal(boundedFetch.mock.callCount(), 64);
   } finally {
     boundedFetch.mock.restore();
   }

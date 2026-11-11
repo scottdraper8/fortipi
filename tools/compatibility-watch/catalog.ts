@@ -132,7 +132,19 @@ export const sources: Source[] = [
     id: "pi-runtime",
     repo: "earendil-works/pi",
     ref: "main",
-    paths: ["packages", "packages/durable/package.json"],
+    paths: [
+      "packages/agent",
+      "packages/ai",
+      "packages/chord",
+      "packages/codemode",
+      "packages/durable",
+      "packages/env",
+      "packages/mcp",
+      "packages/schema",
+      "packages/telemetry",
+      "packages/tui",
+      "packages/durable/package.json",
+    ],
     manifest: { path: "packages/durable/package.json", name: "@earendil-works/pi-durable" },
     pins: ["pi-durable", "pi-ai", "pi-schema", "chord", "pi-codemode", "pi-telemetry"]
       .map((name) => dependency(`@earendil-works/${name}`))
