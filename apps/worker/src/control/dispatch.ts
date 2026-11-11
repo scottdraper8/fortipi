@@ -4,7 +4,7 @@ import { contains, emptyScope, requireGrant } from "./authorization.js";
 import { type Directory, valid } from "./directory.js";
 import type { Executors } from "./executors.js";
 import type { Identities } from "./identity.js";
-import { check, id, ref, type Store, same } from "./store.js";
+import { ControlError, check, id, ref, type Store, same } from "./store.js";
 import type { ExecutorState, Tickets } from "./tickets.js";
 
 export interface DispatchRecord {
@@ -392,24 +392,103 @@ export class Dispatch {
       disposition,
     };
   }
+  #completionRecord(ctx: D.AuthContext, identity: D.ExecutionIdentity): DispatchRecord {
+    check(
+      valid("executor-messages", "ExecutorFrame", {
+        type: "job.query",
+        requestId: ctx.requestId,
+        payload: identity,
+      }),
+      "invalid_request",
+      "Invalid execution query",
+    );
+    const record = this.record(ctx, identity, "jobs.dispatch");
+    const reservation = record.intent.reservation;
+    const original = record.intent.assignment.identity;
+    const currentLease = this.store.get<{ lease: D.Lease }>("lease", original.lease.leaseId)?.lease;
+    const registration = this.store.get<D.AuthorityRegistration>(
+      "recipient",
+      ctx.registrationId ?? "",
+    );
+    const resources = {
+      ...emptyScope(),
+      agentIds: [reservation.agentId],
+      conversationIds: [reservation.conversationId],
+      workspaceIds: [reservation.workspaceId],
+      tools: [record.intent.assignment.tool],
+      executorIds: identity.target.kind === "executor" ? [identity.target.executorId] : [],
+      actions: [...new Set([...reservation.actions, "jobs.dispatch"])],
+    };
+    requireGrant(ctx, "jobs.dispatch", resources);
+    check(
+      record.attempted &&
+        identity.target.kind === "executor" &&
+        same(reservation.credential, ref(ctx)) &&
+        same(this.store.get("reservation_id", reservation.reservationId), reservation) &&
+        (same(original, identity) ||
+          (currentLease && same({ ...original, lease: currentLease }, identity))) &&
+        registration?.recipient.kind === "agent" &&
+        registration.recipient.id === reservation.agentId &&
+        registration.registrationId === ctx.registrationId &&
+        same(registration.credential, ref(ctx)) &&
+        contains(registration.resources, { ...resources, actions: ["jobs.dispatch"] }) &&
+        ctx.grants.some(
+          (grant) =>
+            (grant.expiresAt === undefined || Date.now() < grant.expiresAt) &&
+            contains(grant.resources, resources) &&
+            contains(grant.resources, registration.resources),
+        ),
+      "unauthorized",
+      "Query requires its current registered execution owner",
+    );
+    // A command exists only after current Agent/Workspace durable terminal proof.
+    // Its retained receipt closes recovery eligibility even if transport ACK is lost.
+    const prefix = `${identity.executionId}:job.committed`;
+    check(
+      this.store.storage.sql
+        .exec<{ n: number }>(
+          "SELECT 1 n FROM cp_records WHERE kind='command' AND key>=? AND key<? LIMIT 1",
+          `${prefix}:`,
+          `${prefix};`,
+        )
+        .toArray().length === 0,
+      "conflict",
+      "Execution already has durable terminal proof",
+    );
+    return record;
+  }
+  completion(ctx: D.AuthContext, identity: D.ExecutionIdentity): boolean {
+    try {
+      this.#completionRecord(ctx, identity);
+      return true;
+    } catch (error) {
+      if (!(error instanceof ControlError)) throw error;
+      return false;
+    }
+  }
   async query(ctx: D.AuthContext, identity: D.ExecutionIdentity): Promise<D.ExecutionObservation> {
-    const record = this.record(ctx, identity);
+    const completion = this.completion(ctx, identity);
+    const current = () =>
+      completion ? this.#completionRecord(ctx, identity) : this.record(ctx, identity);
+    const record = current();
     if (record.observation?.state === "terminal") return record.observation;
     const late = this.store.page<{ result: D.PreparedResult }>("late_result", 0, 1, {
       subject: identity.executionId,
     })[0]?.value;
     if (late) return { identity, state: "unknown", result: late.result };
     check(identity.target.kind === "executor", "unsupported", "Backend query belongs to workspace");
+    let frame: D.ExecutorFrame | undefined;
     try {
-      const frame = await this.executors.exchange(
+      frame = await this.executors.exchange(
         identity.target.executorId,
         identity.target.generation,
         { type: "job.query", requestId: id(), payload: identity },
         ctx.deadline,
       );
-      if (frame.type === "job.query_result" && same(frame.payload.identity, identity))
-        return frame.payload;
     } catch {}
+    current();
+    if (frame?.type === "job.query_result" && same(frame.payload.identity, identity))
+      return frame.payload;
     return { identity, state: "unknown" };
   }
   async cancel(ctx: D.AuthContext, input: D.CancelRequest): Promise<D.CancelDisposition> {

@@ -188,7 +188,13 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.ExecutionIdentity,
   ): Promise<D.Outcome<D.ExecutionObservation>> {
-    return this.#call(ctx, () => this.dispatch.query(ctx, input));
+    return outcome(ctx.requestId, async () => {
+      await this.initialized;
+      this.identities.current(ctx);
+      if (this.dispatch.completion(ctx, input)) this.capacity.admitRepair();
+      else this.capacity.admitRequest(ctx.principalId);
+      return this.dispatch.query(ctx, input);
+    });
   }
   async cancelExecution(
     ctx: D.AuthContext,
