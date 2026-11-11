@@ -53,42 +53,57 @@ export async function nativeChecks(): Promise<void> {
   assert.equal(gyp.stdout.trim(), "v13.1.0");
   console.log("Native probe: PTY input/output and rendered cells");
   const terminal = new Terminal({ cols: 80, rows: 24, allowProposedApi: true });
-  await new Promise<void>((accept, reject) => {
-    const child = spawn(
-      process.execPath,
-      [
-        "-e",
-        "if(!process.stdin.isTTY||!process.stdout.isTTY)process.exit(9); process.stdout.write('PTY_READY\\n'); process.stdin.once('data',()=>{process.stdout.write('PTY_NATIVE_OK\\n');setTimeout(()=>process.exit(0),50)})",
-      ],
-      { name: "xterm-256color", cols: 80, rows: 24, cwd: repository },
-    );
-    let output = "";
-    const respond = createPtyProbeResponder((input) => child.write(input));
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error("Native PTY timed out"));
-    }, 15_000);
-    child.onData((data) => {
-      output += data;
-      terminal.write(data);
-      respond(output);
+  let disposePty = () => {};
+  try {
+    await new Promise<void>((accept, reject) => {
+      const child = spawn(
+        process.execPath,
+        [
+          "-e",
+          "if(!process.stdin.isTTY||!process.stdout.isTTY)process.exit(9); process.stdout.write('PTY_READY\\n'); process.stdin.once('data',()=>{process.stdout.write('PTY_NATIVE_OK\\n');setTimeout(()=>process.exit(0),50)})",
+        ],
+        { name: "xterm-256color", cols: 80, rows: 24, cwd: repository },
+      );
+      let output = "";
+      const respond = createPtyProbeResponder((input) => child.write(input));
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error("Native PTY timed out"));
+      }, 15_000);
+      const dataListener = child.onData((data) => {
+        output += data;
+        terminal.write(data);
+        respond(output);
+      });
+      const exitListener = child.onExit(({ exitCode }) => {
+        clearTimeout(timer);
+        if (exitCode !== 0 || !output.includes("PTY_NATIVE_OK"))
+          reject(new Error(`Native PTY failed: ${exitCode}`));
+        else
+          terminal.write("", () => {
+            const screen = Array.from(
+              { length: terminal.rows },
+              (_, row) => terminal.buffer.active.getLine(row)?.translateToString(true) ?? "",
+            ).join("\n");
+            if (screen.includes("PTY_NATIVE_OK")) accept();
+            else reject(new Error("Headless terminal did not render PTY output"));
+          });
+      });
+      disposePty = () => {
+        dataListener.dispose();
+        exitListener.dispose();
+        // A natural Windows child exit does not dispose node-pty's ConoutConnection worker.
+        // The public kill operation releases it after the genuine exit/screen assertions.
+        if (process.platform === "win32") child.kill();
+      };
     });
-    child.onExit(({ exitCode }) => {
-      clearTimeout(timer);
-      if (exitCode !== 0 || !output.includes("PTY_NATIVE_OK"))
-        reject(new Error(`Native PTY failed: ${exitCode}`));
-      else
-        terminal.write("", () => {
-          const screen = Array.from(
-            { length: terminal.rows },
-            (_, row) => terminal.buffer.active.getLine(row)?.translateToString(true) ?? "",
-          ).join("\n");
-          terminal.dispose();
-          if (screen.includes("PTY_NATIVE_OK")) accept();
-          else reject(new Error("Headless terminal did not render PTY output"));
-        });
-    });
-  });
+  } finally {
+    try {
+      disposePty();
+    } finally {
+      terminal.dispose();
+    }
+  }
   console.log(
     `Native binaries: Node/pnpm/esbuild/workerd/node-gyp and actual PTY + screen cells passed on ${process.platform}/${process.arch}`,
   );
