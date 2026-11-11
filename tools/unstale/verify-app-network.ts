@@ -6,7 +6,7 @@ import { Resolver, resolve4 } from "node:dns/promises";
 import { lstat, readFile, readlink } from "node:fs/promises";
 import { request } from "node:https";
 import { isIP } from "node:net";
-import { delimiter, resolve } from "node:path";
+import { delimiter, dirname, resolve } from "node:path";
 import { rootCertificates } from "node:tls";
 import { promisify } from "node:util";
 import { repository } from "../../scripts/build-workspaces.ts";
@@ -39,6 +39,14 @@ interface Authority {
   sidecar: Container;
 }
 async function docker(file: string, args: string[]): Promise<string> {
+  assert.match(
+    env.DOCKER_HOST ?? "",
+    /^unix:\/\/\/tmp\/fortipi-docker-[A-Za-z0-9_-]+\/docker.sock$/,
+  );
+  assert.equal(
+    env.DOCKER_CONFIG,
+    resolve(dirname((env.DOCKER_HOST ?? "").slice("unix://".length)), "config"),
+  );
   return (
     await execute(file, args, { env, timeout: 5000, maxBuffer: 64 * 1024, encoding: "utf8" })
   ).stdout.trim();
@@ -158,6 +166,7 @@ async function observeApplicationNamespace(imageId: string): Promise<void> {
   const before = await authority(file, imageId);
   // This is the workerd namespace's protected upstream route, not the app's DNS descriptor.
   assert.ok(isStepSecuritySinkhole(await resolve4("example.com")));
+  console.log(JSON.stringify({ probe: "application-upstream-dns", stepSecuritySinkhole: true }));
   const security = JSON.parse(
     await docker(file, ["info", "--format", "{{json .SecurityOptions}}"]),
   ) as string[];
@@ -260,8 +269,13 @@ if (import.meta.main) {
         deniedTransportFailure: denied.transportFailure,
         allowedAfter: last.status,
         applicationDnsSinkhole: appSinkhole,
-        workerdNamespaceSinkholeVerified: true,
-        unknown: false,
+        unknown: !(
+          first.status === 200 &&
+          last.status === 200 &&
+          denied.transportFailure &&
+          denied.status === null &&
+          appSinkhole
+        ),
       }),
     );
     assert.equal(first.status, 200);

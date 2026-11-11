@@ -164,6 +164,14 @@ async function namespaceEgress(): Promise<void> {
 
 if (import.meta.main) {
   assert.equal(process.platform, "linux");
+  assert.match(
+    env.DOCKER_HOST ?? "",
+    /^unix:\/\/\/tmp\/fortipi-docker-[A-Za-z0-9_-]+\/docker.sock$/,
+  );
+  assert.equal(
+    env.DOCKER_CONFIG,
+    resolve(dirname((env.DOCKER_HOST ?? "").slice("unix://".length)), "config"),
+  );
   assert.ok(
     process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--rootless"),
   );
