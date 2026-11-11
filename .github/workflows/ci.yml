@@ -183,4 +183,7 @@ jobs:
         if: runner.os == 'Windows'
         timeout-minutes: 2
         run: node packages/fortipi-executor/test/fixtures/daemon.ts windows-probe
+      - name: Probe native state denial across identities
+        timeout-minutes: 2
+        run: node packages/fortipi-executor/test/fixtures/cross-identity.ts
       - run: pnpm run test:executor

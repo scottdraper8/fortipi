@@ -164,6 +164,17 @@ component and operation on all three operating systems; an arbitrary process
 with the same OS user's access can still race these checks or write outside the
 root. Root trust remains necessary. POSIX modes or restrictive current-user/SYSTEM
 DACLs protect state. ACL inspection alone is not a demonstrated other-user denial.
+The hosted native CI job separately runs `test/fixtures/cross-identity.ts` under
+an existing POSIX `nobody` UID or a disposable Windows account in Users, without
+administrator membership. The child must read a public control and receive only
+permission-denied errors when opening the protected profile, directory, SQLite
+database and actual crash journal. An exported protected profile isolates file
+permissions from the directory barrier; widening only that synthetic file must
+allow access, and restoring protection must deny it again. No file contents or
+account passwords are logged; the account and synthetic files are removed in
+`finally`. The fixture refuses local/self-hosted execution, uses noninteractive
+sudo on POSIX and in-process random credentials on Windows, and has a two-minute
+CI step bound. Its actual three-OS results are required in the canonical report.
 Windows permission utilities use typed SID ACL operations from .NET Framework
 and direct filesystem attributes, without cmdlet module autoload or account-name
 translation. The native diagnostic emits bounded stage timings without identities
@@ -210,5 +221,5 @@ those integrated proofs and packed-install acceptance.
 
 The canonical Phase3 Thread8 report records the exact commit, commands, native
 platform observations, mutation results and missing evidence. Three-OS product
-proof, other-user ACL denial and the actual Worker/relay/revocation composition
-remain required release evidence; macOS fixtures do not prove Windows behavior.
+proof, the separate cross-identity denial probe and actual Worker/relay/revocation
+composition remain required evidence; macOS fixtures do not prove Windows behavior.
