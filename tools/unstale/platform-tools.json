@@ -1,0 +1,232 @@
+{
+  "format": 1,
+  "reviewedAt": "2026-11-11T00:49:09.076Z",
+  "actions": [
+    {
+      "repository": "step-security/harden-runner",
+      "version": "v2.22.4",
+      "sha": "1d88384fd173af6ecb012dfd0264a306b711241a",
+      "licenseSha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "licensePath": "tools/unstale/licenses/step-security/harden-runner/1d88384fd173af6ecb012dfd0264a306b711241a/LICENSE"
+    },
+    {
+      "repository": "actions/checkout",
+      "version": "v7.0.1",
+      "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "licenseSha256": "3e855ffa704114a51628ef8f0bf3aeb41728adf9d9070e263bf58aa5640b0eb5",
+      "licensePath": "tools/unstale/licenses/actions/checkout/3d3c42e5aac5ba805825da76410c181273ba90b1/LICENSE"
+    },
+    {
+      "repository": "actions/setup-node",
+      "version": "v7.1.0",
+      "sha": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+      "licenseSha256": "7d070f6b64d9bcc530fe99cc21eaaa4b3c364e0b2d367d7735671fa202a03b32",
+      "licensePath": "tools/unstale/licenses/actions/setup-node/949feb2413d6458794dcd2491c4babbbce0c15c1/LICENSE"
+    },
+    {
+      "repository": "pnpm/action-setup",
+      "version": "v6.1.1",
+      "sha": "73e46992e05b19abd31f2f3c20e0e7370d762115",
+      "licenseSha256": "eb9c7f938c31b542da6906e2ac11b8996cfb2ca4afe3f7440df2b5063b52f615",
+      "licensePath": "tools/unstale/licenses/pnpm/action-setup/73e46992e05b19abd31f2f3c20e0e7370d762115/LICENSE"
+    },
+    {
+      "repository": "actions/setup-python",
+      "version": "v7.1.0",
+      "sha": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+      "licenseSha256": "7d070f6b64d9bcc530fe99cc21eaaa4b3c364e0b2d367d7735671fa202a03b32",
+      "licensePath": "tools/unstale/licenses/actions/setup-python/6d4fd22b20465ccc0f7354476588e8df7c9ca0e0/LICENSE"
+    },
+    {
+      "repository": "actions/setup-go",
+      "version": "v7.0.0",
+      "sha": "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+      "licenseSha256": "7d070f6b64d9bcc530fe99cc21eaaa4b3c364e0b2d367d7735671fa202a03b32",
+      "licensePath": "tools/unstale/licenses/actions/setup-go/b7ad1dad31e06c5925ef5d2fc7ad053ef454303e/LICENSE"
+    },
+    {
+      "repository": "actions/upload-artifact",
+      "version": "v7.0.2",
+      "sha": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+      "licenseSha256": "3e855ffa704114a51628ef8f0bf3aeb41728adf9d9070e263bf58aa5640b0eb5",
+      "licensePath": "tools/unstale/licenses/actions/upload-artifact/cf430e030ddbb5b0abf93d22962f4752f3646cd9/LICENSE"
+    },
+    {
+      "repository": "actions/download-artifact",
+      "version": "v8.0.2",
+      "sha": "9000827ccba6bdab643e8b6fd33ac0654aef8333",
+      "licenseSha256": "3e855ffa704114a51628ef8f0bf3aeb41728adf9d9070e263bf58aa5640b0eb5",
+      "licensePath": "tools/unstale/licenses/actions/download-artifact/9000827ccba6bdab643e8b6fd33ac0654aef8333/LICENSE"
+    },
+    {
+      "repository": "softprops/action-gh-release",
+      "version": "v3.0.4",
+      "sha": "8a0cd651e5b2365bd640854a3fa5dfc70e4875f3",
+      "licenseSha256": "4f07d568da0741c63bfa76f151be44d77d7b0d6f16efa09ae1a0d3f284257da6",
+      "licensePath": "tools/unstale/licenses/softprops/action-gh-release/8a0cd651e5b2365bd640854a3fa5dfc70e4875f3/LICENSE"
+    },
+    {
+      "repository": "pre-commit/pre-commit-hooks",
+      "version": "v6.0.0",
+      "sha": "3e8a8703264a2f4a69428a0aa4dcb512790b2c8c",
+      "licenseSha256": "ea2ca27cba7cc35822d95a46d59bcd3cc88e196592e6390d1949a359ffc990e8",
+      "licensePath": "tools/unstale/licenses/pre-commit/pre-commit-hooks/3e8a8703264a2f4a69428a0aa4dcb512790b2c8c/LICENSE"
+    },
+    {
+      "repository": "gitleaks/gitleaks",
+      "version": "v8.30.1",
+      "sha": "83d9cd684c87d95d656c1458ef04895a7f1cbd8e",
+      "licenseSha256": "e3884b252b3bfc045e55be43a34d1e80da070bc6f804ac95bf4660e97d62ebc6",
+      "licensePath": "tools/unstale/licenses/gitleaks/gitleaks/83d9cd684c87d95d656c1458ef04895a7f1cbd8e/LICENSE"
+    }
+  ],
+  "images": [
+    {
+      "repository": "ghcr.io/cloudflare/computer-computerd-linux-x64",
+      "digest": "sha256:6ec793fa80f109acf8b3cd4e295284cfed97f61c03030b780a612ec22c49b294",
+      "config": "sha256:b67b982a63f3c68aa9485d8d4994390938329633ef99ae342eb961e8fa5878bf",
+      "architecture": "amd64",
+      "os": "linux",
+      "layers": [
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:9f4637c57d28d94e19eb448f66cbcf4dcca06761ae890ec1d75081c642e7cb3d",
+          "size": 43314190
+        }
+      ],
+      "observation": "Manifest and config bytes verified; layers/build/runtime/image license inventory remain owner3 evidence"
+    },
+    {
+      "repository": "registry-1.docker.io/library/debian",
+      "digest": "sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392",
+      "config": "sha256:596c6d80c879dc94eae22cb9c59a5e18f66f4f9722e170892324c282b4eb19bc",
+      "architecture": "amd64",
+      "os": "linux",
+      "layers": [
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41",
+          "size": 29856132
+        }
+      ],
+      "observation": "Manifest and config bytes verified; layers/build/runtime/image license inventory remain owner3 evidence"
+    }
+  ],
+  "docker": {
+    "version": "29.9.3",
+    "buildkit": "0.34.2",
+    "url": "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.3.tgz",
+    "sha256": "3fb5d1f13014c18cc54945bc177c58a9056a482dada031e17d12cf2e6922c973",
+    "license": "Apache-2.0",
+    "securityReference": "https://docs.docker.com/engine/release-notes/29/",
+    "observation": "Official static Linux x64 archive identity; run actual daemon/image build on Linux before claiming compatibility"
+  },
+  "fuse": {
+    "fuse3": "3.17.2-3",
+    "libfuse3": "3.17.2-3",
+    "libfuse2t64": "2.9.9-9",
+    "observation": "Owner3 freezes dated Debian snapshot and transitive inventory; separate OS licensing gate"
+  },
+  "externalRuntimes": {
+    "go": {
+      "version": "1.27.4",
+      "source": "https://go.dev/dl/?mode=json&include=all",
+      "archives": [
+        {
+          "filename": "go1.27.4.darwin-amd64.tar.gz",
+          "os": "darwin",
+          "arch": "amd64",
+          "sha256": "2b799377704ef12db39bd254995d5c348c9cc8d86562ca817724390e56c38f43",
+          "size": 71756705
+        },
+        {
+          "filename": "go1.27.4.darwin-amd64.pkg",
+          "os": "darwin",
+          "arch": "amd64",
+          "sha256": "98b6668684006873a3befee5cf155a110f79c3156ac718ddf45f59e4043a16b9",
+          "size": 73214562
+        },
+        {
+          "filename": "go1.27.4.darwin-arm64.tar.gz",
+          "os": "darwin",
+          "arch": "arm64",
+          "sha256": "91a44a2b8a716600ad94a4f143e156116620db8828086a6e3602291be9bd0bb4",
+          "size": 68231011
+        },
+        {
+          "filename": "go1.27.4.darwin-arm64.pkg",
+          "os": "darwin",
+          "arch": "arm64",
+          "sha256": "2c13315bb6e702283547083be8f43803d178355ff74e9e7ff2692175b1655760",
+          "size": 69567457
+        },
+        {
+          "filename": "go1.27.4.linux-amd64.tar.gz",
+          "os": "linux",
+          "arch": "amd64",
+          "sha256": "7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840",
+          "size": 70680823
+        },
+        {
+          "filename": "go1.27.4.linux-arm64.tar.gz",
+          "os": "linux",
+          "arch": "arm64",
+          "sha256": "3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92",
+          "size": 67129258
+        },
+        {
+          "filename": "go1.27.4.windows-amd64.zip",
+          "os": "windows",
+          "arch": "amd64",
+          "sha256": "178ab98950ac69ab25069307dc6ade79f3816e414cce95b4da166a115cde1e7e",
+          "size": 79077744
+        },
+        {
+          "filename": "go1.27.4.windows-amd64.msi",
+          "os": "windows",
+          "arch": "amd64",
+          "sha256": "ae9e383a027ac83c227efd0be3173bf98bccfa5d966a206dff7998f4a3d8449c",
+          "size": 66203648
+        },
+        {
+          "filename": "go1.27.4.windows-arm64.zip",
+          "os": "windows",
+          "arch": "arm64",
+          "sha256": "9e7a72565792b8ab370b37ac9ac109799237abacb39ff2f541c438b963c0cc64",
+          "size": 75172694
+        },
+        {
+          "filename": "go1.27.4.windows-arm64.msi",
+          "os": "windows",
+          "arch": "arm64",
+          "sha256": "1c265543d177c5415c13b77d46a827a86247e6f9854265e04d528f1c7bffd634",
+          "size": 63655936
+        }
+      ]
+    },
+    "preCommit": {
+      "version": "4.7.0",
+      "license": "MIT",
+      "source": "https://pypi.org/pypi/pre-commit/4.7.0/json",
+      "archives": [
+        {
+          "filename": "pre_commit-4.7.0-py2.py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/eb/83/ce0a196e4f7b20b11ce3aa1fc72fb973f64b7628d51c1b8aebad37fb7f81/pre_commit-4.7.0-py2.py3-none-any.whl",
+          "sha256": "2e229038ad3656081b70c27913157e4b636ef306f643f024a8a8e3f0f7b2f877",
+          "size": 226261
+        },
+        {
+          "filename": "pre_commit-4.7.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/3a/c3/6965c2690ddce885ec75121572d065a5b94c5a5d8d3e657927ecda9fd715/pre_commit-4.7.0.tar.gz",
+          "sha256": "1f3deee12b914c8fa184bd2b5953391c2e4f36763e403d4a23dc9983fa7c6e86",
+          "size": 198120
+        }
+      ]
+    },
+    "python": {
+      "version": "3.15.2",
+      "source": "https://www.python.org/downloads/release/python-3152/",
+      "install": "SHA-pinned setup-python verifies selected GitHub-hosted CPython release; actual OS installation evidence remains CI"
+    }
+  }
+}

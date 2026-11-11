@@ -1,0 +1,14 @@
+{
+  "name": "fortipi-unstale-tool",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "license": "SEE LICENSE IN LICENSE",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=26.13.0"
+  },
+  "dependencies": {
+    "@unstale/cli": "0.2.12"
+  }
+}

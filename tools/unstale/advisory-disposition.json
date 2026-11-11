@@ -1,0 +1,20 @@
+{
+  "package": "zod",
+  "version": "4.6.7",
+  "cve": "CVE-2023-54404",
+  "alias": "GHSA-mrhx-c7xc-m3w5",
+  "authorityURL": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/54xxx/CVE-2023-54404.json",
+  "githubURL": "https://api.github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+  "reviewedAt": "2026-11-11T00:49:40.444Z",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/54xxx/CVE-2023-54404.json",
+      "sha256": "eda236916fb292ab2b5a448a6b893a86c909bbc27cc0b3eb0e6b93bdb7e1bd2a"
+    },
+    {
+      "url": "https://api.github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+      "sha256": "3d0e1148c49463ab635d4fd962d03be1cbd96262925d1b79c2e5e20b7e5dd595"
+    }
+  ],
+  "decision": "Exact non-actionable upstream-rejected CVE; GHSA range<4.6.6 excludes pinned4.6.7. Revalidate both authorities on every reported occurrence; all other findings block."
+}

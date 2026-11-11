@@ -1,0 +1,42 @@
+{
+  "name": "fortipi-cli",
+  "version": "0.1.0",
+  "description": "FortiPi cli",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/scottdraper8/fortipi.git",
+    "directory": "packages/fortipi-cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=26.13.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "licenses",
+    "templates",
+    "worker-assets"
+  ],
+  "bin": {
+    "fortipi": "./dist/bin.js"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "1.5.2",
+    "fortipi-contract": "workspace:*",
+    "wrangler": "4.160.0",
+    "ajv": "8.20.0"
+  }
+}

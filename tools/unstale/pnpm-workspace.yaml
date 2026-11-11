@@ -1,0 +1,25 @@
+packages:
+  - .
+saveExact: true
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeExclude:
+  - "@unstale/cli-darwin-arm64@0.2.12"
+  - "@unstale/cli-darwin-x64@0.2.12"
+  - "@unstale/cli-linux-arm64@0.2.12"
+  - "@unstale/cli-linux-x64@0.2.12"
+  - "@unstale/cli-win32-x64@0.2.12"
+  - "@unstale/cli@0.2.12"
+trustPolicy: no-downgrade
+trustLockfile: false
+verifyDepsBeforeRun: error
+strictDepBuilds: true
+dangerouslyAllowAllBuilds: false
+autoInstallPeers: false
+strictPeerDependencies: true
+engineStrict: true
+sideEffectsCache: false
+skills:
+  dirs: []
+allowBuilds:
+  pnpm@12.18.0: false

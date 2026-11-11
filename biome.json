@@ -1,0 +1,49 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.6/schema.json",
+  "files": {
+    "includes": [
+      "package.json",
+      "pnpm-workspace.yaml",
+      "tsconfig*.json",
+      "biome.json",
+      ".gitignore",
+      ".pre-commit-config.yaml",
+      ".github/dependabot.yml",
+      ".github/workflows/ci.yml",
+      "scripts/install-dependencies.ts",
+      "scripts/build-workspaces.ts",
+      "scripts/check-pins.ts",
+      "scripts/check-licenses.ts",
+      "scripts/run-unstale.ts",
+      "scripts/verify-foundation.ts",
+      "apps/**",
+      "packages/**",
+      "tools/unstale/**",
+      "docs/toolchain.md",
+      "tests/**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/pnpm-lock.yaml",
+      "!tools/unstale/supply-chain.json",
+      "!tools/unstale/licenses"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  }
+}

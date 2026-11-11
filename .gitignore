@@ -11,3 +11,10 @@ coverage/
 *.key
 .agent-docs/tmp/
 .unstale/
+*.tsbuildinfo
+tools/unstale/.cache/
+tools/unstale/.pnpm-store/
+packages/fortipi-*/LICENSE
+packages/fortipi-*/THIRD_PARTY_NOTICES.md
+packages/fortipi-*/licenses/
+packages/fortipi-cli/worker-assets/

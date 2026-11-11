@@ -1,0 +1,43 @@
+{
+  "name": "fortipi-client",
+  "version": "0.1.0",
+  "description": "FortiPi client",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/scottdraper8/fortipi.git",
+    "directory": "packages/fortipi-client"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=26.13.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "licenses"
+  ],
+  "dependencies": {
+    "fortipi-contract": "workspace:*",
+    "ajv": "8.20.0"
+  }
+}
