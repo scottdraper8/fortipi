@@ -1,6 +1,7 @@
 // CI-only Linux image tooling. No product bytes or credentials enter this directory.
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
+import { Resolver } from "node:dns/promises";
 import { constants } from "node:fs";
 import {
   chmod,
@@ -13,6 +14,7 @@ import {
   realpath,
   writeFile,
 } from "node:fs/promises";
+import { isIPv4 } from "node:net";
 import { release, tmpdir, userInfo } from "node:os";
 import { basename, delimiter, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -635,12 +637,31 @@ async function main(): Promise<void> {
       await command(resolve(directory, name), ["--version"], env),
       /\b29\.9\.3(?:,|\s|$)/,
     );
+  if (!rootless) {
+    // Harden-Runner normally adds this protected DNS proxy to the system daemon's
+    // config. Preserve it explicitly while retaining our empty, isolated config.
+    const resolver = new Resolver({ timeout: 2000, tries: 1 });
+    resolver.setServers(["172.17.0.1"]);
+    const allowed = await resolver.resolve4("registry.npmjs.org");
+    assert.ok(
+      allowed.length > 0 && allowed.every(isIPv4) && !allowed.includes("54.185.253.63"),
+      "Protected Docker DNS must resolve the allowed registry",
+    );
+    assert.deepEqual(
+      await resolver.resolve4("example.com"),
+      ["54.185.253.63"],
+      "Protected Docker DNS must return Harden-Runner's denied-domain sinkhole",
+    );
+    console.log(
+      "Rootful protected Docker DNS allowed/blocked controls verified before daemon replacement",
+    );
+  }
   await command("sudo", ["-n", "systemctl", "stop", "docker.service", "docker.socket"], env);
   const log = await open(resolve(session, "daemon.log"), "wx", 0o600);
   const daemonConfig = resolve(config, "daemon.json");
   await writeFile(daemonConfig, "{}\n", { mode: 0o600 });
   const daemonArguments = [
-    ...(rootless ? ["--rootless", "--storage-driver", "overlay2"] : []),
+    ...(rootless ? ["--rootless", "--storage-driver", "overlay2"] : ["--dns", "172.17.0.1"]),
     "--config-file",
     daemonConfig,
     "--log-level",

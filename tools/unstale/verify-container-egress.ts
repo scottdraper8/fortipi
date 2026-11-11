@@ -19,10 +19,15 @@ export function privateBridgeDns(resolv: string): string {
   return "10.0.2.1";
 }
 
+export function isStepSecuritySinkhole(addresses: string[]): boolean {
+  return addresses.length === 1 && addresses[0] === "54.185.253.63";
+}
+
 const commands = {
   allowed: "exec 3<>/dev/tcp/registry.npmjs.org/443",
   denied: "exec 3<>/dev/tcp/example.com/443",
   registryDns: "/usr/bin/getent ahostsv4 registry.npmjs.org",
+  exampleDns: "/usr/bin/getent ahostsv4 example.com",
 } as const;
 
 async function main(): Promise<void> {
@@ -63,6 +68,7 @@ async function main(): Promise<void> {
       }),
     );
   }
+  const sinkholes: Partial<Record<"bridge" | "host", boolean>> = {};
   const probe = (network: "bridge" | "host", target: keyof typeof commands) =>
     new Promise<number>((accept, reject) => {
       const started = new Date().toISOString();
@@ -98,24 +104,31 @@ async function main(): Promise<void> {
             return;
           }
           const exitCode = typeof error?.code === "number" ? error.code : 0;
+          const dns = target === "registryDns" || target === "exampleDns";
+          const addresses = [
+            ...new Set(
+              stdout.split("\n").flatMap((line) => {
+                const address = line.split(/\s+/)[0];
+                return address && isIPv4(address) ? [address] : [];
+              }),
+            ),
+          ];
+          const sinkhole = isStepSecuritySinkhole(addresses);
+          if (target === "exampleDns") sinkholes[network] = exitCode === 0 && sinkhole;
           console.log(
             JSON.stringify({
-              probe: target === "registryDns" ? "container-dns" : "container-tcp",
+              probe: dns ? "container-dns" : "container-tcp",
               network,
               target,
-              ...(target === "registryDns" ? {} : { port: 443 }),
+              ...(dns ? {} : { port: 443 }),
               started,
               finished: new Date().toISOString(),
               exitCode,
               imageId: metadata.imageId,
-              ...(target === "registryDns"
+              ...(dns
                 ? {
-                    ipv4AddressCount: new Set(
-                      stdout.split("\n").flatMap((line) => {
-                        const address = line.split(/\s+/)[0];
-                        return address && isIPv4(address) ? [address] : [];
-                      }),
-                    ).size,
+                    ipv4AddressCount: addresses.length,
+                    ...(target === "exampleDns" ? { stepSecuritySinkhole: sinkhole } : {}),
                   }
                 : {}),
             }),
@@ -131,11 +144,17 @@ async function main(): Promise<void> {
     const denied = await probe(network, "denied");
     const after = await probe(network, "allowed");
     await probe(network, "registryDns");
+    await probe(network, "exampleDns");
     controls.push({ network, before, denied, after });
   }
   // Observe both real paths even when one is broken; neither failure becomes success.
   for (const { network, before, denied, after } of controls) {
     verifyControls(before, denied, after);
+    assert.equal(
+      sinkholes[network],
+      true,
+      "Denied DNS must observe Harden-Runner's exact policy sinkhole",
+    );
     console.log(
       JSON.stringify({
         network,
@@ -144,7 +163,7 @@ async function main(): Promise<void> {
         allowedControls: "connected",
         exampleConnection: "refused",
         attribution:
-          "Retain and inspect Harden-Runner's example.com:443 blocked-flow event; refusal alone is not firewall attribution",
+          "Exact StepSecurity DNS sinkhole observed; retain provider example.com denial event (subsequent responses may be cached)",
       }),
     );
   }

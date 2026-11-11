@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { Workspace, WorkspaceProxy } from "@cloudflare/computer";
 import { CodemodeBackend } from "@cloudflare/computer/backends/codemode";
 import { ContainerBackend, withWorkspaceContainer } from "@cloudflare/computer/backends/container";
+import { FencedContainerAPI } from "../../src/container/host-adapter.js";
 
 export { WorkspaceProxy };
 
@@ -29,11 +30,19 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
         ? this.container.handleFetch(request)
         : new Response(null, { status: 403 });
     const linux = url.searchParams.get("backend") === "linux";
+    let containerHost: FencedContainerAPI | undefined;
+    if (linux) {
+      if (!this.env.LINUX_CONTAINERS) throw new Error("Container binding required");
+      containerHost = new FencedContainerAPI(
+        await this.env.LINUX_CONTAINERS.getByName("probe-host").getWorkspaceContainer(),
+      );
+    }
     const backend = linux
       ? new ContainerBackend({
           container: () => {
-            if (!this.env.LINUX_CONTAINERS) throw new Error("Container binding required");
-            return this.env.LINUX_CONTAINERS.getByName("probe-host");
+            const host = containerHost;
+            if (!host) throw new Error("Fenced container host required");
+            return { getWorkspaceContainer: () => host };
           },
           workspace: { binding: "WORKSPACES", id: this.ctx.id.toString() },
           id: "probe",

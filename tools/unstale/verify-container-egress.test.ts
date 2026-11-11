@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { privateBridgeDns, verifyControls } from "./verify-container-egress.ts";
+import {
+  isStepSecuritySinkhole,
+  privateBridgeDns,
+  verifyControls,
+} from "./verify-container-egress.ts";
 
 test("an allowed target on both sides is required to distinguish refusal from broken networking", () => {
   verifyControls(0, 1, 0);
@@ -23,6 +27,13 @@ test("rootless bridge DNS must be the pinned private gateway, without external f
     "nameserver 10.0.2.1\nnameserver 8.8.8.8",
   ])
     assert.throws(() => privateBridgeDns(value));
+});
+
+test("a refused TCP connection alone cannot establish the provider's DNS policy action", () => {
+  assert.equal(isStepSecuritySinkhole(["54.185.253.63"]), true);
+  for (const addresses of [[], ["127.0.0.1"], ["8.8.8.8"], ["54.185.253.63", "8.8.8.8"]]) {
+    assert.equal(isStepSecuritySinkhole(addresses), false);
+  }
 });
 
 test("input diagnostics preserve the request/error while withholding signed URL and auth data", async () => {

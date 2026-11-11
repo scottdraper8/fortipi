@@ -34,7 +34,11 @@ const harness = createTestHarness({
         name: "fortipi-linux-image-probe",
         main: resolve(root, "apps/worker/test/backends/runtime-worker.ts"),
         compatibility_date: "2026-11-10",
-        compatibility_flags: ["nodejs_compat"],
+        compatibility_flags: [
+          "nodejs_compat",
+          "enable_request_signal",
+          "request_signal_passthrough",
+        ],
         durable_objects: {
           bindings: [
             { name: "WORKSPACES", class_name: "BackendProbe" },
