@@ -178,16 +178,13 @@ export class Capacity {
     if (!authority) return undefined;
     const { registration, action, grant } = authority;
     const agentId = registration.recipient.id;
-    const expectedOwner =
-      action === "conversations.create" || action === "conversations.fork"
-        ? agentId
-        : registration.resources.conversationIds[0];
-    const expectedSlots =
+    const agentOwned =
       action === "conversations.create" ||
       action === "conversations.fork" ||
-      action === "jobs.dispatch"
-        ? 0
-        : 1;
+      action === "exports.create" ||
+      action === "backups.create";
+    const expectedOwner = agentOwned ? agentId : registration.resources.conversationIds[0];
+    const expectedSlots = agentOwned || action === "jobs.dispatch" ? 0 : 1;
     if (expectedOwner !== ownerId || admissionSlots !== expectedSlots) return undefined;
     return {
       registrationId: registration.registrationId,

@@ -112,15 +112,28 @@ export class Directory {
       !roleAllows(ctx, action)
     )
       return undefined;
-    // These are the actual Agent operations that use models/storage. The registration
-    // is service-constructed; opaque operation IDs do not establish authority.
-    const creation = action === "conversations.create";
-    if (!modelActions.has(action) && action !== "jobs.dispatch") return undefined;
+    // Service registrations bind an operation; opaque operation IDs grant no authority.
+    const storageExport = action === "exports.create" || action === "backups.create";
     if (
-      creation
+      storageExport &&
+      (ctx.role !== "admin" ||
+        registration.executor !== undefined ||
+        resources.workspaceIds.length !== 0 ||
+        resources.executorIds.length !== 0 ||
+        resources.backendIds.length !== 0 ||
+        resources.tools.length !== 0 ||
+        resources.conversationIds.length > 100 ||
+        !resources.conversationIds.every((id) => id === "*" || valid("common", "Id", id)))
+    )
+      return undefined;
+    const creation = action === "conversations.create";
+    if (!modelActions.has(action) && action !== "jobs.dispatch" && !storageExport) return undefined;
+    if (
+      !storageExport &&
+      (creation
         ? resources.conversationIds.length !== 0
         : resources.conversationIds.length !== 1 ||
-          !valid("common", "Id", resources.conversationIds[0])
+          !valid("common", "Id", resources.conversationIds[0]))
     )
       return undefined;
     if (
