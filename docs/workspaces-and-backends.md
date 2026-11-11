@@ -157,6 +157,16 @@ authority after each awaited read before exposing another chunk.
 Scratch materialization retries verify an existing file's type, mode, size and
 full hash against the committed input; they never overwrite a mismatching file.
 
+Container HTTP resolves the host's existing native TCP-port Fetcher before
+calling `fetch(Request)`. Pipelining that fetch or sending `RequestInit.signal`
+through custom JavaScript RPC fails in the pinned runtime. The resolved Fetcher
+preserves request bytes, cancellation and deadlines without experimental signal
+serialization. Recorded start identity and running/exit checks fence the request
+before and after HTTP; query-only mode never starts or restarts a replacement.
+The upstream observation API does not expose a remote runtime UUID independently
+of start. Exit/eviction and known recorded-identity changes fail closed; external
+replacement identity remains an explicit runtime-proof limit.
+
 ## Image inputs and verification
 
 With the reviewed Node/pnpm toolchain first on `PATH`:

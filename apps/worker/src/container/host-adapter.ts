@@ -35,8 +35,31 @@ export class FencedContainerAPI implements IWorkspaceContainerAPI {
   interceptAllOutboundHttp(workspace: WorkspaceRef, token: string) {
     return this.host.interceptAllOutboundHttp(workspace, token);
   }
-  fetchPort(port: number, input: RequestInfo | URL, init?: RequestInit) {
-    return this.host.fetchPort(port, input, init);
+  async fetchPort(port: number, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const expected = this.runtime?.runtimeId;
+    requireThat(expected, "interrupted", "No recorded container runtime");
+    const before = await this.host.status();
+    requireThat(
+      before.running && before.exit === null && this.runtime?.runtimeId === expected,
+      "interrupted",
+      "Recorded container is no longer available",
+    );
+    // Resolve the native capability before fetch: pipelining .fetch on the RPC promise
+    // still serializes Request.signal through custom RPC in the pinned runtime.
+    const portFetcher = await this.host.port(port);
+    const response = await portFetcher.fetch(new Request(input, init));
+    try {
+      const after = await this.host.status();
+      requireThat(
+        after.running && after.exit === null && this.runtime?.runtimeId === expected,
+        "interrupted",
+        "Container changed during its request",
+      );
+    } catch (error) {
+      await response.body?.cancel().catch(() => {});
+      throw error;
+    }
+    return response;
   }
   port(port: number): Fetcher {
     return this.host.port(port);
