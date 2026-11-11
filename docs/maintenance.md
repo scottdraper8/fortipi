@@ -20,14 +20,16 @@ node --test tools/compatibility-watch/watch.test.ts
 Computer/computerd, upstream libfuse, Agents PiHarness/Lifecycle, the Pi package family, Wrangler,
 workerd, Node, pnpm, TypeScript's original compiler release repository and node-pty. Policy watches include shared pricing
 partials and compatibility flag data. GitHub Contents identities include recursive
-directory tree hashes. Each repository ref resolves once per run; all its paths
+directory tree hashes. Pi watches the used package family and shared runtime sources;
+unrelated coding-agent guides and evals are outside this product's dependency scope.
+Each repository ref resolves once per run; all its paths
 are read at that commit. Release tags resolve to actual commits, including annotated tags;
 retargeting a tag requires review. Latest published stable releases are pointers, potentially
 from a different major; default-branch package versions can be unreleased.
 Neither versions nor semver labels establish breaking changes or safety.
 
 Requests are GET-only to `api.github.com`, without redirects or retries: at most
-48 requests, three concurrent sources, 10 seconds per request, 90 seconds total and
+64 requests, three concurrent sources, 10 seconds per request, 90 seconds total and
 512 KiB per response. Empty, malformed, missing or potentially truncated responses
 cannot turn green. GitHub rate limits/outages fail explicitly. The separate
 workflow retains existing Action/version pins and StepSecurity block egress;

@@ -116,15 +116,24 @@
       "reviewNote": "Reviewed Agents 0.33.0 changelog and PiHarness guide: Pi 1.5 peers, Lifecycle host wake/recovery, batched streamed persistence and session.watch API. Pi 1.5 storage is not readable by 1.4. Retain pin; actual recovery/rollback constraints remain runtime release obligations."
     },
     "pi-runtime": {
-      "catalogSha256": "8626cad373ee3e1232bd93e85856e9b37ac9de02e5b2b1bc0ea096fdfc2ef8d0",
+      "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "b3c2e4a6bef8d370e311c472306c43a3f8f7308a",
+        "commit": "74dcca7d4140403eaa81c3e7124e73b63a0cb106",
         "version": "1.5.2",
         "paths": {
-          "packages": "494da1042431a4a4a41d0b764c53fd0e599ef26c8874acd020d8098e8f3e8679",
+          "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
+          "packages/ai": "0c86af0adc997540076dbd8717f3e644e2069562875e2aff2e2015560d7a9531",
+          "packages/chord": "2d2eb45934bdb40e41a447b16223220da9a9b422166af1389b9aa74a80dacbf2",
+          "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
+          "packages/durable": "d59a45112e58a585d28e45f15fcb021171410e2529a1c674a5991ea09eddbbfc",
+          "packages/env": "fbd7273e15859bbe168fe54230baef84741bb7f0864725fd63bf1ef6b97f8e25",
+          "packages/mcp": "1f337636b01da98ca9088abb679318bdcf3b9f06ac9f14d56d63a4825b33df2a",
+          "packages/schema": "1cac0355eee29b45658e037766a7b983f01a57dfa444d973e66365317f6c1752",
+          "packages/telemetry": "cb8f452fda82cec5074961cc6854226cd74474490b92b3208a13e26e84ff28e7",
+          "packages/tui": "6f78a812e7b746d74b2e502e3718486f5ef9fff01d0942860e5d87a754fe95d7",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "c0acd3a16221b3e1d103b3c263813fc07ca3a74bea01cc824222b7d1b5ae739a"
+        "sha256": "90ecc38eca5f45a0946c22916a29d36f21f35fce4953ed5123603dcfee1b1a6c"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -136,8 +145,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-11T09:32:51.350Z",
-      "reviewNote": "Reviewed primary compare 49fe0a2...b3c2e4a: one unreleased commit changes coding-agent llama.cpp default port 8080 to 9931 plus examples/tests; no durable API or package-version change. Retain locked 1.5.2; future provider onboarding must respect explicit configured URLs. No runtime compatibility claim."
+      "reviewedAt": "2026-11-11T10:00:56.008Z",
+      "reviewNote": "Reviewed 49fe0a2...74dcca7 primary diffs: AI README/tests and unrelated coding-agent port/docs changes, no selected runtime API/package version change. Scope now explicitly covers used Pi packages and shared agent/env/mcp sources, excluding unused coding-agent/evals. Retain locked1.5.2; this is a reference, not runtime compatibility proof."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",

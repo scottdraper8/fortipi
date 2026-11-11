@@ -35,7 +35,7 @@ export function githubRequest(useGh = false): Request {
   let requests = 0;
   return async (path) => {
     assert.ok(/^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\//.test(path));
-    if (++requests > 48 || total.aborted) throw new Unavailable("Run request/time bound reached");
+    if (++requests > 64 || total.aborted) throw new Unavailable("Run request/time bound reached");
     const signal = AbortSignal.any([total, AbortSignal.timeout(10_000)]);
     let body: string;
     if (useGh) {
