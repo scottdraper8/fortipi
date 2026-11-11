@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { TextDecoder } from "node:util";
 import { createGunzip } from "node:zlib";
 import { t as listTar } from "tar";
 import {
@@ -34,6 +35,108 @@ interface Member {
   digest: string;
   size: number;
   bytes?: Buffer;
+}
+interface DiagnosticDescriptor extends Descriptor {
+  role: "child" | "config" | "layer";
+  inSelectedGraph: boolean;
+}
+type OCIDiagnostic =
+  | { type: "unknown" }
+  | { type: "oci-index" | "oci-manifest"; descriptors: DiagnosticDescriptor[] };
+
+/** Describe bounded retained metadata only; this never admits an archive member. */
+export function describeOCI(
+  bytes: Buffer | undefined,
+  expectedDigest: string,
+  graph: readonly Descriptor[],
+  budget: number,
+): OCIDiagnostic {
+  const unknown = { type: "unknown" } as const;
+  if (
+    !bytes ||
+    bytes.length > 8192 ||
+    !Number.isSafeInteger(budget) ||
+    budget < 0 ||
+    budget > 16 ||
+    `sha256:${createHash("sha256").update(bytes).digest("hex")}` !== expectedDigest
+  )
+    return unknown;
+  const object = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  const annotations = (value: unknown) =>
+    value === undefined ||
+    (object(value) && Object.values(value).every((item) => typeof item === "string"));
+  try {
+    const value: unknown = JSON.parse(new TextDecoder("utf8", { fatal: true }).decode(bytes));
+    if (!object(value) || value.schemaVersion !== 2 || !annotations(value.annotations))
+      return unknown;
+    const index = value.mediaType === "application/vnd.oci.image.index.v1+json";
+    if (!index && value.mediaType !== manifestTypes[0]) return unknown;
+    const keys = index
+      ? ["schemaVersion", "mediaType", "manifests", "annotations"]
+      : ["schemaVersion", "mediaType", "config", "layers", "annotations"];
+    if (!Object.keys(value).every((key) => keys.includes(key))) return unknown;
+    const values = index ? value.manifests : value.layers;
+    if (!Array.isArray(values) || values.length + (index ? 0 : 1) > budget) return unknown;
+    const descriptors: DiagnosticDescriptor[] = [];
+    const inputs: [unknown, DiagnosticDescriptor["role"]][] = index
+      ? values.map((item) => [item, "child"])
+      : [[value.config, "config"], ...values.map((item): [unknown, "layer"] => [item, "layer"])];
+    for (const [input, role] of inputs) {
+      const types =
+        role === "child"
+          ? ["application/vnd.oci.image.index.v1+json", ...manifestTypes]
+          : role === "config"
+            ? configTypes
+            : [layerType, ...gzipTypes];
+      if (
+        !object(input) ||
+        !Object.keys(input).every((key) =>
+          ["mediaType", "digest", "size", "annotations", "platform"].includes(key),
+        ) ||
+        typeof input.mediaType !== "string" ||
+        !types.includes(input.mediaType) ||
+        typeof input.digest !== "string" ||
+        !/^sha256:[a-f0-9]{64}$/.test(input.digest) ||
+        !Number.isSafeInteger(input.size) ||
+        Number(input.size) < 0 ||
+        !annotations(input.annotations)
+      )
+        return unknown;
+      if (input.platform !== undefined) {
+        if (
+          !object(input.platform) ||
+          !Object.entries(input.platform).every(([key, item]) =>
+            ["architecture", "os", "os.version", "variant"].includes(key)
+              ? typeof item === "string"
+              : ["os.features", "features"].includes(key) &&
+                Array.isArray(item) &&
+                item.length <= 16 &&
+                item.every((entry) => typeof entry === "string"),
+          )
+        )
+          return unknown;
+      }
+      const descriptor = {
+        role,
+        mediaType: input.mediaType,
+        digest: input.digest,
+        size: Number(input.size),
+      };
+      descriptors.push({
+        ...descriptor,
+        inSelectedGraph: graph.some(
+          (selected) =>
+            selected.mediaType === descriptor.mediaType &&
+            selected.digest === descriptor.digest &&
+            selected.size === descriptor.size,
+        ),
+      });
+    }
+    return { type: index ? "oci-index" : "oci-manifest", descriptors };
+  } catch {
+    return unknown;
+  }
 }
 export interface SavedImage {
   manifest: Descriptor;
@@ -217,19 +320,30 @@ export async function inspectImageArchive(
       allowed.add("repositories");
     }
     const unexpected = [...members].filter(([path]) => !allowed.has(path));
+    let descriptorBudget = 16;
     if (unexpected.length)
       console.error(
         JSON.stringify({
           probe: "image-unreferenced-members",
           members: unexpected.slice(0, 4).map(([path, member]) => {
             const blob = /^blobs\/sha256\/([a-f0-9]{64})$/.exec(path);
-            if (blob)
+            if (blob) {
+              const description = describeOCI(
+                member.bytes?.length === member.size ? member.bytes : undefined,
+                `sha256:${blob[1]}`,
+                [selected, manifest.config, ...manifest.layers],
+                descriptorBudget,
+              );
+              if (description.type !== "unknown")
+                descriptorBudget -= description.descriptors.length;
               return {
                 class: "oci-blob",
                 declaredSha256: `sha256:${blob[1]}`,
                 actualSha256: member.digest,
                 size: member.size,
+                ...description,
               };
+            }
             return {
               class:
                 /^(?:[a-f0-9]{64}\/(?:json|VERSION|layer\.tar)|index\.json|oci-layout|manifest\.json|repositories)$/.test(

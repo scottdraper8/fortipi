@@ -51,6 +51,129 @@ export interface ApplicationNetworkEvidence {
   upstreamStepSecurityBeforeAfter: boolean;
 }
 
+type FetchRole = "allowed-before" | "denied-example" | "allowed-after";
+type FetchEvent =
+  | { role: FetchRole; phase: "START" }
+  | { role: FetchRole; phase: "RESPONSE"; status: number }
+  | { role: FetchRole; phase: "FAILURE"; causeCode: string };
+
+/** Observe the pinned harness's existing Node fetch without changing its promises or I/O. */
+export function observeHarnessFetch() {
+  const original = globalThis.fetch;
+  const roles: FetchRole[] = ["allowed-before", "denied-example", "allowed-after"];
+  const registry = "https://registry.npmjs.org/pnpm/12.18.0";
+  const example = "https://example.com/";
+  const events: FetchEvent[] = [];
+  let calls = 0;
+  let valid = true;
+  let active = true;
+  const record = (event: FetchEvent) => {
+    if (active && events.length < 6) events.push(event);
+    else valid = false;
+  };
+  const failure = (role: FetchRole, error: unknown) => {
+    let causeCode = "UNKNOWN";
+    try {
+      const cause =
+        typeof error === "object" && error !== null && "cause" in error ? error.cause : error;
+      const code =
+        typeof cause === "object" && cause !== null && "code" in cause ? cause.code : undefined;
+      if (
+        typeof code === "string" &&
+        [
+          "ECONNREFUSED",
+          "ECONNRESET",
+          "ENOTFOUND",
+          "EAI_AGAIN",
+          "ETIMEDOUT",
+          "UND_ERR_CONNECT_TIMEOUT",
+          "UND_ERR_SOCKET",
+          "ABORT_ERR",
+        ].includes(code)
+      )
+        causeCode = code;
+    } catch {
+      // Diagnostic property access must never replace the original error.
+    }
+    record({ role, phase: "FAILURE", causeCode });
+  };
+  const wrapper: typeof globalThis.fetch = function (this: unknown, ...args) {
+    let role: FetchRole | undefined;
+    try {
+      const [input, init] = args;
+      if (
+        active &&
+        typeof input === "string" &&
+        [registry, example].includes(input) &&
+        init?.method === "HEAD"
+      ) {
+        const ordinal = calls++;
+        role = roles[ordinal];
+        if (!role || input !== (ordinal === 1 ? example : registry)) valid = false;
+        if (role) record({ role, phase: "START" });
+      }
+    } catch {
+      valid = false;
+    }
+    let promise: ReturnType<typeof globalThis.fetch>;
+    try {
+      promise = Reflect.apply(original, this, args);
+    } catch (error) {
+      if (role) failure(role, error);
+      throw error;
+    }
+    if (role) {
+      const observedRole = role;
+      try {
+        void promise.then(
+          (response) => {
+            try {
+              if (
+                Number.isInteger(response.status) &&
+                response.status >= 100 &&
+                response.status <= 599
+              )
+                record({ role: observedRole, phase: "RESPONSE", status: response.status });
+              else valid = false;
+            } catch {
+              valid = false;
+            }
+          },
+          (error: unknown) => {
+            failure(observedRole, error);
+          },
+        );
+      } catch {
+        valid = false;
+      }
+    }
+    return promise;
+  };
+  globalThis.fetch = wrapper;
+  return {
+    stop() {
+      if (active) {
+        if (globalThis.fetch === wrapper) globalThis.fetch = original;
+        else valid = false;
+        active = false;
+      }
+      return {
+        probe: "harness-node-fetch" as const,
+        complete:
+          valid &&
+          calls === 3 &&
+          events.length === 6 &&
+          events.every(
+            (event, index) =>
+              event.role === roles[Math.floor(index / 2)] &&
+              (index % 2 === 0 ? event.phase === "START" : event.phase !== "START"),
+          ),
+        events: events.map((event) => ({ ...event })),
+      };
+    },
+  };
+}
+
 /** Gateway failure is meaningful only with the actual client and protected final-hop route. */
 export function verifyGatewayEgress(
   messages: readonly { message: string }[],

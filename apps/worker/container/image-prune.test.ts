@@ -8,7 +8,7 @@ import { Readable } from "node:stream";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
 import { c as createTar, Header } from "tar";
-import { inspectImageArchive } from "./image-archive.ts";
+import { describeOCI, inspectImageArchive } from "./image-archive.ts";
 import { assertRuntimeConfig, filePolicy, type PrunePolicy, pruningPolicy } from "./image-prune.ts";
 import { compareRootfs, scanRootfs } from "./rootfs.ts";
 
@@ -236,6 +236,7 @@ test("rejected archive diagnostics cap members and hash tainted names without we
       declaredSha256: `sha256:${"f".repeat(64)}`,
       actualSha256: `sha256:${sha(payload)}`,
       size: Buffer.byteLength(payload),
+      type: "unknown",
     });
     for (const [index, name] of [layout, tainted, almostBlob].entries())
       assert.deepEqual(diagnostic.members[index + 1], {
@@ -246,6 +247,122 @@ test("rejected archive diagnostics cap members and hash tainted names without we
       logs.join("\n"),
       /diagnostic-private|Authorization|credential|VERSION|extra-fifth|extra-sixth/,
     );
+  } finally {
+    console.error = originalError;
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+test("bounded OCI descriptions validate descriptor triples without exposing metadata values", () => {
+  const config = {
+    mediaType: "application/vnd.oci.image.config.v1+json",
+    digest: `sha256:${"a".repeat(64)}`,
+    size: 12,
+  };
+  const layer = {
+    mediaType: "application/vnd.oci.image.layer.v1.tar",
+    digest: `sha256:${"b".repeat(64)}`,
+    size: 512,
+  };
+  const manifest = {
+    schemaVersion: 2,
+    mediaType: "application/vnd.oci.image.manifest.v1+json",
+    config,
+    layers: [layer],
+    annotations: { private: "diagnostic-private-content" },
+  };
+  const selected = {
+    mediaType: manifest.mediaType,
+    digest: `sha256:${sha(JSON.stringify(manifest))}`,
+    size: Buffer.byteLength(JSON.stringify(manifest)),
+  };
+  const graph = [selected, config, layer];
+  const describe = (value: unknown, budget = 16) => {
+    const bytes = Buffer.from(JSON.stringify(value));
+    return describeOCI(bytes, `sha256:${sha(bytes)}`, graph, budget);
+  };
+  const described = describe(manifest);
+  assert.deepEqual(described, {
+    type: "oci-manifest",
+    descriptors: [
+      { ...config, role: "config", inSelectedGraph: true },
+      { ...layer, role: "layer", inSelectedGraph: true },
+    ],
+  });
+  assert.doesNotMatch(JSON.stringify(described), /private|annotations|Env/);
+  for (const changed of [
+    { ...layer, size: 513 },
+    { ...layer, digest: `sha256:${"c".repeat(64)}` },
+    { ...layer, mediaType: "application/vnd.oci.image.layer.v1.tar+gzip" },
+  ]) {
+    const result = describe({ ...manifest, layers: [changed] });
+    assert.ok(result.type !== "unknown");
+    assert.equal(result.descriptors[1]?.inSelectedGraph, false);
+  }
+  for (const value of [
+    { ...manifest, Env: ["diagnostic-private-env"] },
+    { ...manifest, config: { ...config, size: -1 } },
+    { ...manifest, config: { ...config, size: Number.MAX_SAFE_INTEGER + 1 } },
+    { ...manifest, config: { ...config, digest: "diagnostic-private-digest" } },
+    { ...manifest, config: { ...config, urls: ["diagnostic-private-url"] } },
+    { ...manifest, config: { ...config, mediaType: "diagnostic-private-type" } },
+    { ...manifest, layers: Array.from({ length: 16 }, () => layer) },
+    {
+      schemaVersion: 2,
+      mediaType: "application/vnd.oci.image.config.v1+json",
+      Env: ["diagnostic-private-env"],
+    },
+  ])
+    assert.deepEqual(describe(value), { type: "unknown" });
+  assert.deepEqual(describe(manifest, 1), { type: "unknown" });
+  for (const bytes of [Buffer.alloc(8193, 32), Buffer.from([0xc3, 0x28]), Buffer.from("{")])
+    assert.deepEqual(describeOCI(bytes, `sha256:${sha(bytes)}`, graph, 16), { type: "unknown" });
+  const valid = Buffer.from(JSON.stringify(manifest));
+  assert.deepEqual(describeOCI(valid, `sha256:${"0".repeat(64)}`, graph, 16), { type: "unknown" });
+});
+
+test("even graph-equivalent OCI indexes stay rejected and share a sixteen-descriptor diagnostic budget", async () => {
+  const work = await mkdtemp(resolve(tmpdir(), "fortipi-oci-description-"));
+  const originalError = console.error;
+  const logs: string[] = [];
+  console.error = (message: string) => logs.push(message);
+  try {
+    const clean = archive(record("retained", Buffer.from("safe")));
+    const baseline = await image(work, [clean]);
+    const index = JSON.parse(await readFile(resolve(work, "index.json"), "utf8"));
+    const selected = index.manifests[0];
+    const manifest = JSON.parse(
+      await readFile(resolve(work, `blobs/sha256/${selected.digest.slice(7)}`), "utf8"),
+    );
+    const extras = [
+      Buffer.from(
+        JSON.stringify({
+          ...index,
+          mediaType: "application/vnd.oci.image.index.v1+json",
+          manifests: Array.from({ length: 16 }, () => selected),
+          annotations: { private: "diagnostic-private-annotation" },
+        }),
+      ),
+      Buffer.from(
+        JSON.stringify({ ...manifest, annotations: { private: "diagnostic-private-annotation" } }),
+      ),
+    ];
+    const candidate = await image(work, [clean], extras);
+    assert.equal(candidate.id, baseline.id);
+    await assert.rejects(
+      inspectImageArchive(candidate.path, candidate.id, {
+        pruning: { removed: [], executables: [], aliases: [], forbiddenLayers: [] },
+      }),
+      /unreferenced conveyed/,
+    );
+    const records = JSON.parse(logs[0] ?? "").members;
+    assert.equal(records[0].type, "oci-index");
+    assert.equal(records[0].descriptors.length, 16);
+    assert.ok(
+      records[0].descriptors.every((entry: { inSelectedGraph: boolean }) => entry.inSelectedGraph),
+    );
+    assert.equal(records[1].type, "unknown");
+    assert.doesNotMatch(logs.join("\n"), /private|annotations|Env/);
   } finally {
     console.error = originalError;
     await rm(work, { recursive: true, force: true });

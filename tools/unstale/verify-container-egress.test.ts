@@ -3,7 +3,11 @@ import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import { type ApplicationNetworkEvidence, verifyGatewayEgress } from "./verify-app-network.ts";
+import {
+  type ApplicationNetworkEvidence,
+  observeHarnessFetch,
+  verifyGatewayEgress,
+} from "./verify-app-network.ts";
 import {
   isStepSecuritySinkhole,
   privateBridgeDns,
@@ -133,6 +137,179 @@ test("bounded gateway status diagnostics keep generic responses red and omit tai
     assert.deepEqual(logs, []);
   } finally {
     console.log = originalLog;
+  }
+});
+
+test("harness fetch observation preserves arguments, receiver, Promise and Response including reachable example", async () => {
+  const realFetch = globalThis.fetch;
+  const requests: {
+    receiver: unknown;
+    args: unknown[];
+    promise: Promise<Response>;
+    response: Response;
+  }[] = [];
+  const original: typeof fetch = function (this: unknown, ...args) {
+    const response = new Response(null, {
+      status: 200,
+      headers: { "x-private": "diagnostic-private-header" },
+    });
+    const promise = Promise.resolve(response);
+    requests.push({ receiver: this, args, promise, response });
+    return promise;
+  };
+  globalThis.fetch = original;
+  const observation = observeHarnessFetch();
+  try {
+    const receiver = {};
+    const controller = new AbortController();
+    const init = {
+      method: "HEAD",
+      signal: controller.signal,
+      headers: { "x-private": "diagnostic-private-header" },
+    };
+    for (const url of [
+      "https://registry.npmjs.org/pnpm/12.18.0",
+      "https://example.com/",
+      "https://registry.npmjs.org/pnpm/12.18.0",
+    ]) {
+      const promise = Reflect.apply(globalThis.fetch, receiver, [url, init]);
+      const actual = requests.at(-1);
+      assert.ok(actual);
+      assert.equal(promise, actual.promise);
+      assert.equal(await promise, actual.response);
+      assert.equal(actual.receiver, receiver);
+      assert.equal(actual.args[0], url);
+      assert.equal(actual.args[1], init);
+      assert.equal(actual.response.bodyUsed, false);
+    }
+    const trace = observation.stop();
+    assert.equal(globalThis.fetch, original);
+    assert.equal(trace.complete, true);
+    assert.equal(trace.events.length, 6);
+    assert.deepEqual(trace.events[3], { role: "denied-example", phase: "RESPONSE", status: 200 });
+    assert.doesNotMatch(JSON.stringify(trace), /diagnostic-private|headers|https:/);
+  } finally {
+    observation.stop();
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("harness observation preserves asynchronous cancellation and the original rejected error", async () => {
+  const realFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const failure = new Error("diagnostic-private-error", { cause: { code: "ECONNREFUSED" } });
+  let pending: Promise<Response> | undefined;
+  const original: typeof fetch = (input, init) => {
+    if (input === "https://example.com/") {
+      assert.equal(init?.signal, controller.signal);
+      pending = new Promise((_accept, reject) =>
+        controller.signal.addEventListener("abort", () => reject(failure), { once: true }),
+      );
+      return pending;
+    }
+    return Promise.resolve(new Response(null, { status: 200 }));
+  };
+  globalThis.fetch = original;
+  const observation = observeHarnessFetch();
+  try {
+    await fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" });
+    const promise = fetch("https://example.com/", { method: "HEAD", signal: controller.signal });
+    assert.equal(promise, pending);
+    controller.abort();
+    await assert.rejects(promise, (error) => error === failure);
+    await fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" });
+    const trace = observation.stop();
+    assert.equal(trace.complete, true);
+    assert.deepEqual(trace.events[3], {
+      role: "denied-example",
+      phase: "FAILURE",
+      causeCode: "ECONNREFUSED",
+    });
+    assert.doesNotMatch(JSON.stringify(trace), /diagnostic-private|error/);
+  } finally {
+    observation.stop();
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("harness diagnostics do not replace synchronous errors or clobber an intervening fetch hook", () => {
+  const realFetch = globalThis.fetch;
+  const failure = new Error("diagnostic-private-error");
+  Object.defineProperty(failure, "cause", {
+    get() {
+      throw new Error("diagnostic-private-getter");
+    },
+  });
+  const original: typeof fetch = () => {
+    throw failure;
+  };
+  globalThis.fetch = original;
+  const observation = observeHarnessFetch();
+  try {
+    assert.throws(
+      () => fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" }),
+      (error) => error === failure,
+    );
+    const replacement: typeof fetch = () => Promise.resolve(new Response());
+    globalThis.fetch = replacement;
+    const trace = observation.stop();
+    assert.equal(globalThis.fetch, replacement);
+    assert.equal(trace.complete, false);
+    assert.deepEqual(trace.events[1], {
+      role: "allowed-before",
+      phase: "FAILURE",
+      causeCode: "UNKNOWN",
+    });
+    assert.doesNotMatch(JSON.stringify(trace), /diagnostic-private/);
+  } finally {
+    observation.stop();
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("harness observation delegates unrelated requests and bounds overflow or misordered probes", async () => {
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  const promise = Promise.resolve(new Response(null, { status: 200 }));
+  globalThis.fetch = () => {
+    calls++;
+    return promise;
+  };
+  try {
+    for (const urls of [
+      [
+        "https://registry.npmjs.org/pnpm/12.18.0",
+        "https://example.com/",
+        "https://registry.npmjs.org/pnpm/12.18.0",
+        "https://example.com/",
+      ],
+      [
+        "https://example.com/",
+        "https://registry.npmjs.org/pnpm/12.18.0",
+        "https://registry.npmjs.org/pnpm/12.18.0",
+      ],
+    ]) {
+      const observation = observeHarnessFetch();
+      try {
+        const init = {
+          method: "HEAD",
+          get headers(): Record<string, string> {
+            throw new Error("diagnostic-private-header");
+          },
+        };
+        assert.equal(fetch("https://example.com/?diagnostic-private-query", init), promise);
+        for (const url of urls) assert.equal(await fetch(url, { method: "HEAD" }), await promise);
+        const trace = observation.stop();
+        assert.equal(trace.complete, false);
+        assert.ok(trace.events.length <= 6);
+        assert.doesNotMatch(JSON.stringify(trace), /diagnostic-private|https:/);
+      } finally {
+        observation.stop();
+      }
+    }
+    assert.equal(calls, 9);
+  } finally {
+    globalThis.fetch = realFetch;
   }
 });
 

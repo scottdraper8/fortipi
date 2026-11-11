@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
 import {
+  observeHarnessFetch,
   verifyApplicationNamespace,
   verifyGatewayEgress,
 } from "../../../../tools/unstale/verify-app-network.ts";
@@ -101,7 +102,26 @@ try {
   process.stdout.write(
     `${JSON.stringify({ imageId: metadata.imageId, localExecution: true, realFuse: body.fuse, cloudVerified: false })}\n`,
   );
-  const network = await verifyApplicationNamespace(metadata.imageId);
+  const parentNamespace = await readlink("/proc/self/ns/net");
+  const observation = observeHarnessFetch();
+  let trace: ReturnType<typeof observation.stop> | undefined;
+  let namespaceStable = false;
+  let network: Awaited<ReturnType<typeof verifyApplicationNamespace>>;
+  try {
+    network = await verifyApplicationNamespace(metadata.imageId);
+  } finally {
+    trace = observation.stop();
+    try {
+      namespaceStable = parentNamespace === (await readlink("/proc/self/ns/net"));
+    } catch {
+      namespaceStable = false;
+    }
+    process.stdout.write(`${JSON.stringify({ ...trace, namespaceStable })}\n`);
+  }
+  assert.ok(
+    trace?.complete && namespaceStable,
+    "Harness host-fetch observation is incomplete or unknown",
+  );
   verifyGatewayEgress(harness.getLogs(), network);
   process.stdout.write(
     `${JSON.stringify({
