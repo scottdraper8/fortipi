@@ -12,10 +12,10 @@ async function setup(options: { grantMs?: number; leaseMs?: number; actions?: st
   });
   let socket: WebSocket | undefined;
   try {
-    const channel = await connected(h);
-    socket = channel.socket;
     const left = 60000 - (Date.now() % 60000);
     if (left < 12000) await new Promise((resolve) => setTimeout(resolve, left + 30));
+    const channel = await connected(h);
+    socket = channel.socket;
     const resources = {
       ...scope(options.actions ?? ["jobs.dispatch", "workspace.write"]),
       tools: ["shell"],
