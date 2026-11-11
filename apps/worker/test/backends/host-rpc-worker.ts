@@ -5,7 +5,10 @@ import type {
   IWorkspaceContainerAPI,
   WorkspaceRef,
 } from "@cloudflare/computer/backends/container";
-import { FencedContainerAPI } from "../../src/container/host-adapter.js";
+import {
+  containerRequestFailureStage,
+  FencedContainerAPI,
+} from "../../src/container/host-adapter.js";
 
 interface ProbeEnv {
   HOST: DurableObjectNamespace<HostProbe>;
@@ -15,10 +18,13 @@ interface ProbeEnv {
 class PortAPI extends RpcTarget implements IWorkspaceContainerAPI {
   readonly portFetcher: Fetcher;
   readonly storage: DurableObjectStorage;
-  constructor(portFetcher: Fetcher, storage: DurableObjectStorage) {
+  readonly fault: string | undefined;
+  private statusCalls = 0;
+  constructor(portFetcher: Fetcher, storage: DurableObjectStorage, fault?: string) {
     super();
     this.portFetcher = portFetcher;
     this.storage = storage;
+    this.fault = fault;
   }
   async start(_spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
     await this.storage.put("starts", ((await this.storage.get<number>("starts")) ?? 0) + 1);
@@ -35,6 +41,9 @@ class PortAPI extends RpcTarget implements IWorkspaceContainerAPI {
   async interceptAllOutboundHttp(_workspace: WorkspaceRef, _token: string) {}
   async setInactivityTimeout(_ms: number) {}
   async status() {
+    this.statusCalls++;
+    if (this.fault === "before-status" || (this.fault === "after-status" && this.statusCalls === 2))
+      throw new Error("Intentional status fault");
     const exited = await this.storage.get<boolean>("exited");
     return {
       running: !exited,
@@ -45,6 +54,7 @@ class PortAPI extends RpcTarget implements IWorkspaceContainerAPI {
     return null;
   }
   port(_port: number): Fetcher {
+    if (this.fault === "port-capability") throw new Error("Intentional capability fault");
     return this.portFetcher;
   }
   fetchPort(_port: number, input: RequestInfo | URL, init?: RequestInit) {
@@ -52,8 +62,15 @@ class PortAPI extends RpcTarget implements IWorkspaceContainerAPI {
   }
 }
 export class HostProbe extends DurableObject<ProbeEnv> {
-  getWorkspaceContainer() {
-    return new PortAPI(this.env.PORT, this.ctx.storage);
+  async getWorkspaceContainer() {
+    return new PortAPI(
+      this.env.PORT,
+      this.ctx.storage,
+      await this.ctx.storage.get<string>("fault"),
+    );
+  }
+  async setFault(fault: string) {
+    await this.ctx.storage.put("fault", fault);
   }
   async markExit() {
     await this.ctx.storage.put("exited", true);
@@ -98,6 +115,7 @@ export default {
       return new Response("settled");
     }
     const hostObject = env.HOST.getByName(url.pathname);
+    if (url.pathname.startsWith("/stage-")) await hostObject.setFault(url.pathname.slice(7));
     const host = await hostObject.getWorkspaceContainer();
     if (url.pathname === "/raw-rpc") {
       try {
@@ -112,6 +130,19 @@ export default {
     }
     const adapter = new FencedContainerAPI(host);
     await adapter.start({ env: {}, enableInternet: false });
+    if (url.pathname.startsWith("/stage-")) {
+      try {
+        await adapter.fetchPort(8080, "https://port/echo");
+        return Response.json({ rejected: false });
+      } catch (error) {
+        return Response.json({
+          stage: containerRequestFailureStage(error),
+          causedStage: containerRequestFailureStage(
+            new Error("Synthetic outer wrapper", { cause: error }),
+          ),
+        });
+      }
+    }
     if (url.pathname === "/exit" || url.pathname === "/evict") {
       adapter.queryOnly = true;
       if (url.pathname === "/exit") await hostObject.markExit();
@@ -173,19 +204,32 @@ export default {
       });
       return response;
     }
-    if (url.pathname === "/cancel" || url.pathname === "/timeout") {
+    if (["/cancel", "/timeout", "/baseline-cancel", "/baseline-timeout"].includes(url.pathname)) {
       const controller = new AbortController();
-      const signal = url.pathname === "/timeout" ? AbortSignal.timeout(100) : controller.signal;
+      const signal = url.pathname.endsWith("timeout")
+        ? AbortSignal.timeout(100)
+        : controller.signal;
+      const reason = new Error("Synthetic caller cancellation");
+      let failure: unknown;
       const before = await (await env.PORT.fetch("https://port/state")).json<{
         started: number;
         aborted: number;
       }>();
-      const pending = adapter.fetchPort(8080, "https://port/slow", { signal }).then(
+      const direct = url.pathname.startsWith("/baseline-")
+        ? await adapter.host.port(8080)
+        : undefined;
+      const fetching = direct
+        ? direct.fetch(new Request("https://port/slow", { signal }))
+        : adapter.fetchPort(8080, "https://port/slow", { signal });
+      const pending = fetching.then(
         (response) => {
           void response.body?.cancel();
           return false;
         },
-        () => true,
+        (error: unknown) => {
+          failure = error;
+          return true;
+        },
       );
       for (let attempt = 0; attempt < 100; attempt++) {
         const state = await (await env.PORT.fetch("https://port/state")).json<{
@@ -195,7 +239,7 @@ export default {
         if (state.started > before.started) break;
         await pause(5);
       }
-      if (url.pathname === "/cancel") controller.abort();
+      if (url.pathname.endsWith("cancel")) controller.abort(reason);
       const rejected = await pending;
       let observed = false;
       for (let attempt = 0; attempt < 100; attempt++) {
@@ -209,7 +253,12 @@ export default {
         }
         await pause(5);
       }
-      return Response.json({ rejected, observed });
+      return Response.json({
+        rejected,
+        observed,
+        stage: containerRequestFailureStage(failure),
+        reasonPreserved: failure === signal.reason,
+      });
     }
     return new Response(null, { status: 404 });
   },

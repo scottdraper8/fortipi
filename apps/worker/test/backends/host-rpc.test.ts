@@ -40,8 +40,25 @@ test("production container adapter carries Request cancellation through actual R
       header: "request-header",
       body: "request-body",
     });
-    for (const path of ["/cancel", "/timeout"])
-      assert.deepEqual(await (await server.fetch(path)).json(), { rejected: true, observed: true });
+    for (const path of ["cancel", "timeout"]) {
+      const baseline = (await (await server.fetch(`/baseline-${path}`)).json()) as {
+        rejected: boolean;
+        observed: boolean;
+        reasonPreserved: boolean;
+      };
+      assert.equal(baseline.rejected, true);
+      assert.equal(baseline.observed, true);
+      assert.equal(typeof baseline.reasonPreserved, "boolean");
+      assert.deepEqual(await (await server.fetch(`/${path}`)).json(), {
+        ...baseline,
+        stage: "native-fetch",
+      });
+    }
+    for (const stage of ["before-status", "port-capability", "after-status"])
+      assert.deepEqual(await (await server.fetch(`/stage-${stage}`)).json(), {
+        stage,
+        causedStage: stage,
+      });
     for (const path of ["/exit", "/evict"])
       assert.deepEqual(await (await server.fetch(path)).json(), {
         requestRejected: true,
