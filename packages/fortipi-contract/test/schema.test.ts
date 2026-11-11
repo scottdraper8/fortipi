@@ -35,6 +35,35 @@ import {
 } from "./fixtures/wire.ts";
 
 const { get } = validators();
+test("native output artifacts carry actual stream provenance before a server can route bytes", () => {
+  const reference = {
+    workspaceId: "workspace_1",
+    revision: "revision_1",
+    artifactId: "artifact_1",
+    sha256: hash,
+    size: 1,
+    endpoint: "/v1/workspaces/workspace_1/artifacts/artifact_1?revision=revision_1",
+    owner: { kind: "local", executorId: "executor_1" },
+    chunks: { chunkBytes: 1, chunkHashes: [hash] },
+    outputSource: { stream: "stdout" },
+  } satisfies Client.ByteReference & Executor.ByteReference;
+  const valid = get("ByteReference");
+  assert.equal(valid(reference), true, JSON.stringify(valid.errors));
+  assert.equal(valid({ ...reference, outputSource: { stream: "stderr" } }), true);
+  for (const key of ["outputSource", "chunks"] as const) {
+    const incomplete: Partial<Client.ByteReference> = { ...reference };
+    delete incomplete[key];
+    assert.equal(valid(incomplete), false, key);
+  }
+  assert.equal(valid({ ...reference, owner: { kind: "local" } }), false);
+  assert.equal(valid({ ...reference, outputSource: { stream: "combined" } }), false);
+  assert.equal(valid({ ...reference, outputSource: { stream: "stdout", offset: 0 } }), false);
+  assert.equal(valid({ ...reference, owner: { kind: "cloud" } }), false);
+  const { outputSource: _source, artifactId: _artifact, chunks: _chunks, ...file } = reference;
+  assert.equal(valid(file), true, "ordinary local file references need no output provenance");
+  assert.equal(valid({ ...file, artifactId: "cloud_1", owner: { kind: "cloud" } }), true);
+  assert.equal(valid({ ...file, outputSource: { stream: "stdout" } }), false);
+});
 test("local upload and read metadata announce complete chunk grids before any bytes", () => {
   const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
   const bytes = Buffer.concat([Buffer.alloc(262144, 65), Buffer.from("tail")]);
