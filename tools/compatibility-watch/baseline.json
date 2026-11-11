@@ -151,20 +151,20 @@
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "877b249292307ae4dd282080e68b1d88c0fd0bb0",
+        "commit": "d434f33d2f7d85c07ac6381822461267891a8ef8",
         "version": "4.160.0",
         "paths": {
-          "packages/wrangler": "14c73e3746b41a2d045cc8e9fdc6a5fe032be82bee08c2bf6a5c380dbd27218a",
+          "packages/wrangler": "d0e5559b0c7b11c02a2400d8ce62e3006d9cc99c138b3c41a0f1d66e84b36303",
           "packages/wrangler/package.json": "6072fef5cb634caf9daee4d5a6bcefd70f18ba0d14c7a911668274c3ce399dd1"
         },
-        "sha256": "d16a6e2a779cd64107cd87bd351d339975374a9fa61e010a6e61359a18ae9548"
+        "sha256": "5ff8cf4d2d21429d0bed6251f8af34e17def356a41c9f9ab1b44144623570bb8"
       },
       "pins": {
         "apps/worker/package.json#devDependencies/wrangler": "4.160.0",
         "packages/fortipi-cli/package.json#dependencies/wrangler": "4.160.0"
       },
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed 4.160.0 manifest/changelog: bundled workerd 1.20261110.1/types, container upload retry handling and configuration/API additions. Retain exact CLI/Worker pins and existing installed prepare/deploy/image checks before any adoption."
+      "reviewedAt": "2026-11-11T12:05:00.000Z",
+      "reviewNote": "Reviewed exact upstream test-concurrency-only change877b249→d434f33: packages/wrangler/e2e/unenv-preset/preset.test.ts changes describe.each to concurrent; no production/config/deploy/image/auth API or manifest change. Retain locked4.160.0; no CLI7 contract change or main-source adoption. Independent scope/source review phase3/compatibility-watch.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
