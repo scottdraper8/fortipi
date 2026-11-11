@@ -17,6 +17,7 @@
     "lint": "biome check .",
     "schema:check": "node packages/fortipi-contract/scripts/generate.ts --check",
     "check:pins": "node scripts/check-pins.ts",
+    "review:supply-chain": "node tools/unstale/review-supply-chain.ts --locks --check",
     "check:licenses": "node scripts/check-licenses.ts",
     "unstale:check": "node scripts/run-unstale.ts",
     "test": "node scripts/build-workspaces.ts test",

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { test } from "node:test";
@@ -77,6 +78,32 @@ test("reject stale graph advisory evidence", async () => {
     state.advisory.checkedAt = new Date(Date.now() - 86_400_001).toISOString();
     await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(state));
   }, /Advisory graph review is stale\/invalid/);
+});
+
+test("reject fresh advisory evidence rebound to changed lock bytes", async () => {
+  await fixture(async (root) => {
+    await mkdir(resolve(root, "dist/supply-chain"), { recursive: true });
+    const digest = async (path: string): Promise<string> =>
+      createHash("sha256")
+        .update(await readFile(resolve(root, path)))
+        .digest("hex");
+    const state = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+    await writeFile(
+      resolve(root, "dist/supply-chain/advisory-review.json"),
+      JSON.stringify({
+        format: 1,
+        reviewSha256: await digest("tools/unstale/supply-chain.json"),
+        locks: {
+          "pnpm-lock.yaml": await digest("pnpm-lock.yaml"),
+          "tools/unstale/pnpm-lock.yaml": await digest("tools/unstale/pnpm-lock.yaml"),
+        },
+        advisory: state.advisory,
+      }),
+    );
+    await checkPins(root);
+    const path = resolve(root, "pnpm-lock.yaml");
+    await writeFile(path, `${await readFile(path, "utf8")}\n# changed since advisory review\n`);
+  }, /Fresh advisory review input changed: pnpm-lock.yaml/);
 });
 
 test("reject absent verified registry signature evidence", async () => {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { parse, parseAllDocuments } from "yaml";
@@ -146,10 +147,42 @@ export async function checkPins(root = repository): Promise<void> {
   const review = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
   assert.equal(review.format, 1);
   assert.deepEqual(review.advisory.findings, [], "Unresolved security advisories");
-  const advisoryAge = Date.now() - Date.parse(review.advisory.checkedAt);
+  let advisory = review.advisory;
+  let fresh:
+    | {
+        format: number;
+        reviewSha256: string;
+        locks: Record<string, string>;
+        advisory: SupplyChain["advisory"];
+      }
+    | undefined;
+  try {
+    fresh = await json(root, "dist/supply-chain/advisory-review.json");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (fresh) {
+    assert.equal(fresh.format, 1);
+    for (const [path, expected] of Object.entries({
+      "tools/unstale/supply-chain.json": fresh.reviewSha256,
+      "pnpm-lock.yaml": fresh.locks["pnpm-lock.yaml"],
+      "tools/unstale/pnpm-lock.yaml": fresh.locks["tools/unstale/pnpm-lock.yaml"],
+    })) {
+      assert.equal(
+        createHash("sha256")
+          .update(await readFile(resolve(root, path)))
+          .digest("hex"),
+        expected,
+        `Fresh advisory review input changed: ${path}`,
+      );
+    }
+    advisory = fresh.advisory;
+  }
+  assert.deepEqual(advisory.findings, [], "Unresolved security advisories");
+  const advisoryAge = Date.now() - Date.parse(advisory.checkedAt);
   assert.ok(
     advisoryAge >= -60_000 && advisoryAge <= 86_400_000,
-    "Advisory graph review is stale/invalid; rerun review-supply-chain.ts --locks",
+    "Advisory graph review is stale/invalid; rerun review-supply-chain.ts --locks --check",
   );
   const manifests = new Map<string, Manifest>();
   for (const path of manifestPaths) {
@@ -298,7 +331,7 @@ export async function checkPins(root = repository): Promise<void> {
     }
   }
   assert.equal(
-    review.advisory.identities,
+    advisory.identities,
     reviewedIdentities.size,
     "Advisory review omits locked identities",
   );

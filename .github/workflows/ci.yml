@@ -84,7 +84,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir tools/unstale install --frozen-lockfile
       - run: node scripts/verify-foundation.ts --egress
-      - run: node tools/unstale/review-supply-chain.ts --locks
+      - run: node tools/unstale/review-supply-chain.ts --locks --check
       - run: pnpm run check:pins
       - run: node --test tools/unstale/foundation.test.ts
       - run: node tools/unstale/provision-docker.ts

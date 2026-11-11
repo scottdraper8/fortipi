@@ -188,6 +188,7 @@ function lockIdentities(text: string): string[] {
 }
 
 async function main(): Promise<void> {
+  const checkOnly = process.argv.includes("--check");
   const identities = new Set<string>();
   for (const path of [
     "package.json",
@@ -236,6 +237,12 @@ async function main(): Promise<void> {
     }
   ).keys;
   const pending = [...identities].sort().filter((id) => !state.packages[id]);
+  if (checkOnly)
+    assert.equal(
+      pending.length,
+      0,
+      "Unreviewed archives require a serialized source-policy update",
+    );
   let at = 0;
   await Promise.all(
     Array.from({ length: 4 }, async () => {
@@ -273,6 +280,22 @@ async function main(): Promise<void> {
     });
   }
   state.advisory = { checkedAt: new Date().toISOString(), identities: all.length, findings };
+  if (checkOnly) {
+    assert.ok(process.argv.includes("--locks"), "Check mode requires both complete lock graphs");
+    const locks: Record<string, string> = {};
+    for (const path of ["pnpm-lock.yaml", "tools/unstale/pnpm-lock.yaml"])
+      locks[path] = hash(await readFile(resolve(root, path)));
+    await mkdir(resolve(root, "dist/supply-chain"), { recursive: true });
+    await writeFile(
+      resolve(root, "dist/supply-chain/advisory-review.json"),
+      `${JSON.stringify({ format: 1, reviewSha256: hash(await readFile(file)), locks, advisory: state.advisory }, null, 2)}\n`,
+    );
+    assert.deepEqual(findings, [], "Unresolved OSV advisories");
+    console.log(
+      `Fresh OSV check: ${all.length} locked identities; source policy and locks unchanged`,
+    );
+    return;
+  }
   for (const id of all) {
     const r = state.packages[id];
     assert.ok(r);

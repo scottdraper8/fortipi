@@ -183,21 +183,24 @@ async function main(): Promise<void> {
   assert.equal(notify.code, 0, `unstale notify failed: ${notify.output}`);
   const status = await execute(binary, ["status", "--wait", "10", "--no-animation"], 60_000);
   assert.equal(status.code, 0, `unstale status failed: ${status.output}`);
-  await execute(binary, ["sync"], 60_000);
+  const sync = await execute(binary, ["sync"], 60_000);
   const advisories = await execute(binary, ["advisories"]);
   assert.equal(advisories.code, 0, `unstale advisory lookup failed: ${advisories.output}`);
   const advisoryUnavailable =
     advisories.output.trim() ===
     "No lockfile advisory report yet: `unstale sync` reads OSV (cached a day).";
   assert.ok(
-    !advisories.output.trim() ||
-      advisoryUnavailable ||
+    advisoryUnavailable ||
       /^Lockfile advisories(?: \(.*\))?: 0 of \d+ advisor(?:y|ies) on \d+ locked package versions call for action[^\n]*$/.test(
         advisories.output.trim(),
       ) ||
       (await rejectedZodAdvisory(advisories.output)),
     `Actionable unstale security findings: ${advisories.output}`,
   );
+  if (advisoryUnavailable || sync.code !== 0)
+    console.error(
+      "unstale advisory refresh DEGRADED; retry unstale:check; fresh full-graph OSV review remains required",
+    );
   const report = await readFile(resolve(repository, ".unstale/onboarding-report.md"), "utf8");
   const coverage = await readFile(resolve(repository, ".unstale/state/coverage.json"), "utf8");
   const acknowledged =
@@ -207,7 +210,7 @@ async function main(): Promise<void> {
   await mkdir(resolve(repository, "dist/supply-chain"), { recursive: true });
   await writeFile(
     resolve(repository, "dist/supply-chain/unstale.json"),
-    `${JSON.stringify({ version: "0.2.12", platform: key, notifyExit: notify.code, statusExit: status.code, advisoryExit: advisories.code, advisoryCoverage: advisoryUnavailable ? "unavailable" : "checked", acknowledged, reportSha256: hash(Buffer.from(report)), coverageSha256: hash(Buffer.from(coverage)), observedAt: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ version: "0.2.12", platform: key, notifyExit: notify.code, statusExit: status.code, syncExit: sync.code, advisoryExit: advisories.code, advisoryCoverage: advisoryUnavailable || sync.code !== 0 ? "degraded" : "checked", acknowledged, reportSha256: hash(Buffer.from(report)), coverageSha256: hash(Buffer.from(coverage)), observedAt: new Date().toISOString() }, null, 2)}\n`,
   );
   console.log(
     status.output
