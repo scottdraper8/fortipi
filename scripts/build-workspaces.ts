@@ -188,17 +188,10 @@ export async function main(command: string | undefined): Promise<void> {
     }
     case "typecheck":
       await run(process.execPath, ["node_modules/typescript/bin/tsc", "-p", "tsconfig.tools.json"]);
-      for (const path of projects) {
-        const sources = await filesBelow(join(repository, path, "src"));
-        if (!sources.some((file) => file.endsWith(".ts")))
-          throw new Error(`Required project has no TypeScript sources: ${path}`);
-        await run(process.execPath, [
-          "node_modules/typescript/bin/tsc",
-          "-p",
-          `${path}/tsconfig.json`,
-          "--noEmit",
-        ]);
-      }
+      await typecheck(projects);
+      return;
+    case "typecheck:executor":
+      await typecheck(["packages/fortipi-contract", "packages/fortipi-executor"]);
       return;
     case "test":
       await tests([
@@ -237,6 +230,20 @@ export async function main(command: string | undefined): Promise<void> {
       return;
     default:
       throw new Error("Expected build, typecheck, test, test:executor, test:browser or test:pty");
+  }
+}
+
+async function typecheck(paths: readonly string[]): Promise<void> {
+  for (const path of paths) {
+    const sources = await filesBelow(join(repository, path, "src"));
+    if (!sources.some((file) => file.endsWith(".ts")))
+      throw new Error(`Required project has no TypeScript sources: ${path}`);
+    await run(process.execPath, [
+      "node_modules/typescript/bin/tsc",
+      "-p",
+      `${path}/tsconfig.json`,
+      "--noEmit",
+    ]);
   }
 }
 

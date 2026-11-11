@@ -78,6 +78,11 @@ async function attribution(
   if (source.inheritedFrom) {
     const parent = review.packages[source.inheritedFrom];
     assert.ok(parent, `${id}: missing attribution parent`);
+    assert.equal(
+      parent.license,
+      review.packages[id]?.license,
+      `${id}: attribution license mismatch`,
+    );
     if (!Object.keys(parent.licenses).length)
       await attribution(root, source.inheritedFrom, policy, review, seen);
   } else assert.ok(source.files.length, `${id}: empty attribution`);
@@ -147,7 +152,11 @@ export async function checkLicenses(root = repository, foundation = false): Prom
     const entries = archiveEntries(raw);
     const manifestBytes = [...entries].find(([path]) => /^[^/]+\/package.json$/.test(path))?.[1];
     assert.ok(manifestBytes, `Missing archive manifest ${id}`);
+    assert.equal(hash(manifestBytes), record.manifestSha256, `Archive manifest changed ${id}`);
     const upstream = JSON.parse(manifestBytes.toString()) as Record<string, unknown>;
+    assert.equal(upstream.name, record.name, `Archive name mismatch ${id}`);
+    assert.equal(upstream.version, record.version, `Archive version mismatch ${id}`);
+    assert.equal(upstream.license, record.license, `Archive license grant mismatch ${id}`);
     const componentInventory: Record<string, string> = {};
     if (externalNative.has(id))
       for (const path of ["package/README.md", "package/versions.json"]) {

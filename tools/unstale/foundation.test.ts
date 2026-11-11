@@ -7,6 +7,7 @@ import { repository } from "../../scripts/build-workspaces.ts";
 import { checkLicenses } from "../../scripts/check-licenses.ts";
 import type { Manifest, SupplyChain } from "../../scripts/check-pins.ts";
 import { checkPins, json, manifestPaths, yaml } from "../../scripts/check-pins.ts";
+import { rejectedZodAdvisory, validateRejectedZodAuthorities } from "../../scripts/run-unstale.ts";
 
 async function fixture(change: (root: string) => Promise<void>, rejection: RegExp): Promise<void> {
   await mkdir(resolve(repository, "dist/foundation-fixtures"), { recursive: true });
@@ -51,6 +52,121 @@ test("reject a corrupt archive identity in either lock document", async () => {
     const text = await readFile(path, "utf8");
     await writeFile(path, text.replace(/sha512-[A-Za-z0-9+/]+==/, `sha512-${"A".repeat(86)}==`));
   }, /Lock archive corruption/);
+});
+
+test("reject manager resolution drift in the first pnpm lock document", async () => {
+  await fixture(async (root) => {
+    const path = resolve(root, "pnpm-lock.yaml");
+    const text = await readFile(path, "utf8");
+    assert.ok(text.includes("version: 12.18.0"));
+    await writeFile(path, text.replace("version: 12.18.0", "version: 12.17.0"));
+  }, /12\.17\.0/);
+});
+
+test("reject a permissions.build override of denied dependency scripts", async () => {
+  await fixture(async (root) => {
+    const policy = await yaml<Record<string, unknown>>(root, "pnpm-workspace.yaml");
+    policy.permissions = { "workerd@1.20261110.1": { build: true } };
+    await writeFile(resolve(root, "pnpm-workspace.yaml"), stringify(policy));
+  }, /Forbidden policy override: permissions/);
+});
+
+test("reject stale graph advisory evidence", async () => {
+  await fixture(async (root) => {
+    const state = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+    state.advisory.checkedAt = new Date(Date.now() - 86_400_001).toISOString();
+    await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(state));
+  }, /Advisory graph review is stale\/invalid/);
+});
+
+test("reject absent verified registry signature evidence", async () => {
+  await fixture(async (root) => {
+    const state = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+    const record = state.packages["ajv@8.20.0"];
+    assert.ok(record);
+    record.signature = "not published";
+    await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(state));
+  }, /Missing verified registry signature/);
+});
+
+test("reject a workspace link redirected to a different owned package", async () => {
+  await fixture(async (root) => {
+    const path = resolve(root, "pnpm-lock.yaml");
+    const text = await readFile(path, "utf8");
+    assert.ok(text.includes("link:../fortipi-contract"));
+    await writeFile(path, text.replace("link:../fortipi-contract", "link:../fortipi-executor"));
+  }, /workspace link points to wrong package/);
+});
+
+test("reject literal harden-runner endpoints that reproduced blocked bootstrap", async () => {
+  await fixture(async (root) => {
+    const path = resolve(root, ".github/workflows/ci.yml");
+    const text = await readFile(path, "utf8");
+    assert.ok(text.includes("allowed-endpoints: >-"));
+    await writeFile(path, text.replace("allowed-endpoints: >-", "allowed-endpoints: |"));
+  }, /allowed-endpoints contains an internal newline/);
+});
+
+test("keep ordinary YAML single-document when relaxing only pnpm lock validation", async () => {
+  await fixture(async (root) => {
+    const path = resolve(root, ".pre-commit-config.yaml");
+    const text = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      text.replace("exclude: '(^|/)pnpm-lock\\.yaml$'", "args: [--allow-multiple-documents]"),
+    );
+  }, /pnpm-lock/);
+});
+
+test("changed or ambiguous GHSA assessments never inherit the exact Zod disposition", () => {
+  const cve = { cveMetadata: { cveId: "CVE-2023-54404", state: "REJECTED" } };
+  const github = {
+    ghsa_id: "GHSA-mrhx-c7xc-m3w5",
+    cve_id: "CVE-2023-54404",
+    withdrawn_at: null,
+    vulnerabilities: [
+      {
+        package: { ecosystem: "npm", name: "zod" },
+        vulnerable_version_range: "< 4.6.6",
+        first_patched_version: "4.6.6",
+      },
+    ],
+  };
+  validateRejectedZodAuthorities(cve, github);
+  assert.throws(
+    () =>
+      validateRejectedZodAuthorities(
+        { cveMetadata: { ...cve.cveMetadata, state: "PUBLISHED" } },
+        github,
+      ),
+    /CVE status changed/,
+  );
+  assert.throws(
+    () =>
+      validateRejectedZodAuthorities(cve, {
+        ...github,
+        vulnerabilities: [
+          ...github.vulnerabilities,
+          { ...github.vulnerabilities[0], vulnerable_version_range: "<= 4.6.7" },
+        ],
+      }),
+    /GHSA affected-version assessment changed/,
+  );
+  assert.throws(
+    () => validateRejectedZodAuthorities(cve, { ...github, ghsa_id: "GHSA-xxxx-xxxx-xxxx" }),
+    /GHSA/,
+  );
+  assert.throws(() => validateRejectedZodAuthorities(cve, {}));
+});
+
+test("changed Zod versions and unrelated actionable findings are not suppressed", async () => {
+  for (const output of [
+    "Lockfile advisories: 1 of 1 advisory on 381 locked package versions call for action\n  zod 4.6.6 (direct):\n  CVE-2023-54404",
+    "Lockfile advisories: 1 of 1 advisory on 381 locked package versions call for action\n  zod 4.6.7 (direct):\n  GHSA-xxxx-xxxx-xxxx",
+    "Lockfile advisories: 2 of 2 advisories on 381 locked package versions call for action\n  zod 4.6.7 (direct):\n  CVE-2023-54404\n  CVE-2026-1234",
+    "Lockfile advisories: 1 of 1 advisory on 381 locked package versions call for action\n  zod 4.6.7 (direct):\n  CVE-2023-54404\n  zod 4.6.5 (transitive):\n  CVE-2023-54404",
+  ])
+    assert.equal(await rejectedZodAdvisory(output), false);
 });
 
 test("reject a newly introduced dependency install script", async () => {

@@ -221,6 +221,7 @@ async function metadata(root: string): Promise<void> {
 
 if (import.meta.main) {
   if (process.argv.includes("--egress")) await egressChecks();
+  else if (process.argv.includes("--native")) await nativeChecks();
   else {
     const root = rootArgument();
     await metadata(root);

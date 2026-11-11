@@ -80,6 +80,19 @@ export async function yaml<T>(root: string, path: string): Promise<T> {
     documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.specifier,
     "12.18.0",
   );
+  assert.equal(documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.version, "12.18.0");
+  assert.deepEqual(Object.keys(documents[0]?.importers ?? {}), ["."]);
+  assert.deepEqual(Object.keys(documents[0]?.importers["."] ?? {}), [
+    "configDependencies",
+    "packageManagerDependencies",
+  ]);
+  assert.deepEqual(documents[0]?.importers["."]?.configDependencies, {});
+  for (const importer of Object.values(documents[1]?.importers ?? {}))
+    assert.equal(
+      importer.packageManagerDependencies,
+      undefined,
+      "Manager importer in application lock",
+    );
   // pnpm 12 separately locks its own native package-manager distribution.
   const result: Lock = { lockfileVersion: "9.0", importers: {}, packages: {} };
   for (const doc of documents) {
@@ -133,6 +146,11 @@ export async function checkPins(root = repository): Promise<void> {
   const review = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
   assert.equal(review.format, 1);
   assert.deepEqual(review.advisory.findings, [], "Unresolved security advisories");
+  const advisoryAge = Date.now() - Date.parse(review.advisory.checkedAt);
+  assert.ok(
+    advisoryAge >= -60_000 && advisoryAge <= 86_400_000,
+    "Advisory graph review is stale/invalid; rerun review-supply-chain.ts --locks",
+  );
   const manifests = new Map<string, Manifest>();
   for (const path of manifestPaths) {
     const manifest = await json<Manifest>(root, path);
@@ -155,6 +173,7 @@ export async function checkPins(root = repository): Promise<void> {
   assert.equal(top?.packageManager, "pnpm@12.18.0");
   assert.equal(manifests.get("tools/unstale/package.json")?.packageManager, top?.packageManager);
   assert.equal(top?.fortipi?.toolchain.node, "26.13.0");
+  const reviewedIdentities = new Set<string>();
   for (const prefix of ["", "tools/unstale/"]) {
     const policy = await yaml<Record<string, unknown>>(root, `${prefix}pnpm-workspace.yaml`);
     for (const [key, value] of Object.entries({
@@ -168,6 +187,7 @@ export async function checkPins(root = repository): Promise<void> {
       dangerouslyAllowAllBuilds: false,
       autoInstallPeers: false,
       strictPeerDependencies: true,
+      engineStrict: true,
       sideEffectsCache: false,
     }))
       assert.equal(policy[key], value, `${prefix}${key}`);
@@ -176,6 +196,7 @@ export async function checkPins(root = repository): Promise<void> {
       "permissions",
       "ignoreScripts",
       "onlyBuiltDependencies",
+      "onlyBuiltDependenciesFile",
       "ignoredBuiltDependencies",
       "ignoreDepScripts",
       "neverBuiltDependencies",
@@ -224,8 +245,18 @@ export async function checkPins(root = repository): Promise<void> {
       assert.ok(Date.parse(exemption.expires) > Date.now(), `Expired release-age exemption ${id}`);
     }
     for (const [id, item] of Object.entries(lock.packages)) {
+      reviewedIdentities.add(id);
       const record = review.packages[id];
       assert.ok(record, `Unreviewed locked archive ${id}`);
+      assert.equal(`${record.name}@${record.version}`, id, `Review identity mismatch ${id}`);
+      assert.match(
+        record.signature,
+        /^verified SHA256:[A-Za-z0-9+/]{43}$/,
+        `Missing verified registry signature ${id}`,
+      );
+      assert.match(record.archiveSha256, /^[a-f0-9]{64}$/);
+      assert.match(record.manifestSha256, /^[a-f0-9]{64}$/);
+      assert.ok(Number.isFinite(Date.parse(record.published)), `Invalid publication date ${id}`);
       assert.match(item.resolution.integrity, /^sha512-[A-Za-z0-9+/]{86}==$/);
       assert.equal(item.resolution.integrity, record.integrity, `Lock archive corruption: ${id}`);
       if (Object.keys(record.lifecycle).length)
@@ -249,9 +280,16 @@ export async function checkPins(root = repository): Promise<void> {
           const locked: { specifier: string; version: string } | undefined =
             importer[group]?.[name];
           assert.equal(locked?.specifier, pin, `${name}: stale lock specifier`);
-          if (pin === "workspace:*")
+          if (pin === "workspace:*") {
             assert.ok(locked?.version.startsWith("link:"), `${name}: not a workspace link`);
-          else {
+            const target = [...manifests].find(([, m]) => m.name === name)?.[0];
+            assert.ok(target, `Missing workspace manifest ${name}`);
+            assert.equal(
+              resolve(root, importerPath, locked.version.slice(5)),
+              resolve(root, target, ".."),
+              `${name}: workspace link points to wrong package`,
+            );
+          } else {
             assert.equal(locked?.version.split("(")[0], pin, `${name}: wrong resolution`);
             assert.ok(ids.has(`${name}@${pin}`));
           }
@@ -259,6 +297,11 @@ export async function checkPins(root = repository): Promise<void> {
       }
     }
   }
+  assert.equal(
+    review.advisory.identities,
+    reviewedIdentities.size,
+    "Advisory review omits locked identities",
+  );
   const hooks = await yaml<{
     repos: {
       repo: string;
@@ -311,7 +354,24 @@ export async function checkPins(root = repository): Promise<void> {
       assert.ok(expected);
     }
   for (const path of await filesBelow(resolve(root, ".github/workflows"))) {
-    await yaml<unknown>(root, relative(root, path));
+    const workflow = await yaml<{
+      jobs: Record<string, { steps: { uses?: string; with?: Record<string, unknown> }[] }>;
+    }>(root, relative(root, path));
+    for (const [job, config] of Object.entries(workflow.jobs)) {
+      const hardening = config.steps[0];
+      assert.ok(hardening, `${job}: missing hardened job steps`);
+      assert.ok(
+        hardening?.uses?.startsWith("step-security/harden-runner@"),
+        `${job}: harden-runner must be first`,
+      );
+      assert.equal(hardening.with?.["egress-policy"], "block", `${job}: block egress is required`);
+      const endpoints = hardening.with?.["allowed-endpoints"];
+      assert.equal(typeof endpoints, "string", `${job}: explicit endpoints are required`);
+      assert.ok(
+        !(endpoints as string).trim().match(/[\r\n]/),
+        `${job}: harden-runner allowed-endpoints contains an internal newline; use a folded YAML scalar`,
+      );
+    }
     const text = await readFile(path, "utf8");
     for (const match of text.matchAll(/\buses:\s*([^\s#]+)@([^\s#]+)/g)) {
       const [, name, sha] = match;

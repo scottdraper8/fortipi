@@ -12,6 +12,7 @@
   "scripts": {
     "build": "node scripts/build-workspaces.ts build",
     "typecheck": "node scripts/build-workspaces.ts typecheck",
+    "typecheck:executor": "node scripts/build-workspaces.ts typecheck:executor",
     "typecheck:tools": "tsc -p tsconfig.tools.json",
     "lint": "biome check .",
     "schema:check": "node packages/fortipi-contract/scripts/generate.ts --check",

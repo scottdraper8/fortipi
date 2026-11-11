@@ -7,12 +7,39 @@ import { archive, archiveEntries, hash } from "../tools/unstale/review-supply-ch
 import { repository } from "./build-workspaces.ts";
 import type { SupplyChain } from "./check-pins.ts";
 
-async function rejectedZodAdvisory(output: string): Promise<boolean> {
+export function validateRejectedZodAuthorities(cve: unknown, github: unknown): void {
+  const authority = cve as { cveMetadata: { cveId: string; state: string } };
+  const advisory = github as {
+    ghsa_id: string;
+    cve_id: string;
+    withdrawn_at: string | null;
+    vulnerabilities: {
+      package: { ecosystem: string; name: string };
+      vulnerable_version_range: string;
+      first_patched_version: string;
+    }[];
+  };
+  assert.equal(authority.cveMetadata.cveId, "CVE-2023-54404");
+  assert.equal(authority.cveMetadata.state, "REJECTED", "CVE status changed");
+  assert.equal(advisory.ghsa_id, "GHSA-mrhx-c7xc-m3w5");
+  assert.equal(advisory.cve_id, "CVE-2023-54404");
+  assert.equal(advisory.withdrawn_at, null, "GHSA assessment changed");
+  assert.equal(advisory.vulnerabilities.length, 1, "GHSA affected-version assessment changed");
+  const vulnerability = advisory.vulnerabilities[0];
+  assert.ok(vulnerability);
+  assert.deepEqual(vulnerability.package, { ecosystem: "npm", name: "zod" });
+  assert.equal(vulnerability.vulnerable_version_range, "< 4.6.6");
+  assert.equal(vulnerability.first_patched_version, "4.6.6");
+}
+
+export async function rejectedZodAdvisory(output: string): Promise<boolean> {
   if (
     !/1 of 1 advisory on \d+ locked package versions/.test(output) ||
     !/^\s+zod 4\.6\.7 \(direct\):$/m.test(output)
   )
     return false;
+  const packages = [...output.matchAll(/^\s+\S+ \S+ \([^\n)]*\):\s*$/gm)];
+  if (packages.length !== 1 || packages[0]?.[0].trim() !== "zod 4.6.7 (direct):") return false;
   const ids = [...output.matchAll(/(?:CVE-\d{4}-\d+|GHSA-[a-z0-9-]+)/g)].map((m) => m[0]);
   if (!ids.length || ids.some((id) => !["CVE-2023-54404", "GHSA-mrhx-c7xc-m3w5"].includes(id)))
     return false;
@@ -39,31 +66,9 @@ async function rejectedZodAdvisory(output: string): Promise<boolean> {
     observations.push({ url, sha256: hash(raw) });
     return JSON.parse(raw.toString()) as unknown;
   };
-  const cve = (await fetchSource(disposition.authorityURL)) as {
-    cveMetadata: { cveId: string; state: string };
-  };
-  const github = (await fetchSource(disposition.githubURL)) as {
-    vulnerabilities: {
-      package: { ecosystem: string; name: string };
-      vulnerable_version_range: string;
-      first_patched_version: string;
-    }[];
-  };
-  assert.equal(cve.cveMetadata.cveId, disposition.cve);
-  assert.equal(
-    cve.cveMetadata.state,
-    "REJECTED",
-    "CVE status changed; investigate before continuing",
-  );
-  assert.ok(
-    github.vulnerabilities.some(
-      (v) =>
-        v.package.ecosystem === "npm" &&
-        v.package.name === "zod" &&
-        v.vulnerable_version_range === "< 4.6.6" &&
-        v.first_patched_version === "4.6.6",
-    ),
-    "GHSA affected-version assessment changed",
+  validateRejectedZodAuthorities(
+    await fetchSource(disposition.authorityURL),
+    await fetchSource(disposition.githubURL),
   );
   await mkdir(resolve(repository, "dist/supply-chain"), { recursive: true });
   await writeFile(
@@ -86,6 +91,7 @@ async function execute(
   return new Promise((accept, reject) => {
     // Public registry/catalog queries receive no registry or application credentials.
     const env: NodeJS.ProcessEnv = {};
+    env.UNSTALE_CACHE_DIR = resolve(repository, ".unstale/cache");
     for (const key of [
       "PATH",
       "HOME",
