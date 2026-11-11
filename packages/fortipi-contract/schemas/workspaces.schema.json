@@ -606,6 +606,14 @@
             "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Mutation"
           },
           "maxItems": 4096
+        },
+        "blobs": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/UploadBlobPlan"
+          },
+          "maxItems": 4096,
+          "description": "Required for local uploads, including an explicit empty array when no put is declared. If supplied, covers each distinct put SHA exactly once, including superseded puts. Computer uploads may omit it."
         }
       },
       "required": [
@@ -2572,6 +2580,21 @@
           "additionalProperties": false
         }
       ]
+    },
+    "UploadBlobPlan": {
+      "title": "UploadBlobPlan",
+      "description": "One announced chunk inventory for a distinct declared put content hash. Byte size comes from its put mutations.",
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "chunks": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ChunkInventory"
+        }
+      },
+      "required": ["sha256", "chunks"],
+      "additionalProperties": false
     }
   }
 }

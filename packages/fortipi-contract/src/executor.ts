@@ -17,11 +17,13 @@ export {
   protocolVersion,
   schemaVersion,
   validateAssignment,
+  validateChunkInventory,
   validateLocalLease,
   validateLocalStage,
   validateManifest,
   validateRelativePath,
   validateTransfer,
+  validateUploadBlobs,
   wireLimits,
 } from "./compatibility.js";
 export {
@@ -33,6 +35,8 @@ export {
 } from "./generated/schemas.js";
 export type {
   Assignment,
+  ByteReference,
+  ChunkInventory,
   CommitReceipt,
   CredentialRef,
   ErrorBody,
@@ -61,4 +65,6 @@ export type {
   TransferDescriptor,
   TransferStatus,
   TransportAck,
+  UploadBegin,
+  UploadBlobPlan,
 } from "./generated/types.js";

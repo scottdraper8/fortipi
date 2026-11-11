@@ -522,6 +522,9 @@
           },
           "required": ["kind"],
           "additionalProperties": false
+        },
+        "chunks": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ChunkInventory"
         }
       },
       "required": ["workspaceId", "revision", "sha256", "size", "endpoint", "owner"],
@@ -1027,6 +1030,27 @@
       "required": ["deploymentId", "agentId", "conversationId", "policyVersion"],
       "additionalProperties": false,
       "description": "Immutable operation preimage context shared by wire assignments and private cloud/native execution requests. Principal identity is not part of the version1 operation preimage."
+    },
+    "ChunkInventory": {
+      "title": "ChunkInventory",
+      "description": "Bounded hashes computed from actual owner bytes before transfer allocation, on an announced grid within negotiated limits. Empty files have no chunks.",
+      "type": "object",
+      "properties": {
+        "chunkBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 262144
+        },
+        "chunkHashes": {
+          "type": "array",
+          "items": {
+            "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+          },
+          "maxItems": 256
+        }
+      },
+      "required": ["chunkBytes", "chunkHashes"],
+      "additionalProperties": false
     }
   }
 }

@@ -2823,6 +2823,9 @@ export const commonSchema = {
           required: ["kind"],
           additionalProperties: false,
         },
+        chunks: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ChunkInventory",
+        },
       },
       required: ["workspaceId", "revision", "sha256", "size", "endpoint", "owner"],
       additionalProperties: false,
@@ -3163,6 +3166,22 @@ export const commonSchema = {
       additionalProperties: false,
       description:
         "Immutable operation preimage context shared by wire assignments and private cloud/native execution requests. Principal identity is not part of the version1 operation preimage.",
+    },
+    ChunkInventory: {
+      title: "ChunkInventory",
+      description:
+        "Bounded hashes computed from actual owner bytes before transfer allocation, on an announced grid within negotiated limits. Empty files have no chunks.",
+      type: "object",
+      properties: {
+        chunkBytes: { type: "integer", minimum: 1, maximum: 262144 },
+        chunkHashes: {
+          type: "array",
+          items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256" },
+          maxItems: 256,
+        },
+      },
+      required: ["chunkBytes", "chunkHashes"],
+      additionalProperties: false,
     },
   },
 } as const;
@@ -5565,6 +5584,15 @@ export const workspacesSchema = {
           },
           maxItems: 4096,
         },
+        blobs: {
+          type: "array",
+          items: {
+            $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/UploadBlobPlan",
+          },
+          maxItems: 4096,
+          description:
+            "Required for local uploads, including an explicit empty array when no put is declared. If supplied, covers each distinct put SHA exactly once, including superseded puts. Computer uploads may omit it.",
+        },
       },
       required: [
         "requestId",
@@ -6976,6 +7004,20 @@ export const workspacesSchema = {
         },
       ],
     },
+    UploadBlobPlan: {
+      title: "UploadBlobPlan",
+      description:
+        "One announced chunk inventory for a distinct declared put content hash. Byte size comes from its put mutations.",
+      type: "object",
+      properties: {
+        sha256: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256" },
+        chunks: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ChunkInventory",
+        },
+      },
+      required: ["sha256", "chunks"],
+      additionalProperties: false,
+    },
   },
 } as const;
 export const schemaRegistry = {
@@ -7102,6 +7144,7 @@ export const schemaRefs = {
     "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CommitDigestInput",
   ProtocolError: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ProtocolError",
   OperationContext: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/OperationContext",
+  ChunkInventory: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ChunkInventory",
   WorkspaceConfig:
     "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/WorkspaceConfig",
   BackendConfig: "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/BackendConfig",
@@ -7235,6 +7278,7 @@ export const schemaRefs = {
   SealedStoreReference:
     "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/SealedStoreReference",
   LeaseIdentity: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/LeaseIdentity",
+  UploadBlobPlan: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/UploadBlobPlan",
 } as const;
 export const knownEventTypes = [
   "conversation.created",

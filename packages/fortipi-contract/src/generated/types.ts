@@ -22,6 +22,7 @@ export type FortiPiValue =
   | CancellationDisposition
   | CapabilityStatus
   | CapacityReservation
+  | ChunkInventory
   | ChunkQuery
   | CleanupReceipt
   | ClientAck
@@ -154,6 +155,7 @@ export type FortiPiValue =
   | UnknownDurableEvent
   | UnknownVolatileEvent
   | UploadBegin
+  | UploadBlobPlan
   | UploadCommit
   | UploadStatus
   | UploadValidation
@@ -1863,6 +1865,17 @@ export interface ByteReference {
     executorId?: Id;
     expiresAt?: Timestamp;
   };
+  chunks?: ChunkInventory;
+}
+/**
+ * Bounded hashes computed from actual owner bytes before transfer allocation, on an announced grid within negotiated limits. Empty files have no chunks.
+ */
+export interface ChunkInventory {
+  chunkBytes: number;
+  /**
+   * @maxItems 256
+   */
+  chunkHashes: Sha256[];
 }
 export interface AdmissionReceipt {
   operationId: Id;
@@ -2788,6 +2801,19 @@ export interface UploadBegin {
    * @maxItems 4096
    */
   mutations: Mutation[];
+  /**
+   * Required for local uploads, including an explicit empty array when no put is declared. If supplied, covers each distinct put SHA exactly once, including superseded puts. Computer uploads may omit it.
+   *
+   * @maxItems 4096
+   */
+  blobs?: UploadBlobPlan[];
+}
+/**
+ * One announced chunk inventory for a distinct declared put content hash. Byte size comes from its put mutations.
+ */
+export interface UploadBlobPlan {
+  sha256: Sha256;
+  chunks: ChunkInventory;
 }
 /**
  * Public commit of a validated upload. Authority resolves stageId, validates its private seal/local observation and computes commitDigest. Exact request retries recover the original receipt; callers never supply child IDs.
