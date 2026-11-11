@@ -76,6 +76,9 @@ try {
     "receipt-read",
     "public-receipt",
     "fact-conversation",
+    "metadata-scope",
+    "metadata-base",
+    "metadata-before-lock",
   ] as const) {
     let changedAuthority = authority;
     let changedComputer = computer;
@@ -134,6 +137,32 @@ try {
         "permitsResource(grant.resources.conversationIds, fact.conversationId)",
         "true",
       );
+    if (mutant.startsWith("metadata-")) {
+      const start = workspace.indexOf(
+        '      if (url.pathname === "/__fortipi/operational-metadata") {',
+      );
+      const end = workspace.indexOf(
+        '      if (url.pathname === "/__fortipi/terminal-proof")',
+        start,
+      );
+      assert.ok(start >= 0 && end > start);
+      let block = workspace.slice(start, end);
+      if (mutant === "metadata-scope")
+        block = block.replace('permitsResource(grant.resources.actions, "jobs.dispatch")', "true");
+      if (mutant === "metadata-base")
+        block = block.replace(
+          'binding.revision === url.searchParams.get("revision") &&',
+          "true &&",
+        );
+      if (mutant === "metadata-before-lock")
+        block = block
+          .replace('authorize(this.state, auth, authority.workspaceId, "workspace.write");', "")
+          .replace(
+            "const metadata = await this.mutex.run(() => {",
+            'authorize(this.state, auth, this.current().workspaceId, "workspace.write");\n        const metadata = await this.mutex.run(() => {',
+          );
+      changedWorkspace = workspace.slice(0, start) + block + workspace.slice(end);
+    }
     if (mutant === "terminal-scope")
       changedAuthority = authority.replace(
         /\(!reservation\.conversationId\s*\|\|\s*permitsResource\(grant\.resources\.conversationIds, reservation\.conversationId\)\)/,
@@ -193,15 +222,17 @@ try {
     const result = await run(
       mutant.startsWith("host-")
         ? "../backends/host-rpc.test.ts"
-        : mutant === "byte-length"
-          ? "artifact-forward.test.ts"
-          : mutant === "empty-announcement" || mutant === "local-upload-digest"
-            ? "local-upload.test.ts"
-            : mutant === "generation"
-              ? "workspace.test.ts"
-              : mutant === "expiry" || mutant === "seal"
-                ? "isolation.test.ts"
-                : "terminal-proof.test.ts",
+        : mutant.startsWith("metadata-")
+          ? "operational-metadata.test.ts"
+          : mutant === "byte-length"
+            ? "artifact-forward.test.ts"
+            : mutant === "empty-announcement" || mutant === "local-upload-digest"
+              ? "local-upload.test.ts"
+              : mutant === "generation"
+                ? "workspace.test.ts"
+                : mutant === "expiry" || mutant === "seal"
+                  ? "isolation.test.ts"
+                  : "terminal-proof.test.ts",
       mutant === "expiry" || mutant === "seal" ? "sealed children" : undefined,
     );
     await writeFile(resolve(root, `apps/worker/dist/sensitivity-${mutant}.log`), result.output);
@@ -234,7 +265,13 @@ try {
                                 ? "Writer gained a public read capability"
                                 : mutant === "fact-conversation"
                                   ? "Unrelated conversation received a workspace fact"
-                                  : "Wrong receipt scope was accepted: x-test-other-conversation",
+                                  : mutant === "metadata-scope"
+                                    ? "Workspace write alone exposed operational metadata"
+                                    : mutant === "metadata-base"
+                                      ? "Operational metadata accepted a different expected base"
+                                      : mutant === "metadata-before-lock"
+                                        ? "Queued stale context exposed operational metadata"
+                                        : "Wrong receipt scope was accepted: x-test-other-conversation",
       ),
       `Mutation failed for an unintended reason: ${result.output.slice(-3000)}`,
     );
