@@ -2,6 +2,7 @@ import { knownEventTypes } from "./generated/schemas.js";
 import type {
   Assignment,
   AssignmentDigestInput,
+  ChunkInventory,
   ClientEvent,
   CommitDigestInput,
   CommitReceipt,
@@ -13,6 +14,7 @@ import type {
   OperationDigestInput,
   ProviderAuthPut,
   TransferDescriptor,
+  UploadBegin,
 } from "./generated/types.js";
 export const protocolVersion = "1.0" as const;
 export const schemaVersion = "1.0.0" as const;
@@ -350,6 +352,46 @@ export async function validateLocalStage(input: LocalStagedChange): Promise<void
   }
   const expectedStage = await digestJson("local-stage", preimage);
   if (input.stagedDigest !== expectedStage) throw new Error("local-stage.invalid: staged_digest");
+}
+/** Exact schema parsing precedes this metadata check; the receiver still verifies actual file bytes. */
+export function validateChunkInventory(chunks: ChunkInventory, size: number): void {
+  if (
+    !Number.isSafeInteger(size) ||
+    size < 0 ||
+    size > wireLimits.fileBytes ||
+    !Number.isSafeInteger(chunks.chunkBytes) ||
+    chunks.chunkBytes < 1 ||
+    chunks.chunkBytes > wireLimits.chunkBytes ||
+    chunks.chunkHashes.length > 256 ||
+    chunks.chunkHashes.length !== Math.ceil(size / chunks.chunkBytes) ||
+    chunks.chunkHashes.some((hash) => !/^[a-f0-9]{64}$/.test(hash))
+  )
+    throw new Error("upload.invalid: chunk_inventory");
+}
+/** Validate all declared puts, including ones superseded by later ordered mutations. */
+export function validateUploadBlobs(input: UploadBegin, options: { required: boolean }): void {
+  assertUtf8Bytes(canonicalJson(input), wireLimits.jsonBytes);
+  if (input.blobs === undefined) {
+    if (options.required) throw new Error("upload.invalid: missing_blobs");
+    return;
+  }
+  const puts = new Map<string, number>();
+  for (const mutation of input.mutations) {
+    if (mutation.kind !== "put") continue;
+    const prior = puts.get(mutation.sha256);
+    if (prior !== undefined && prior !== mutation.size)
+      throw new Error("upload.invalid: inconsistent_file_size");
+    puts.set(mutation.sha256, mutation.size);
+  }
+  const seen = new Set<string>();
+  for (const blob of input.blobs) {
+    const size = puts.get(blob.sha256);
+    if (size === undefined || seen.has(blob.sha256))
+      throw new Error("upload.invalid: unexpected_blob");
+    validateChunkInventory(blob.chunks, size);
+    seen.add(blob.sha256);
+  }
+  if (seen.size !== puts.size) throw new Error("upload.invalid: missing_blobs");
 }
 export function commitDigest(input: CommitDigestInput): Promise<string> {
   const lease = input.leaseIdentity;

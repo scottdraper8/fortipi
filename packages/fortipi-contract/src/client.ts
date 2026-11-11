@@ -14,6 +14,8 @@ export {
 export type {
   AdmissionReceipt,
   Approval,
+  ByteReference,
+  ChunkInventory,
   ClientAck,
   ClientCommand,
   ClientError,
@@ -30,5 +32,7 @@ export type {
   TicketIdentity,
   TicketReceipt,
   UnknownDurableEvent,
+  UploadBegin,
+  UploadBlobPlan,
   VolatileEvent,
 } from "./generated/types.js";
