@@ -18,6 +18,7 @@ import { ControlPlane as RealControlPlane } from "../../src/control/control-plan
 import { Dispatch } from "../../src/execution/dispatch.js";
 import { isTerminal, Jobs } from "../../src/execution/jobs.js";
 import { nativeContext, nativeProof } from "../../src/execution/native-proof.js";
+import { FreshJobDoc } from "../../src/execution/new-job.js";
 import { defaultModel } from "../../src/models/factory.js";
 import { configuredModel } from "../../src/models/selection.js";
 
@@ -467,6 +468,17 @@ export class TestAgentSession extends AgentSession {
   }
   async toolStateJson(cid: string) {
     return JSON.stringify(await this.toolState(cid));
+  }
+  async freshReferenceCount(cid: string): Promise<number> {
+    const row = await this.store.get<ConversationRow>("conversation", cid);
+    if (!row) throw new Error("Unknown test conversation");
+    const harness = await this.pi.pi(),
+      document = await harness.snapshot(
+        FreshJobDoc,
+        Number(row.piId) as import("@earendil-works/pi-durable").ConversationId,
+        BACKGROUND_CONTEXT,
+      );
+    return Object.keys(document?.children ?? {}).length;
   }
   async activeJobPorts(jobId: string) {
     const state = await this.jobs.state(jobId);

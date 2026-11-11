@@ -366,9 +366,41 @@ export class FreshJobs {
         task = this.token(),
         cap = Math.min(100, store.policy.bounds.queuedAdmissions);
       await this.#current(auth, record, old);
+      const conversationId = Number(conversation.piId) as ConversationId;
+      const snapshot = await harness.snapshot(FreshJobDoc, conversationId, BACKGROUND_CONTEXT);
+      const references = Object.entries(snapshot?.children ?? {});
+      check(references.length <= 100, "conflict", "Fresh child reference window is invalid");
+      // A reference protects the Pi-commit/app-ack gap. Once its exact immutable
+      // child anchor is durable, the business receipt and ownership no longer
+      // depend on keeping that reference in the bounded handoff document.
+      // Read OWN anchors outside Pi's commit; never join the two queues.
+      const retired = await store.transaction(async (tx) => {
+        const result: { key: string; jobId: string; child: number }[] = [];
+        for (const [referenceKey, reference] of references) {
+          if (referenceKey === key) continue;
+          const anchor = await store.get<{
+            child: number;
+            conversationId: string;
+            authorization: string;
+          }>("fresh-child", reference.jobId, tx);
+          if (
+            anchor?.authorization === referenceKey &&
+            anchor.child === reference.child &&
+            anchor.conversationId === conversation.piId
+          )
+            result.push({ key: referenceKey, jobId: reference.jobId, child: reference.child });
+        }
+        return result;
+      });
+      await this.#current(auth, record, old);
       const child = await harness.commit(async (tx) => {
-        const doc = await tx.doc(FreshJobDoc, Number(conversation.piId) as ConversationId),
-          prior = doc.children[key];
+        const doc = await tx.doc(FreshJobDoc, conversationId);
+        for (const reference of retired) {
+          const current = doc.children[reference.key];
+          if (current?.jobId === reference.jobId && current.child === reference.child)
+            delete doc.children[reference.key];
+        }
+        const prior = doc.children[key];
         if (prior) {
           check(prior.jobId === record.newJobId, "conflict", "Fresh child reference changed");
           return prior.child;
