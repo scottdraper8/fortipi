@@ -16,6 +16,7 @@ Use TypeScript for the product and all repository-owned build/release/check tool
 Goal: v0.1.0 is complete only after actual deployment and verification, including public-client interoperability.
 Use the real Pi Durable runtime with Cloudflare PiHarness; do not replace its durable loop with a hand-built chat loop.
 Separate application/client credentials, deployment credentials and executor credentials.
+Respect Cloudflare plan limits with conservative Free defaults and explicit paid capability gates. Keep provider authentication plug-and-play; do not add model-provider usage budgets.
 State, workspace and execution must remain independent; no blind replay of side effects, stale lease commits or stale workspace revision commits.
 Release surfaces: npm packages, GitHub Releases, Cloudflare Worker/Durable Object deployment. Prefer npm OIDC after initial bootstrap.
 Dependency and tooling versions must be verified current, exact-pinned and locked. Preserve required third-party notices and use Sustainable Use License 1.0.
