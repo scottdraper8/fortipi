@@ -84,6 +84,26 @@ use this private lane. Authority envelopes are bounded to64KiB UTF-8. Public
 reject public access to internal paths and caller authority headers; Agent5 owns
 that guard and invokes this handoff after readiness, with no CP startup network.
 
+Existing private `resolveExecutorGeneration` also accepts a current CP-registered
+operation under one current grant covering `jobs.dispatch` and `workspace.write`
+over its exact Agent/conversation/workspace/executor and trusted registration
+resources. For an Agent recipient this identifies the selected execution target,
+independently of Computer storage or another local storage owner. A Workspace
+recipient stays bound to its actual local storage owner. Both require the current
+authoritative binding version; stale refs, scope, grant expiry and credential or
+executor floors deny. Returned generation and five numeric transfer limits come
+from actual validated registration, with null limits when no valid observation
+exists. Legacy `workspace.read` stays a local storage-owner lookup, including its
+existing exact pending-import recovery. No public directory/read/list grant or
+permission to spawn follows from this metadata; target/action/capability/lease
+admission still follows separately.
+
+Job metadata capacity uses its trusted Agent registration's exact conversation
+owner and zero slots, with one current full dispatch scope over workspace, tool
+and selected target. The service retains the job/operation mapping; opaque job
+IDs alone do not establish CP owner authority. Dispatch metadata does not grant
+model resolution.
+
 An executor's application credential generation, execution generation and socket
 connection epoch are separate. Reconnect increments only the epoch. Restoring a
 lost execution ledger requires explicit new-generation authorization. The
