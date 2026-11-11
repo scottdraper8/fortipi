@@ -1,6 +1,7 @@
 import { validateBrowserOrigin } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import { contains, requireGrant } from "./authorization.js";
+import { valid } from "./directory.js";
 import type { Identities } from "./identity.js";
 import { check, hash, id, json, next, ref, type Store, same } from "./store.js";
 
@@ -23,6 +24,15 @@ export class Tickets {
   constructor(store: Store, identities: Identities) {
     this.store = store;
     this.identities = identities;
+  }
+  private clientAgent(resources: D.ResourceScope): string {
+    const agentId = resources.agentIds[0];
+    check(
+      resources.agentIds.length === 1 && agentId !== undefined && valid("common", "Id", agentId),
+      "invalid_request",
+      "Client stream requires one concrete agent",
+    );
+    return agentId;
   }
   register(ctx: D.AuthContext, input: D.AuthorityRecipientRequest): D.AuthorityRegistration {
     return this.store.tx(() => {
@@ -117,7 +127,10 @@ export class Tickets {
         "conflict",
         "Executor generation changed",
       );
-    } else check(ctx.role !== "executor", "unauthorized", "Executor cannot acquire client stream");
+    } else {
+      check(ctx.role !== "executor", "unauthorized", "Executor cannot acquire client stream");
+      this.clientAgent(input.resources);
+    }
     const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (x) =>
       x.toString(16).padStart(2, "0"),
     ).join("");
@@ -170,6 +183,24 @@ export class Tickets {
     };
   }
   async consume(input: D.TicketRedemption): Promise<D.SocketIdentity> {
+    const [identity] = await this.redeem(input, input.destination);
+    return identity;
+  }
+  async consumeStream(
+    ticket: string,
+    origin: D.TicketRedemption["origin"],
+  ): Promise<[D.SocketIdentity, D.AuthContext]> {
+    return this.redeem({
+      ticket,
+      deploymentId: this.identities.deploymentId,
+      audience: "client-stream",
+      origin,
+    });
+  }
+  private async redeem(
+    input: Omit<D.TicketRedemption, "destination">,
+    destination?: D.TicketRedemption["destination"],
+  ): Promise<[D.SocketIdentity, D.AuthContext]> {
     check(
       input.ticket.length === 64 && input.deploymentId === this.identities.deploymentId,
       "unauthenticated",
@@ -190,30 +221,36 @@ export class Tickets {
       );
       check(c, "unauthenticated", "Invalid credential");
       const ctx: D.AuthContext = {
-        ...t.identity,
+        credentialId: t.identity.credentialId,
+        generation: t.identity.generation,
+        grantVersion: t.identity.grantVersion,
+        deploymentId: t.identity.deploymentId,
+        principalId: t.identity.principalId,
+        role: t.identity.role,
         grants: c.grants,
         requestId: id(),
         authenticatedAt: Date.now(),
         credentialExpiresAt: c.expiresAt,
-        deadline: Date.now() + 30000,
+        deadline: Math.min(Date.now() + 30000, t.identity.expiresAt),
       };
       this.identities.current(ctx);
       let registrationId: string;
       if (input.audience === "client-stream") {
+        check(ctx.role !== "executor", "unauthorized", "Executor cannot acquire client stream");
+        const agentId = this.clientAgent(t.identity.resources);
         check(
-          input.destination.kind === "agent" &&
-            t.identity.resources.agentIds.includes(input.destination.id),
+          destination === undefined || (destination.kind === "agent" && destination.id === agentId),
           "unauthorized",
           "Ticket destination mismatch",
         );
         registrationId = this.register(ctx, {
           credential: ref(ctx),
-          recipient: input.destination,
+          recipient: { kind: "agent", id: agentId },
           resources: t.identity.resources,
         }).registrationId;
       } else {
         check(
-          input.destination.kind === "control" && t.identity.executor,
+          destination?.kind === "control" && t.identity.executor,
           "unauthorized",
           "Ticket destination mismatch",
         );
@@ -227,7 +264,7 @@ export class Tickets {
       }
       const identity = { ...t.identity, registrationId };
       this.store.put("ticket", digest, { ...t, identity, used: true }, "", "", t.expiresAt);
-      return identity;
+      return [identity, { ...ctx, registrationId }];
     });
   }
   epoch(executorId: string): number {

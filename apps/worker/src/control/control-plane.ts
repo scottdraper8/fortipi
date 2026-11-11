@@ -800,6 +800,58 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
         headers.set("Access-Control-Allow-Headers", "Authorization,Content-Type");
         return new Response(null, { status: 204, headers });
       }
+      if (url.pathname === "/v1/stream") {
+        check(
+          [...url.searchParams].length === 1 &&
+            valid("administration", "TicketQuery", Object.fromEntries(url.searchParams)),
+          "invalid_request",
+          "Invalid stream query",
+        );
+        const [identity, auth] = await this.tickets.consumeStream(
+          url.searchParams.get("ticket") ?? "",
+          origin ? { kind: "browser", value: origin } : { kind: "native" },
+        );
+        this.identities.current(auth);
+        check(
+          request.method === "GET" &&
+            request.headers.get("Upgrade")?.toLowerCase() === "websocket" &&
+            !request.headers.has("Sec-WebSocket-Protocol"),
+          "invalid_request",
+          "Native WebSocket upgrade required",
+        );
+        const forwarded = new Headers();
+        for (const name of [
+          "Upgrade",
+          "Connection",
+          "Sec-WebSocket-Key",
+          "Sec-WebSocket-Version",
+          "Sec-WebSocket-Extensions",
+          "Origin",
+        ]) {
+          const value = request.headers.get(name);
+          if (value !== null) forwarded.set(name, value);
+        }
+        const socketEnvelope = json(identity);
+        const authEnvelope = json(auth);
+        check(
+          new TextEncoder().encode(socketEnvelope).length +
+            new TextEncoder().encode(authEnvelope).length <=
+            65536,
+          "invalid_request",
+          "Stream authority headers exceed bound",
+        );
+        forwarded.set("X-Fortipi-Socket", socketEnvelope);
+        forwarded.set("X-Fortipi-Context", authEnvelope);
+        const agentId = identity.resources.agentIds[0];
+        check(agentId, "invalid_request", "Missing stream agent");
+        return this.env.AGENT_SESSIONS.getByName(agentId).fetch(
+          new Request("https://agent.internal/v1/stream", {
+            method: "GET",
+            headers: forwarded,
+            signal: request.signal,
+          }),
+        );
+      }
       if (url.pathname === "/v1/executor/session") {
         const identity = await this.tickets.consume({
           ticket: url.searchParams.get("ticket") ?? "",

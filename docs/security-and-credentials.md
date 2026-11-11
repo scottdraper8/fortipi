@@ -46,6 +46,31 @@ before supplying `CredentialProof.origin`. Preflight is unauthenticated and
 bounded; there is no wildcard credential CORS. Proxies must redact ticket query
 strings from access/error logs.
 
+Client-stream tickets require exactly one concrete `resources.agentIds` entry.
+The public URL still contains only its opaque ticket. ControlPlane derives the
+agent from retained ticket scope inside the consume/recipient-registration
+transaction, then forwards query-free `GET /v1/stream` to that named AgentSession.
+The known-destination redemption port also rejects a different agent. Missing,
+wildcard, duplicate or ambiguous agent scope fails closed at mint and redemption.
+Unknown query selectors, duplicate tickets and client subprotocol negotiation are
+rejected. Invalid upgrades and unavailable targets cannot restore spent tickets.
+
+Only WebSocket transport headers and the validated Origin survive forwarding.
+ControlPlane replaces caller authority with existing JSON `X-Fortipi-Socket`
+and `X-Fortipi-Context`: scoped SocketIdentity plus the unchanged canonical
+AuthContext built from current stored credential/grants/expiry during redemption.
+Their combined UTF-8 size is bounded to64KiB; excess authority is rejected rather
+than truncated. Bearers, cookies and caller internal/connection headers do not
+reach the agent. Agent5 must match the references, principal, deployment, role and
+registration, enforce current floors, and intersect every command with ticket
+resources even though the canonical grants may cover unrelated resources. The
+handshake deadline is not socket TTL. Per-command server request IDs/deadlines
+may be bounded afresh by current authority/socket expiry while canonical expiry
+and authenticatedAt stay unchanged. Full grants do not belong in the bounded
+2KiB socket attachment; Agent5 owns bounded nonsecret authority retention and its
+actual native JSON-only pre-upgrade guard. The namespace stream fixture proves
+the CP handoff, not the Agent/Pi implementation.
+
 An executor's application credential generation, execution generation and socket
 connection epoch are separate. Reconnect increments only the epoch. Restoring a
 lost execution ledger requires explicit new-generation authorization. The

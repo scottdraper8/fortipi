@@ -17,6 +17,7 @@ const validators = new Map(
     ["agents", "AgentPatch"],
     ["configuration", "ConfigurationPatch"],
     ["administration", "TicketInput"],
+    ["administration", "TicketQuery"],
     ["administration", "CredentialMint"],
     ["executor-messages", "ExecutorFrame"],
     ["executor-messages", "Assignment"],
@@ -29,6 +30,7 @@ const validators = new Map(
     ["workspaces", "WorkspaceLeaseRelease"],
     ["workspaces", "Lease"],
     ["common", "ProtocolError"],
+    ["common", "Id"],
     ["conversations", "ReplayPage"],
     ["transfers", "TransferDescriptor"],
   ].map(([schema, name]) => {
