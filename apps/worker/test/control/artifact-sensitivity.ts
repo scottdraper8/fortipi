@@ -19,6 +19,14 @@ try {
   );
   for (const mutation of [
     {
+      file: "executors.ts",
+      pattern: /payload: \{ \.\.\.ack, deliveryId: frame\.requestId \},/,
+      replacement: "payload: ack,",
+      test: "native-artifacts.test.ts",
+      testPattern: "native artifact index is atomic",
+      oracle: "native result ACK must identify the original persisted executor outbox entry",
+    },
+    {
       file: "artifact-index.ts",
       pattern: /artifactEndpointMatches\(\s*reference,\s*(`[^`]+`),?\s*\)/,
       replacement: "reference.endpoint === $1",
@@ -54,11 +62,25 @@ try {
     },
     {
       file: "relay.ts",
-      pattern: /check\(\s*this\.producerWaiters\.size < 16,/,
-      replacement:
-        "if(d.size===0){this.executors.send(d.executorId,d.executorGeneration,frame);return;} check(this.producerWaiters.size < 16,",
+      pattern: /if \(d\.size !== 0\) \{/,
+      replacement: "if (d.size >= 0) {",
       test: "native-artifacts.test.ts",
       oracle: "zero-byte output remains waiting without the producer's actual proof",
+    },
+    {
+      file: "relay.ts",
+      pattern: /state: "waiting",\s*verifiedChunks: \[\],/,
+      replacement: 'state: descriptor.size === 0 ? "verified" : "waiting", verifiedChunks: [],',
+      test: "relay.test.ts",
+      testPattern: "zero local read needs actual retained owner proof",
+      oracle: "zero local read cannot initialize verified from metadata alone",
+    },
+    {
+      file: "relay.ts",
+      pattern: /await this\.waitForReceipt\(ctx, d\);/g,
+      replacement: "void 0;",
+      test: "local-write.test.ts",
+      oracle: "final stage PUT must wait for the actual durable consumer receipt",
     },
     {
       file: "artifact-index.ts",

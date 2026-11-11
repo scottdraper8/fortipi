@@ -57,9 +57,12 @@ export async function connected(
     });
   });
   const send = (frame: D.ExecutorFrame): void => socket.send(JSON.stringify(frame));
-  const wait = async (type: D.ExecutorFrame["type"]): Promise<D.ExecutorFrame> => {
+  const wait = async (
+    type: D.ExecutorFrame["type"],
+    matches: (frame: D.ExecutorFrame) => boolean = () => true,
+  ): Promise<D.ExecutorFrame> => {
     for (let attempt = 0; attempt < 100; attempt++) {
-      const frame = frames.find((f) => f.type === type);
+      const frame = frames.find((f) => f.type === type && matches(f));
       if (frame) return frame;
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, 20);

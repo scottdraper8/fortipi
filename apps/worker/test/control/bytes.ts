@@ -24,6 +24,14 @@ export async function inventory(
   size: number,
   chunkBytes: number,
 ): Promise<{ sha256: string; chunks: D.ChunkInventory }> {
+  const owner = await open(path, "r");
+  try {
+    const stat = await owner.stat();
+    assert.ok(stat.isFile());
+    assert.equal(stat.size, size, "inventory requires the actual retained owner file");
+  } finally {
+    await owner.close();
+  }
   const full = createHash("sha256");
   const chunkHashes: string[] = [];
   for (let index = 0; index < Math.ceil(size / chunkBytes); index++) {

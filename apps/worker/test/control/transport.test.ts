@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { open } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 import { assignmentDigest, manifestDigest, operationDigest } from "fortipi-contract";
 import type * as D from "../../src/boundary/dto.js";
+import { inventory } from "./bytes.ts";
 import { connected } from "./connection.ts";
 import { config, harness, request, scope, uuid, value } from "./harness.ts";
 
@@ -144,7 +147,33 @@ test("real sockets: heartbeat writes nothing, reservation precedes lease, duplic
       false,
       "job stage must match the reserved execution before dispatch exists",
     );
-    const staged = value(await h.cp.openTransfer(admin, stage));
+    const openingStage = h.cp.openTransfer(admin, stage);
+    const stageFrame = await channel.wait("transfer.open");
+    if (stageFrame.type !== "transfer.open") assert.fail("No stage transfer");
+    const emptyPath = join(h.directory, "verified-empty-stage");
+    const emptyFile = await open(emptyPath, "wx");
+    await emptyFile.sync();
+    await emptyFile.close();
+    assert.equal((await inventory(emptyPath, 0, stage.chunkBytes)).sha256, emptyHash);
+    value(
+      await h.cp.deliverExecutorFrame(channel.executor, {
+        executorId: "executor",
+        generation: 1,
+        connectionEpoch: channel.epoch,
+        frame: {
+          type: "transfer.status",
+          requestId: stageFrame.requestId,
+          payload: {
+            transferId: stageFrame.payload.transferId,
+            attemptId: stageFrame.payload.attemptId,
+            state: "verified",
+            verifiedChunks: [],
+            bytes: 0,
+          },
+        },
+      }),
+    );
+    const staged = value(await openingStage);
     assert.equal(
       staged.executionId,
       identity.executionId,
@@ -270,6 +299,23 @@ test("real sockets: heartbeat writes nothing, reservation precedes lease, duplic
     channel.send(output);
     const outputAck = await channel.wait("job.output_ack");
     if (outputAck.type !== "job.output_ack") assert.fail("Missing durable output receipt");
+    assert.deepEqual(
+      outputAck,
+      {
+        type: "job.output_ack",
+        requestId: output.requestId,
+        payload: { deliveryId: output.requestId, sequence: 1, persisted: true },
+      },
+      "native output ACK must identify the original persisted executor outbox entry",
+    );
+    const internalAck = value(
+      await h.cp.deliverExecutorFrame(channel.executor, {
+        executorId: "executor",
+        generation: 1,
+        connectionEpoch: channel.epoch,
+        frame: output,
+      }),
+    );
     await h.cp.forceDue();
     await h.cp.drainTest();
     const held = JSON.parse(await h.cp.repairState()) as {
@@ -292,7 +338,7 @@ test("real sockets: heartbeat writes nothing, reservation precedes lease, duplic
     await new Promise((resolve) => setTimeout(resolve, 3000));
     await h.cp.drainTest();
     assert.equal(
-      await recipient.hasReceipt(outputAck.payload.deliveryId),
+      await recipient.hasReceipt(internalAck.deliveryId),
       true,
       "only the actual receiver ack releases the source inbox",
     );

@@ -212,7 +212,16 @@ test("native artifact index is atomic and immutable; a different reader streams 
       "artifact endpoint must accept its single matching original revision query",
     );
     channel.send(frame);
-    await channel.wait("job.result_ack");
+    const resultAck = await channel.wait("job.result_ack");
+    assert.deepEqual(
+      resultAck,
+      {
+        type: "job.result_ack",
+        requestId: frame.requestId,
+        payload: { deliveryId: frame.requestId, sequence: frame.payload.sequence, persisted: true },
+      },
+      "native result ACK must identify the original persisted executor outbox entry",
+    );
     assert.ok(
       await h.cp.artifactRecord(artifactId),
       "result transport ack must follow the durable index transaction",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, open, writeFile } from "node:fs/promises";
+import { mkdir, open, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { canonicalJson } from "fortipi-contract";
@@ -11,6 +11,134 @@ import { harness, request, uuid, value } from "./harness.ts";
 
 const query = (descriptor: D.TransferDescriptor, index: number): string =>
   `attemptId=${descriptor.attemptId}&length=${Math.min(descriptor.chunkBytes, descriptor.size - index * descriptor.chunkBytes)}&sha256=${descriptor.chunkHashes[index]}`;
+
+test("zero local read needs actual retained owner proof; missing file interrupts instead of fabricating availability", async () => {
+  const h = await harness();
+  let socket: WebSocket | undefined;
+  try {
+    let channel = await connected(h);
+    socket = channel.socket;
+    const path = join(h.directory, "retained-empty-owner");
+    await writeFile(path, new Uint8Array());
+    const plan = await inventory(path, 0, 65536);
+    const binding = await localBinding(
+      h,
+      channel,
+      {
+        version: 1,
+        entries: [{ type: "file", path: "empty.bin", size: 0, sha256: plan.sha256, mode: 420 }],
+      },
+      "retained_empty_owner",
+    );
+    channel = binding.channel;
+    socket = channel.socket;
+    const read: D.LocalReadRequest = {
+      kind: "read",
+      operationId: uuid(),
+      workspaceId: binding.workspaceId,
+      bindingVersion: 2,
+      rootBindingId: "root",
+      executorId: "executor",
+      executorGeneration: 1,
+      credential: binding.credential,
+      revision: binding.revision,
+      path: "empty.bin",
+      deadline: Date.now() + 30000,
+    };
+    const metadata = h.cp.requestLocalWorkspace(binding.ctx, read);
+    const requestFrame = await channel.wait("workspace.request");
+    if (requestFrame.type !== "workspace.request") assert.fail("No owner metadata request");
+    channel.send({
+      type: "workspace.response",
+      requestId: requestFrame.requestId,
+      payload: {
+        requestId: requestFrame.payload.requestId,
+        correlationId: requestFrame.payload.correlationId,
+        response: {
+          kind: "read",
+          result: {
+            workspaceId: binding.workspaceId,
+            revision: binding.revision,
+            size: 0,
+            sha256: plan.sha256,
+            endpoint: `/v1/workspaces/${binding.workspaceId}/read`,
+            owner: { kind: "local", executorId: "executor" },
+            chunks: plan.chunks,
+          },
+        },
+      },
+    });
+    value(await metadata);
+    await rm(path);
+    const opening = h.cp.openTransfer(binding.ctx, {
+      deploymentId: h.deploymentId,
+      direction: "from-executor",
+      purpose: "local-read",
+      workspaceId: binding.workspaceId,
+      bindingVersion: 2,
+      operationId: read.operationId,
+      operationDigest: createHash("sha256").update(canonicalJson(read)).digest("hex"),
+      executorId: "executor",
+      executorGeneration: 1,
+      credential: binding.credential,
+      consumer: binding.resources,
+      baseRevision: binding.revision,
+      content: { kind: "workspace-file", path: "empty.bin", manifestHash: binding.manifestHash },
+      fileSha256: plan.sha256,
+      size: 0,
+      chunkBytes: 65536,
+      chunkHashes: [],
+      expiresAt: Date.now() + 10000,
+      deadline: read.deadline,
+    });
+    // A failed negative assertion closes the runtime with this RPC pending;
+    // preserve that assertion while successful flow still awaits the result.
+    void opening.catch(() => undefined);
+    const frame = await channel.wait("transfer.open");
+    if (frame.type !== "transfer.open") assert.fail("No zero read open");
+    assert.equal(
+      value(
+        await h.cp.observeTransfer(binding.ctx, {
+          transferId: frame.payload.transferId,
+          attemptId: frame.payload.attemptId,
+        }),
+      ).state,
+      "waiting",
+      "zero local read cannot initialize verified from metadata alone",
+    );
+    await assert.rejects(
+      () => inventory(path, 0, 65536),
+      { code: "ENOENT" },
+      "an empty grid is not proof that the retained owner file exists",
+    );
+    const status: D.TransferStatus = {
+      transferId: frame.payload.transferId,
+      attemptId: frame.payload.attemptId,
+      state: "interrupted",
+      bytes: 0,
+      verifiedChunks: [],
+      reason: "Actual owner file missing",
+    };
+    const deliver = (payload: D.TransferStatus) =>
+      h.cp.deliverExecutorFrame(channel.executor, {
+        executorId: "executor",
+        generation: 1,
+        connectionEpoch: channel.epoch,
+        frame: { type: "transfer.status", requestId: frame.requestId, payload },
+      });
+    const ack = value(await deliver(status));
+    assert.deepEqual(value(await deliver(status)), ack);
+    assert.equal((await opening).ok, false, "missing owner proof must fail the zero read open");
+    assert.equal(
+      (await deliver({ ...status, state: "verified" })).ok,
+      false,
+      "late proof cannot revive the interrupted owner attempt",
+    );
+  } finally {
+    socket?.close();
+    await h.close();
+  }
+});
 
 test("actual two-phase retained local read uses real owner-byte inventory and multiple verified HTTP chunks", async () => {
   const h = await harness();

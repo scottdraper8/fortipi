@@ -92,8 +92,11 @@ activation. Sender credential, execution generation, connection epoch and the
 stored assignment are checked before durable acceptance. Bounded output/results
 are deduplicated by execution/type/sequence and payload digest. A transport ack
 means receipt, not workspace publication or Pi success. Receiver acknowledgments
-must match the original durable delivery ID/sequence. Source facts retain stable
-IDs until the receiving agent returns its actual persisted event ID/sequence;
+must match the original durable delivery ID/sequence.
+The executor-facing output/result ACK identifies the executor's original outgoing
+request ID and sequence only after persistence; the control-plane inbox keeps its
+separate durable downstream receipt ID for delivery and repair.
+Source facts retain stable IDs until the receiving agent returns its actual persisted event ID/sequence;
 ControlPlane never invents a replay coordinate. Late prepared results can be
 quarantined for authorized reconciliation without replacing an accepted outcome.
 
@@ -189,17 +192,27 @@ the whole-source and selected-body checks complete. Responses use a
 `FixedLengthStream` so their actual byte length survives Worker transport;
 [Cloudflare documents this requirement](https://developers.cloudflare.com/workers/runtime-apis/response/).
 
-An output open records its request ID, transfer/attempt IDs and connection epoch
+Every transfer open records its request ID, transfer/attempt IDs and connection epoch
 before send. Existing `transfer.status` replies must correlate exactly with that
-current executor channel. Empty output remains waiting until a matching producer
+current executor channel. Every zero-length purpose remains waiting until a matching owner
 `verified` reply reports zero bytes and no chunks after checking its actual
-private source. An index entry alone cannot manufacture an empty response.
+retained source or durable staged consumer file. Metadata alone cannot manufacture availability.
 Missing proof interrupts the attempt within ten seconds; a late proof cannot
 revive it. Nonempty producer status never replaces actual HTTP chunk receipts or
 receiver whole-file verification. Reopening the runtime interrupts incomplete
 attempts and requires a fresh descriptor; it never reassigns execution. The
 native collector currently emits no reference for an empty output stream; the
 generic zero-reference path is exercised using an explicitly retained file.
+
+Nonempty local-stage opens return before byte transfer. Their final to-executor
+producer PUT, including an exact receipt retry, waits at most ten seconds for the
+same-open consumer status after all actual GET chunks finish and the consumer
+verifies the whole file and durably persists verified_blob. GET reaches EOF
+normally so this proof can finish. Duplicate PUTs share the existing bounded wait;
+duplicate statuses preserve the same receipt. Current grants, expiry, executor
+generation and connection epoch are checked again after the wait. From-executor
+producer PUTs return after actual chunk verification without waiting for the
+producer's later status, avoiding a circular dependency.
 
 Terminal delivery verifies private authoritative proofs before recording its
 command. The Agent path is `POST /__fortipi/terminal-proof/{jobId}` with

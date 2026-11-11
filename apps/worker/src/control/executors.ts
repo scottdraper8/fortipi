@@ -395,7 +395,9 @@ export class Executors {
         json({
           type: frame.type === "job.output" ? "job.output_ack" : "job.result_ack",
           requestId: frame.requestId,
-          payload: ack,
+          // The executor outbox is keyed by its outgoing request, while the
+          // control-plane inbox keeps its own durable downstream receipt ID.
+          payload: { ...ack, deliveryId: frame.requestId },
         }),
       );
   }

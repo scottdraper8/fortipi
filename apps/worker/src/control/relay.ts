@@ -48,7 +48,12 @@ export class Relay {
   private active = new Map<string, Rendezvous>();
   private producerWaiters = new Map<
     string,
-    { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
+    {
+      promise: Promise<void>;
+      resolve: () => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >();
   constructor(
     store: Store,
@@ -254,7 +259,7 @@ export class Relay {
         status: {
           transferId: descriptor.transferId,
           attemptId: descriptor.attemptId,
-          state: descriptor.size === 0 && descriptor.purpose !== "output" ? "verified" : "waiting",
+          state: "waiting",
           verifiedChunks: [],
           bytes: 0,
         },
@@ -298,33 +303,63 @@ export class Relay {
       requestId: row.openRequestId,
       payload: d,
     };
-    if (d.purpose !== "output" || d.size !== 0) {
+    if (d.size !== 0) {
       this.executors.send(d.executorId, d.executorGeneration, frame);
       return;
     }
+    const receipt = this.waitForReceipt(ctx, d);
+    try {
+      this.executors.send(d.executorId, d.executorGeneration, frame);
+    } catch {
+      this.abortAttempt(d.transferId, d.attemptId, "Transfer owner unavailable");
+    }
+    await receipt;
+  }
+  private async waitForReceipt(ctx: D.AuthContext, d: D.TransferDescriptor): Promise<void> {
+    const row = this.authorized(ctx, d.transferId, d.attemptId);
     check(
-      this.producerWaiters.size < 16,
-      "unavailable",
-      "Producer acknowledgment window exhausted",
+      row.incarnation === this.incarnation &&
+        row.status.state !== "interrupted" &&
+        row.status.state !== "expired",
+      "interrupted",
+      "Transfer owner proof unavailable",
     );
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => this.abortAttempt(d.transferId, d.attemptId, "Producer acknowledgment deadline"),
-        Math.max(1, Math.min(10000, ctx.deadline - Date.now(), d.expiresAt - Date.now())),
+    if (row.producerReceipt?.status.state === "verified" && row.status.state === "verified") return;
+    let waiter = this.producerWaiters.get(d.transferId);
+    if (!waiter) {
+      check(
+        this.producerWaiters.size < 16,
+        "unavailable",
+        "Producer acknowledgment window exhausted",
       );
-      this.producerWaiters.set(d.transferId, { resolve, reject, timer });
-      try {
-        this.executors.send(d.executorId, d.executorGeneration, frame);
-      } catch (error) {
-        this.abortAttempt(d.transferId, d.attemptId, "Producer unavailable");
-        reject(error);
-      }
-    });
+      let resolveReceipt: () => void = () => undefined;
+      let rejectReceipt: (error: Error) => void = () => undefined;
+      const promise = new Promise<void>((resolve, reject) => {
+        resolveReceipt = resolve;
+        rejectReceipt = reject;
+      });
+      const timer = setTimeout(
+        () =>
+          this.abortAttempt(d.transferId, d.attemptId, "Transfer owner acknowledgment deadline"),
+        Math.max(
+          1,
+          Math.min(
+            10000,
+            ctx.deadline - Date.now(),
+            d.deadline - Date.now(),
+            d.expiresAt - Date.now(),
+          ),
+        ),
+      );
+      waiter = { promise, resolve: resolveReceipt, reject: rejectReceipt, timer };
+      this.producerWaiters.set(d.transferId, waiter);
+    }
+    await waiter.promise;
     this.authorized(ctx, d.transferId, d.attemptId);
     check(
       this.store.get<Transfer>("transfer", d.transferId)?.status.state === "verified",
       "interrupted",
-      "Producer did not verify empty output",
+      "Transfer owner did not verify the retained file",
     );
   }
   async receiveStatus(ctx: D.AuthContext, input: D.ExecutorDelivery): Promise<D.DeliveryAck> {
@@ -457,11 +492,11 @@ export class Relay {
       "unauthenticated",
       "Transfer executor revoked",
     );
-    if (d.purpose === "output")
+    if (d.purpose === "output" || d.size === 0 || d.purpose === "local-stage")
       check(
         e.epoch === row.connectionEpoch,
         "interrupted",
-        "Output producer connection changed; authorize a new attempt",
+        "Transfer owner connection changed; authorize a new attempt",
       );
     check(
       (c.role === "executor" && c.executorId === d.executorId) ||
@@ -580,6 +615,12 @@ export class Relay {
         "conflict",
         "Completed GET requires a new authorized attempt",
       );
+      if (
+        d.purpose === "local-stage" &&
+        d.direction === "to-executor" &&
+        row.status.verifiedChunks.length === d.chunkHashes.length
+      )
+        await this.waitForReceipt(ctx, d);
       return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
     }
     const key = `${transferId}:${attemptId}:${index}`;
@@ -767,9 +808,22 @@ export class Relay {
         latest.status.verifiedChunks.push(index);
         latest.status.bytes += length;
         latest.status.state =
-          latest.status.verifiedChunks.length === d.chunkHashes.length ? "verified" : "waiting";
+          latest.status.verifiedChunks.length === d.chunkHashes.length &&
+          !(d.purpose === "local-stage" && d.direction === "to-executor")
+            ? "verified"
+            : "waiting";
         this.store.put("transfer", d.transferId, latest, "", "", d.expiresAt);
       });
+      // GET has already reached EOF. The staging consumer can now fsync and
+      // persist verified_blob before its correlated receipt releases the final
+      // input producer. Output producers must finish PUT before sending status.
+      const completed = this.store.get<Transfer>("transfer", d.transferId);
+      if (
+        d.purpose === "local-stage" &&
+        d.direction === "to-executor" &&
+        completed?.status.verifiedChunks.length === d.chunkHashes.length
+      )
+        await this.waitForReceipt(ctx, d);
       producer.resolve(
         new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } }),
       );

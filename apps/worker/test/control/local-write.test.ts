@@ -115,30 +115,52 @@ test("local stage relay carries every declared put on its real grid, including s
     ];
     let last: D.TransferDescriptor | undefined;
     for (const [fileIndex, file] of files.entries()) {
-      const descriptor: D.TransferDescriptor = value(
-        await h.cp.openTransfer(ctx, {
-          deploymentId: h.deploymentId,
-          direction: "to-executor",
-          purpose: "local-stage",
-          workspaceId: binding.workspaceId,
-          bindingVersion: 2,
-          operationId: lease.operationId,
-          operationDigest: reservation.operationDigest,
-          executorId: "executor",
-          executorGeneration: 1,
-          credential: lease.credential,
-          consumer: binding.resources,
-          baseRevision: binding.revision,
-          lease,
-          content: { kind: "workspace-file", path: file.relative, manifestHash, uploadId },
-          fileSha256: file.plan.sha256,
-          size: file.size,
-          chunkBytes: file.plan.chunks.chunkBytes,
-          chunkHashes: file.plan.chunks.chunkHashes,
-          expiresAt: Date.now() + 20000,
-          deadline: reservation.deadline,
-        }),
+      const opening = h.cp.openTransfer(ctx, {
+        deploymentId: h.deploymentId,
+        direction: "to-executor",
+        purpose: "local-stage",
+        workspaceId: binding.workspaceId,
+        bindingVersion: 2,
+        operationId: lease.operationId,
+        operationDigest: reservation.operationDigest,
+        executorId: "executor",
+        executorGeneration: 1,
+        credential: lease.credential,
+        consumer: binding.resources,
+        baseRevision: binding.revision,
+        lease,
+        content: { kind: "workspace-file", path: file.relative, manifestHash, uploadId },
+        fileSha256: file.plan.sha256,
+        size: file.size,
+        chunkBytes: file.plan.chunks.chunkBytes,
+        chunkHashes: file.plan.chunks.chunkHashes,
+        expiresAt: Date.now() + 20000,
+        deadline: reservation.deadline,
+      });
+      const frame = await channel.wait(
+        "transfer.open",
+        (f) => f.type === "transfer.open" && f.payload.fileSha256 === file.plan.sha256,
       );
+      if (frame.type !== "transfer.open") assert.fail("No stage open");
+      const descriptor = frame.payload;
+      const receipt = () =>
+        h.cp.deliverExecutorFrame(channel.executor, {
+          executorId: "executor",
+          generation: 1,
+          connectionEpoch: channel.epoch,
+          frame: {
+            type: "transfer.status",
+            requestId: frame.requestId,
+            payload: {
+              transferId: descriptor.transferId,
+              attemptId: descriptor.attemptId,
+              state: "verified",
+              bytes: file.size,
+              verifiedChunks: descriptor.chunkHashes.map((_, i) => i),
+            },
+          },
+        });
+      if (file.size !== 0) assert.deepEqual(value(await opening), descriptor);
       last = descriptor;
       const receivedPath = join(h.directory, `receiver-${fileIndex}.bin`);
       const recipient = await open(receivedPath, "w+");
@@ -152,8 +174,16 @@ test("local stage relay carries every declared put on its real grid, including s
                 attemptId: descriptor.attemptId,
               }),
             ).state,
-            "verified",
+            "waiting",
+            "zero-byte stage remains waiting until actual consumer file proof",
           );
+          await recipient.sync();
+          assert.equal(
+            (await inventory(receivedPath, 0, descriptor.chunkBytes)).sha256,
+            file.plan.sha256,
+          );
+          value(await receipt());
+          assert.deepEqual(value(await opening), descriptor);
           assert.equal(
             (
               await fetch(
@@ -204,6 +234,57 @@ test("local stage relay carries every declared put on its real grid, including s
             descriptor.chunkHashes[index],
           );
           await recipient.write(bytes, 0, bytes.length, index * descriptor.chunkBytes);
+          if (index === descriptor.chunkHashes.length - 1) {
+            let settled = false;
+            void producer.then(() => {
+              settled = true;
+            });
+            const duplicate = fetch(
+              new URL(
+                `/internal/transfers/${descriptor.transferId}/peer/chunks/${index}?${query}`,
+                base,
+              ),
+              {
+                method: "PUT",
+                headers: { "X-Fortipi-Context": JSON.stringify(ctx) },
+                body: await chunk(file.path, index, descriptor.chunkBytes, file.size),
+              },
+            );
+            void duplicate.catch(() => undefined);
+            let duplicateSettled = false;
+            void duplicate.then(() => {
+              duplicateSettled = true;
+            });
+            await new Promise((resolve) => setTimeout(resolve, 35));
+            assert.equal(
+              settled || duplicateSettled,
+              false,
+              "final stage PUT must wait for the actual durable consumer receipt",
+            );
+            assert.equal(
+              value(
+                await h.cp.observeTransfer(ctx, {
+                  transferId: descriptor.transferId,
+                  attemptId: descriptor.attemptId,
+                }),
+              ).state,
+              "waiting",
+              "byte EOF alone cannot claim durable consumer availability",
+            );
+            await recipient.sync();
+            assert.equal(
+              (await inventory(receivedPath, file.size, descriptor.chunkBytes)).sha256,
+              file.plan.sha256,
+              "consumer verifies the whole file before its durable receipt",
+            );
+            const ack = value(await receipt());
+            assert.deepEqual(
+              value(await receipt()),
+              ack,
+              "identical consumer receipts are idempotent",
+            );
+            assert.equal((await duplicate).status, 204);
+          }
           assert.equal((await producer).status, 204);
         }
       } finally {
