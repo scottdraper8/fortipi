@@ -112,6 +112,23 @@ test("abrupt Wrangler/workerd kill preserves authority, OAuth and structured quo
     const reserved = await get("/reserve");
     assert.ok(reserved && typeof reserved === "object" && "ok" in reserved && reserved.ok === true);
     const reservation = await get("/reserved");
+    const settled = await get("/settle-conservative");
+    assert.ok(
+      settled &&
+        typeof settled === "object" &&
+        "ok" in settled &&
+        settled.ok === true &&
+        "value" in settled &&
+        settled.value &&
+        typeof settled.value === "object" &&
+        "reservationId" in settled.value &&
+        typeof settled.value.reservationId === "string",
+    );
+    const settledId = settled.value.reservationId;
+    assert.deepEqual(await get("/capacity-usage"), { reserved: 8192, consumed: 4096, slots: 1 });
+    assert.deepEqual(await get(`/capacity-settlement?id=${settledId}`), {
+      disposition: "consumed",
+    });
     await get("/seed-provider");
     const providerBefore = await get("/resolve-provider");
     assert.ok(
@@ -142,6 +159,16 @@ test("abrupt Wrangler/workerd kill preserves authority, OAuth and structured quo
       await get("/reserved"),
       reservation,
       "reservation is not regenerated after process death",
+    );
+    assert.deepEqual(
+      await get("/capacity-usage"),
+      { reserved: 8192, consumed: 4096, slots: 1 },
+      "unmeasured full conservative charge survives actual runtime-tree SIGKILL",
+    );
+    assert.deepEqual(
+      await get(`/capacity-settlement?id=${settledId}`),
+      { disposition: "consumed" },
+      "actual reopen must preserve absent measurement without fabricating observed bytes",
     );
     const pausedAfter = (await get("/repair-state")) as {
       holds: unknown[];
