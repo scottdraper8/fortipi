@@ -315,15 +315,15 @@ try {
   $admins=[System.DirectoryServices.AccountManagement.GroupPrincipal]::FindByIdentity($ctx,[System.DirectoryServices.AccountManagement.IdentityType]::Sid,'S-1-5-32-544');if($admins.Members.Contains($account)){throw 'privileged test account'}
   $stage='resolve-identity'
   $source=[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(code).toString("base64")}')).Replace('__EXPECTED_SID__',$account.Sid.Value).Replace('__OWNER_SID__',[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
-  $source64=[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($source))
   function Probe {
     $p=[System.Diagnostics.Process]::new()
     try {
-      $p.StartInfo.FileName=${literal(process.execPath)};$p.StartInfo.Arguments='-e "eval(Buffer.from(process.argv[1],process.argv[2]).toString())" '+$source64+' base64'
+      $p.StartInfo.FileName=${literal(process.execPath)};$p.StartInfo.Arguments='--input-type=commonjs -'
+      if($p.StartInfo.FileName.Length+$p.StartInfo.Arguments.Length+3 -ge 1024){throw 'credential launch command bound'}
       $p.StartInfo.UserName=$name;$p.StartInfo.Domain='.';$p.StartInfo.Password=$secret;$p.StartInfo.UseShellExecute=$false;$p.StartInfo.LoadUserProfile=$false;$p.StartInfo.WorkingDirectory=${literal(root)}
-      $p.StartInfo.RedirectStandardOutput=$true;$p.StartInfo.RedirectStandardError=$true;$p.StartInfo.CreateNoWindow=$true
+      $p.StartInfo.RedirectStandardInput=$true;$p.StartInfo.RedirectStandardOutput=$true;$p.StartInfo.RedirectStandardError=$true;$p.StartInfo.CreateNoWindow=$true
       $p.StartInfo.EnvironmentVariables.Clear();$p.StartInfo.EnvironmentVariables['SystemRoot']=${literal(environment.SystemRoot ?? "")};$p.StartInfo.EnvironmentVariables['WINDIR']=${literal(environment.SystemRoot ?? "")};$p.StartInfo.EnvironmentVariables['PATH']=${literal(environment.PATH ?? "")};$p.StartInfo.EnvironmentVariables['TEMP']=${literal(root)};$p.StartInfo.EnvironmentVariables['TMP']=${literal(root)}
-      [void]$p.Start();$out=$p.StandardOutput.ReadToEndAsync();$err=$p.StandardError.ReadToEndAsync()
+      [void]$p.Start();$out=$p.StandardOutput.ReadToEndAsync();$err=$p.StandardError.ReadToEndAsync();$p.StandardInput.Write($source);$p.StandardInput.Close()
       if(!$p.WaitForExit(15000)){$p.Kill();$p.WaitForExit();throw 'child deadline'}
       $text=$out.GetAwaiter().GetResult();$stderr=$err.GetAwaiter().GetResult();if($p.ExitCode -ne 0 -or $text.Length -gt 16384){$script:detail='child-runtime';if($stderr.Contains('unprivileged identity control failed')){$script:detail='identity'};if($stderr.Contains('public read control failed')){$script:detail='public-control'};if($stderr.Contains('unexpected file-open failure')){$script:detail='file-open'};throw 'child control failed'}
       return $text

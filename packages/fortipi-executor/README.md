@@ -180,6 +180,9 @@ the synthetic public lab, so the runner's home permissions cannot prevent the
 positive control from starting. It changes no runner-home permissions. Failed
 launch/control diagnostics disclose only fixed categories, including when
 Windows PowerShell wraps stderr in CLIXML.
+Windows sends the fixed probe program through redirected stdin and closes it;
+the credentialed child command stays below CreateProcessWithLogonW's 1024-character
+limit. The account password remains in process memory and SecureString.
 Windows permission utilities use typed SID ACL operations from .NET Framework
 and direct filesystem attributes, without cmdlet module autoload or account-name
 translation. The native diagnostic emits bounded stage timings without identities
