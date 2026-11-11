@@ -3,10 +3,10 @@ import { freeInfrastructurePolicy, schemaRegistry } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
 import { audit } from "./audit.js";
-import { emptyScope, permits, requireGrant } from "./authorization.js";
+import { contains, emptyScope, permits, requireGrant, roleAllows } from "./authorization.js";
 import type { Identities } from "./identity.js";
 import { queueRepairResume } from "./repair.js";
-import { check, fail, hash, id, json, next, type Store } from "./store.js";
+import { check, fail, hash, id, json, next, ref, type Store, same } from "./store.js";
 
 // Only fixed trusted schemas are compiled at module activation, never in request handlers.
 const ajv = new Ajv({ strict: true, allErrors: false, validateFormats: false });
@@ -59,6 +59,51 @@ export class Directory {
   }
   policy(): D.InfrastructurePolicy {
     return this.config().infrastructure ?? freeInfrastructurePolicy;
+  }
+  registeredOperation(ctx: D.AuthContext) {
+    this.identities.current(ctx);
+    const registration = this.store.get<D.AuthorityRegistration>(
+      "recipient",
+      ctx.registrationId ?? "",
+    );
+    if (registration?.recipient.kind !== "agent" || !same(registration.credential, ref(ctx)))
+      return undefined;
+    const resources = registration.resources;
+    const agentId = registration.recipient.id;
+    const action = resources.actions[0];
+    if (
+      resources.agentIds.length !== 1 ||
+      resources.agentIds[0] !== agentId ||
+      !valid("common", "Id", agentId) ||
+      !this.store.get("agent", agentId) ||
+      resources.actions.length !== 1 ||
+      !action ||
+      !roleAllows(ctx, action)
+    )
+      return undefined;
+    // These are the actual Agent operations that reserve storage. The registration
+    // is service-constructed; opaque operation IDs do not establish authority.
+    const creation = action === "conversations.create";
+    if (
+      !creation &&
+      !["conversations.fork", "messages.submit", "conversations.steer", "tasks.resume"].includes(
+        action,
+      )
+    )
+      return undefined;
+    if (
+      creation
+        ? resources.conversationIds.length !== 0
+        : resources.conversationIds.length !== 1 ||
+          !valid("common", "Id", resources.conversationIds[0])
+    )
+      return undefined;
+    const grant = ctx.grants.find(
+      (g) =>
+        (g.expiresAt === undefined || Date.now() < g.expiresAt) && contains(g.resources, resources),
+    );
+    if (!grant) return undefined;
+    return { registration, action, grant };
   }
   async once<T>(
     ctx: D.AuthContext,
