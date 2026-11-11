@@ -326,6 +326,13 @@ test("registered native job observation uses exact retained preparation and curr
       true,
       "registered retained native observation needs no hidden workspace.read even after effect expiry",
     );
+    const reservedPending = h.cp.requestLocalWorkspace(h.agentAuth, job.observe);
+    await job.reply(reservedPending);
+    assert.equal(
+      (await reservedPending).ok,
+      true,
+      "the actual reservation Agent registration preserves the retained tool and one-grant authority",
+    );
     const read: D.LocalReadRequest = {
       kind: "read",
       operationId: uuid(),

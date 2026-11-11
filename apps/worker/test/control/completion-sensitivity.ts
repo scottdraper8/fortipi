@@ -24,6 +24,24 @@ try {
   );
   for (const mutation of [
     {
+      file: "dispatch.ts",
+      pattern: /registration\.registrationId === reservation\.registrationIds\.agent &&/,
+      replacement: "false &&",
+      testFile: "completion.test.ts",
+      testPattern: "registered execution recovery checks",
+      oracle:
+        "the exact retained reservation registration derives its tool from the dispatch and current grant",
+    },
+    {
+      file: "local-workspace.ts",
+      pattern: /registration\.registrationId === reservation\.registrationIds\.agent &&/,
+      replacement: "false &&",
+      testFile: "local-authority.test.ts",
+      testPattern: "registered native job observation uses",
+      oracle:
+        "registered retained native observation needs no hidden workspace.read even after effect expiry",
+    },
+    {
       file: "control-plane.ts",
       pattern: /if \(this\.dispatch\.completion\(ctx, input\)\) this\.capacity\.admitRepair\(\);/,
       replacement: "if (false) this.capacity.admitRepair();",

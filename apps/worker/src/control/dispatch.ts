@@ -431,7 +431,15 @@ export class Dispatch {
         registration.recipient.id === reservation.agentId &&
         registration.registrationId === ctx.registrationId &&
         same(registration.credential, ref(ctx)) &&
-        contains(registration.resources, { ...resources, actions: ["jobs.dispatch"] }) &&
+        contains(registration.resources, {
+          ...resources,
+          actions: ["jobs.dispatch"],
+          // Target reservation precedes the assignment, which supplies the retained tool.
+          ...(registration.registrationId === reservation.registrationIds.agent &&
+          registration.resources.tools.length === 0
+            ? { tools: [] }
+            : {}),
+        }) &&
         ctx.grants.some(
           (grant) =>
             (grant.expiresAt === undefined || Date.now() < grant.expiresAt) &&

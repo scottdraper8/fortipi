@@ -132,6 +132,21 @@ test("registered execution recovery checks its retained owner and one current lo
         "terminal",
         "current registered dispatch query must require no hidden read or write grant",
       );
+      const reservedActor = {
+        ...h.actor,
+        registrationId: h.job.reservation.registrationIds.agent,
+      };
+      const beforeReserved = await h.cp.admissions();
+      const reservedResult = await h.cp.queryExecution(reservedActor, h.job.identity);
+      assert.equal(
+        reservedResult.ok,
+        true,
+        "the exact retained reservation registration derives its tool from the dispatch and current grant",
+      );
+      assert.equal(value(reservedResult).state, "terminal");
+      const afterReserved = await h.cp.admissions();
+      assert.equal(afterReserved.repair - beforeReserved.repair, 1);
+      assert.equal(afterReserved.application, beforeReserved.application);
       if (actions.includes("workspace.write")) {
         const renewed = { ...h.job.identity.lease, leaseVersion: 2, expiresAt: Date.now() + 6000 };
         value(
