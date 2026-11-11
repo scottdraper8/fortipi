@@ -45,6 +45,13 @@ const validators = new Map(
 export function valid(schema: string, name: string, value: unknown): boolean {
   return validators.get(`${schema}/${name}`)?.(value) === true;
 }
+const modelActions = new Set([
+  "conversations.create",
+  "conversations.fork",
+  "messages.submit",
+  "conversations.steer",
+  "tasks.resume",
+]);
 export class Directory {
   readonly store: Store;
   readonly identities: Identities;
@@ -81,16 +88,10 @@ export class Directory {
       !roleAllows(ctx, action)
     )
       return undefined;
-    // These are the actual Agent operations that reserve storage. The registration
+    // These are the actual Agent operations that use models/storage. The registration
     // is service-constructed; opaque operation IDs do not establish authority.
     const creation = action === "conversations.create";
-    if (
-      !creation &&
-      !["conversations.fork", "messages.submit", "conversations.steer", "tasks.resume"].includes(
-        action,
-      )
-    )
-      return undefined;
+    if (!modelActions.has(action)) return undefined;
     if (
       creation
         ? resources.conversationIds.length !== 0
@@ -104,6 +105,19 @@ export class Directory {
     );
     if (!grant) return undefined;
     return { registration, action, grant };
+  }
+  registeredModel(ctx: D.AuthContext, agentId: string) {
+    const authority = this.registeredOperation(ctx);
+    check(
+      authority &&
+        modelActions.has(authority.action) &&
+        authority.registration.recipient.id === agentId,
+      "unauthorized",
+      "Model resolution requires its current registered Agent operation",
+    );
+    const row = this.store.get<{ agent: D.Agent; model: D.ModelConfig }>("agent", agentId);
+    check(row, "not_found", "Agent unavailable");
+    return row;
   }
   async once<T>(
     ctx: D.AuthContext,

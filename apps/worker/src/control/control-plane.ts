@@ -954,16 +954,30 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       const artifactMatch = /^\/internal\/artifacts\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_-]+)$/.exec(
         url.pathname,
       );
-      check(match || statusMatch || artifactMatch, "not_found", "Control route unavailable");
+      const modelMatch = /^\/internal\/agents\/([a-zA-Z0-9_-]+)\/model$/.exec(url.pathname);
+      check(
+        match || statusMatch || artifactMatch || modelMatch,
+        "not_found",
+        "Control route unavailable",
+      );
       let auth: D.AuthContext;
       if (url.pathname.startsWith("/internal/")) {
         const envelope = request.headers.get("X-Fortipi-Context");
         check(
-          envelope && envelope.length <= 65536,
+          envelope && new TextEncoder().encode(envelope).length <= 65536,
           "unauthenticated",
           "Missing internal authority",
         );
-        auth = JSON.parse(envelope) as D.AuthContext;
+        try {
+          auth = JSON.parse(envelope) as D.AuthContext;
+        } catch {
+          fail("unauthenticated", "Malformed internal authority");
+        }
+        check(
+          auth && typeof auth === "object" && typeof auth.credentialId === "string",
+          "unauthenticated",
+          "Invalid internal authority",
+        );
         this.identities.current(auth);
       } else {
         const bearer = request.headers.get("Authorization") ?? "";
@@ -975,6 +989,17 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
           deadline: Date.now() + 30000,
         });
         check(auth.role === "executor", "unauthorized", "Executor credential required");
+      }
+      if (modelMatch) {
+        this.capacity.admitRequest(auth.principalId);
+        check(
+          request.method === "GET" && request.body === null && url.search === "",
+          "invalid_request",
+          "Model resolution requires query-free GET",
+        );
+        const selected = this.directory.registeredModel(auth, modelMatch[1] ?? "");
+        headers.set("X-Fortipi-Agent-Config-Version", String(selected.agent.configVersion));
+        return Response.json(selected.model, { headers });
       }
       if (artifactMatch)
         return this.artifacts.fetch(auth, request, artifactMatch[1] ?? "", artifactMatch[2] ?? "");
