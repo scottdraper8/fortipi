@@ -230,7 +230,16 @@ exact requestId/body receipts before CAS after floors. An old receipt never revi
 a released/revoked lease. Release's public receipt omits the private tombstone ID.
 
 Private TargetRequest's workspace-operation variant requires baseRevision; job
-requests are unchanged. Private LeaseRenewal and LeaseRelease both require stable
+requests additionally require executionId from the actual stable ExecutionIdentity
+persisted by Agent5 before CP reservation/effects. TargetReservation retains it.
+CP reservation idempotency binds that ID; dispatch/prepare must match the retained
+ID to the actual execution identity before effects. Source3 job local-stage
+descriptors use the retained executionId/jobId with the full unchanged transfer
+scope, without guessing or scanning. This applies to native/cloud/builtin job
+scopes without authorizing a new execution/workspace matrix or late effects.
+Public workspace-operation leases gain no job/execution fields, and existing job
+digest recipes stay unchanged (assignmentDigest already binds executionId).
+Private LeaseRenewal and LeaseRelease both require stable
 requestId, never a fresh AuthContext.requestId. Other private renewal/release fields
 remain, including server-derived expiresAt and internal release tombstone receipts.
 CP exposes generated ApiMethod ports for the three operations; consumers implement

@@ -137,7 +137,8 @@ export async function executionFlow(
     await cp.reserveTarget(registered, {
       ownerKind: "job",
       operationId: "operation_1",
-      jobId: "job_1",
+      jobId: identity.jobId,
+      executionId: identity.executionId,
       operationDigest: immutableOperationDigest,
       agentId: operationContext.agentId,
       conversationId: operationContext.conversationId,
@@ -150,6 +151,11 @@ export async function executionFlow(
     }),
   );
   if (reservation.ownerKind !== "job") throw new Error("Expected job reservation");
+  if (reservation.executionId !== identity.executionId || reservation.jobId !== identity.jobId)
+    throw new Error("Reservation does not match the persisted execution identity");
+  const { executionId: _executionId, ...missingExecutionId } = reservation;
+  // @ts-expect-error Every job target reservation requires the pre-persisted execution identity.
+  await cp.reserveTarget(registered, missingExecutionId);
   const acquired = value(await workspace.acquireLease(registered, reservation));
   if (
     acquired.baseRevision !== operation.baseRevision ||
@@ -318,7 +324,8 @@ export async function executionFlow(
   await cp.reserveTarget(registered, {
     ownerKind: "job",
     operationId: "operation_1",
-    jobId: "job_1",
+    jobId: identity.jobId,
+    executionId: identity.executionId,
     operationDigest: hash,
     agentId: "agent_1",
     conversationId: "conversation_1",

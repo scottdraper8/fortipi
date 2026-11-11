@@ -122,7 +122,13 @@ interface TargetScope {
 }
 export type TargetRequest = TargetScope &
   (
-    | { ownerKind: "job"; jobId: string; agentId: string; conversationId: string }
+    | {
+        ownerKind: "job";
+        jobId: string;
+        executionId: string;
+        agentId: string;
+        conversationId: string;
+      }
     | {
         ownerKind: "workspace-operation";
         baseRevision: string;
