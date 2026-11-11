@@ -32,6 +32,7 @@ import {
 } from "../workspace/workspace-object.js";
 import { codemode } from "./codemode.js";
 import { linux, linuxHostId } from "./linux.js";
+import { type NativeContext, quiesceNative, validQuiescence } from "./quiescence.js";
 
 interface RecordEntry {
   prepared: D.PreparedExecution;
@@ -44,12 +45,22 @@ interface RecordEntry {
   runtimeId?: string;
   observationKey: string;
   hostId?: string;
+  nativeImageDigest?: string;
+  nativeContext?: NativeContext;
   storageQuiescent?: boolean;
   collection?: { requestId: string; commitId: string; manifestHash: string };
 }
 interface Envelope {
   auth: D.AuthContext;
   allocation: D.StoreAllocation;
+}
+interface ScratchEvidence {
+  identity: D.ExecutionIdentity;
+  result: WorkspaceRuntimeResult<"utf8">;
+  proof?: string;
+  runtimeId?: string;
+  quiescent?: boolean;
+  quiescence?: D.RuntimeQuiescence;
 }
 export class ExecutionLedger {
   readonly owner: WorkspaceObject;
@@ -278,36 +289,44 @@ export class ExecutionLedger {
         preparedAt: Date.now(),
         expiresAt: Math.min(request.identity.deadline, request.identity.lease.expiresAt),
       };
-      return this.owner.mutex.run(() => {
-        validateLease(this.owner.state, this.owner.current(), request.identity.lease, ctx);
-        const raced = this.owner.state.get<RecordEntry>(
-          `execution:${request.identity.executionId}`,
-        );
-        if (raced) {
-          requireThat(
-            same(raced.prepared.request, request),
-            "conflict",
-            "Concurrent preparation changed",
+      return this.owner.mutex.run(() =>
+        this.owner.state.transaction(() => {
+          validateLease(this.owner.state, this.owner.current(), request.identity.lease, ctx);
+          const raced = this.owner.state.get<RecordEntry>(
+            `execution:${request.identity.executionId}`,
           );
-          return raced.prepared;
-        }
-        this.owner.state.put(`execution:${request.identity.executionId}`, {
-          observationKey: crypto.randomUUID(),
-          ...(config.kind === "linux"
-            ? {
-                hostId: linuxHostId(
-                  config.host,
-                  this.env.WORKSPACES.idFromName(allocation.childId).toString(),
-                ),
-              }
-            : {}),
-          prepared,
-          allocation,
-          state: "prepared",
-          observation: { identity: request.identity, state: "unknown" },
-        } satisfies RecordEntry);
-        return prepared;
-      });
+          if (raced) {
+            requireThat(
+              same(raced.prepared.request, request),
+              "conflict",
+              "Concurrent preparation changed",
+            );
+            return raced.prepared;
+          }
+          this.owner.state.put(`execution:${request.identity.executionId}`, {
+            observationKey: crypto.randomUUID(),
+            ...(config.kind === "linux"
+              ? {
+                  hostId: linuxHostId(
+                    config.host,
+                    this.env.WORKSPACES.idFromName(allocation.childId).toString(),
+                  ),
+                  nativeImageDigest: config.imageDigest,
+                  nativeContext: new WorkspaceStorage(this.owner).registerHost(
+                    ctx,
+                    allocation,
+                    config,
+                  ),
+                }
+              : {}),
+            prepared,
+            allocation,
+            state: "prepared",
+            observation: { identity: request.identity, state: "unknown" },
+          } satisfies RecordEntry);
+          return prepared;
+        }),
+      );
     }, ctx.requestId);
   }
   startOnce(
@@ -663,7 +682,10 @@ export class ExecutionLedger {
       );
       requireThat(permission.ok, "conflict", "Assignment closed or no durable start intent");
       const config = this.config(envelope.auth);
-      const { proof } = (await permission.json()) as { proof: string };
+      const { proof, nativeContext } = (await permission.json()) as {
+        proof: string;
+        nativeContext?: NativeContext;
+      };
       const first = await this.owner.mutex.run(() => {
         const previous = this.owner.state.get<string>("scratch-start");
         if (previous) {
@@ -679,16 +701,56 @@ export class ExecutionLedger {
       });
       if (!first) return Response.json({ identity, state: "unknown" });
       this.scratchStore = store;
-      if (config.kind === "cloud-js")
+      requireThat(
+        !this.owner.state.get("scratch-stop-intent"),
+        "interrupted",
+        "Scratch writer lane is permanently stopping or stopped",
+      );
+      if (config.kind === "cloud-js") {
+        requireThat(
+          !nativeContext,
+          "conflict",
+          "Prepared native runtime cannot change backend kind",
+        );
+        this.owner.state.put("scratch-runtime-kind", "cloud-js");
         this.workspace = await store.configure([
           codemode(this.env, envelope.auth.deploymentId, config),
         ]);
-      else {
+      } else {
+        requireThat(
+          nativeContext &&
+            nativeContext.hostId === linuxHostId(config.host, this.owner.objectId) &&
+            nativeContext.imageDigest === config.imageDigest &&
+            nativeContext.authorityId === envelope.allocation.authorityId &&
+            nativeContext.allocationId === envelope.allocation.allocationId &&
+            nativeContext.childId === envelope.allocation.childId,
+          "interrupted",
+          "Original prepared native host/image context is unavailable or changed",
+        );
+        this.owner.state.put("scratch-runtime-kind", "linux");
+        this.owner.state.put("scratch-native-context", nativeContext);
         const actual = await linux(
           this.env,
           envelope.auth.deploymentId,
           this.owner.objectId,
           config,
+          nativeContext,
+          async (runtime) => {
+            // Preserve the real SDK acknowledgment before any execution can use the host.
+            this.owner.state.put("scratch-native-runtime", runtime.runtimeId);
+            const acknowledged = await this.owner.stub(envelope.allocation.authorityId).fetch(
+              new Request("https://workspace.internal/__fortipi/execution/observed", {
+                method: "POST",
+                headers: { [internalHeader]: JSON.stringify(envelope) },
+                body: JSON.stringify({ identity, proof, runtimeId: runtime.runtimeId }),
+              }),
+            );
+            requireThat(
+              acknowledged.ok,
+              "interrupted",
+              "Actual native runtime acknowledgment remains unresolved",
+            );
+          },
         );
         this.host = actual.host;
         this.container = actual.backend;
@@ -736,30 +798,23 @@ export class ExecutionLedger {
             result.sync.status === "complete" &&
             result.sync.skipped.length === 0 &&
             result.skipped.length === 0;
-          // Callback admission closes before disconnecting the actual SDK runtime. No later
-          // native callback or scratch mutation can reopen this child's writer lane.
-          const quiescent = synchronized && config.kind === "cloud-js";
-          if (quiescent) {
-            this.active = false;
-            this.container = undefined;
-            await store.quiesce();
-            this.workspace = undefined;
-          }
-          const evidence = {
+          let evidence: ScratchEvidence = {
             identity,
             result,
-            quiescent,
+            proof,
+            quiescent: false,
             ...(this.host?.runtime ? { runtimeId: this.host.runtime.runtimeId } : {}),
           };
           if (result.sync.status === "complete")
             await this.owner.mutex.run(() => this.owner.state.put("scratch-result", evidence));
-          await this.owner.stub(envelope.allocation.authorityId).fetch(
-            new Request("https://workspace.internal/__fortipi/execution/observed", {
-              method: "POST",
-              headers: { [internalHeader]: JSON.stringify(envelope) },
-              body: JSON.stringify({ ...evidence, proof }),
-            }),
-          );
+          if (synchronized) {
+            try {
+              evidence = await this.closeWriter(store, evidence);
+            } catch {
+              this.uncertain = true;
+            }
+          }
+          await this.observe(envelope, evidence);
         })
         .catch(() => {
           this.uncertain = true;
@@ -773,16 +828,12 @@ export class ExecutionLedger {
       });
     }
     const identity = await boundedJson<D.ExecutionIdentity>(request, wireLimits.jsonBytes);
-    const saved = this.active
-      ? undefined
-      : this.owner.state.get<{
-          identity: D.ExecutionIdentity;
-          result: WorkspaceRuntimeResult<"utf8">;
-          runtimeId?: string;
-        }>("scratch-result");
+    const saved = this.active ? undefined : this.owner.state.get<ScratchEvidence>("scratch-result");
     if (saved && saved.identity.assignmentDigest === identity.assignmentDigest && !this.active) {
       this.identity = saved.identity;
       this.result = saved.result;
+      this.active = !this.owner.state.get("scratch-quiescent");
+      store.runtimePinned = this.active;
     }
     if (this.host) this.host.queryOnly = true;
     requireThat(
@@ -826,6 +877,18 @@ export class ExecutionLedger {
         ...(this.host?.runtime ? { runtimeUuid: this.host.runtime.runtimeId } : {}),
       });
     }
+    if (action === "collect") {
+      await this.completion;
+      let evidence = this.owner.state.get<ScratchEvidence>("scratch-result");
+      if (
+        evidence &&
+        evidence.identity.assignmentDigest === identity.assignmentDigest &&
+        evidence.result.sync.status === "complete" &&
+        !evidence.quiescent
+      )
+        evidence = await this.closeWriter(store, evidence);
+      if (evidence?.proof) await this.observe(envelope, evidence);
+    }
     requireThat(
       action === "collect" &&
         !this.active &&
@@ -849,14 +912,55 @@ export class ExecutionLedger {
   }
   async callback(request: Request): Promise<Response> {
     requireThat(
-      this.active && this.container,
+      this.active && this.container && !this.owner.state.get("scratch-stop-intent"),
       "unauthorized",
       "No pending active container transport",
     );
     return this.container.handleFetch(request);
   }
   hasCallback(): boolean {
-    return this.active && this.container !== undefined;
+    return (
+      this.active && this.container !== undefined && !this.owner.state.get("scratch-stop-intent")
+    );
+  }
+  private async closeWriter(
+    store: ComputerStore,
+    evidence: ScratchEvidence,
+  ): Promise<ScratchEvidence> {
+    const kind = this.owner.state.get<string>("scratch-runtime-kind");
+    let quiescence: D.RuntimeQuiescence | undefined;
+    if (kind === "linux")
+      quiescence = await quiesceNative(
+        this.owner,
+        this.env,
+        evidence.identity,
+        evidence.result,
+        evidence.runtimeId,
+      );
+    else
+      requireThat(
+        kind === "cloud-js" || (evidence.quiescent && this.owner.state.get("scratch-quiescent")),
+        "interrupted",
+        "Original runtime kind is unknown; retain active allocation",
+      );
+    this.active = false;
+    this.container = undefined;
+    await store.quiesce();
+    this.workspace = undefined;
+    const closed = { ...evidence, quiescent: true, ...(quiescence ? { quiescence } : {}) };
+    await this.owner.mutex.run(() => this.owner.state.put("scratch-result", closed));
+    return closed;
+  }
+  private async observe(envelope: Envelope, evidence: ScratchEvidence): Promise<void> {
+    requireThat(evidence.proof, "interrupted", "Original completion proof unavailable");
+    const response = await this.owner.stub(envelope.allocation.authorityId).fetch(
+      new Request("https://workspace.internal/__fortipi/execution/observed", {
+        method: "POST",
+        headers: { [internalHeader]: JSON.stringify(envelope) },
+        body: JSON.stringify(evidence),
+      }),
+    );
+    requireThat(response.ok, "interrupted", "Completion observation remains unacknowledged");
   }
   async permit(request: Request, ctx: D.AuthContext): Promise<Response> {
     const identity = await boundedJson<D.ExecutionIdentity>(request, wireLimits.jsonBytes);
@@ -868,57 +972,100 @@ export class ExecutionLedger {
         "conflict",
         "No eligible attempted execution",
       );
-      return row.observationKey;
+      return {
+        proof: row.observationKey,
+        ...(row.nativeContext ? { nativeContext: row.nativeContext } : {}),
+      };
     });
-    return Response.json({ proof });
+    return Response.json(proof);
   }
-  async observed(request: Request, allocation: D.StoreAllocation): Promise<Response> {
+  async observed(
+    request: Request,
+    allocation: D.StoreAllocation,
+    ctx: D.AuthContext,
+  ): Promise<Response> {
     const observed = await boundedJson<{
       identity: D.ExecutionIdentity;
-      result: WorkspaceRuntimeResult<"utf8">;
+      result?: WorkspaceRuntimeResult<"utf8">;
       proof: string;
       runtimeId?: string;
       quiescent?: boolean;
+      quiescence?: D.RuntimeQuiescence;
     }>(request, wireLimits.jsonBytes);
     requireThat(
-      new TextEncoder().encode(JSON.stringify(observed.result)).length <=
+      new TextEncoder().encode(JSON.stringify(observed.result ?? null)).length <=
         this.owner.policy.bounds.inlineTailBytes * 3 + 65_536,
       "payload_too_large",
       "Execution observation exceeds bound",
     );
-    await this.owner.mutex.run(() => {
-      const row = this.owner.state.get<RecordEntry>(`execution:${observed.identity.executionId}`);
-      requireThat(
-        row &&
-          same(row.allocation, allocation) &&
-          row.observationKey === observed.proof &&
-          row.prepared.request.identity.assignmentDigest === observed.identity.assignmentDigest &&
-          row.state !== "prepared",
-        "unauthorized",
-        "Invalid private completion proof",
-      );
-      row.result = observed.result;
-      row.state = observed.result.sync.status === "complete" ? "terminal" : "unknown";
-      row.storageQuiescent =
-        observed.quiescent === true &&
-        observed.result.sync.status === "complete" &&
-        observed.result.sync.skipped.length === 0 &&
-        observed.result.skipped.length === 0;
-      if (observed.runtimeId) {
+    await this.owner.mutex.run(() =>
+      this.owner.state.transaction(() => {
+        const row = this.owner.state.get<RecordEntry>(`execution:${observed.identity.executionId}`);
         requireThat(
-          !row.runtimeId || row.runtimeId === observed.runtimeId,
-          "interrupted",
-          "Runtime identity changed",
+          row &&
+            same(row.allocation, allocation) &&
+            row.observationKey === observed.proof &&
+            row.prepared.request.identity.assignmentDigest === observed.identity.assignmentDigest &&
+            row.state !== "prepared",
+          "unauthorized",
+          "Invalid private completion proof",
         );
-        row.runtimeId = observed.runtimeId;
-      }
-      row.observation = {
-        identity: observed.identity,
-        state: observed.result.sync.status === "complete" ? "terminal" : "pending_sync",
-        ...(observed.runtimeId ? { runtimeUuid: observed.runtimeId } : {}),
-      };
-      this.owner.state.put(`execution:${observed.identity.executionId}`, row);
-    });
+        if (!observed.result) {
+          requireThat(
+            Object.keys(observed).sort().join(",") === "identity,proof,runtimeId" &&
+              row.nativeContext &&
+              observed.runtimeId,
+            "invalid_request",
+            "Exact native SDK acknowledgment required",
+          );
+          this.row(ctx, observed.identity);
+          validateLease(this.owner.state, this.owner.current(), observed.identity.lease, ctx);
+          new WorkspaceStorage(this.owner).acknowledgeHost(row.nativeContext, observed.runtimeId);
+          requireThat(
+            !row.runtimeId || row.runtimeId === observed.runtimeId,
+            "conflict",
+            "Acknowledged runtime identity changed",
+          );
+          row.runtimeId = observed.runtimeId;
+          this.owner.state.put(`execution:${observed.identity.executionId}`, row);
+          return;
+        }
+        requireThat(
+          row.result?.sync.status !== "complete" || same(row.result, observed.result),
+          "conflict",
+          "Completed runtime evidence changed",
+        );
+        row.result = observed.result;
+        row.state = observed.result.sync.status === "complete" ? "terminal" : "unknown";
+        row.storageQuiescent =
+          row.storageQuiescent ||
+          (observed.quiescent === true &&
+            observed.result.sync.status === "complete" &&
+            observed.result.sync.skipped.length === 0 &&
+            observed.result.skipped.length === 0 &&
+            (!row.hostId ||
+              (validQuiescence(observed.quiescence) &&
+                observed.quiescence.runtimeId === observed.runtimeId &&
+                observed.quiescence.imageDigest === row.nativeImageDigest)));
+        if (observed.runtimeId) {
+          requireThat(
+            !row.runtimeId || row.runtimeId === observed.runtimeId,
+            "interrupted",
+            "Runtime identity changed",
+          );
+          row.runtimeId = observed.runtimeId;
+        }
+        row.observation = {
+          identity: observed.identity,
+          state: observed.result.sync.status === "complete" ? "terminal" : "pending_sync",
+          ...(observed.runtimeId ? { runtimeUuid: observed.runtimeId } : {}),
+          ...(row.observation.state === "terminal" && row.observation.result
+            ? { result: row.observation.result }
+            : {}),
+        };
+        this.owner.state.put(`execution:${observed.identity.executionId}`, row);
+      }),
+    );
     return new Response(null, { status: 204 });
   }
   async stopChild(): Promise<void> {

@@ -1,11 +1,16 @@
 import { createHash } from "node:crypto";
 import { canonicalJson, digestJson, incrementSafe, wireLimits } from "fortipi-contract";
+import { linuxHostId } from "../backends/linux.js";
 import type * as D from "../boundary/dto.js";
 import type {
+  RuntimeHostContext,
+  RuntimeHostStorageSample,
+  RuntimeHostStorageSampleInput,
   StorageSampleInput,
   WorkspaceStorageSample,
   WorkspaceStorageSampleInput,
 } from "../boundary/infrastructure.js";
+import { hostContext } from "../container/host-context.js";
 import {
   type AllocationRecord,
   authorize,
@@ -14,11 +19,12 @@ import {
   same,
 } from "./authority.js";
 import { requireThat } from "./errors.js";
+import { limitedStream } from "./streams.js";
 import { internalHeader, type WorkspaceObject } from "./workspace-object.js";
 
 type Owner = Pick<
   WorkspaceObject,
-  "state" | "mutex" | "policy" | "current" | "isSelf" | "stub" | "control"
+  "state" | "mutex" | "policy" | "current" | "isSelf" | "stub" | "control" | "execution"
 >;
 interface ExecutionStorage {
   state: string;
@@ -40,11 +46,17 @@ interface InstallSettlement {
   reservationId: string;
   disposition: "consumed";
 }
+export interface RuntimeHostMember {
+  context: RuntimeHostContext;
+  version: number;
+  runtimeId?: string;
+}
 interface Census {
   version: number;
   observedAt: number;
   bytes: number;
   children: Record<string, number>;
+  hosts?: Record<string, number>;
   registryHash: string;
 }
 interface Cached {
@@ -172,6 +184,158 @@ export class WorkspaceStorage {
   constructor(owner: Owner) {
     this.owner = owner;
   }
+  /** Called inside the authority's queued preparation transaction, BEFORE any Host contact. */
+  registerHost(
+    ctx: D.AuthContext,
+    allocation: D.StoreAllocation,
+    config: Extract<D.BackendConfig, { kind: "linux" }>,
+  ): RuntimeHostContext {
+    authorizeSample(this.owner, ctx);
+    const key = `runtime-host:${allocation.allocationId}`;
+    const hostId = linuxHostId(
+      config.host,
+      this.owner.execution.env.WORKSPACES.idFromName(allocation.childId).toString(),
+    );
+    const prior = this.owner.state.get<RuntimeHostMember>(key);
+    if (prior) {
+      requireThat(
+        prior.context.hostId === hostId &&
+          prior.context.authorityId === allocation.authorityId &&
+          prior.context.childId === allocation.childId &&
+          prior.context.imageDigest === config.imageDigest,
+        "conflict",
+        "Immutable Host allocation context changed",
+      );
+      return prior.context;
+    }
+    this.admit(metadataCredit);
+    const context = hostContext({
+      hostId,
+      authorityId: allocation.authorityId,
+      allocationId: allocation.allocationId,
+      childId: allocation.childId,
+      imageDigest: config.imageDigest,
+      ownershipNonce: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex"),
+    });
+    this.owner.state.put(key, { context, version: 1 } satisfies RuntimeHostMember);
+    return context;
+  }
+  /** Actual SDK acknowledgment only; callers validate current retained assignment and lease first. */
+  acknowledgeHost(context: RuntimeHostContext, runtimeId: string): void {
+    const key = `runtime-host:${context.allocationId}`;
+    const row = this.owner.state.get<RuntimeHostMember>(key);
+    requireThat(
+      row &&
+        same(row.context, context) &&
+        knownId(runtimeId) &&
+        (!row.runtimeId || row.runtimeId === runtimeId),
+      "conflict",
+      "Host acknowledgment changed physical allocation",
+    );
+    if (!row.runtimeId)
+      this.owner.state.put(key, { ...row, runtimeId, version: incrementSafe(row.version) });
+  }
+  private hosts(): RuntimeHostMember[] {
+    const rows = boundedRows<RuntimeHostMember>(this.owner, "runtime-host:");
+    const seen = new Set<string>();
+    for (const { key, value: row } of rows) {
+      const context = hostContext(row.context);
+      const allocation = this.owner.state.get<AllocationRecord>(
+        `allocation:${context.allocationId}`,
+      )?.state.allocation;
+      requireThat(
+        key === `runtime-host:${context.allocationId}` &&
+          this.owner.isSelf(context.authorityId) &&
+          allocation?.role === "scratch" &&
+          allocation.childId === context.childId &&
+          allocation.authorityId === context.authorityId &&
+          context.hostId.endsWith(
+            `:${this.owner.execution.env.WORKSPACES.idFromName(context.childId).toString()}`,
+          ) &&
+          !seen.has(context.hostId) &&
+          Number.isSafeInteger(row.version) &&
+          row.version > 0,
+        "conflict",
+        "Complete separate Host registry ownership required",
+      );
+      seen.add(context.hostId);
+    }
+    for (const { value: execution } of boundedRows<{
+      hostId?: string;
+      allocation: D.StoreAllocation;
+    }>(this.owner, "execution:"))
+      if (execution.hostId)
+        requireThat(
+          rows.some(
+            ({ value }) =>
+              value.context.hostId === execution.hostId &&
+              value.context.allocationId === execution.allocation?.allocationId,
+          ),
+          "interrupted",
+          "Retained native Host lacks pool context; census remains incomplete",
+        );
+    return rows.map(({ value }) => value);
+  }
+  private async sampleHost(
+    ctx: D.AuthContext,
+    input: RuntimeHostStorageSampleInput,
+  ): Promise<RuntimeHostStorageSample> {
+    const check = () => {
+      authorizeSample(this.owner, ctx);
+      const row = this.owner.state.get<RuntimeHostMember>(
+        `runtime-host:${input.context.allocationId}`,
+      );
+      requireThat(
+        row &&
+          same(row.context, input.context) &&
+          row.version === input.registryVersion &&
+          row.runtimeId === input.runtimeId,
+        "conflict",
+        "Current acknowledged Host registry required",
+      );
+    };
+    await this.owner.mutex.run(check);
+    const namespace = this.owner.execution.env.LINUX_CONTAINERS;
+    requireThat(namespace, "interrupted", "Original physical Host binding unavailable");
+    const response = await namespace.getByName(input.context.hostId).fetch(
+      new Request(`https://container.internal${samplePath}`, {
+        method: "POST",
+        body: JSON.stringify(input),
+        signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, ctx.deadline - Date.now()))),
+      }),
+    );
+    requireThat(
+      response.ok && response.body,
+      "interrupted",
+      "Host physical sample unavailable; retain full coverage",
+    );
+    const sample = await new Response(
+      limitedStream(response.body, 65_536, Date.now() + 10_000, false),
+    ).json<RuntimeHostStorageSample>();
+    requireThat(
+      sample &&
+        Object.keys(sample).sort().join(",") ===
+          "bytes,context,observedAt,registryVersion,runtimeId,sampleId" &&
+        sample.sampleId === input.sampleId &&
+        same(sample.context, input.context) &&
+        sample.runtimeId === input.runtimeId &&
+        sample.registryVersion === input.registryVersion &&
+        Number.isSafeInteger(sample.bytes) &&
+        sample.bytes >= 0 &&
+        Number.isSafeInteger(sample.observedAt) &&
+        sample.observedAt >= 0 &&
+        sample.observedAt <= Date.now(),
+      "conflict",
+      "Exact physical Host sample receipt required",
+    );
+    await this.owner.mutex.run(() => {
+      check();
+      const key = `storage-host-observed:${input.context.allocationId}`;
+      if (sample.bytes > (this.owner.state.get<number>(key) ?? 0))
+        this.owner.state.put(key, sample.bytes);
+    });
+    return sample;
+  }
   private allocations(): AllocationRecord[] {
     const rows = boundedRows<AllocationRecord>(this.owner, "allocation:");
     const children = new Set<string>();
@@ -232,6 +396,7 @@ export class WorkspaceStorage {
       "allocation-lease:",
       "deallocated:",
       "execution:",
+      "runtime-host:",
       "storage-initialized:",
       "storage-collection:",
       "storage-collection-credit:",
@@ -263,6 +428,12 @@ export class WorkspaceStorage {
     let observed = owner.state.bytes;
     let unspent = metadataCredit;
     const allocations = this.allocations();
+    for (const host of this.hosts()) {
+      observed +=
+        owner.state.get<number>(`storage-host-observed:${host.context.allocationId}`) ?? 0;
+      // Stop receipts do not delete this DO. Keep cache/unknown/active metadata growth prospective.
+      unspent += metadataCredit;
+    }
     for (const row of allocations) {
       const allocation = row.state.allocation;
       if (
@@ -515,6 +686,25 @@ export class WorkspaceStorage {
       children[allocation.childId] = sample.bytes;
       if (this.complete(row)) completed.push(allocation.capacityReservationId);
     }
+    const hosts: Record<string, number> = {};
+    for (const member of this.hosts()) {
+      requireThat(
+        member.runtimeId,
+        "interrupted",
+        "Unknown Host retains full prospective coverage; do not activate to measure",
+      );
+      const sample = await this.sampleHost(ctx, {
+        sampleId: await digestJson("operation", {
+          sampleId: input.sampleId,
+          hostId: member.context.hostId,
+        }),
+        policyVersion: input.policyVersion,
+        context: member.context,
+        runtimeId: member.runtimeId,
+        registryVersion: member.version,
+      });
+      hosts[member.context.hostId] = sample.bytes;
+    }
     return this.owner.mutex.run(() =>
       this.owner.state.transaction(() => {
         authorizeSample(this.owner, ctx);
@@ -550,13 +740,22 @@ export class WorkspaceStorage {
         const census: Census = {
           version,
           observedAt: sample.observedAt,
-          bytes: sample.bytes + Object.values(children).reduce((sum, bytes) => sum + bytes, 0),
+          bytes:
+            sample.bytes +
+            Object.values(children).reduce((sum, bytes) => sum + bytes, 0) +
+            Object.values(hosts).reduce((sum, bytes) => sum + bytes, 0),
           children,
+          hosts,
           registryHash: before,
         };
         this.owner.state.put("storage-census", census);
         for (const [childId, bytes] of Object.entries(children))
           this.owner.state.put(`storage-observed:${childId}`, bytes);
+        for (const member of this.hosts())
+          this.owner.state.put(
+            `storage-host-observed:${member.context.allocationId}`,
+            hosts[member.context.hostId],
+          );
         const coveredReservationIds = [
           ...new Set(
             [

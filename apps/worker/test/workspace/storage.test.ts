@@ -414,6 +414,20 @@ test("physical census preserves immutable samples, current authority, orphan hol
       "Authority observation included prospective credits",
     );
     assert.ok(initial.charge.bytes > initial.census.bytes);
+    const authorityDb = await storage(server);
+    await authorityDb.exec(
+      "INSERT INTO fp_ws_record(key,value) VALUES(?,?)",
+      "execution:unknown-host",
+      JSON.stringify({ hostId: `fortipi:linux:backend:${"a".repeat(64)}` }),
+    );
+    assert.notEqual(
+      (await sample(server, "unknown-host")).status,
+      200,
+      "Unobserved Host was mislabeled as complete child-only aggregate M",
+    );
+    // This injected unknown member never contacted a Host; remove only test metadata.
+    await authorityDb.exec("DELETE FROM fp_ws_record WHERE key='execution:unknown-host'");
+    assert.equal((await facts(server)).census.version, initial.census.version);
     for (const headers of [
       { "x-test-unregistered": "1" },
       { "x-test-expired": "1" },

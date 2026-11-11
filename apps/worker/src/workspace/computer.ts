@@ -45,6 +45,7 @@ export class ComputerStore {
       state.state === "writable" &&
         !this.runtimePinned &&
         !this.state.get("scratch-quiescent") &&
+        !this.state.get("scratch-stop-intent") &&
         Date.now() < state.allocation.deadline,
       "conflict",
       "Child is sealed, expired, active or retired",

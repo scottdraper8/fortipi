@@ -2,11 +2,15 @@ import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Workspace, WorkspaceProxy } from "@cloudflare/computer";
 import { CodemodeBackend } from "@cloudflare/computer/backends/codemode";
 import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
+import { linuxHostId } from "../../src/backends/linux.js";
+import type { RuntimeHostContext } from "../../src/boundary/infrastructure.js";
 import {
   containerRequestFailureStage,
   FencedContainerAPI,
 } from "../../src/container/host-adapter.js";
+import { hostContext } from "../../src/container/host-context.js";
 import { ContainerHostTransport } from "../../src/container/host-transport.js";
+import { requireThat } from "../../src/workspace/errors.js";
 
 export { WorkspaceProxy };
 
@@ -47,18 +51,38 @@ export class ProbeGateway extends WorkerEntrypoint {
   }
 }
 
-export class ProbeHost extends DurableObject {
+const probeChildId = "fortipi:child:00000000-0000-4000-8000-000000000001";
+
+/** Standalone ABI probe; this context is not a real parent Workspace allocation/pool. */
+export class ProbeHost extends DurableObject<ProbeEnv> {
   #transport: ContainerHostTransport | undefined;
   preparedImage(): string {
     const image = this.ctx.container?.images.computerd;
-    if (!image) throw new Error("Prepared computerd image required");
+    if (!image || !/@sha256:[a-f0-9]{64}$/.test(image))
+      throw new Error("Actual immutable prepared computerd image required");
     return image;
   }
   #host(): ContainerHostTransport {
+    const container = this.ctx.container;
+    requireThat(container, "unsupported", "Actual owning container context required");
     this.#transport ??= new ContainerHostTransport(
       this.ctx.storage,
       new WorkspaceContainerAPI(this.ctx),
       () => this.preparedImage(),
+      { inspect: () => container.inspect(), destroy: () => container.destroy() },
+      {
+        policyVersion: () => 1,
+        validate: (context) => {
+          requireThat(
+            this.env.LINUX_CONTAINERS?.idFromName(context.hostId).equals(this.ctx.id) &&
+              context.childId === probeChildId &&
+              context.hostId ===
+                linuxHostId("probe", this.env.WORKSPACES.idFromName(context.childId).toString()),
+            "unauthorized",
+            "Actual standalone probe namespace/child mismatch",
+          );
+        },
+      },
     );
     return this.#transport;
   }
@@ -88,10 +112,30 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
     let containerHost: FencedContainerAPI | undefined;
     if (linux) {
       if (!this.env.LINUX_CONTAINERS) throw new Error("Container binding required");
-      containerHost = new FencedContainerAPI(
-        await this.env.LINUX_CONTAINERS.getByName("probe-host").getWorkspaceContainer(),
-        this.env.LINUX_CONTAINERS.getByName("probe-host"),
+      const hostId = linuxHostId("probe", this.ctx.id.toString());
+      const host = this.env.LINUX_CONTAINERS.getByName(hostId);
+      const image = await host.preparedImage();
+      const imageDigest = image.slice(image.lastIndexOf("@") + 1);
+      const prior = await this.ctx.storage.get<RuntimeHostContext>("fortipi-probe-context");
+      const context =
+        prior ??
+        hostContext({
+          hostId,
+          authorityId: "controlled-probe",
+          allocationId: "controlled-probe-allocation",
+          childId: probeChildId,
+          imageDigest,
+          ownershipNonce: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex"),
+        });
+      requireThat(
+        context.hostId === hostId &&
+          context.imageDigest === imageDigest &&
+          this.env.WORKSPACES.idFromName(context.childId).equals(this.ctx.id),
+        "conflict",
+        "Standalone probe context changed; do not infer replacement ownership",
       );
+      if (!prior) await this.ctx.storage.put("fortipi-probe-context", context);
+      containerHost = new FencedContainerAPI(await host.getWorkspaceContainer(), host, context);
     }
     const backend = linux
       ? new ContainerBackend({
@@ -185,8 +229,12 @@ export default {
   async fetch(request: Request, env: ProbeEnv): Promise<Response> {
     if (new URL(request.url).pathname === "/prepared-image") {
       if (!env.LINUX_CONTAINERS) return new Response(null, { status: 404 });
-      return Response.json(await env.LINUX_CONTAINERS.getByName("probe-host").preparedImage());
+      return Response.json(
+        await env.LINUX_CONTAINERS.getByName(
+          linuxHostId("probe", env.WORKSPACES.idFromName(probeChildId).toString()),
+        ).preparedImage(),
+      );
     }
-    return env.WORKSPACES.getByName("backend-probe").fetch(request);
+    return env.WORKSPACES.getByName(probeChildId).fetch(request);
   },
 };

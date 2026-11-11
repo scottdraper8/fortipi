@@ -1,7 +1,9 @@
+import type { ContainerRuntimeInfo } from "@cloudflare/computer/backends/container";
 import { ContainerBackend } from "@cloudflare/computer/backends/container";
 import { requireCapability } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
+import type { RuntimeHostContext } from "../boundary/infrastructure.js";
 import { FencedContainerAPI } from "../container/host-adapter.js";
 import { requireThat } from "../workspace/errors.js";
 
@@ -10,6 +12,8 @@ export async function linux(
   deploymentId: string,
   scratchId: string,
   config: Extract<D.BackendConfig, { kind: "linux" }>,
+  context: RuntimeHostContext,
+  started: (runtime: ContainerRuntimeInfo) => Promise<void>,
 ): Promise<{ backend: ContainerBackend; host: FencedContainerAPI }> {
   requireThat(
     env.LINUX_CONTAINERS &&
@@ -37,7 +41,13 @@ export async function linux(
   const stub = env.LINUX_CONTAINERS.get(
     env.LINUX_CONTAINERS.idFromName(linuxHostId(config.host, scratchId)),
   );
-  const host = new FencedContainerAPI(await stub.getWorkspaceContainer(), stub);
+  requireThat(
+    context.hostId === linuxHostId(config.host, scratchId) &&
+      context.imageDigest === config.imageDigest,
+    "conflict",
+    "Original retained Host context required",
+  );
+  const host = new FencedContainerAPI(await stub.getWorkspaceContainer(), stub, context, started);
   return {
     host,
     backend: new ContainerBackend({
