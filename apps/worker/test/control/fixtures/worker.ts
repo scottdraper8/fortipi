@@ -11,6 +11,16 @@ import type { TestRecipient } from "./recipients.js";
 export { TestRecipient } from "./recipients.js";
 
 export class TestControlPlane extends ControlPlane {
+  async capacityUsage(): Promise<string> {
+    return JSON.stringify(this.capacity.usage());
+  }
+  async capacitySettlement(reservationId: string): Promise<string | undefined> {
+    const row = this.store.get<{ settlement?: { disposition: string; observedBytes?: number } }>(
+      "capacity_reservation",
+      reservationId,
+    );
+    return row?.settlement ? JSON.stringify(row.settlement) : undefined;
+  }
   async streamRegistration(envelope: string): Promise<string> {
     const identity: unknown = JSON.parse(envelope);
     check(
@@ -429,6 +439,8 @@ export type FixtureControl = DurableObject<Env> &
   ControlPlaneRpc &
   Pick<
     TestControlPlane,
+    | "capacityUsage"
+    | "capacitySettlement"
     | "deployment"
     | "streamRegistration"
     | "replaceTicketAgents"
@@ -462,6 +474,14 @@ export default {
     if (url.pathname === "/canary")
       return Response.json(await cp.canary(url.searchParams.get("value") ?? undefined));
     if (url.pathname === "/reserved") return Response.json(await cp.reserved());
+    if (url.pathname === "/capacity-usage")
+      return new Response(await cp.capacityUsage(), {
+        headers: { "Content-Type": "application/json" },
+      });
+    if (url.pathname === "/capacity-settlement")
+      return Response.json(
+        JSON.parse((await cp.capacitySettlement(url.searchParams.get("id") ?? "")) ?? "null"),
+      );
     if (url.pathname === "/repair-state")
       return new Response(await cp.repairState(), {
         headers: { "Content-Type": "application/json" },
@@ -493,7 +513,11 @@ export default {
         ),
       );
     }
-    if (["/auth", "/revoke-bootstrap", "/reserve", "/seed-provider"].includes(url.pathname)) {
+    if (
+      ["/auth", "/revoke-bootstrap", "/reserve", "/seed-provider", "/settle-conservative"].includes(
+        url.pathname,
+      )
+    ) {
       const auth = await cp.authenticate({
         bearer: env.FORTIPI_ADMIN_TOKEN,
         deploymentId: await cp.deployment(),
@@ -501,6 +525,22 @@ export default {
         deadline: Date.now() + 30000,
       });
       if (url.pathname === "/auth" || !auth.ok) return Response.json({ authenticated: auth.ok });
+      if (url.pathname === "/settle-conservative") {
+        const reserved = await cp.reserveCapacity(auth.value, {
+          operationId: "restart_conservative",
+          ownerId: "owner",
+          policyVersion: 1,
+          bytes: 4096,
+          admissionSlots: 0,
+        });
+        if (!reserved.ok) return Response.json(reserved);
+        return Response.json(
+          await cp.settleCapacity(auth.value, {
+            reservationId: reserved.value.reservationId,
+            disposition: "consumed",
+          }),
+        );
+      }
       if (url.pathname === "/seed-provider")
         return Response.json(
           await cp.putProviderAuth(auth.value, {

@@ -348,8 +348,14 @@ with attach/lease/result/commit and check expiry on outbound subscription delive
 
 Capacity reservations retain identity across retry/restart and count outstanding
 claims pessimistically. A failed/uncertain write does not release capacity.
-Settlement requires measured bytes under internal authority and is idempotent;
-consumed bytes remain charged. Physical SQLite size and reserved usage preserve
+Settlement requires current retained internal authority and is idempotent.
+Consumed settlement without optional `observedBytes` retains the FULL original
+byte charge as conservative consumed capacity; it records no fabricated
+measurement and announces no reclaimed space. Exact absent/explicit measurements
+remain distinct settlement identities; a later measured retry cannot rewrite an
+unmeasured settlement. Explicit measurements must be safe nonnegative integers
+within the reservation, and unused settlement requires authoritative explicit
+zero. Consumed bytes remain charged. Physical SQLite size and reserved usage preserve
 completion/revoke/repair headroom. Existing history/receipts are not evicted to
 admit new work. Unknown/free defaults are conservative; paid account status alone
 does not raise bounds or provision Loader/Containers. Account-wide remaining
@@ -377,7 +383,7 @@ directory. Raw logical grants, opaque operation IDs and caller-chosen owners
 alone do not establish this authority. Explicit capacity grants and Workspace
 authority retain their existing paths; public agent reads remain `agents.read`.
 
-Measured settlement of a retained registered Agent or Workspace claim uses the
+Valid settlement of a retained registered Agent or Workspace claim uses the
 existing repair/install request pool after current authority and original claim
 validation. The same validation runs again after alarm scheduling and before
 transactional settlement. Every retry consumes a pool slot, even if already

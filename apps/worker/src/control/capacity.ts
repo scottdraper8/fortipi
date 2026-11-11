@@ -221,18 +221,24 @@ export class Capacity {
         "Capacity settlement requires its original current Agent operation",
       );
     else requireGrant(ctx, "capacity.settle");
+    check(
+      input.disposition === "consumed" || input.disposition === "unused",
+      "invalid_request",
+      "Unknown capacity settlement disposition",
+    );
     const settlement = {
       disposition: input.disposition,
       ...(input.observedBytes === undefined ? {} : { observedBytes: input.observedBytes }),
     };
     if (row.settlement) check(same(row.settlement, settlement), "conflict", "Settlement changed");
     check(
-      input.observedBytes !== undefined &&
-        Number.isSafeInteger(input.observedBytes) &&
-        input.observedBytes >= 0 &&
-        input.observedBytes <= row.reservation.bytes,
+      input.observedBytes === undefined
+        ? input.disposition === "consumed"
+        : Number.isSafeInteger(input.observedBytes) &&
+            input.observedBytes >= 0 &&
+            input.observedBytes <= row.reservation.bytes,
       "invalid_request",
-      "Settlement requires authoritative measured bytes",
+      "Explicit settlement measurements must fit the original reservation",
     );
     check(
       input.disposition !== "unused" || input.observedBytes === 0,
@@ -372,7 +378,10 @@ export class Capacity {
         check(same(row.settlement, settlement), "conflict", "Settlement changed");
         return row.reservation;
       }
-      check(input.observedBytes !== undefined, "invalid_request", "Measured bytes required");
+      // Absent measurement retains the entire original storage charge. Keep the
+      // field absent in the receipt: this is conservative accounting, not an
+      // observation, and cannot be rewritten by a later measured retry.
+      const chargedBytes = input.observedBytes ?? row.reservation.bytes;
       const totals = this.usage();
       const reservation = { ...row.reservation, state: "settled" as const };
       const updated = { ...row, reservation, settlement };
@@ -384,10 +393,10 @@ export class Capacity {
       );
       this.store.put("capacity", "counters", {
         reserved: totals.reserved - reservation.bytes,
-        consumed: totals.consumed + input.observedBytes,
+        consumed: totals.consumed + chargedBytes,
         slots: totals.slots - reservation.admissionSlots,
       });
-      if (input.observedBytes < reservation.bytes) queueRepairResume(this.store, "reclaimed");
+      if (chargedBytes < reservation.bytes) queueRepairResume(this.store, "reclaimed");
       return reservation;
     });
   }
