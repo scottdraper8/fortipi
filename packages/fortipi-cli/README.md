@@ -11,6 +11,8 @@ fortipi init --from operator-source.json --config operator.json --non-interactiv
 fortipi config validate --config operator.json --json
 ```
 
+Infrastructure failures include curated resource, measurement kind, limits, supplied reset/retry times and operator action on stderr. Remote messages, free-text reasons and resource identifiers are omitted. Unknown measurements and absent resets stay unknown; storage errors do not imply a daily reset.
+
 `runtime` follows the shipped `Configuration` schema. Workspace, execution, routing and models are independent selections. Free/unknown defaults use the contract's conservative bounds. Paid Loader/Containers require explicit canonical capability declarations; local validation does not prove Cloudflare account entitlement. The example requires a separately registered, authorized native executor and does not grant native shell permission.
 
 Management uses an exact-origin protected application profile, selected with `--profile NAME`. Inputs to mutations are non-secret canonical DTO files. Credential issuance reserves and syncs its protected output before contacting the authority; stdout contains metadata only. A lost response leaves its request ID for recovery. Never remint blindly. Revocation may return durable `pending` and must be queried until complete.

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { errorDiagnostic } from "./errors.js";
 import { CliError, runCommand } from "./index.js";
 
 const controller = new AbortController();
@@ -17,6 +18,6 @@ try {
   }
 } catch (e) {
   const error = e instanceof CliError ? e : new CliError("command_failed");
-  process.stderr.write(`${controller.signal.aborted ? "cancelled" : error.code}\n`);
+  process.stderr.write(`${controller.signal.aborted ? "cancelled" : errorDiagnostic(error)}\n`);
   process.exitCode = controller.signal.aborted ? 130 : error.exitCode;
 }
