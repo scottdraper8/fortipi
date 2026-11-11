@@ -180,7 +180,11 @@ export class Capacity {
         ? agentId
         : registration.resources.conversationIds[0];
     const expectedSlots =
-      action === "conversations.create" || action === "conversations.fork" ? 0 : 1;
+      action === "conversations.create" ||
+      action === "conversations.fork" ||
+      action === "jobs.dispatch"
+        ? 0
+        : 1;
     if (expectedOwner !== ownerId || admissionSlots !== expectedSlots) return undefined;
     return {
       registrationId: registration.registrationId,

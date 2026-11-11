@@ -7,6 +7,7 @@ import { contains, emptyScope, permits, requireGrant, roleAllows } from "./autho
 import type { Identities } from "./identity.js";
 import { queueRepairResume } from "./repair.js";
 import { check, fail, hash, id, json, next, ref, type Store, same } from "./store.js";
+import type { ExecutorState } from "./tickets.js";
 
 // Only fixed trusted schemas are compiled at module activation, never in request handlers.
 const ajv = new Ajv({ strict: true, allErrors: false, validateFormats: false });
@@ -18,6 +19,7 @@ const validators = new Map(
     ["configuration", "ConfigurationPatch"],
     ["administration", "TicketInput"],
     ["administration", "TicketQuery"],
+    ["administration", "ExecutorTransferLimits"],
     ["administration", "CredentialMint"],
     ["executor-messages", "ExecutorFrame"],
     ["executor-messages", "Assignment"],
@@ -67,14 +69,27 @@ export class Directory {
   policy(): D.InfrastructurePolicy {
     return this.config().infrastructure ?? freeInfrastructurePolicy;
   }
-  registeredOperation(ctx: D.AuthContext) {
+  registeredAuthority(ctx: D.AuthContext) {
     this.identities.current(ctx);
     const registration = this.store.get<D.AuthorityRegistration>(
       "recipient",
       ctx.registrationId ?? "",
     );
-    if (registration?.recipient.kind !== "agent" || !same(registration.credential, ref(ctx)))
-      return undefined;
+    if (!registration || !same(registration.credential, ref(ctx))) return undefined;
+    if (registration.executor) {
+      const executor = this.store.get<ExecutorState>("executor", registration.executor.executorId);
+      if (
+        !executor ||
+        executor.status === "revoked" ||
+        executor.generation !== registration.executor.generation
+      )
+        return undefined;
+    }
+    return registration;
+  }
+  registeredOperation(ctx: D.AuthContext) {
+    const registration = this.registeredAuthority(ctx);
+    if (registration?.recipient.kind !== "agent") return undefined;
     const resources = registration.resources;
     const agentId = registration.recipient.id;
     const action = resources.actions[0];
@@ -91,12 +106,29 @@ export class Directory {
     // These are the actual Agent operations that use models/storage. The registration
     // is service-constructed; opaque operation IDs do not establish authority.
     const creation = action === "conversations.create";
-    if (!modelActions.has(action)) return undefined;
+    if (!modelActions.has(action) && action !== "jobs.dispatch") return undefined;
     if (
       creation
         ? resources.conversationIds.length !== 0
         : resources.conversationIds.length !== 1 ||
           !valid("common", "Id", resources.conversationIds[0])
+    )
+      return undefined;
+    if (
+      action === "jobs.dispatch" &&
+      (resources.workspaceIds.length !== 1 ||
+        !valid("common", "Id", resources.workspaceIds[0]) ||
+        resources.tools.length !== 1 ||
+        resources.tools[0] === "*" ||
+        !resources.tools[0] ||
+        !(
+          (resources.executorIds.length === 1 &&
+            valid("common", "Id", resources.executorIds[0]) &&
+            resources.backendIds.length === 0) ||
+          (resources.backendIds.length === 1 &&
+            valid("common", "Id", resources.backendIds[0]) &&
+            resources.executorIds.length === 0)
+        ))
     )
       return undefined;
     const grant = ctx.grants.find(
