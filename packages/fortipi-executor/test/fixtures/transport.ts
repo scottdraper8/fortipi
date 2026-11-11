@@ -12,6 +12,8 @@ export async function relayFixture(data: Buffer) {
     pressure = false,
     redirect = false;
   let ticketIdentity: TicketIdentity | undefined;
+  let grid = Math.max(1, data.length),
+    delayMs = 0;
   const server = createServer(async (req, res) => {
     const pieces: Buffer[] = [];
     for await (const piece of req) pieces.push(Buffer.from(piece as Buffer));
@@ -40,10 +42,15 @@ export async function relayFixture(data: Buffer) {
       return;
     }
     if (req.method === "GET") {
-      const value = corrupt ? Buffer.from("bad") : data;
+      const index = Number(
+          new URL(req.url ?? "/", "http://fixture").pathname.split("/chunks/")[1] ?? 0,
+        ),
+        expected = data.subarray(index * grid, (index + 1) * grid),
+        value = corrupt ? Buffer.from("bad") : expected;
+      if (delayMs) await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
       res.writeHead(200, {
         "Content-Length": String(value.length),
-        "X-Content-SHA256": hash(data),
+        "X-Content-SHA256": hash(expected),
       });
       res.end(value);
     } else {
@@ -56,6 +63,12 @@ export async function relayFixture(data: Buffer) {
   return {
     origin,
     requests,
+    setGrid(value: number) {
+      grid = value;
+    },
+    setDelay(value: number) {
+      delayMs = value;
+    },
     setCorrupt(value: boolean) {
       corrupt = value;
     },

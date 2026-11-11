@@ -1,7 +1,7 @@
 import { lstat, rmdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { Assignment } from "fortipi-contract/executor";
-import { manifestDigest } from "fortipi-contract/executor";
+import type { Assignment, UploadBlobPlan } from "fortipi-contract/executor";
+import { manifestDigest, validateUploadBlobs } from "fortipi-contract/executor";
 import type { Limits } from "../config.js";
 import { secureDirectory, syncDirectory } from "../config.js";
 import type { Ledger } from "../ledger.js";
@@ -10,7 +10,7 @@ import { hash } from "../policy.js";
 import type { HttpTransport } from "../transport.js";
 import { readBounded, validate } from "../transport.js";
 import type { Manifest } from "./manifest.js";
-import { checkManifest, differences, mutationsFor, scan } from "./manifest.js";
+import { checkManifest, differences, inventoryFor, mutationsFor, scan } from "./manifest.js";
 import { SafeRoot } from "./paths.js";
 
 export interface Scratch {
@@ -97,13 +97,16 @@ export class Snapshots {
       await root.mkdir(directory);
     for (const entry of response.manifest.entries) {
       if (entry.type !== "file") continue;
-      const r = await this.http.request(
-        `${base}/blobs/${entry.sha256}?revision=${encodeURIComponent(id.baseRevision)}`,
-        {},
-        true,
-        Math.min(id.deadline, id.lease.expiresAt),
-      );
-      const bytes = await readBounded(r, entry.size);
+      const { r, bytes } = await this.http.withTransfer(async () => {
+        const r = await this.http.request(
+          `${base}/blobs/${entry.sha256}?revision=${encodeURIComponent(id.baseRevision)}`,
+          {},
+          true,
+          Math.min(id.deadline, id.lease.expiresAt),
+        );
+        const bytes = await readBounded(r, entry.size);
+        return { r, bytes };
+      });
       if (
         bytes.byteLength !== entry.size ||
         hash(bytes) !== entry.sha256 ||
@@ -162,6 +165,20 @@ export class Snapshots {
       requestId = previous.requestId;
       commitId = previous.commitId;
     }
+    const blobs: UploadBlobPlan[] = [];
+    if (!previous) {
+      const seen = new Set<string>();
+      for (const m of mutations)
+        if (m.kind === "put") {
+          const bytes = await root.read(m.path, this.limits.fileBytes);
+          if (bytes.length !== m.size || hash(bytes) !== m.sha256)
+            throw new Error("scratch changed before upload plan");
+          if (!seen.has(m.sha256)) {
+            seen.add(m.sha256);
+            blobs.push({ sha256: m.sha256, chunks: inventoryFor(bytes, this.http.chunkBytes) });
+          }
+        }
+    }
     const begin = previous?.body ?? {
       requestId,
       baseRevision: id.baseRevision,
@@ -171,13 +188,19 @@ export class Snapshots {
       manifestHash: after.manifestHash,
       manifest: after.manifest,
       mutations,
+      blobs,
     };
     this.ledger.saveRecord("stages", `upload_intent_${id.executionId}`, {
       requestId,
       commitId,
       body: begin,
     });
-    validate("workspaces.schema.json", "UploadBegin", begin);
+    const proposal = validate<Parameters<typeof validateUploadBlobs>[0]>(
+      "workspaces.schema.json",
+      "UploadBegin",
+      begin,
+    );
+    validateUploadBlobs(proposal, { required: false });
     const opened = validate<{ uploadId: string; manifestHash: string; baseRevision: string }>(
       "workspaces.schema.json",
       "UploadStatus",
@@ -191,26 +214,42 @@ export class Snapshots {
       commitId,
       requestId,
     });
+    const uploaded = new Set<string>();
     for (const mutation of mutations) {
       if (mutation.kind !== "put") continue;
       const bytes = await root.read(mutation.path, this.limits.fileBytes);
       if (hash(bytes) !== mutation.sha256) throw new Error("scratch drift during upload");
+      const plan =
+        proposal.blobs?.find((b) => b.sha256 === mutation.sha256) ??
+        (proposal.blobs === undefined
+          ? { sha256: mutation.sha256, chunks: inventoryFor(bytes, 262144) }
+          : undefined);
+      if (
+        !plan ||
+        plan.chunks.chunkBytes > this.http.chunkBytes ||
+        JSON.stringify(inventoryFor(bytes, plan.chunks.chunkBytes)) !== JSON.stringify(plan.chunks)
+      )
+        throw new Error("upload chunk grid/bytes no longer eligible");
+      if (uploaded.has(mutation.sha256)) continue;
       for (
         let offset = 0, index = 0;
         offset < bytes.length;
-        offset += this.http.chunkBytes, index++
+        offset += plan.chunks.chunkBytes, index++
       ) {
         if (Date.now() >= Math.min(id.deadline, id.lease.expiresAt))
           throw new Error("expired upload");
-        const chunk = bytes.subarray(offset, offset + this.http.chunkBytes);
-        const r = await this.http.request(
-          `${base}/${uploadId}/blobs/${mutation.sha256}/chunks/${index}?length=${chunk.length}&sha256=${hash(chunk)}`,
-          { method: "PUT", body: chunk, headers: { "Content-Type": "application/octet-stream" } },
-          true,
-          Math.min(id.deadline, id.lease.expiresAt),
+        const chunk = bytes.subarray(offset, offset + plan.chunks.chunkBytes);
+        const r = await this.http.withTransfer(() =>
+          this.http.request(
+            `${base}/${uploadId}/blobs/${mutation.sha256}/chunks/${index}?length=${chunk.length}&sha256=${hash(chunk)}`,
+            { method: "PUT", body: chunk, headers: { "Content-Type": "application/octet-stream" } },
+            true,
+            Math.min(id.deadline, id.lease.expiresAt),
+          ),
         );
         if (r.status !== 204) throw new Error("upload chunk not acknowledged");
       }
+      uploaded.add(mutation.sha256);
     }
     if ((await scan(root, this.limits)).manifestHash !== after.manifestHash)
       throw new Error("scratch changed during staging");

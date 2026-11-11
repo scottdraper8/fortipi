@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { Approvals } from "./approval.js";
 import { adapter, effectiveLimits, loadProfile, privateWrite, stateHome } from "./config.js";
 import { runDaemon } from "./daemon.js";
-import { Guard, Ledger, rootRegistry } from "./ledger.js";
+import { Guard, Ledger, ledgerRegistryIdentity, rootRegistry } from "./ledger.js";
 import { HttpTransport } from "./transport.js";
 import { LocalWorkspace } from "./workspace/local.js";
 import { SafeRoot } from "./workspace/paths.js";
@@ -28,6 +28,13 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     directory = join(dirname(resolve(profilePath)), profile.ledgerId);
   const command = args[0];
   if (command === "init") {
+    const guards = await rootRegistry(
+      join(stateHome(), "roots"),
+      [],
+      platform,
+      ledgerRegistryIdentity(profile, directory, "provision"),
+    );
+    for (const guard of guards) guard.close();
     const ledger = await Ledger.provision(
       directory,
       profile.ledgerId,
@@ -123,6 +130,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
         join(stateHome(), "roots"),
         [{ key: root.key, ledgerId: profile.ledgerId, ledgerPath: directory }],
         platform,
+        ledgerRegistryIdentity(profile, directory, "bind"),
       );
       try {
         guards.push(await Guard.acquire(join(directory, "daemon.guard.sqlite"), platform));

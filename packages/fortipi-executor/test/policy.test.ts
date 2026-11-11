@@ -148,3 +148,37 @@ test("actual daemon process death after spawn leaves unknown attempt; reopen/que
     await f.cleanup();
   }
 });
+test("observed signal cancellation persists intent first, reports actual exit and leaves terminal commit separate", async () => {
+  const f = await fixture();
+  let r: ExecutorRuntime | undefined, a: Awaited<ReturnType<typeof assignment>> | undefined;
+  try {
+    const marker = join(f.path, "cancel-effect");
+    a = await assignment(nodeCommand(fixtureChild, "append-wait", marker));
+    r = await runtime(f);
+    await r.locals.get("root")?.request(prepare(a, f.initial.manifestHash));
+    await r.assignOnce(a);
+    const pending = r.approvals.list()[0];
+    if (!pending) throw new Error("approval missing");
+    r.approvals.decide(a.identity.jobId, pending.digest, "allow");
+    await r.tick();
+    await eventually(async () => {
+      try {
+        return (await readFile(marker, "utf8")) === "effect\n";
+      } catch {
+        return false;
+      }
+    }, "child effect missing");
+    const disposition = await r.cancel(a.identity, "operator cancellation");
+    assert.equal(disposition.state, "stopped");
+    assert.equal(disposition.possibleExternalEffects, true);
+    const id = a.identity.jobId;
+    await eventually(() => !!f.ledger.get(id)?.result, "cancel result missing");
+    assert.equal(f.ledger.get(id)?.cancelled, true);
+    assert.equal(f.ledger.get(id)?.result?.state, "cancelled");
+    assert.equal(f.ledger.get(id)?.committed, undefined);
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+  } finally {
+    if (r && a && r.children.has(a.identity.jobId)) await r.cancel(a.identity, "fixture cleanup");
+    await f.cleanup();
+  }
+});

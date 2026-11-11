@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type {
   Assignment,
+  ErrorBody,
   ExecutionIdentity,
   ExecutionObservation,
   ExecutorFrame,
   JobCommitted,
   LeaseUpdate,
+  LocalWorkspaceResponse,
   PreparedResult,
   TransferDescriptor,
 } from "fortipi-contract/executor";
@@ -16,11 +18,11 @@ import { Approvals } from "./approval.js";
 import type { Binding, Profile } from "./config.js";
 import { adapter, effectiveLimits, secureDirectory, stateHome } from "./config.js";
 import type { JobRow } from "./ledger.js";
-import { Guard, Ledger, rootRegistry } from "./ledger.js";
+import { Guard, Ledger, ledgerRegistryIdentity, rootRegistry } from "./ledger.js";
 import { Output } from "./output.js";
 import type { PlatformAdapter } from "./platform/types.js";
 import { childEnvironment } from "./platform/types.js";
-import { allowedByRule, approvalKey, checkPolicy, immutableIdentity } from "./policy.js";
+import { allowedByRule, approvalKey, checkPolicy, hash, immutableIdentity } from "./policy.js";
 import type { FrameHandler } from "./transport.js";
 import { frame, HttpTransport, SessionTransport } from "./transport.js";
 import { LocalWorkspace } from "./workspace/local.js";
@@ -53,6 +55,7 @@ export class ExecutorRuntime implements FrameHandler {
   transfers = new Set<string>();
   stageRetryAt = new Map<string, number>();
   queryIndex = 0;
+  private workspaceRequests = new Map<string, Promise<LocalWorkspaceResponse | ErrorBody>>();
   connected = false;
   revoked = false;
   session?: SessionTransport;
@@ -237,7 +240,12 @@ export class ExecutorRuntime implements FrameHandler {
       };
     return {
       identity: row.assignment.identity,
-      state: row.state === "running" && this.children.has(identity.jobId) ? "running" : "unknown",
+      state:
+        row.state === "running" &&
+        this.children.get(identity.jobId)?.exitCode === null &&
+        this.children.get(identity.jobId)?.signalCode === null
+          ? "running"
+          : "unknown",
       ...(row.backendExecutionId
         ? { backendExecutionId: row.backendExecutionId, runtimeUuid: row.incarnation }
         : {}),
@@ -352,8 +360,16 @@ export class ExecutorRuntime implements FrameHandler {
         spawnError = true;
       });
       const executionRoot = root;
-      child.once("close", (code) => {
-        void this.finished(assignment, executionRoot, output, code, spawnError, outputFailed)
+      child.once("close", (code, signal) => {
+        void this.finished(
+          assignment,
+          executionRoot,
+          output,
+          code,
+          signal,
+          spawnError,
+          outputFailed,
+        )
           .catch(() => {
             const failed = this.ledger.get(id.jobId);
             if (failed) {
@@ -389,6 +405,7 @@ export class ExecutorRuntime implements FrameHandler {
     root: SafeRoot,
     output: Output,
     code: number | null,
+    signal: NodeJS.Signals | null,
     spawnError: boolean,
     outputFailed: boolean,
   ): Promise<void> {
@@ -399,7 +416,8 @@ export class ExecutorRuntime implements FrameHandler {
     if (!row) throw new Error("result ledger lost");
     assignment = row.assignment;
     const stale = this.leaseLost(row.assignment) || this.revoked;
-    const certain = !outputFailed && code !== null;
+    const certain =
+      !outputFailed && row.state !== "unknown" && (code !== null || signal !== null || spawnError);
     let result = await output.result(
       !certain || stale
         ? "unknown"
@@ -500,7 +518,7 @@ export class ExecutorRuntime implements FrameHandler {
       );
       return { state: "not-started", possibleExternalEffects: false };
     }
-    if (row.committed)
+    if (row.committed || row.result)
       return {
         state: "already-terminal",
         possibleExternalEffects: row.result?.possibleExternalEffects ?? true,
@@ -517,8 +535,23 @@ export class ExecutorRuntime implements FrameHandler {
     });
     if (row.state === "closed") return { state: "not-started", possibleExternalEffects: false };
     const child = this.children.get(identity.jobId);
-    if (!child) return { state: "unknown", possibleExternalEffects: true };
-    return this.platform.cancel(child, 250);
+    const disposition = child
+      ? await this.platform.cancel(child, 250)
+      : { state: "unknown" as const, possibleExternalEffects: true };
+    if (disposition.state === "unknown") {
+      this.ledger.transaction(() => {
+        const latest = this.ledger.existing(identity);
+        if (latest && !latest.committed && !latest.result) {
+          latest.state = "unknown";
+          latest.reason = "cancellation cannot confirm process-tree exit";
+          this.ledger.put(latest);
+        }
+        this.ledger.db
+          .prepare("UPDATE pins SET quarantine=1 WHERE operation IN (?,?)")
+          .run(identity.jobId, identity.lease.operationId);
+      });
+    }
+    return disposition;
   }
   leaseUpdate(update: LeaseUpdate): void {
     this.identityAllowed(update.identity);
@@ -645,6 +678,8 @@ export class ExecutorRuntime implements FrameHandler {
     this.connected = false;
   }
   async receive(value: ExecutorFrame): Promise<void> {
+    if (Buffer.byteLength(canonicalJson(value)) > this.http.jsonBytes)
+      throw new Error("payload_too_large: encoded frame");
     frame(value);
     this.http.assertExecutorAuthority();
     if (value.type === "executor.registered") {
@@ -715,47 +750,9 @@ export class ExecutorRuntime implements FrameHandler {
       return;
     } // Remote decisions never mutate local approval state.
     if (value.type === "workspace.request") {
-      const request = value.payload.request,
-        local = this.locals.get(request.rootBindingId);
-      if (!local) throw new Error("local binding unavailable");
-      void local
-        .request(request)
-        .then((response) => {
-          this.session?.send({
-            type: "workspace.response",
-            requestId: value.requestId,
-            payload: {
-              requestId: value.payload.requestId,
-              correlationId: value.payload.correlationId,
-              response,
-            },
-          });
-        })
-        .catch((error: unknown) => {
-          const reason =
-            error instanceof Error && error.message.includes("revision_unavailable")
-              ? "revision_unavailable"
-              : error instanceof Error && error.message.includes("expired_lease")
-                ? "expired_lease"
-                : "local_drift";
-          this.session?.send({
-            type: "workspace.response",
-            requestId: value.requestId,
-            payload: {
-              requestId: value.payload.requestId,
-              correlationId: value.payload.correlationId,
-              response: {
-                error: {
-                  code: "workspace.conflict",
-                  message: "Local workspace operation requires recovery or current authority",
-                  requestId: value.payload.requestId,
-                  retryable: false,
-                  details: { reason },
-                },
-              },
-            },
-          });
-        });
+      void this.handleWorkspaceFrame(value)
+        .then((response) => this.session?.send(response))
+        .catch(() => this.session?.socket?.close(1008, "workspace request identity conflict"));
       return;
     }
     if (value.type === "transfer.open") {
@@ -765,6 +762,7 @@ export class ExecutorRuntime implements FrameHandler {
     if (value.type === "executor.presence") {
       if (value.payload.state === "revoking") {
         this.revoked = true;
+        this.http.revoked = true;
         for (const identity of this.ledger.identities())
           void this.cancel(identity, "revoked").catch(() => {});
       }
@@ -778,7 +776,89 @@ export class ExecutorRuntime implements FrameHandler {
       return;
     throw new Error("unexpected inbound executor frame");
   }
+  async handleWorkspaceFrame(
+    value: Extract<ExecutorFrame, { type: "workspace.request" }>,
+  ): Promise<Extract<ExecutorFrame, { type: "workspace.response" }>> {
+    this.http.assertExecutorAuthority();
+    if (Buffer.byteLength(canonicalJson(value)) > this.http.jsonBytes)
+      throw new Error("payload_too_large: encoded frame");
+    frame(value);
+    const { requestId, correlationId, request } = value.payload,
+      local = this.locals.get(request.rootBindingId);
+    if (!local) throw new Error("local binding unavailable");
+    const digest = hash(canonicalJson(value.payload)),
+      requestKey = `workspace_request_${requestId}`,
+      correlationKey = `workspace_correlation_${correlationId}`;
+    this.ledger.transaction(() => {
+      for (const key of [requestKey, correlationKey]) {
+        const old = this.ledger.db.prepare("SELECT value FROM meta WHERE key=?").get(key) as
+          | { value: string }
+          | undefined;
+        if (old && old.value !== digest)
+          throw new Error("workspace request/correlation body conflict");
+        if (!old) {
+          this.ledger.capacity(Buffer.byteLength(canonicalJson(value.payload)) + 4096, true);
+          this.ledger.db.prepare("INSERT INTO meta VALUES (?,?)").run(key, digest);
+        }
+      }
+    });
+    let work = this.workspaceRequests.get(requestId);
+    if (!work) {
+      if (this.workspaceRequests.size >= Math.min(32, this.http.limits.queuedAdmissions))
+        throw new Error("workspace request concurrency exhausted");
+      work = local
+        .request(request)
+        .catch((error: unknown): ErrorBody => {
+          const message = error instanceof Error ? error.message : "unknown";
+          if (/payload_too_large|capacity|chunk grid/.test(message))
+            return {
+              error: {
+                code: "payload_too_large",
+                message: "Local metadata or capacity limit exceeded",
+                requestId,
+                retryable: false,
+              },
+            };
+          const reason = message.includes("revision_unavailable")
+            ? "revision_unavailable"
+            : message.includes("expired_lease")
+              ? "expired_lease"
+              : message.includes("stale_fence")
+                ? "stale_fence"
+                : message.includes("uncertain")
+                  ? "uncertain_effects"
+                  : "local_drift";
+          return {
+            error: {
+              code: "workspace.conflict",
+              message: "Local workspace requires current authority or recovery",
+              requestId,
+              retryable: false,
+              details: { reason },
+            },
+          };
+        })
+        .then((response) => {
+          this.ledger.db
+            .prepare(
+              "INSERT INTO meta VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            )
+            .run(`workspace_response_${requestId}`, canonicalJson(response));
+          return response;
+        })
+        .finally(() => {
+          this.workspaceRequests.delete(requestId);
+        });
+      this.workspaceRequests.set(requestId, work);
+    }
+    return {
+      type: "workspace.response",
+      requestId: value.requestId,
+      payload: { requestId, correlationId, response: await work },
+    };
+  }
   async transfer(descriptor: TransferDescriptor): Promise<void> {
+    this.http.assertExecutorAuthority();
     const key = `${descriptor.transferId}:${descriptor.attemptId}`;
     if (this.transfers.has(key) || this.transfers.size >= this.http.limits.transferConcurrency)
       throw new Error("local transfer concurrency exhausted");
@@ -826,6 +906,7 @@ export class ExecutorRuntime implements FrameHandler {
         this.http.assertExecutorAuthority();
       } catch {
         this.revoked = true;
+        this.http.revoked = true;
         this.connected = false;
         for (const identity of this.ledger.identities())
           if (this.children.has(identity.jobId))
@@ -836,7 +917,8 @@ export class ExecutorRuntime implements FrameHandler {
     for (const identity of this.ledger.identities())
       if (
         this.leaseLost(this.ledger.get(identity.jobId)?.assignment) &&
-        this.children.has(identity.jobId)
+        this.children.has(identity.jobId) &&
+        this.ledger.get(identity.jobId)?.state !== "unknown"
       )
         await this.cancel(identity, "expired lease");
     for (const local of this.locals.values()) await local.expirePrepared();
@@ -942,6 +1024,7 @@ export async function runDaemon(
           ledgerPath: directory,
         })),
         platform,
+        ledgerRegistryIdentity(profile, directory, "bind"),
       )),
     );
     guards.push(await Guard.acquire(join(directory, "daemon.guard.sqlite"), platform));

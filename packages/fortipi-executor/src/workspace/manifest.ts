@@ -1,5 +1,10 @@
-import type { LocalReadResult } from "fortipi-contract/executor";
-import { canonicalJson, manifestDigest, validateManifest } from "fortipi-contract/executor";
+import type { ChunkInventory, LocalReadResult } from "fortipi-contract/executor";
+import {
+  canonicalJson,
+  manifestDigest,
+  validateChunkInventory,
+  validateManifest,
+} from "fortipi-contract/executor";
 import type { Limits } from "../config.js";
 import { hash } from "../policy.js";
 import type { SafeRoot } from "./paths.js";
@@ -7,6 +12,16 @@ import { excluded } from "./paths.js";
 
 export type Manifest = Extract<LocalReadResult, { kind: "snapshot" }>["result"]["manifest"];
 export type Entry = Manifest["entries"][number];
+export function inventoryFor(bytes: Uint8Array, chunkBytes: number): ChunkInventory {
+  validateChunkInventory({ chunkBytes, chunkHashes: [] }, 0);
+  if (Math.ceil(bytes.byteLength / chunkBytes) > 256)
+    throw new Error("payload_too_large: negotiated chunk grid cannot represent this file");
+  const chunks: ChunkInventory = { chunkBytes, chunkHashes: [] };
+  for (let offset = 0; offset < bytes.byteLength; offset += chunkBytes)
+    chunks.chunkHashes.push(hash(bytes.subarray(offset, offset + chunkBytes)));
+  validateChunkInventory(chunks, bytes.byteLength);
+  return chunks;
+}
 export function checkManifest(
   manifest: Manifest,
   limits: Limits,

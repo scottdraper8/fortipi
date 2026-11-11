@@ -24,7 +24,7 @@ import type { Ledger, LocalRow } from "../ledger.js";
 import { hash } from "../policy.js";
 import { validate } from "../transport.js";
 import type { Manifest } from "./manifest.js";
-import { checkManifest, differences, scan } from "./manifest.js";
+import { checkManifest, differences, inventoryFor, scan } from "./manifest.js";
 import type { SafeRoot } from "./paths.js";
 import type { Staging } from "./staging.js";
 
@@ -252,6 +252,7 @@ export class LocalWorkspace {
     validate("workspaces.schema.json", "LocalWorkspaceRequest", request);
     return this.serialized(async () => {
       this.authorize(request);
+      await this.root.verify();
       if (request.kind === "prepare") return this.prepare(request);
       if (request.kind === "apply") return this.apply(request);
       if (request.kind === "observe") return this.observe(request);
@@ -274,6 +275,26 @@ export class LocalWorkspace {
       throw new Error("unknown local operation or scope conflict");
     return row;
   }
+  private renewPreparation(row: LocalRow, request: LocalPrepare | LocalApply): void {
+    const old = row.request.lease,
+      next = request.lease;
+    if (next.leaseVersion < old.leaseVersion) return;
+    if (next.leaseVersion === old.leaseVersion) {
+      if (next.expiresAt !== old.expiresAt)
+        throw new Error("workspace.conflict: lease observation conflict");
+      return;
+    }
+    if (
+      row.closed ||
+      Date.now() >= row.prepared.expiresAt ||
+      next.expiresAt <= old.expiresAt ||
+      next.expiresAt > row.request.deadline
+    )
+      throw new Error("workspace.conflict: expired_lease");
+    row.request.lease = next;
+    row.prepared.expiresAt = Math.min(next.expiresAt, row.request.deadline);
+    this.ledger.saveLocal(row);
+  }
   async prepare(request: LocalPrepare): Promise<LocalPrepared> {
     const old = this.ledger.local(request.operationId);
     if (old) {
@@ -284,6 +305,7 @@ export class LocalWorkspace {
         old.request.expectedManifestHash !== request.expectedManifestHash
       )
         throw new Error("local operation conflict");
+      this.renewPreparation(old, request);
       return old.prepared;
     }
     if (
@@ -371,6 +393,7 @@ export class LocalWorkspace {
   }
   async apply(request: LocalApply): Promise<LocalObservation> {
     const row = this.correlated(request);
+    this.renewPreparation(row, request);
     if (row.closed || Date.now() >= row.prepared.expiresAt)
       throw new Error("workspace.conflict: expired_lease");
     // Repeat apply is observational, including prepared native execution. Only job.assign may spawn.
@@ -589,6 +612,7 @@ export class LocalWorkspace {
     const current = await this.current(expected);
     const revision = request.revision;
     let result: LocalReadResult;
+    let producerDoneKey: string | undefined;
     if (request.kind === "snapshot")
       result = {
         kind: "snapshot",
@@ -622,41 +646,98 @@ export class LocalWorkspace {
     } else {
       const entry = current.manifest.entries.find((e) => e.path === request.path);
       if (entry?.type !== "file") throw new Error("not_found");
-      const descriptor = request.transfers?.find(
-        (d) =>
-          d.purpose === "local-read" &&
-          d.operationId === request.operationId &&
-          d.baseRevision === revision &&
-          d.content.kind === "workspace-file" &&
-          d.content.path === request.path &&
-          d.content.manifestHash === expected &&
-          d.fileSha256 === entry.sha256 &&
-          d.size === entry.size,
-      );
-      if (!descriptor) throw new Error("authorized read transfer required");
-      this.staging.check(descriptor);
+      const { transfers: _transfers, ...scope } = request,
+        scopeHash = hash(canonicalJson(scope)),
+        key = `read_${this.binding.rootBindingId}_${this.binding.bindingVersion}_${request.operationId}`;
+      const old = this.ledger.record<{
+        scopeHash: string;
+        reference: Extract<LocalReadResult, { kind: "read" }>["result"];
+      }>("stages", key);
+      if (old && old.scopeHash !== scopeHash) throw new Error("read operation body conflict");
+      if (request.transfers !== undefined && !old)
+        throw new Error("local read metadata phase required before transfer");
       const bytes = await this.root.read(entry.path, this.limits.fileBytes);
-      for (let i = 0; i < descriptor.chunkHashes.length; i++) {
-        this.staging.check(descriptor);
-        await this.staging.http.chunk(
-          descriptor,
-          i,
-          bytes.subarray(i * descriptor.chunkBytes, (i + 1) * descriptor.chunkBytes),
-        );
-      }
-      result = {
-        kind: "read",
-        result: {
+      if (bytes.length !== entry.size || hash(bytes) !== entry.sha256)
+        throw new Error("workspace.conflict: local_drift");
+      const grid = old?.reference.chunks?.chunkBytes ?? this.staging.http.chunkBytes;
+      if (grid > this.staging.http.chunkBytes)
+        throw new Error("negotiated chunk grid no longer eligible");
+      const chunks = inventoryFor(bytes, grid),
+        reference: Extract<LocalReadResult, { kind: "read" }>["result"] = {
           workspaceId: request.workspaceId,
           revision,
           sha256: entry.sha256,
           size: entry.size,
+          chunks,
           endpoint: `/v1/workspaces/${request.workspaceId}/read?revision=${encodeURIComponent(revision)}&path=${encodeURIComponent(entry.path)}`,
           owner: { kind: "local", executorId: this.profile.executorId },
-        },
-      };
+        };
+      if (old && canonicalJson(old.reference) !== canonicalJson(reference))
+        throw new Error("workspace.conflict: local_drift");
+      if (!old) {
+        this.ledger.capacity(Buffer.byteLength(canonicalJson(reference)) * 2, true);
+        this.ledger.saveRecord("stages", key, { scopeHash, reference });
+      }
+      result = { kind: "read", result: reference };
+      if (request.transfers !== undefined) {
+        if (request.transfers.length !== 1)
+          throw new Error("exactly one scoped read transfer required");
+        const descriptor = request.transfers?.find(
+          (d) =>
+            d.purpose === "local-read" &&
+            d.operationId === request.operationId &&
+            d.baseRevision === revision &&
+            d.content.kind === "workspace-file" &&
+            d.content.path === request.path &&
+            d.content.manifestHash === expected &&
+            d.workspaceId === request.workspaceId &&
+            d.bindingVersion === request.bindingVersion &&
+            canonicalJson(d.credential) === canonicalJson(request.credential) &&
+            d.chunkBytes === chunks.chunkBytes &&
+            canonicalJson(d.chunkHashes) === canonicalJson(chunks.chunkHashes) &&
+            d.fileSha256 === entry.sha256 &&
+            d.size === entry.size,
+        );
+        if (!descriptor) throw new Error("authorized read transfer required");
+        this.staging.check(descriptor);
+        const producerKey = `producer_${descriptor.transferId}_${descriptor.attemptId}`,
+          prior = this.ledger.db.prepare("SELECT value FROM meta WHERE key=?").get(producerKey) as
+            | { value: string }
+            | undefined;
+        if (prior) {
+          const p = JSON.parse(prior.value) as { scopeHash: string; state: string };
+          if (p.scopeHash !== scopeHash) throw new Error("read producer body conflict");
+          if (p.state !== "done")
+            throw new Error("uncertain read producer requires a newly authorized attempt");
+        } else {
+          this.ledger.transaction(() => {
+            this.ledger.capacity(4096, true);
+            this.ledger.db
+              .prepare("INSERT INTO meta VALUES (?,?)")
+              .run(producerKey, canonicalJson({ scopeHash, state: "intent" }));
+          });
+          for (let i = 0; i < descriptor.chunkHashes.length; i++) {
+            this.staging.check(descriptor);
+            await this.staging.http.chunk(
+              descriptor,
+              i,
+              bytes.subarray(i * descriptor.chunkBytes, (i + 1) * descriptor.chunkBytes),
+            );
+          }
+          producerDoneKey = producerKey;
+        }
+      }
     }
     await this.current(expected);
+    if (producerDoneKey) {
+      const prior = this.ledger.db
+        .prepare("SELECT value FROM meta WHERE key=?")
+        .get(producerDoneKey) as { value: string };
+      const value = JSON.parse(prior.value) as { scopeHash: string };
+      this.ledger.db
+        .prepare("UPDATE meta SET value=? WHERE key=?")
+        .run(canonicalJson({ scopeHash: value.scopeHash, state: "done" }), producerDoneKey);
+    }
     return result;
   }
   async expirePrepared(): Promise<void> {

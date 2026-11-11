@@ -48,8 +48,10 @@ digest; remote approvals cannot create these rules or change local decisions.
 SQLite FULL transactions persist a unique job/body identity, exact local decision
 and winning start intent before spawn. Dedicated rollback-journal databases hold
 lifetime exclusive locks for the ledger and canonical filesystem root. A separate
-per-user registry prevents another profile or path alias from registering a new
-ledger for that root. Use a local disk whose locking behavior has been verified;
+per-user registry binds each executor execution generation to its ledger before
+provisioning and prevents a replacement profile/root from bypassing lost history.
+It also prevents path aliases from registering a new ledger for an existing
+root. Use a local disk whose locking behavior has been verified;
 network/distributed filesystems are outside the supported storage configuration.
 
 The canonical operation/assignment hashes must validate before admission or
@@ -89,6 +91,9 @@ acknowledgments. Native execution enters through job.assign; workspace apply
 never launches a process. Repeated apply is observational. Partial/unknown/drift
 quarantines the root. Observe and receipt recovery may use an expired historical
 lease under current authority, while apply and commit require a live lease.
+The original caller credential and lease identity remain part of that journal;
+the CP authenticates a newly authorized reader separately. Rewriting historical
+scope or changing the executor generation cannot recover or apply that operation.
 Current bytes are never silently substituted for unavailable historical content.
 
 File bytes travel through bounded authenticated HTTPS chunk transfers. The relay
@@ -99,6 +104,14 @@ job correlation are independently checked. Infrastructure pressure pauses bounde
 retries while retaining operation identity. Effective limits are the minimum of
 local and discovered bounds. A paid account raises no limit or enables a backend
 automatically. There are no model-provider token/hour/week budgets.
+
+Local reads first return metadata with hashes computed from retained revision
+bytes, then accept an exactly correlated transfer descriptor to produce chunks.
+The announced grid is immutable and no larger than negotiated `chunkBytes`;
+file/artifact caps also respect the grid's 256-chunk metadata bound. Staged writes
+verify all ordered puts, including superseded and empty files. Empty files send
+no public PUT. A verified SHA can serve multiple declared paths only inside the
+same validated upload scope. Oversize control metadata fails before effects.
 
 Paths are NFC relative POSIX names. Reserved Windows aliases, ADS, traversal,
 case collisions, secrets/build caches, links, junctions/reparse points, externally

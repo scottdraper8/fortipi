@@ -6,7 +6,8 @@ import type { ExecutorFrame, TransferDescriptor } from "fortipi-contract/executo
 import { validateTransfer } from "fortipi-contract/executor";
 import { Output } from "../dist/output.js";
 import { hash } from "../dist/policy.js";
-import { frame, HttpTransport } from "../dist/transport.js";
+import { frame, HttpTransport, readBounded } from "../dist/transport.js";
+import { inventoryFor } from "../dist/workspace/manifest.js";
 import { Staging } from "../dist/workspace/staging.js";
 import { assignment, credential, fixture, resources } from "./fixtures/daemon.ts";
 import { relayFixture } from "./fixtures/transport.ts";
@@ -181,6 +182,35 @@ test("ticket metadata authenticates the executor transport role and credential e
     await assert.rejects(http.ticket(), /executor transport authority/);
     server.setTicketIdentity({ ...identity, credentialExpiresAt: Date.now() - 1 });
     await assert.rejects(http.ticket(), /executor transport authority/);
+  } finally {
+    await server.close();
+    await f.cleanup();
+  }
+});
+test("real HTTP transfer slots bound concurrency and negotiated grid capacity rejects unrepresentable metadata", async () => {
+  const f = await fixture(),
+    bytes = Buffer.from("bounded"),
+    server = await relayFixture(bytes);
+  try {
+    f.profile.origin = server.origin;
+    f.profile.limits.transferConcurrency = 1;
+    f.profile.limits.chunkBytes = 1;
+    const http = new HttpTransport(f.profile, fetch, true);
+    server.setDelay(100);
+    assert.equal(http.limits.fileBytes, 256);
+    assert.equal(http.limits.artifactBytes, 256);
+    assert.throws(() => inventoryFor(Buffer.alloc(257), http.chunkBytes), /negotiated chunk grid/);
+    assert.equal(server.requests.length, 0);
+    const read = () =>
+      http.withTransfer(async () => readBounded(await http.request("/fixture"), bytes.length));
+    const [first, second] = await Promise.allSettled([read(), read()]);
+    assert.equal(first.status, "fulfilled");
+    if (first.status === "fulfilled") assert.deepEqual(Buffer.from(first.value), bytes);
+    assert.equal(second.status, "rejected");
+    if (second.status === "rejected") assert.match(String(second.reason), /concurrency/);
+    assert.equal(server.requests.length, 1);
+    await read();
+    assert.equal(server.requests.length, 2, "slot is released after the actual body completes");
   } finally {
     await server.close();
     await f.cleanup();

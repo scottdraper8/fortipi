@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
-import type { CommitReceipt, LocalObservation, LocalPrepare } from "fortipi-contract/executor";
-import { commitDigest, localStageDigest, manifestDigest } from "fortipi-contract/executor";
+import type {
+  CommitReceipt,
+  ExecutorFrame,
+  LocalObservation,
+  LocalPrepare,
+  LocalReadRequest,
+  TransferDescriptor,
+} from "fortipi-contract/executor";
+import {
+  commitDigest,
+  localStageDigest,
+  manifestDigest,
+  validateUploadBlobs,
+} from "fortipi-contract/executor";
 import { adapter, defaults } from "../dist/config.js";
+import { ExecutorRuntime } from "../dist/daemon.js";
 import { hash } from "../dist/policy.js";
 import { HttpTransport } from "../dist/transport.js";
 import { LocalWorkspace } from "../dist/workspace/local.js";
@@ -15,6 +28,7 @@ import { Snapshots } from "../dist/workspace/snapshot.js";
 import { Staging } from "../dist/workspace/staging.js";
 import {
   assignment,
+  authenticateFixture,
   credential,
   fixture,
   importRoot,
@@ -178,6 +192,27 @@ test("prepare changes no canonical bytes; apply once, lost ack observes; receipt
     assert.equal(f.ledger.local(request.operationId)?.journal.length, 1);
     const proof = await receipt(request, applied);
     const expired = { ...request, lease: { ...request.lease, expiresAt: 0 } };
+    // The CP authenticates a new reader separately; the wire journal identity stays historical.
+    const nextCaller = { ...request.credential, generation: request.credential.generation + 1 };
+    await assert.rejects(
+      f.local.request({
+        ...requestScope(expired),
+        kind: "observe",
+        preparationId,
+        credential: nextCaller,
+        lease: { ...expired.lease, credential: nextCaller },
+      }),
+      /scope conflict/,
+    );
+    await assert.rejects(
+      f.local.request({
+        ...requestScope(expired),
+        kind: "observe",
+        preparationId,
+        executorGeneration: request.executorGeneration + 1,
+      }),
+      /authority mismatch/,
+    );
     const observed = await f.local.request({
       ...requestScope(expired),
       kind: "observe",
@@ -190,6 +225,15 @@ test("prepare changes no canonical bytes; apply once, lost ack observes; receipt
       /expired/,
     );
     assert.equal(f.ledger.rootAvailable(f.root.key), false, "apply ack cannot release receipt pin");
+    await assert.rejects(
+      f.local.request({
+        ...receiptScope(expired),
+        kind: "receipt",
+        preparationId,
+        receipt: { ...proof, commitDigest: "0".repeat(64) },
+      }),
+      /digest mismatch/,
+    );
     const ack = await f.local.request({
       ...receiptScope(expired),
       kind: "receipt",
@@ -554,6 +598,324 @@ test("cloud snapshot bytes materialize and a lost upload acknowledgment retries 
     assert.equal(original.toString(), "immutable original bytes");
   } finally {
     await server.close();
+    await f.cleanup();
+  }
+});
+test("two-phase local read returns real negotiated-grid inventory and concurrent body-bound retries produce bytes once", async () => {
+  const f = await fixture(),
+    bytes = Buffer.alloc(600000, 0x5a),
+    digest = (data: Uint8Array) => createHash("sha256").update(data).digest("hex"),
+    relay = await relayFixture(bytes);
+  try {
+    await f.root.write("large.bin", bytes, 420);
+    const actual = await scan(f.root, defaults),
+      binding = f.profile.bindings[0];
+    if (!binding) throw new Error("binding missing");
+    binding.manifestHash = actual.manifestHash;
+    f.profile.origin = relay.origin;
+    f.profile.limits.chunkBytes = 65536;
+    const http = new HttpTransport(f.profile, fetch, true);
+    authenticateFixture(http);
+    const runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger: f.ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http,
+    });
+    await runtime.initialize();
+    const local = runtime.locals.get("root");
+    if (!local) throw new Error("local missing");
+    await importRoot(local);
+    relay.setGrid(http.chunkBytes);
+    const scope: Extract<LocalReadRequest, { kind: "read" }> = {
+      kind: "read",
+      operationId: "read_large",
+      workspaceId: "workspace",
+      bindingVersion: 1,
+      rootBindingId: "root",
+      executorId: f.profile.executorId,
+      executorGeneration: f.profile.executorGeneration,
+      credential,
+      revision: "r0",
+      deadline: Date.now() + 60000,
+      path: "large.bin",
+    };
+    const metadata: Extract<ExecutorFrame, { type: "workspace.request" }> = {
+      type: "workspace.request",
+      requestId: "outer_metadata",
+      payload: { requestId: "metadata", correlationId: "metadata_corr", request: scope },
+    };
+    const [m, duplicate] = await Promise.all([
+      runtime.handleWorkspaceFrame(metadata),
+      runtime.handleWorkspaceFrame(metadata),
+    ]);
+    assert.deepEqual(m, duplicate);
+    const response = m.payload.response;
+    assert.ok("kind" in response && response.kind === "read");
+    const reference = response.result;
+    assert.equal(reference.sha256, digest(bytes));
+    assert.equal(reference.size, bytes.length);
+    assert.ok(reference.chunks);
+    assert.equal(reference.chunks.chunkBytes, 65536);
+    assert.deepEqual(
+      reference.chunks.chunkHashes,
+      Array.from({ length: Math.ceil(bytes.length / 65536) }, (_, i) =>
+        digest(bytes.subarray(i * 65536, (i + 1) * 65536)),
+      ),
+    );
+    assert.equal(relay.requests.length, 0, "metadata phase must not start a producer");
+    const descriptor: TransferDescriptor = {
+      transferId: "read_transfer",
+      attemptId: "read_attempt",
+      deploymentId: f.profile.deploymentId,
+      direction: "from-executor",
+      purpose: "local-read",
+      workspaceId: "workspace",
+      bindingVersion: 1,
+      operationId: scope.operationId,
+      operationDigest: "a".repeat(64),
+      executorId: f.profile.executorId,
+      executorGeneration: f.profile.executorGeneration,
+      credential,
+      consumer: f.profile.resources,
+      baseRevision: "r0",
+      content: { kind: "workspace-file", path: scope.path, manifestHash: actual.manifestHash },
+      fileSha256: reference.sha256,
+      size: reference.size,
+      chunkBytes: reference.chunks.chunkBytes,
+      chunkHashes: reference.chunks.chunkHashes,
+      expiresAt: Date.now() + 20000,
+      deadline: scope.deadline,
+    };
+    const producer: Extract<ExecutorFrame, { type: "workspace.request" }> = {
+      type: "workspace.request",
+      requestId: "outer_producer",
+      payload: {
+        requestId: "producer",
+        correlationId: "producer_corr",
+        request: { ...scope, transfers: [descriptor] },
+      },
+    };
+    await assert.rejects(
+      runtime.handleWorkspaceFrame({
+        ...metadata,
+        payload: { ...metadata.payload, request: producer.payload.request },
+      }),
+      /body conflict/,
+    );
+    assert.equal(relay.requests.length, 0);
+    const invalid = await runtime.handleWorkspaceFrame({
+      ...producer,
+      requestId: "outer_bad_generation",
+      payload: {
+        ...producer.payload,
+        requestId: "bad_generation",
+        correlationId: "bad_generation_corr",
+        request: { ...scope, transfers: [{ ...descriptor, executorGeneration: 8 }] },
+      },
+    });
+    assert.ok("error" in invalid.payload.response);
+    assert.equal(relay.requests.length, 0);
+    const [produced, repeated] = await Promise.all([
+      runtime.handleWorkspaceFrame(producer),
+      runtime.handleWorkspaceFrame(producer),
+    ]);
+    assert.deepEqual(produced, repeated);
+    assert.equal(relay.requests.length, reference.chunks.chunkHashes.length);
+    assert.deepEqual(Buffer.concat(relay.requests.map((r) => r.bytes)), bytes);
+    await runtime.handleWorkspaceFrame(producer);
+    assert.equal(
+      relay.requests.length,
+      reference.chunks.chunkHashes.length,
+      "completed producer retry is observational",
+    );
+    http.jsonBytes = 256;
+    await assert.rejects(
+      runtime.handleWorkspaceFrame({
+        ...producer,
+        requestId: "oversize",
+        payload: { ...producer.payload, requestId: "oversize", correlationId: "oversize_corr" },
+      }),
+      /payload_too_large/,
+    );
+    assert.equal(
+      f.ledger.db.prepare("SELECT value FROM meta WHERE key='workspace_request_oversize'").get(),
+      undefined,
+    );
+  } finally {
+    await relay.close();
+    await f.cleanup();
+  }
+});
+test("multi-chunk local stage verifies scoped bytes, shares one SHA only inside its upload, and applies empty files without PUT", async () => {
+  const f = await setup(),
+    bytes = Buffer.alloc(600000, 0x31),
+    sha256 = createHash("sha256").update(bytes).digest("hex"),
+    emptySha = createHash("sha256").digest("hex"),
+    grid = 16384,
+    relay = await relayFixture(bytes);
+  try {
+    const a = await assignment("never executed"),
+      base = prepare(a, f.initial.manifestHash),
+      uploadId = "chunked_upload",
+      manifest: Manifest = {
+        version: 1,
+        entries: [
+          { path: "one", type: "file", mode: 420, size: bytes.length, sha256 },
+          { path: "two", type: "file", mode: 420, size: bytes.length, sha256 },
+          { path: "empty", type: "file", mode: 420, size: 0, sha256: emptySha },
+        ],
+      },
+      postManifestHash = await manifestDigest(manifest),
+      mutations = manifest.entries.map((e) => {
+        if (e.type !== "file") throw new Error("file expected");
+        return { kind: "put" as const, path: e.path, sha256: e.sha256, size: e.size, mode: e.mode };
+      }),
+      chunks = {
+        chunkBytes: grid,
+        chunkHashes: Array.from({ length: Math.ceil(bytes.length / grid) }, (_, i) =>
+          createHash("sha256")
+            .update(bytes.subarray(i * grid, (i + 1) * grid))
+            .digest("hex"),
+        ),
+      };
+    const begin: Parameters<typeof validateUploadBlobs>[0] = {
+      requestId: "begin",
+      baseRevision: base.baseRevision,
+      lease: base.lease,
+      operationId: base.operationId,
+      commitId: base.commitId,
+      manifestHash: postManifestHash,
+      manifest,
+      mutations,
+      blobs: [
+        { sha256, chunks },
+        { sha256: emptySha, chunks: { chunkBytes: grid, chunkHashes: [] } },
+      ],
+    };
+    validateUploadBlobs(begin, { required: true });
+    assert.throws(
+      () => validateUploadBlobs({ ...begin, blobs: [] }, { required: true }),
+      /missing_blobs/,
+    );
+    const descriptor: TransferDescriptor = {
+      transferId: "input",
+      attemptId: "input_attempt",
+      deploymentId: f.profile.deploymentId,
+      direction: "to-executor",
+      purpose: "local-stage",
+      workspaceId: "workspace",
+      bindingVersion: 1,
+      operationId: base.operationId,
+      operationDigest: base.operationDigest,
+      jobId: a.identity.jobId,
+      executionId: a.identity.executionId,
+      executorId: f.profile.executorId,
+      executorGeneration: f.profile.executorGeneration,
+      credential,
+      consumer: f.profile.resources,
+      baseRevision: "r0",
+      lease: base.lease,
+      content: { kind: "workspace-file", path: "one", manifestHash: postManifestHash, uploadId },
+      fileSha256: sha256,
+      size: bytes.length,
+      chunkBytes: grid,
+      chunkHashes: chunks.chunkHashes,
+      expiresAt: Date.now() + 20000,
+      deadline: base.deadline,
+    };
+    const oldOrigin = f.profile.origin;
+    f.profile.origin = relay.origin;
+    relay.setGrid(grid);
+    try {
+      await f.staging.receive(descriptor);
+      await f.staging.receive({
+        ...descriptor,
+        transferId: "empty_input",
+        content: { ...descriptor.content, path: "empty" },
+        fileSha256: emptySha,
+        size: 0,
+        chunkHashes: [],
+      });
+    } finally {
+      f.profile.origin = oldOrigin;
+    }
+    assert.equal(
+      relay.requests.length,
+      chunks.chunkHashes.length,
+      "one verified upload SHA covers both declared paths; zero file transfers no chunks",
+    );
+    const beforeChangedGrid = relay.requests.length,
+      changedGrid = 32768,
+      changedHashes = Array.from({ length: Math.ceil(bytes.length / changedGrid) }, (_, i) =>
+        createHash("sha256")
+          .update(bytes.subarray(i * changedGrid, (i + 1) * changedGrid))
+          .digest("hex"),
+      );
+    await assert.rejects(
+      f.staging.receive({
+        ...descriptor,
+        transferId: "changed_grid",
+        attemptId: "changed_grid_attempt",
+        chunkBytes: changedGrid,
+        chunkHashes: changedHashes,
+      }),
+      /immutable record conflict/,
+    );
+    assert.equal(
+      relay.requests.length,
+      beforeChangedGrid,
+      "announced grid cannot silently change before bytes",
+    );
+    const mode = {
+        kind: "staged-change" as const,
+        uploadId,
+        manifest,
+        mutations,
+        postManifestHash,
+        stagedDigest: await localStageDigest({ uploadId, manifest, mutations }),
+      },
+      request: LocalPrepare = { ...base, mode };
+    const badMode = {
+      ...mode,
+      uploadId: "foreign_upload",
+      stagedDigest: await localStageDigest({ ...mode, uploadId: "foreign_upload" }),
+    };
+    await assert.rejects(f.local.request({ ...base, mode: badMode }), /upload-scoped/);
+    assert.equal((await scan(f.root, defaults)).manifestHash, f.initial.manifestHash);
+    const prepared = await f.local.request(request);
+    assert.ok("preparationId" in prepared);
+    const apply = {
+        ...requestScope(request),
+        kind: "apply" as const,
+        preparationId: prepared.preparationId,
+      },
+      result = await f.local.request(apply);
+    assert.ok("state" in result);
+    assert.equal(result.state, "applied");
+    assert.deepEqual(await f.root.read("one", defaults.fileBytes), bytes);
+    assert.deepEqual(await f.root.read("two", defaults.fileBytes), bytes);
+    assert.equal((await f.root.read("empty", defaults.fileBytes)).length, 0);
+    assert.equal(f.ledger.get(a.identity.jobId), undefined);
+    await assert.rejects(
+      f.local.request({
+        ...request,
+        operationId: "higher_fence",
+        lease: { ...request.lease, operationId: "higher_fence", fence: "2" },
+      }),
+    );
+    await assert.rejects(f.local.request(apply), /stale_fence/);
+    const observed = await f.local.request({
+      ...requestScope(request),
+      kind: "observe",
+      preparationId: prepared.preparationId,
+    });
+    assert.ok("state" in observed);
+    assert.equal(observed.state, "applied");
+    assert.deepEqual(await f.root.read("one", defaults.fileBytes), bytes);
+  } finally {
+    await relay.close();
     await f.cleanup();
   }
 });

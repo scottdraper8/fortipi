@@ -7,6 +7,7 @@ import type { Limits } from "./config.js";
 import { privateWrite, secureDirectory } from "./config.js";
 import type { Ledger } from "./ledger.js";
 import { hash } from "./policy.js";
+import { inventoryFor } from "./workspace/manifest.js";
 
 export class Output {
   ledger: Ledger;
@@ -139,6 +140,7 @@ export class Output {
           revision: this.identity.baseRevision,
           sha256: hash(data),
           size: bytes,
+          chunks: inventoryFor(data, this.limits.chunkBytes),
           artifactId,
           endpoint: `/v1/workspaces/${row.assignment.workspaceId}/artifacts/${artifactId}?revision=${encodeURIComponent(this.identity.baseRevision)}`,
           owner: { kind: "local", executorId: this.identity.lease.executorId },

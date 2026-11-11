@@ -6,7 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { defaults } from "../dist/config.js";
-import { Guard, Ledger, rootRegistry } from "../dist/ledger.js";
+import { Guard, Ledger, ledgerRegistryIdentity, rootRegistry } from "../dist/ledger.js";
 import { Output } from "../dist/output.js";
 import { assignment, fixture } from "./fixtures/daemon.ts";
 
@@ -135,5 +135,46 @@ test("one winning start claim; renewable expiry is stable, changed body conflict
     assert.match(await readFile(join(lost.directory, "identity.json"), "utf8"), /ledger/);
   } finally {
     await rm(lost.path, { recursive: true, force: true });
+  }
+});
+test("executor generation cannot replace its durable ledger by selecting another root or profile", async () => {
+  const f = await fixture();
+  const registry = join(f.path, "independent-registry");
+  const identity = ledgerRegistryIdentity(f.profile, f.directory, "provision");
+  try {
+    for (const guard of await rootRegistry(registry, [], undefined, identity)) guard.close();
+    await assert.rejects(rootRegistry(registry, [], undefined, identity), /already bound/);
+    for (const guard of await rootRegistry(registry, [], undefined, { ...identity, mode: "bind" }))
+      guard.close();
+    await assert.rejects(
+      rootRegistry(
+        registry,
+        [
+          {
+            key: "different-root",
+            ledgerId: "replacement",
+            ledgerPath: join(f.path, "replacement"),
+          },
+        ],
+        undefined,
+        {
+          ...identity,
+          mode: "bind",
+          ledgerId: "replacement",
+          ledgerPath: join(f.path, "replacement"),
+        },
+      ),
+      /already bound/,
+    );
+    for (const guard of await rootRegistry(registry, [], undefined, {
+      ...identity,
+      executorGeneration: identity.executorGeneration + 1,
+    }))
+      guard.close();
+    // Registry loss must not erase its separately persisted identity sentinel.
+    await rm(join(registry, "registry.sqlite"));
+    await assert.rejects(rootRegistry(registry, [], undefined, { ...identity, mode: "bind" }));
+  } finally {
+    await f.cleanup();
   }
 });

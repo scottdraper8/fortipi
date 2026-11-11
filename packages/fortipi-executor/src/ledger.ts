@@ -16,7 +16,7 @@ import type {
   TransportAck,
 } from "fortipi-contract/executor";
 import { canonicalJson } from "fortipi-contract/executor";
-import type { Limits } from "./config.js";
+import type { Limits, Profile } from "./config.js";
 import { adapter, privateRead, privateWrite, secureDirectory } from "./config.js";
 import type { PlatformAdapter } from "./platform/types.js";
 import { assignmentBody, hash, immutableIdentity } from "./policy.js";
@@ -445,10 +445,22 @@ export class Ledger {
 }
 
 /** Canonical per-user registry is independent of origin/profile aliases. */
+export function ledgerRegistryIdentity(p: Profile, ledgerPath: string, mode: "bind" | "provision") {
+  return {
+    origin: p.origin,
+    deploymentId: p.deploymentId,
+    executorId: p.executorId,
+    executorGeneration: p.executorGeneration,
+    ledgerId: p.ledgerId,
+    ledgerPath,
+    mode,
+  };
+}
 export async function rootRegistry(
   directory: string,
   roots: { key: string; ledgerId: string; ledgerPath: string }[],
   platform = adapter(),
+  identity?: ReturnType<typeof ledgerRegistryIdentity>,
 ): Promise<Guard[]> {
   await secureDirectory(directory, platform);
   const guards: Guard[] = [];
@@ -475,8 +487,36 @@ export async function rootRegistry(
     const db = new Database(registryPath, { timeout: 100 });
     try {
       db.exec(
-        "PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS roots (id TEXT PRIMARY KEY,ledger TEXT NOT NULL,path TEXT NOT NULL); BEGIN IMMEDIATE",
+        "PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; CREATE TABLE IF NOT EXISTS roots (id TEXT PRIMARY KEY,ledger TEXT NOT NULL,path TEXT NOT NULL); CREATE TABLE IF NOT EXISTS executors (id TEXT PRIMARY KEY,ledger TEXT NOT NULL,path TEXT NOT NULL); BEGIN IMMEDIATE",
       );
+      if (identity) {
+        const key = hash(
+            canonicalJson({
+              origin: identity.origin,
+              deploymentId: identity.deploymentId,
+              executorId: identity.executorId,
+              executorGeneration: identity.executorGeneration,
+            }),
+          ),
+          old = db.prepare("SELECT ledger,path FROM executors WHERE id=?").get(key) as
+            | { ledger: string; path: string }
+            | undefined;
+        if (
+          old &&
+          (identity.mode === "provision" ||
+            old.ledger !== identity.ledgerId ||
+            old.path !== identity.ledgerPath)
+        )
+          throw new Error(
+            "executor execution generation already bound; never provision a replacement ledger",
+          );
+        if (!old)
+          db.prepare("INSERT INTO executors VALUES (?,?,?)").run(
+            key,
+            identity.ledgerId,
+            identity.ledgerPath,
+          );
+      }
       for (const root of roots) {
         const previous = db.prepare("SELECT ledger,path FROM roots WHERE id=?").get(root.key) as
           | { ledger: string; path: string }

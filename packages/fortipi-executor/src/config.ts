@@ -3,7 +3,7 @@ import type { Stats } from "node:fs";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, realpath, rename } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { CredentialRef, TransferDescriptor } from "fortipi-contract/executor";
 import { linux } from "./platform/linux.js";
 import { macos } from "./platform/macos.js";
@@ -12,6 +12,7 @@ import { windows } from "./platform/windows.js";
 import type { LocalPolicy } from "./policy.js";
 
 export interface Limits {
+  chunkBytes: number;
   fileBytes: number;
   snapshotBytes: number;
   manifestEntries: number;
@@ -25,6 +26,7 @@ export interface Limits {
   historyRows: number;
 }
 export const defaults: Limits = {
+  chunkBytes: 262144,
   fileBytes: 4194304,
   snapshotBytes: 16777216,
   manifestEntries: 512,
@@ -250,7 +252,7 @@ export async function loadProfile(
   p.origin = validateOrigin(p.origin, local);
   for (const b of p.bindings) {
     b.path = await realpath(b.path);
-    if (contains(b.path, resolve(path)) || contains(b.path, await realpath(stateHome())))
+    if (contains(b.path, resolve(path)) || contains(b.path, await futurePath(stateHome())))
       throw new Error("state must be outside workspaces");
   }
   for (let current = dirname(resolve(path)); ; current = dirname(current)) {
@@ -264,4 +266,12 @@ export async function loadProfile(
   }
   effectiveLimits(p.limits);
   return p;
+}
+async function futurePath(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT" || dirname(path) === path) throw error;
+    return join(await futurePath(dirname(path)), basename(path));
+  }
 }

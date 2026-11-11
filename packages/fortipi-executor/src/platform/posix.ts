@@ -58,7 +58,10 @@ export function posix(platform: "linux" | "darwin"): PlatformAdapter {
           return { state: "unknown", possibleExternalEffects: true };
         }
         await new Promise<void>((resolve) => setTimeout(resolve, graceMs));
-        // A leader can exit with descendants still holding pipes; process group is still ours during this call.
+        if (closed) return { state: "stopped", possibleExternalEffects: true };
+        // Once the leader has exited, its numeric group/PID alone cannot authorize escalation.
+        if (child.exitCode !== null || child.signalCode !== null)
+          return { state: "unknown", possibleExternalEffects: true };
         try {
           process.kill(-pid, "SIGKILL");
         } catch (error) {

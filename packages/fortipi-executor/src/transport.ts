@@ -72,9 +72,22 @@ export class HttpTransport {
   outputFrameBytes = 16384;
   pausedUntil = 0;
   authority?: TicketIdentity;
+  revoked = false;
+  private activeTransfers = 0;
+  async withTransfer<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.activeTransfers >= this.limits.transferConcurrency)
+      throw new Error("local transfer concurrency exhausted");
+    this.activeTransfers++;
+    try {
+      return await fn();
+    } finally {
+      this.activeTransfers--;
+    }
+  }
   assertExecutorAuthority(): void {
     const a = this.authority;
     if (
+      this.revoked ||
       a?.role !== "executor" ||
       a.deploymentId !== this.profile.deploymentId ||
       canonicalJson(a.credential) !== canonicalJson(this.profile.credential) ||
@@ -87,6 +100,13 @@ export class HttpTransport {
     this.profile = profile;
     this.fetcher = fetcher;
     this.limits = effectiveLimits(profile.limits);
+    this.chunkBytes = this.limits.chunkBytes;
+    this.applyGridBounds();
+  }
+  private applyGridBounds(): void {
+    this.limits.chunkBytes = this.chunkBytes;
+    this.limits.fileBytes = Math.min(this.limits.fileBytes, this.chunkBytes * 256);
+    this.limits.artifactBytes = Math.min(this.limits.artifactBytes, this.chunkBytes * 256);
   }
   async request(
     path: string,
@@ -102,6 +122,7 @@ export class HttpTransport {
     )
       throw new Error("cross-origin request rejected");
     const now = Date.now();
+    if (authenticated && this.revoked) throw new Error("executor transport revoked");
     if (deadline <= now) throw new Error("request deadline expired");
     if (now < this.pausedUntil) throw new HttpFailure(503, this.pausedUntil);
     const headers = new Headers(init.headers);
@@ -170,8 +191,10 @@ export class HttpTransport {
       const n = value.limits[key];
       if (!Number.isSafeInteger(n) || n < 1 || n > maximum)
         throw new Error("invalid negotiated wire bound");
-      this[key] = n;
+      this[key] = Math.min(this[key], n);
     }
+    this.chunkBytes = Math.min(this.chunkBytes, this.limits.chunkBytes);
+    this.applyGridBounds();
   }
   async ticket(): Promise<{ ticket: string; expiresAt: number }> {
     const t = validate<TicketReceipt>(
@@ -205,6 +228,13 @@ export class HttpTransport {
     return t;
   }
   async chunk(
+    descriptor: TransferDescriptor,
+    index: number,
+    data?: Uint8Array,
+  ): Promise<Uint8Array | undefined> {
+    return this.withTransfer(() => this.chunkOnce(descriptor, index, data));
+  }
+  private async chunkOnce(
     descriptor: TransferDescriptor,
     index: number,
     data?: Uint8Array,

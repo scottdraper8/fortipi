@@ -28,6 +28,23 @@ export interface Stage {
   mutations: Mutation[];
   stagedDigest: string;
 }
+function fileProof(d: Extract<TransferDescriptor, { purpose: "local-stage" }>) {
+  const { expiresAt: _expiry, leaseVersion: _version, ...leaseIdentity } = d.lease;
+  return {
+    workspaceId: d.workspaceId,
+    bindingVersion: d.bindingVersion,
+    operationId: d.operationId,
+    operationDigest: d.operationDigest,
+    baseRevision: d.baseRevision,
+    uploadId: d.content.uploadId,
+    manifestHash: d.content.manifestHash,
+    sha256: d.fileSha256,
+    size: d.size,
+    credential: d.credential,
+    leaseIdentity,
+    chunks: { chunkBytes: d.chunkBytes, chunkHashes: d.chunkHashes },
+  };
+}
 export class Staging {
   directory: string;
   ledger: Ledger;
@@ -100,6 +117,9 @@ export class Staging {
     this.check(descriptor);
     if (descriptor.direction !== "to-executor" || descriptor.content.kind !== "workspace-file")
       throw new Error("invalid input transfer");
+    const proof = fileProof(descriptor);
+    this.ledger.capacity(Buffer.byteLength(canonicalJson(proof)) * 2, true);
+    this.ledger.saveRecord("stages", `input_plan_${proof.uploadId}_${proof.sha256}`, proof);
     this.ledger.transaction(() => {
       const key = `blob_reserved_${descriptor.fileSha256}`;
       const previous = this.ledger.db.prepare("SELECT value FROM meta WHERE key=?").get(key) as
@@ -145,23 +165,11 @@ export class Staging {
       `transfer_${descriptor.transferId}_${descriptor.attemptId}`,
       descriptor,
     );
-    const { expiresAt: _expires, leaseVersion: _version, ...leaseIdentity } = descriptor.lease;
+    this.ledger.saveRecord("stages", `verified_blob_${proof.uploadId}_${proof.sha256}`, proof);
     this.ledger.saveRecord(
       "stages",
       `input_${descriptor.content.uploadId}_${hash(descriptor.content.path)}_${descriptor.fileSha256}`,
-      {
-        workspaceId: descriptor.workspaceId,
-        bindingVersion: descriptor.bindingVersion,
-        operationId: descriptor.operationId,
-        operationDigest: descriptor.operationDigest,
-        baseRevision: descriptor.baseRevision,
-        uploadId: descriptor.content.uploadId,
-        path: descriptor.content.path,
-        sha256: descriptor.fileSha256,
-        size: descriptor.size,
-        credential: descriptor.credential,
-        leaseIdentity,
-      },
+      { ...proof, path: descriptor.content.path },
     );
   }
   async register(stage: Omit<Stage, "stagedDigest">): Promise<Stage> {
@@ -272,6 +280,32 @@ export class Staging {
   async forRequest(request: LocalPrepare): Promise<Stage> {
     if (request.mode.kind !== "staged-change") throw new Error("native mode has no stage");
     await validateLocalStage(request.mode);
+    const { expiresAt: _expiry, leaseVersion: _version, ...leaseIdentity } = request.lease;
+    for (const m of request.mode.mutations)
+      if (m.kind === "put") {
+        const proof = this.ledger.record<ReturnType<typeof fileProof>>(
+          "stages",
+          `verified_blob_${request.mode.uploadId}_${m.sha256}`,
+        );
+        if (
+          !proof ||
+          proof.workspaceId !== request.workspaceId ||
+          proof.bindingVersion !== request.bindingVersion ||
+          proof.operationId !== request.operationId ||
+          proof.operationDigest !== request.operationDigest ||
+          proof.baseRevision !== request.baseRevision ||
+          proof.manifestHash !== request.mode.postManifestHash ||
+          proof.size !== m.size ||
+          canonicalJson(proof.credential) !== canonicalJson(request.credential) ||
+          canonicalJson(proof.leaseIdentity) !== canonicalJson(leaseIdentity)
+        )
+          throw new Error("staged put lacks exact upload-scoped verified bytes");
+        this.ledger.saveRecord(
+          "stages",
+          `input_${request.mode.uploadId}_${hash(m.path)}_${m.sha256}`,
+          { ...proof, path: m.path },
+        );
+      }
     const mutations: Mutation[] = request.mode.mutations.map((m) =>
       m.kind === "put"
         ? {
