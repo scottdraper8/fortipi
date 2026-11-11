@@ -80,6 +80,16 @@ export function storageSamplePorts(lookup: D.StoreLookup): void {
   void [authority, child, observation, unversioned, redirected, anonymous, census];
 }
 
+export function runtimeQuiescencePort(input: D.RuntimeQuiesceRequest): D.RuntimeQuiescence {
+  const stopped: D.RuntimeQuiescence = { ...input, stopped: true, observedAt: 1000 };
+  // @ts-expect-error A disconnect or pending stop is not evidence that the native runtime stopped.
+  const pending: D.RuntimeQuiescence = { ...input, stopped: false, observedAt: 1000 };
+  // @ts-expect-error Cleanup cannot select an unbound image or replacement runtime.
+  const unbound: D.RuntimeQuiesceRequest = { requestId: input.requestId };
+  void [pending, unbound];
+  return stopped;
+}
+
 export async function adminExportPorts(
   agent: AgentSessionRpc,
   workspace: WorkspaceObjectRpc,
