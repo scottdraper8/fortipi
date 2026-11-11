@@ -28,7 +28,7 @@ async function runFixture(source?: string, denied = false): Promise<void> {
         source ??
         "import {readFile,writeFile} from 'node:fs/promises'; export default async function(){let count=0;try{count=Number(await readFile('/workspace/run-count.txt','utf8'));}catch{} await writeFile('/workspace/run-count.txt',String(count+1),{mode:420});let denials=0; for(const path of ['/.fortipi/output/stdout','/etc/passwd','/workspace/../escape'])try{await readFile(path);}catch{denials++;}try{await fetch('https://example.invalid/');}catch{denials++;} if(denials!==4)throw new Error('Confinement probe escaped'); await writeFile('/workspace/confinement.txt',String(denials));console.log('x'.repeat(40000));}",
     };
-    const deadline = Date.now() + 30_000;
+    const deadline = Date.now() + (denied ? 2000 : 30_000);
     const operation: D.OperationDigestInput = {
       ...operationContext,
       tool: "javascript",
@@ -107,6 +107,34 @@ async function runFixture(source?: string, denied = false): Promise<void> {
         input: { operationId: "describeWorkspace", path: { workspaceId: "workspace" }, query: {} },
       });
       assert.equal(described.body.revision, seeded.value.revision);
+      const storage = await server
+        .getWorker()
+        .getDurableObjectStorage("WORKSPACES", { name: "workspace" });
+      const rows = (await storage.exec(
+        "SELECT value FROM fp_ws_record WHERE key LIKE 'allocation:%'",
+      )) as { value: string }[];
+      const allocation = (JSON.parse(rows[0]?.value ?? "null") as { state: D.StoreState }).state
+        .allocation;
+      await delay(Math.max(0, allocation.deadline + 60_000 - Date.now() + 20));
+      const retired = (await (
+        await server.fetch("/rpc", {
+          method: "POST",
+          body: JSON.stringify({
+            kind: "retire",
+            input: {
+              authorityId: allocation.authorityId,
+              workspaceId: allocation.workspaceId,
+              allocationId: allocation.allocationId,
+              childId: allocation.childId,
+            },
+          }),
+        })
+      ).json()) as D.Outcome<D.StoreRetirement>;
+      assert.equal(
+        retired.ok,
+        false,
+        "Unknown dispatch scratch was retired without quiescence proof after actual GC grace",
+      );
       return;
     }
     let observation: D.ExecutionObservation | undefined;
@@ -178,8 +206,8 @@ test(
   () => runFixture(),
 );
 test(
-  "unavailable host modules leave dispatch uncertain without a replacement start or publication",
-  { timeout: 15_000 },
+  "unavailable host modules leave dispatch uncertain without a replacement start or unsafe GC",
+  { timeout: 90_000 },
   () =>
     runFixture(
       "import value from 'fortipi-host-secret'; export default async function(){ return value; }",

@@ -891,6 +891,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
             requireThat(
               !row.referenced &&
                 row.pins === 0 &&
+                !this.execution.pins(row.state.allocation) &&
                 row.state.allocation.deadline + 60_000 <= Date.now(),
               "conflict",
               "Allocation is referenced, pinned or within cleanup grace",
@@ -2781,6 +2782,7 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         ({ value }) =>
           !value.referenced &&
           value.pins === 0 &&
+          !this.execution.pins(value.state.allocation) &&
           value.state.state !== "deleted" &&
           value.state.allocation.deadline + 60_000 <= Date.now(),
       );

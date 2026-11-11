@@ -59,6 +59,11 @@ export class ExecutionLedger {
     this.owner = owner;
     this.env = env;
   }
+  pins(allocation: D.StoreAllocation): boolean {
+    if (allocation.role !== "scratch") return false;
+    const row = this.owner.state.get<RecordEntry>(`execution:${allocation.executionId}`);
+    return Boolean(row && row.state !== "prepared" && row.result?.sync.status !== "complete");
+  }
   private config(ctx: D.AuthContext): Exclude<D.BackendConfig, { kind: "native" }> {
     requireThat(
       "execution" in this.env.FORTIPI_CONFIG,
@@ -323,6 +328,15 @@ export class ExecutionLedger {
       const observation = (await response.json()) as D.ExecutionObservation;
       await this.owner.mutex.run(() => {
         const current = this.row(ctx, prepared.request.identity);
+        if (observation.state !== "not_started" && observation.runtimeUuid) {
+          requireThat(
+            !current.runtimeId || current.runtimeId === observation.runtimeUuid,
+            "interrupted",
+            "Recorded container runtime changed",
+          );
+          current.runtimeId = observation.runtimeUuid;
+          this.owner.state.put(`execution:${prepared.request.identity.executionId}`, current);
+        }
         if (current.state === "attempted") {
           current.state = observation.state === "running" ? "running" : "unknown";
           current.observation = observation;
@@ -342,7 +356,20 @@ export class ExecutionLedger {
       if (row.state === "prepared") return { identity, state: "unknown" }; // No closed-assignment proof: a late start may still arrive.
       const response = await this.send(ctx, row, "query", identity);
       if (!response.ok) return { identity, state: "unknown" };
-      return (await response.json()) as D.ExecutionObservation;
+      const observation = (await response.json()) as D.ExecutionObservation;
+      const runtimeId = observation.state === "not_started" ? undefined : observation.runtimeUuid;
+      if (runtimeId)
+        await this.owner.mutex.run(() => {
+          const current = this.row(ctx, identity);
+          requireThat(
+            !current.runtimeId || current.runtimeId === runtimeId,
+            "interrupted",
+            "Query observed a replacement runtime",
+          );
+          current.runtimeId = runtimeId;
+          this.owner.state.put(`execution:${identity.executionId}`, current);
+        });
+      return observation;
     }, ctx.requestId);
   }
   cancel(ctx: D.AuthContext, input: D.CancelRequest): Promise<D.Outcome<D.CancelDisposition>> {
@@ -382,6 +409,7 @@ export class ExecutionLedger {
         collected.result.sync.status === "complete" &&
           collected.result.skipped.length === 0 &&
           collected.result.sync.skipped.length === 0 &&
+          (!row.hostId || collected.runtimeId !== undefined) &&
           (!row.runtimeId || collected.runtimeId === row.runtimeId),
         "interrupted",
         "Scratch sync incomplete or runtime replaced",
@@ -661,22 +689,22 @@ export class ExecutionLedger {
         })
         .catch((error: unknown) => {
           this.uncertain = true;
-          this.owner.state.put("scratch-uncertain", true);
           throw error;
         });
       this.completion = handle
         .result()
         .then(async (result) => {
           this.result = result;
-          this.active = false;
-          store.runtimePinned = false;
+          this.active = result.sync.status !== "complete";
+          store.runtimePinned = result.sync.status !== "complete";
           if (this.host) this.host.queryOnly = true;
           const evidence = {
             identity,
             result,
             ...(this.host?.runtime ? { runtimeId: this.host.runtime.runtimeId } : {}),
           };
-          await this.owner.mutex.run(() => this.owner.state.put("scratch-result", evidence));
+          if (result.sync.status === "complete")
+            await this.owner.mutex.run(() => this.owner.state.put("scratch-result", evidence));
           await this.owner.stub(envelope.allocation.authorityId).fetch(
             new Request("https://workspace.internal/__fortipi/execution/observed", {
               method: "POST",
@@ -687,7 +715,6 @@ export class ExecutionLedger {
         })
         .catch(() => {
           this.uncertain = true;
-          this.owner.state.put("scratch-uncertain", true);
         });
       this.completion.catch(() => {});
       return Response.json({
@@ -698,11 +725,13 @@ export class ExecutionLedger {
       });
     }
     const identity = await boundedJson<D.ExecutionIdentity>(request, wireLimits.jsonBytes);
-    const saved = this.owner.state.get<{
-      identity: D.ExecutionIdentity;
-      result: WorkspaceRuntimeResult<"utf8">;
-      runtimeId?: string;
-    }>("scratch-result");
+    const saved = this.active
+      ? undefined
+      : this.owner.state.get<{
+          identity: D.ExecutionIdentity;
+          result: WorkspaceRuntimeResult<"utf8">;
+          runtimeId?: string;
+        }>("scratch-result");
     if (saved && saved.identity.assignmentDigest === identity.assignmentDigest && !this.active) {
       this.identity = saved.identity;
       this.result = saved.result;
@@ -839,6 +868,15 @@ export class ExecutionLedger {
     return new Response(null, { status: 204 });
   }
   async stopChild(): Promise<void> {
+    const started = this.owner.state.get<string>("scratch-start");
+    const saved = this.owner.state.get<{ result: WorkspaceRuntimeResult<"utf8"> }>(
+      "scratch-result",
+    );
+    requireThat(
+      !started || this.workspace || this.completion || saved?.result.sync.status === "complete",
+      "interrupted",
+      "Lost runtime/sync authority cannot prove scratch quiescence; retain its allocation",
+    );
     if (this.active && this.workspace && this.identity)
       await this.workspace.runtime.killExec(this.identity.executionId, {
         backend: this.identity.target.kind === "backend" ? this.identity.target.backendId : "",
