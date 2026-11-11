@@ -64,6 +64,17 @@ interface Cached {
   principalId: string;
   sample: WorkspaceStorageSample;
 }
+interface CensusAttempt {
+  input: WorkspaceStorageSampleInput;
+  principalId: string;
+  registryHash: string;
+  startedAt: number;
+}
+interface Observation {
+  sampleId: string;
+  bytes: number;
+  observedAt: number;
+}
 interface Permit {
   context: D.AuthContext;
   lookup: D.StoreLookup;
@@ -183,6 +194,32 @@ export class WorkspaceStorage {
   readonly owner: Owner;
   constructor(owner: Owner) {
     this.owner = owner;
+  }
+  private remember(key: string, sample: Observation): void {
+    const previous = this.owner.state.get<Observation>(`${key}:receipt`);
+    requireThat(
+      !previous ||
+        sample.observedAt > previous.observedAt ||
+        (sample.observedAt === previous.observedAt && sample.bytes >= previous.bytes),
+      "conflict",
+      "Older physical receipt cannot replace a newer observation",
+    );
+    this.owner.state.put(`${key}:receipt`, {
+      sampleId: sample.sampleId,
+      bytes: sample.bytes,
+      observedAt: sample.observedAt,
+    } satisfies Observation);
+    if (sample.bytes > (this.owner.state.get<number>(key) ?? 0))
+      this.owner.state.put(key, sample.bytes);
+  }
+  private reconcile(key: string, sample: Observation): void {
+    requireThat(
+      same(this.owner.state.get(`${key}:receipt`), sample),
+      "conflict",
+      "Physical observation changed before completed census",
+    );
+    // Only this still-current genuine observation can support a lower physical value.
+    this.owner.state.put(key, sample.bytes);
   }
   /** Called inside the authority's queued preparation transaction, BEFORE any Host contact. */
   registerHost(
@@ -331,8 +368,7 @@ export class WorkspaceStorage {
     await this.owner.mutex.run(() => {
       check();
       const key = `storage-host-observed:${input.context.allocationId}`;
-      if (sample.bytes > (this.owner.state.get<number>(key) ?? 0))
-        this.owner.state.put(key, sample.bytes);
+      this.remember(key, sample);
     });
     return sample;
   }
@@ -651,11 +687,37 @@ export class WorkspaceStorage {
     if (cached) return cached;
     if (input.kind === "child") return this.child(ctx, input);
     await this.settleCompleted(ctx);
-    const before = await this.owner.mutex.run(() => {
-      authorizeSample(this.owner, ctx);
-      return this.survey();
-    });
+    const attempt = await this.owner.mutex.run(() =>
+      this.owner.state.transaction(() => {
+        authorizeSample(this.owner, ctx);
+        const registryHash = this.survey();
+        const key = `storage-attempt:${input.sampleId}`;
+        const prior = this.owner.state.get<CensusAttempt>(key);
+        requireThat(
+          !prior ||
+            (same(prior.input, input) &&
+              prior.principalId === ctx.principalId &&
+              prior.registryHash === registryHash),
+          "conflict",
+          "Incomplete census intent changed; use a new sample ID",
+        );
+        const value = prior ?? {
+          input,
+          principalId: ctx.principalId,
+          registryHash,
+          startedAt: Date.now(),
+        };
+        requireThat(
+          Date.now() - value.startedAt <= 10_000,
+          "conflict",
+          "Incomplete census expired; use a new sample ID",
+        );
+        if (!prior) this.owner.state.put(key, value);
+        return value;
+      }),
+    );
     const children: Record<string, number> = {};
+    const observations = new Map<string, Observation>();
     const completed: string[] = [];
     for (const row of this.allocations()) {
       const allocation = row.state.allocation;
@@ -684,6 +746,11 @@ export class WorkspaceStorage {
         registryVersion: row.state.version,
       });
       children[allocation.childId] = sample.bytes;
+      observations.set(`storage-observed:${allocation.childId}`, {
+        sampleId: sample.sampleId,
+        bytes: sample.bytes,
+        observedAt: sample.observedAt,
+      });
       if (this.complete(row)) completed.push(allocation.capacityReservationId);
     }
     const hosts: Record<string, number> = {};
@@ -704,12 +771,17 @@ export class WorkspaceStorage {
         registryVersion: member.version,
       });
       hosts[member.context.hostId] = sample.bytes;
+      observations.set(`storage-host-observed:${member.context.allocationId}`, {
+        sampleId: sample.sampleId,
+        bytes: sample.bytes,
+        observedAt: sample.observedAt,
+      });
     }
     return this.owner.mutex.run(() =>
       this.owner.state.transaction(() => {
         authorizeSample(this.owner, ctx);
         requireThat(
-          this.survey() === before,
+          this.survey() === attempt.registryHash,
           "conflict",
           "Complete Workspace census changed across observations",
         );
@@ -719,6 +791,20 @@ export class WorkspaceStorage {
           bytes: this.owner.state.bytes,
           observedAt: Date.now(),
         };
+        const observedAt = Math.min(
+          sample.observedAt,
+          ...[...observations.values()].map((row) => row.observedAt),
+        );
+        requireThat(
+          sample.observedAt - attempt.startedAt <= 10_000 &&
+            [...observations.values()].every(
+              (row) =>
+                row.observedAt >= attempt.startedAt && sample.observedAt - row.observedAt <= 10_000,
+            ),
+          "conflict",
+          "Census contains stale physical observations; use a new sample ID",
+        );
+        for (const [key, observation] of observations) this.reconcile(key, observation);
         const version = incrementSafe(this.owner.state.get<Census>("storage-census")?.version ?? 0);
         for (const reservationId of completed)
           this.owner.state.put(`storage-credit:${reservationId}`, { censusVersion: version });
@@ -739,23 +825,16 @@ export class WorkspaceStorage {
         }
         const census: Census = {
           version,
-          observedAt: sample.observedAt,
+          observedAt,
           bytes:
             sample.bytes +
             Object.values(children).reduce((sum, bytes) => sum + bytes, 0) +
             Object.values(hosts).reduce((sum, bytes) => sum + bytes, 0),
           children,
           hosts,
-          registryHash: before,
+          registryHash: attempt.registryHash,
         };
         this.owner.state.put("storage-census", census);
-        for (const [childId, bytes] of Object.entries(children))
-          this.owner.state.put(`storage-observed:${childId}`, bytes);
-        for (const member of this.hosts())
-          this.owner.state.put(
-            `storage-host-observed:${member.context.allocationId}`,
-            hosts[member.context.hostId],
-          );
         const coveredReservationIds = [
           ...new Set(
             [
@@ -785,7 +864,7 @@ export class WorkspaceStorage {
           sampleId: input.sampleId,
           policyVersion: input.policyVersion,
           sampleSeq: version,
-          observedAt: sample.observedAt,
+          observedAt,
           coverage: { kind: "workspace", bytes: census.bytes, censusVersion: version },
           coveredReservationIds,
         } satisfies StorageSampleInput);
@@ -847,9 +926,7 @@ export class WorkspaceStorage {
           "conflict",
           "Registry changed after child sample",
         );
-        const old = this.owner.state.get<number>(`storage-observed:${input.lookup.childId}`) ?? 0;
-        if (sample.bytes > old)
-          this.owner.state.put(`storage-observed:${input.lookup.childId}`, sample.bytes);
+        this.remember(`storage-observed:${input.lookup.childId}`, sample);
         this.save(ctx, input, sample);
       });
       return sample;
@@ -952,6 +1029,9 @@ export class WorkspaceStorage {
       return this.owner.state.get<StorageSampleInput>("storage-report");
     });
     if (!report || this.owner.state.get(`storage-report-ack:${report.sampleId}`)) return;
+    // Unknown stale reports keep their original body and all CP growth coverage.
+    // A new sample ID must obtain genuinely current physical observations.
+    if (report.observedAt > Date.now() || Date.now() - report.observedAt > 10_000) return;
     requireThat(
       ctx.registrationId,
       "unauthorized",
@@ -964,7 +1044,12 @@ export class WorkspaceStorage {
           method: "POST",
           headers: { "X-Fortipi-Context": JSON.stringify(registered) },
           body: JSON.stringify(report),
-          signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, ctx.deadline - Date.now()))),
+          signal: AbortSignal.timeout(
+            Math.max(
+              1,
+              Math.min(10_000, ctx.deadline - Date.now(), report.observedAt + 10_000 - Date.now()),
+            ),
+          ),
         }),
       );
       if (!response.ok) return; // Retain the exact pending sample; never claim installation reconciliation.
