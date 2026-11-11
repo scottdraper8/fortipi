@@ -148,6 +148,10 @@ grid must match. Membership is immutable and bounded to sixteen artifacts and
 the current effective output/storage limits. Cross-job reuse conflicts. The
 metadata survives inbox acknowledgment; exact retries after original credential
 revocation retain the original transport receipt.
+An authenticated current publisher can retain bounded evidence for a historical
+execution generation in private quarantine. That acknowledgment never creates a
+public artifact index, authorizes historical bytes, or starts another process.
+Existing index entries remain subject to current executor floors.
 
 An absent cloud artifact delegates privately to
 `GET /internal/artifacts/{workspaceId}/{artifactId}` with the existing
@@ -166,6 +170,9 @@ registered limits are checked during streaming. An expired or revoked original
 job credential does not prevent a different authorized reader from retrieving
 retained output. Explicit `revision` must equal the indexed original revision;
 query duplicates, changed streams and unauthorized owner scopes fail closed.
+Descriptor expiry uses a current covering reader grant; an expired redundant
+grant cannot shorten another valid grant. Every fragment still rechecks current
+authority and limits.
 
 Full output is verified incrementally. A bounded range uses a full verification
 pass to calculate the selected-body hash, followed by a fresh full-source

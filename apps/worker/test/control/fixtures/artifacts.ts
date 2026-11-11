@@ -73,6 +73,13 @@ export default {
   },
 };
 export class TestControlPlane extends BaseControlPlane {
+  async refuseArtifactInbox(enabled: boolean): Promise<void> {
+    this.ctx.storage.sql.exec("DROP TRIGGER IF EXISTS fixture_refuse_artifact_inbox");
+    if (enabled)
+      this.ctx.storage.sql.exec(
+        "CREATE TRIGGER fixture_refuse_artifact_inbox BEFORE INSERT ON cp_records WHEN NEW.kind='inbox' BEGIN SELECT RAISE(ABORT,'synthetic artifact inbox refusal'); END",
+      );
+  }
   async artifactRecord(id: string): Promise<string | undefined> {
     const value = this.store.get("native_artifact", id);
     return value ? JSON.stringify(value) : undefined;
@@ -101,6 +108,7 @@ export type ArtifactControl = FixtureControl &
     | "advanceFixtureRevision"
     | "registrationRecord"
     | "leaseRecord"
+    | "refuseArtifactInbox"
   >;
 /** Controlled durable proof authorities. They assert the private transport contract, not source3/5 enforcement. */
 export class TestRecipient extends BaseRecipient {

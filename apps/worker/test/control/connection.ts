@@ -8,7 +8,11 @@ export async function connected(
   h: Pick<Awaited<ReturnType<typeof harness>>, "mint" | "auth" | "server"> & {
     cp: Pick<Awaited<ReturnType<typeof harness>>["cp"], "mintTicket">;
   },
-  options: { workspaceIds?: string[]; transferLimits?: D.ExecutorTransferLimits } = {},
+  options: {
+    workspaceIds?: string[];
+    transferLimits?: D.ExecutorTransferLimits;
+    generation?: number;
+  } = {},
 ) {
   const resources = {
     ...scope(),
@@ -29,7 +33,7 @@ export async function connected(
         audience: "executor-session",
         resources,
         originMode: { kind: "native" },
-        executor: { executorId: "executor", generation: 1 },
+        executor: { executorId: "executor", generation: options.generation ?? 1 },
       }),
     ),
   );
@@ -72,7 +76,7 @@ export async function connected(
     requestId: uuid(),
     payload: {
       executorId: "executor",
-      generation: 1,
+      generation: options.generation ?? 1,
       protocolVersion: "1.0",
       schemaVersion: "1.0.0",
       capabilities: ["shell"],

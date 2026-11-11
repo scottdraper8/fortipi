@@ -480,7 +480,9 @@ export class Delivery {
             "Late result quarantine exhausted",
           );
           const ack: D.DeliveryAck = { deliveryId: id(), sequence, persisted: true };
-          indexArtifacts(this.store, this.directory, frame.payload);
+          // Preserve old-generation evidence without authorizing its byte source.
+          if (identity.target.generation === input.generation)
+            indexArtifacts(this.store, this.directory, frame.payload);
           this.store.put(
             "late_result",
             key,

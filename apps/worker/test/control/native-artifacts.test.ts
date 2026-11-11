@@ -10,6 +10,95 @@ import { connected } from "./connection.ts";
 import type { ArtifactControl } from "./fixtures/artifacts.ts";
 import { harness, request, scope, uuid, value } from "./harness.ts";
 
+test("a current publisher retains historical-generation result evidence without exposing old artifact bytes", async () => {
+  const h = await harness<ArtifactControl>({
+    fixturePath: "apps/worker/test/control/fixtures/artifacts.ts",
+  });
+  let socket: WebSocket | undefined;
+  try {
+    const original = await connected(h);
+    socket = original.socket;
+    const job = await assignedJob(h, await h.auth());
+    value(
+      await h.cp.revokeExecutor(
+        await h.auth(),
+        request("revokeExecutor", { requestId: uuid(), expectedGeneration: 1 }, { id: "executor" }),
+      ),
+    );
+    const current = await connected(h, { generation: 2 });
+    socket = current.socket;
+    const artifactId = uuid();
+    const privatePath = join(h.directory, "historical-private-output.bin");
+    await writeFile(privatePath, new Uint8Array());
+    const plan = await inventory(privatePath, 0, 65536);
+    const result: D.PreparedResult = {
+      identity: job.identity,
+      sequence: 1,
+      state: "unknown",
+      possibleExternalEffects: true,
+      output: {
+        tail: "historical proof",
+        truncated: false,
+        artifacts: [
+          {
+            artifactId,
+            workspaceId: "workspace",
+            revision: job.identity.baseRevision,
+            endpoint: `/v1/workspaces/workspace/artifacts/${artifactId}`,
+            owner: { kind: "local", executorId: "executor" },
+            outputSource: { stream: "stdout" },
+            sha256: plan.sha256,
+            size: 0,
+            chunks: plan.chunks,
+          },
+        ],
+      },
+    };
+    const delivery: D.ExecutorDelivery = {
+      executorId: "executor",
+      generation: 2,
+      connectionEpoch: current.epoch,
+      frame: { type: "job.prepared_result", requestId: uuid(), payload: result },
+    };
+    const received = await h.cp.deliverExecutorFrame(current.executor, delivery);
+    assert.equal(
+      received.ok,
+      true,
+      `current publisher must retain bounded historical-generation evidence without public indexing${received.ok ? "" : ` (${received.code}: ${received.message})`}`,
+    );
+    const ack = value(received);
+    assert.deepEqual(value(await h.cp.deliverExecutorFrame(current.executor, delivery)), ack);
+    assert.equal(await h.cp.rowCount("late_result"), 1);
+    assert.equal(await h.cp.artifactRecord(artifactId), undefined);
+    assert.equal(await h.cp.rowCount("native_artifact_set"), 0);
+    assert.equal(await h.cp.rowCount("inbox"), 0);
+    const observation = value(await h.cp.queryExecution(await h.auth(), job.identity));
+    assert.equal(observation.state, "unknown");
+    assert.deepEqual(observation.result, result);
+    assert.equal(
+      current.frames.filter((frame) => frame.type === "job.assign").length,
+      0,
+      "historical evidence does not authorize another execution",
+    );
+    const altered = structuredClone(delivery);
+    if (altered.frame.type !== "job.prepared_result") assert.fail("Missing result");
+    altered.frame.payload.output.tail = "changed proof";
+    assert.equal((await h.cp.deliverExecutorFrame(current.executor, altered)).ok, false);
+    assert.equal(
+      (
+        await h.cp.deliverExecutorFrame(current.executor, {
+          ...delivery,
+          connectionEpoch: original.epoch,
+        })
+      ).ok,
+      false,
+    );
+  } finally {
+    socket?.close();
+    await h.close();
+  }
+});
+
 test("native artifact index is atomic and immutable; a different reader streams real retained bytes and bounded ranges after job authority expires", async () => {
   const h = await harness<ArtifactControl>({
     fixturePath: "apps/worker/test/control/fixtures/artifacts.ts",
@@ -74,6 +163,23 @@ test("native artifact index is atomic and immutable; a different reader streams 
       requestId: uuid(),
       payload: result,
     };
+    await h.cp.refuseArtifactInbox(true);
+    assert.equal(
+      (
+        await h.cp.deliverExecutorFrame(channel.executor, {
+          executorId: "executor",
+          generation: 1,
+          connectionEpoch: channel.epoch,
+          frame,
+        })
+      ).ok,
+      false,
+      "a failed inbox transaction cannot acknowledge partially indexed output",
+    );
+    assert.equal(await h.cp.artifactRecord(artifactId), undefined);
+    assert.equal(await h.cp.rowCount("native_artifact_set"), 0);
+    assert.equal(await h.cp.rowCount("inbox"), 0);
+    await h.cp.refuseArtifactInbox(false);
     channel.send(frame);
     await channel.wait("job.result_ack");
     assert.ok(
@@ -125,7 +231,15 @@ test("native artifact index is atomic and immutable; a different reader streams 
     const issued = await h.mint({
       requestId: uuid(),
       role: "client",
-      grants: [{ grantId: uuid(), version: 1, resources: scope(["artifacts.read"]) }],
+      grants: [
+        { grantId: uuid(), version: 1, resources: scope(["artifacts.read"]) },
+        {
+          grantId: uuid(),
+          version: 1,
+          resources: scope(["artifacts.read"]),
+          expiresAt: Date.now() - 1,
+        },
+      ],
     });
     const current = await h.auth(issued.token);
     const resources: D.ResourceScope = {
@@ -272,7 +386,18 @@ test("native artifact index is atomic and immutable; a different reader streams 
       return opens[count - 1] ?? assert.fail("No transfer open");
     };
     const first = get();
-    const open = await waitOpen(1);
+    const open = await Promise.race([
+      waitOpen(1),
+      first.then((response) => {
+        assert.equal(
+          response.status,
+          200,
+          "an expired redundant grant cannot disable another current artifact-read grant",
+        );
+        return undefined;
+      }),
+    ]);
+    assert.ok(open, "actual artifact producer must open before its body is returned");
     const d = open.payload;
     assert.equal(
       (

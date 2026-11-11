@@ -256,13 +256,17 @@ export class Artifacts {
       "conflict",
       "Retained artifact metadata missing",
     );
+    const grant = ctx.grants.find(
+      (grant) =>
+        (grant.expiresAt === undefined || grant.expiresAt > Date.now()) &&
+        contains(grant.resources, artifactScope(row)),
+    );
+    check(grant, "unauthorized", "Artifact reader grant expired");
     const expiresAt = Math.min(
       ctx.deadline,
       Date.now() + 30000,
       ctx.credentialExpiresAt ?? Number.MAX_SAFE_INTEGER,
-      ...ctx.grants
-        .filter((g) => g.expiresAt !== undefined && contains(g.resources, artifactScope(row)))
-        .map((g) => g.expiresAt ?? Number.MAX_SAFE_INTEGER),
+      grant.expiresAt ?? Number.MAX_SAFE_INTEGER,
       reference.owner.expiresAt ?? Number.MAX_SAFE_INTEGER,
     );
     const descriptor = await this.relay.open(

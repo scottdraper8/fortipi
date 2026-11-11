@@ -19,6 +19,25 @@ try {
   );
   for (const mutation of [
     {
+      file: "delivery.ts",
+      pattern:
+        /if \(identity\.target\.generation === input\.generation\)\s*indexArtifacts\(this\.store, this\.directory, frame\.payload\);/,
+      replacement: "indexArtifacts(this.store, this.directory, frame.payload);",
+      test: "native-artifacts.test.ts",
+      testPattern: "current publisher retains historical-generation",
+      oracle:
+        "current publisher must retain bounded historical-generation evidence without public indexing",
+    },
+    {
+      file: "artifacts.ts",
+      pattern: /grant\.expiresAt \?\? Number\.MAX_SAFE_INTEGER,/,
+      replacement:
+        "...ctx.grants.filter(g => g.expiresAt !== undefined && contains(g.resources, artifactScope(row))).map(g => g.expiresAt ?? Number.MAX_SAFE_INTEGER),",
+      test: "native-artifacts.test.ts",
+      testPattern: "native artifact index is atomic",
+      oracle: "an expired redundant grant cannot disable another current artifact-read grant",
+    },
+    {
       file: "relay.ts",
       pattern: /check\(\s*this\.producerWaiters\.size < 16,/,
       replacement:
@@ -48,16 +67,24 @@ try {
     assert.match(original, mutation.pattern);
     await writeFile(path, original.replace(mutation.pattern, mutation.replacement));
     const run = () =>
-      spawnSync(process.execPath, ["--test", resolve("apps/worker/test/control", mutation.test)], {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        timeout: 35000,
-        env: {
-          PATH: process.env.PATH ?? "",
-          FORTIPI_CONTROL_TEST_SOURCE: directory,
-          WRANGLER_SEND_METRICS: "false",
+      spawnSync(
+        process.execPath,
+        [
+          "--test",
+          ...("testPattern" in mutation ? [`--test-name-pattern=${mutation.testPattern}`] : []),
+          resolve("apps/worker/test/control", mutation.test),
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: 35000,
+          env: {
+            PATH: process.env.PATH ?? "",
+            FORTIPI_CONTROL_TEST_SOURCE: directory,
+            WRANGLER_SEND_METRICS: "false",
+          },
         },
-      });
+      );
     const failed = run();
     assert.equal(failed.status, 1, `Mutant must fail behavior: ${failed.stdout}\n${failed.stderr}`);
     assert.ok(
