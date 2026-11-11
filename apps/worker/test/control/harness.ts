@@ -53,7 +53,12 @@ export const scope = (actions: string[] = ["*"]): D.ResourceScope => ({
   actions,
 });
 export async function harness<T extends FixtureControl = FixtureControl>(
-  options: { modelAuthKey?: string | null; allowedOrigins?: string[]; fixturePath?: string } = {},
+  options: {
+    modelAuthKey?: string | null;
+    allowedOrigins?: string[];
+    fixturePath?: string;
+    workspaceClass?: "TestWorkspace";
+  } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-control-"));
   const configPath = join(directory, "wrangler.json");
@@ -92,10 +97,19 @@ export async function harness<T extends FixtureControl = FixtureControl>(
         bindings: [
           { name: "CONTROL_PLANE", class_name: "TestControlPlane" },
           { name: "AGENT_SESSIONS", class_name: "TestRecipient" },
-          { name: "WORKSPACES", class_name: "TestRecipient" },
+          { name: "WORKSPACES", class_name: options.workspaceClass ?? "TestRecipient" },
         ],
       },
-      migrations: [{ tag: "v1", new_sqlite_classes: ["TestControlPlane", "TestRecipient"] }],
+      migrations: [
+        {
+          tag: "v1",
+          new_sqlite_classes: [
+            "TestControlPlane",
+            "TestRecipient",
+            ...(options.workspaceClass ? [options.workspaceClass] : []),
+          ],
+        },
+      ],
     }),
   );
   process.env.WRANGLER_SEND_METRICS = "false";
