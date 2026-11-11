@@ -29,7 +29,9 @@ export function createPtyProbeResponder(send: (input: string) => void): (output:
 
 export async function nativeChecks(): Promise<void> {
   assert.equal(process.versions.node, "26.13.0", "Use the exact reviewed Node runtime");
+  console.log("Native probe: pnpm identity");
   const pnpm = await verifyPnpmExecutable(await pnpmExecutable());
+  console.log("Native probe: workerd binary");
   const workerRequire = createRequire(resolve(repository, "apps/worker/package.json"));
   const wranglerRequire = createRequire(workerRequire.resolve("wrangler"));
   const workerd = wranglerRequire("workerd") as { default: string; version: string };
@@ -37,16 +39,19 @@ export async function nativeChecks(): Promise<void> {
   const binary = workerd.default;
   const workerVersion = await exec(binary, ["--version"], { timeout: 30_000 });
   assert.match(workerVersion.stdout, /2026-11-10/);
+  console.log("Native probe: esbuild transform");
   const esbuild = await import("esbuild");
   assert.equal(esbuild.version, "0.28.2");
   assert.ok(
     esbuild.transformSync("const value: number = 1", { loader: "ts" }).code.includes("value"),
   );
+  console.log("Native probe: node-gyp identity");
   const gyp = await exec(process.execPath, ["node_modules/node-gyp/bin/node-gyp.js", "--version"], {
     cwd: repository,
     timeout: 30_000,
   });
   assert.equal(gyp.stdout.trim(), "v13.1.0");
+  console.log("Native probe: PTY input/output and rendered cells");
   const terminal = new Terminal({ cols: 80, rows: 24, allowProposedApi: true });
   await new Promise<void>((accept, reject) => {
     const child = spawn(
