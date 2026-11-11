@@ -158,7 +158,7 @@ test("local stage relay carries every declared put on its real grid, including s
             (
               await fetch(
                 new URL(
-                  `/v1/executor/transfers/${descriptor.transferId}/input/chunks/0?attemptId=${descriptor.attemptId}&length=0&sha256=${file.plan.sha256}`,
+                  `/v1/executor/transfers/${descriptor.transferId}/input/chunks/0?attemptId=${descriptor.attemptId}`,
                   base,
                 ),
                 { headers: { Authorization: `Bearer ${channel.issued.token}` } },
@@ -173,7 +173,7 @@ test("local stage relay carries every declared put on its real grid, including s
           const query = `attemptId=${descriptor.attemptId}&length=${length}&sha256=${descriptor.chunkHashes[index]}`;
           const consumer: Promise<Response> = fetch(
             new URL(
-              `/v1/executor/transfers/${descriptor.transferId}/input/chunks/${index}?${query}`,
+              `/v1/executor/transfers/${descriptor.transferId}/input/chunks/${index}?attemptId=${descriptor.attemptId}`,
               base,
             ),
             { headers: { Authorization: `Bearer ${channel.issued.token}` } },
@@ -189,8 +189,15 @@ test("local stage relay carries every declared put on its real grid, including s
               body: await chunk(file.path, index, descriptor.chunkBytes, file.size),
             },
           );
+          // Keep a failed consumer assertion primary while cleanup cancels its
+          // still-waiting peer; successful flow still awaits this producer below.
+          void producer.catch(() => undefined);
           const response: Response = await consumer;
-          assert.equal(response.status, 200);
+          assert.equal(
+            response.status,
+            200,
+            "canonical executor input GET requires only attemptId",
+          );
           const bytes = new Uint8Array(await response.arrayBuffer());
           assert.equal(
             createHash("sha256").update(bytes).digest("hex"),

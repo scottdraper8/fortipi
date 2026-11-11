@@ -19,6 +19,13 @@ try {
   );
   for (const mutation of [
     {
+      file: "relay.ts",
+      pattern: /if \(producer\)(\s+check\()/,
+      replacement: 'if (producer || request.method === "GET")$1',
+      test: "local-write.test.ts",
+      oracle: "canonical executor input GET requires only attemptId",
+    },
+    {
       file: "delivery.ts",
       pattern:
         /if \(identity\.target\.generation === input\.generation\)\s*indexArtifacts\(this\.store, this\.directory, frame\.payload\);/,

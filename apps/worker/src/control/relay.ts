@@ -552,14 +552,6 @@ export class Relay {
       "invalid_request",
       "Invalid transfer chunk",
     );
-    const length = Math.min(d.chunkBytes, d.size - index * d.chunkBytes);
-    const url = new URL(request.url);
-    check(
-      Number(url.searchParams.get("length")) === length &&
-        url.searchParams.get("sha256") === d.chunkHashes[index],
-      "conflict",
-      "Chunk identity mismatch",
-    );
     const executor = ctx.role === "executor";
     const producer = d.direction === "from-executor" ? executor : !executor;
     check(
@@ -567,6 +559,17 @@ export class Relay {
       "unauthorized",
       "Wrong transfer direction",
     );
+    const length = Math.min(d.chunkBytes, d.size - index * d.chunkBytes);
+    const url = new URL(request.url);
+    // Consumer GET uses only attemptId; its chunk identity comes from the
+    // retained descriptor. Producer PUT must declare the exact byte tuple.
+    if (producer)
+      check(
+        Number(url.searchParams.get("length")) === length &&
+          url.searchParams.get("sha256") === d.chunkHashes[index],
+        "conflict",
+        "Chunk identity mismatch",
+      );
     const receipt = this.store.get<{ length: number; sha256: string }>(
       "chunk_receipt",
       `${attemptId}:${index}`,

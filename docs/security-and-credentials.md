@@ -113,8 +113,11 @@ must be acknowledged; renewal cannot repeat apply or change staged metadata.
 Local bytes use two simultaneously active HTTP requests. The executor routes are
 `/v1/executor/transfers/{transferId}/input/chunks/{chunkIndex}` (GET),
 `.../output/chunks/{chunkIndex}` (PUT), and
-`/v1/executor/transfers/{transferId}` (GET status). Each includes `attemptId`;
-chunks also bind declared length and SHA-256. The service forwards the other peer
+`/v1/executor/transfers/{transferId}` (GET status). Each includes `attemptId`.
+Public input GET supplies only `attemptId`, as the canonical TransferQuery
+requires; its expected chunk length/hash come from the retained descriptor/grid.
+Producer PUT supplies and must match the explicit length/hash tuple before any
+bytes are exposed. The service forwards the other peer
 to `/internal/transfers/{transferId}/peer/chunks/{chunkIndex}` with an authenticated
 `X-Fortipi-Context` envelope, after stripping that header from public requests.
 This envelope is private Worker-to-DO transport, never a public credential.

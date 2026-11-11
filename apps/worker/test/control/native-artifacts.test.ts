@@ -399,6 +399,28 @@ test("native artifact index is atomic and immutable; a different reader streams 
     ]);
     assert.ok(open, "actual artifact producer must open before its body is returned");
     const d = open.payload;
+    const missingTuple = await network(
+      `/v1/executor/transfers/${d.transferId}/output/chunks/0?attemptId=${d.attemptId}`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${channel.issued.token}` },
+        body: await chunk(ownerPath, 0, d.chunkBytes, d.size),
+      },
+    );
+    assert.equal(
+      missingTuple.status,
+      409,
+      "producer PUT still requires its explicit length and hash",
+    );
+    const wrongHash = await network(
+      `/v1/executor/transfers/${d.transferId}/output/chunks/0?attemptId=${d.attemptId}&length=${d.chunkBytes}&sha256=${"0".repeat(64)}`,
+      {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${channel.issued.token}` },
+        body: await chunk(ownerPath, 0, d.chunkBytes, d.size),
+      },
+    );
+    assert.equal(wrongHash.status, 409, "producer PUT cannot change the retained chunk hash");
     assert.equal(
       (
         await deliver({
