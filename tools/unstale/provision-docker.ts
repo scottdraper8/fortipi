@@ -452,16 +452,14 @@ async function main(): Promise<void> {
     "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.3.tgz",
   );
   await mkdir(resolve(repository, "dist/toolchain"), { recursive: true });
-  const directory = rootless
-    ? await mkdtemp(resolve(repository, "dist/toolchain/docker-rootless-"))
-    : resolve(repository, "dist/toolchain/docker");
-  await mkdir(directory, { recursive: true });
-  if (rootless)
-    assert.match(
-      directory,
-      /^\/[A-Za-z0-9_./-]+$/,
-      "rootless prerequisite: simple absolute checkout path",
-    );
+  const directory = await mkdtemp(
+    resolve(repository, `dist/toolchain/docker-${rootless ? "rootless" : "rootful"}-`),
+  );
+  assert.match(
+    directory,
+    /^\/[A-Za-z0-9_./-]+$/,
+    "Docker prerequisite: simple absolute checkout path",
+  );
   const raw = await download(policy.docker.url, policy.docker.sha256, "docker-29.9.3.tgz");
   for (const [path, bytes] of archiveEntries(raw)) {
     assert.match(path, /^docker\/[a-z0-9-]+$/);
@@ -519,17 +517,23 @@ async function main(): Promise<void> {
     "Buildx license identity changed",
   );
   const plugins = resolve(directory, "cli-plugins");
-  // Rootless job state must not collide with a previous daemon or inherit Docker credentials.
-  const session = rootless ? await mkdtemp(resolve(tmpdir(), "fortipi-docker-")) : directory;
-  if (rootless)
-    assert.match(
-      session,
-      /^\/[A-Za-z0-9_./-]+$/,
-      "rootless prerequisite: simple absolute temporary path",
-    );
+  // Both modes use fresh private state and never inherit Docker credentials or daemon config.
+  const session = await mkdtemp(resolve(tmpdir(), "fortipi-docker-"));
+  assert.match(
+    session,
+    /^\/[A-Za-z0-9_./-]+$/,
+    "Docker prerequisite: simple absolute temporary path",
+  );
   const config = resolve(session, "config");
-  await mkdir(plugins, { recursive: true });
-  await mkdir(config, { recursive: true });
+  await mkdir(plugins, { mode: 0o700 });
+  await mkdir(config, { mode: 0o700 });
+  for (const path of [directory, session, plugins, config]) {
+    const stat = await lstat(path);
+    assert.ok(
+      stat.isDirectory() && stat.uid === process.getuid?.() && (stat.mode & 0o777) === 0o700,
+      "Docker tooling/state must be private job-owned 0700 directories",
+    );
+  }
   const buildx = await download(
     policy.buildx.url,
     policy.buildx.sha256,
@@ -540,12 +544,13 @@ async function main(): Promise<void> {
   await writeFile(
     resolve(config, "config.json"),
     JSON.stringify({ cliPluginsExtraDirs: [plugins] }),
+    { mode: 0o600 },
   );
   const env: NodeJS.ProcessEnv = {
-    ...(rootless
-      ? { HOME: process.env.HOME, CODEX_HOME: process.env.CODEX_HOME, LANG: process.env.LANG }
-      : process.env),
-    PATH: `${directory}${delimiter}${rootless ? "/usr/bin:/bin:/usr/sbin:/sbin" : (process.env.PATH ?? "")}`,
+    HOME: process.env.HOME,
+    CODEX_HOME: process.env.CODEX_HOME,
+    LANG: process.env.LANG,
+    PATH: `${directory}${delimiter}/usr/bin:/bin:/usr/sbin:/sbin`,
     DOCKER_HOST: `unix://${session}/docker.sock`,
     DOCKER_CONFIG: config,
     BUILDX_CONFIG: resolve(config, "buildx"),
@@ -598,32 +603,28 @@ async function main(): Promise<void> {
       /\b29\.9\.3(?:,|\s|$)/,
     );
   await command("sudo", ["-n", "systemctl", "stop", "docker.service", "docker.socket"], env);
-  const log = await open(resolve(session, "daemon.log"), rootless ? "wx" : "w", 0o600);
+  const log = await open(resolve(session, "daemon.log"), "wx", 0o600);
   const daemonConfig = resolve(config, "daemon.json");
-  if (rootless) await writeFile(daemonConfig, "{}\n", { mode: 0o600 });
+  await writeFile(daemonConfig, "{}\n", { mode: 0o600 });
+  const daemonArguments = [
+    ...(rootless ? ["--rootless", "--storage-driver", "overlay2"] : []),
+    "--config-file",
+    daemonConfig,
+    "--log-level",
+    "error",
+    "--metrics-addr=",
+    "--host",
+    `unix://${session}/docker.sock`,
+    "--data-root",
+    `${session}/data`,
+    "--exec-root",
+    `${session}/exec`,
+    "--pidfile",
+    `${session}/daemon.pid`,
+  ];
   const daemon = spawn(
     rootless ? resolve(directory, "dockerd-rootless.sh") : "sudo",
-    [
-      ...(rootless
-        ? [
-            "--rootless",
-            "--config-file",
-            daemonConfig,
-            "--storage-driver",
-            "overlay2",
-            "--log-level",
-            "error",
-          ]
-        : ["-n", resolve(directory, "dockerd")]),
-      "--host",
-      `unix://${session}/docker.sock`,
-      "--data-root",
-      `${session}/data`,
-      "--exec-root",
-      `${session}/exec`,
-      "--pidfile",
-      `${session}/daemon.pid`,
-    ],
+    [...(rootless ? [] : ["-n", resolve(directory, "dockerd")]), ...daemonArguments],
     { env, detached: true, stdio: ["ignore", log.fd, log.fd] },
   );
   let stopped: string | undefined;
@@ -661,7 +662,30 @@ async function main(): Promise<void> {
       ready,
       rootless
         ? `rootless prerequisite: pinned nonroot daemon unavailable (${stopped ?? "60s deadline"}); inspect private ${session}/daemon.log`
-        : "Pinned Docker daemon failed; inspect ignored daemon.log",
+        : `Pinned Docker daemon failed; inspect private ${session}/daemon.log`,
+    );
+    const pid = (await readFile(resolve(session, "daemon.pid"), "utf8")).trim();
+    assert.match(pid, /^[1-9]\d*$/);
+    assert.ok(
+      JSON.stringify(
+        (await readFile(`/proc/${pid}/cmdline`, "utf8")).split("\0").filter(Boolean),
+      ) === JSON.stringify([resolve(directory, "dockerd"), ...daemonArguments]),
+      "Daemon arguments must select only the private Unix API, empty config and disabled metrics",
+    );
+    assert.ok((await readFile(daemonConfig, "utf8")) === "{}\n", "Daemon config must remain empty");
+    assert.equal(
+      (
+        await command(resolve(directory, "docker"), ["info", "--format", "{{.DockerRootDir}}"], env)
+      ).trim(),
+      resolve(session, "data"),
+      "Client must reach this run's isolated daemon",
+    );
+    const socket = await lstat(resolve(session, "docker.sock"));
+    assert.ok(
+      socket.isSocket() &&
+        socket.uid === (rootless ? process.getuid?.() : 0) &&
+        (socket.mode & 0o007) === 0,
+      "API socket must be local, correctly owned and inaccessible to other users",
     );
     if (rootless) {
       const options = JSON.parse(
@@ -672,8 +696,6 @@ async function main(): Promise<void> {
         ),
       ) as string[];
       assert.ok(options.includes("name=rootless"), "Daemon is not actually rootless");
-      const pid = (await readFile(resolve(session, "daemon.pid"), "utf8")).trim();
-      assert.match(pid, /^[1-9]\d*$/);
       assert.equal(
         pid,
         (await readFile(resolve(session, "state/child_pid"), "utf8")).trim(),
@@ -692,6 +714,14 @@ async function main(): Promise<void> {
       assert.ok(allocated[0] && allocated[1]);
       verifyIdMap(await readFile(`/proc/${pid}/uid_map`, "utf8"), userInfo().uid, allocated[0]);
       verifyIdMap(await readFile(`/proc/${pid}/gid_map`, "utf8"), userInfo().gid, allocated[1]);
+    } else {
+      assert.equal(
+        (await command("/usr/bin/sudo", ["-n", "readlink", "-f", `/proc/${pid}/exe`], env)).trim(),
+        resolve(directory, "dockerd"),
+        "Rootful daemon executable changed",
+      );
+      const status = await readFile(`/proc/${pid}/status`, "utf8");
+      assert.match(status, /^Uid:\s+0\s+0\s+0\s+0$/m, "Default mode must remain actually rootful");
     }
     const activeBuildx = (
       await command(resolve(directory, "docker"), ["buildx", "version"], env)
@@ -740,7 +770,7 @@ async function main(): Promise<void> {
       console.error(
         `Bounded daemon startup diagnostics: ${resolve(session, "startup-diagnostics.txt")}`,
       );
-      if (rootless) console.error(tail.toString("utf8"));
+      console.error(tail.toString("utf8"));
     } finally {
       await diagnostics.close();
     }

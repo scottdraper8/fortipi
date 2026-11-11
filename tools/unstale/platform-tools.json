@@ -325,7 +325,7 @@
       "https://docs.docker.com/engine/security/rootless/",
       "https://docs.docker.com/engine/security/rootless/troubleshoot/"
     ],
-    "observation": "Optional CI-only exact upstream source build with Go1.27.4, frozen verified source/module/package graph and cross-built Linux output hash. No Linux daemon/image/FUSE or signature/attestation approval. No selected tool bytes enter product images.",
+    "observation": "Optional CI-only exact upstream source build with Go1.27.4, frozen verified source/module/package graph and cross-built Linux output hash. No Linux daemon/image/FUSE or signature/attestation approval. No selected tool bytes enter product images. Common rootful/rootless setup now enforces private empty-config Unix-only CI boundary; default remains rootful. Known inherited Docker stdlib issue remains recorded with exact CI-only disposition.",
     "securityReview": {
       "checkedAt": "2026-11-11T05:11:48.839Z",
       "rootlesskitPublishedAdvisories": 0,
@@ -398,7 +398,11 @@
         "cliCompiler": "go1.26.10",
         "daemonCompiler": "go1.26.10",
         "finding": "GO-2026-6859",
-        "status": "BLOCKED: existing Docker CLI/daemon built with affected Go stdlib; no compiled callgraph/supported upstream fix reviewed for these binaries. RootlessKit source rebuild fixes only RootlessKit. Docker pins are outside this delegated additive rootless block; parent must resolve before approval/use."
+        "status": "Retained known stdlib finding; scoped applicability disposition for private trusted CI only, pending actual Linux boundary proof.",
+        "effect": "GO-2026-6859 describes HTTP/1 server runtime panic when MaxBytesReader/MaxBytesHandler body reads race response-header writes; no RCE claim.",
+        "boundary": "CLI commands act as clients. Both daemon modes get fresh private job-owned 0700 tool/config/state directories, scrubbed child environment, explicit empty daemon config, one private Unix API socket and disabled metrics. Runtime validates exact cmdline, PID/executable/UID, private socket ownership/mode and returned data-root; fresh client/Buildx config selects only that endpoint/default Docker driver.",
+        "conditions": "Trusted disposable CI caller already has full Docker API authority; never forward API to agents/public clients. Only reviewed digest-pinned images/our Dockerfile and network=none builds; no syntax frontends, remote contexts, deployment credentials or customer bytes. No product distribution of these tools. Any boundary change or external API listener requires a fresh review.",
+        "residualRisk": "Docker29.9.3 remains built with affected Go1.26.10 and is not claimed patched. A trusted caller may still cause job denial of service; shared/untrusted/production exposure is outside this disposition. No symbol-grep reachability waiver, full callgraph proof or security certification."
       }
     }
   }
