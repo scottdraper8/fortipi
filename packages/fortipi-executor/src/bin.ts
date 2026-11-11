@@ -20,7 +20,7 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   const profilePath = value("--profile");
   if (!profilePath)
     throw new Error(
-      "Usage: fortipi-executor <init|import|start|status|policy|approvals|approve|reject> --profile <protected-profile.json>",
+      "Usage: fortipi-executor <init|import|start|status|resume-infrastructure|policy|approvals|approve|reject> --profile <protected-profile.json>",
     );
   const local = args.includes("--local-test");
   const platform = adapter(),
@@ -103,6 +103,22 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
     platform,
   );
   try {
+    if (command === "resume-infrastructure") {
+      // The running daemon owns this guard for its lifetime. Never clear only its disk
+      // state while its in-memory transport still holds the old pressure observation.
+      const guard = await Guard.acquire(join(directory, "daemon.guard.sqlite"), platform);
+      try {
+        const http = new HttpTransport(profile, fetch, local);
+        http.bindLedger(ledger);
+        http.clearPressure();
+        process.stdout.write(
+          "Infrastructure pause cleared after operator recovery. Start the daemon to reconnect; pending job identities are retained.\n",
+        );
+      } finally {
+        guard.close();
+      }
+      return;
+    }
     if (command === "import") {
       const binding = profile.bindings.find(
         (b) => b.rootBindingId === value("--root-binding-id") && b.providerKind === "local",

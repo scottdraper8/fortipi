@@ -1,16 +1,28 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import type { ErrorBody, ExecutorFrame, TransferDescriptor } from "fortipi-contract/executor";
 import { validateTransfer } from "fortipi-contract/executor";
-import { Ledger } from "../dist/ledger.js";
+import { adapter, privateWrite } from "../dist/config.js";
+import { Guard, Ledger } from "../dist/ledger.js";
 import { Output } from "../dist/output.js";
 import { hash } from "../dist/policy.js";
 import { frame, HttpFailure, HttpTransport, readBounded } from "../dist/transport.js";
 import { inventoryFor } from "../dist/workspace/manifest.js";
 import { Staging } from "../dist/workspace/staging.js";
-import { assignment, credential, fixture, resources } from "./fixtures/daemon.ts";
+import {
+  assignment,
+  credential,
+  fixture,
+  fixtureChild,
+  nodeCommand,
+  resources,
+} from "./fixtures/daemon.ts";
 import { relayFixture } from "./fixtures/transport.ts";
 
 test("real HTTP scoped relay validates length/hash/direction, blocks redirects and coalesces pressure", async () => {
@@ -235,6 +247,31 @@ test("small output deliveries count their stored envelope bytes and preserve led
     await f.cleanup();
   }
 });
+test("full job history refuses new admission while the admitted job retains output and recovery capacity", async () => {
+  const f = await fixture(),
+    historyRows = f.ledger.limits.historyRows;
+  try {
+    f.ledger.limits.historyRows = 1;
+    const a = await assignment("admitted"),
+      row = f.ledger.admit(a, "approval"),
+      output = new Output(f.ledger, a.identity, f.ledger.limits);
+    row.decision = "allow";
+    f.ledger.put(row);
+    assert.equal(f.ledger.claim(a.identity.jobId, "approval", f.root.key, a.identity.jobId), true);
+    const next = await assignment("new admission");
+    assert.throws(() => f.ledger.admit(next, "approval"), /capacity exhausted/);
+    output.append("stdout", Buffer.from("admitted output"));
+    const delivery = f.ledger.outbox()[0];
+    assert.ok(delivery?.type === "job.output");
+    assert.equal(delivery.payload.text, "admitted output");
+    f.ledger.recover();
+    assert.equal(f.ledger.get(a.identity.jobId)?.state, "unknown");
+    assert.equal(f.ledger.claim(a.identity.jobId, "approval", f.root.key, a.identity.jobId), false);
+  } finally {
+    f.ledger.limits.historyRows = historyRows;
+    await f.cleanup();
+  }
+});
 test("typed infrastructure pressure survives SQLite reopen without shortening the known retry or changing job identity", async () => {
   const f = await fixture(),
     server = await relayFixture(Buffer.alloc(0));
@@ -418,6 +455,95 @@ test("a delayed pressure response cannot shorten a concurrent known reset or rel
       assert.deepEqual(recovered.pressure, http.pressure);
     }
   } finally {
+    await server.close();
+    await f.cleanup();
+  }
+});
+test("local CLI clears a storage hold only explicitly with the daemon stopped and retains uncertain job identity", async () => {
+  const f = await fixture(),
+    server = await relayFixture(Buffer.alloc(0)),
+    directory = join(f.path, "ledger"),
+    profilePath = join(f.path, "profile.json"),
+    marker = join(f.path, "must-not-replay"),
+    binary = fileURLToPath(new URL("../dist/bin.js", import.meta.url)),
+    execute = promisify(execFile);
+  let seed: Ledger | undefined, guard: Guard | undefined;
+  try {
+    f.profile.origin = server.origin;
+    f.profile.bindings = [];
+    await adapter().protect(f.path, true);
+    await privateWrite(profilePath, JSON.stringify(f.profile));
+    seed = await Ledger.provision(directory, "ledger", { ...f.ledger.limits });
+    const a = await assignment(nodeCommand(fixtureChild, "append", marker)),
+      row = seed.admit(a, "approval");
+    row.decision = "allow";
+    seed.put(row);
+    assert.equal(
+      seed.claim(a.identity.jobId, "approval", "uncertain-root", a.identity.jobId),
+      true,
+    );
+    const http = new HttpTransport(f.profile, fetch, true);
+    http.bindLedger(seed);
+    server.setPressure({
+      error: {
+        code: "quota_exceeded",
+        message: "Storage pressure",
+        requestId: "cli_storage_pressure",
+        retryable: false,
+        details: {
+          retryAfterMs: 5000,
+          pressure: {
+            resource: "storage",
+            scope: { kind: "object" },
+            source: "provider",
+            measurement: "unknown",
+            reason: "Operator must reclaim storage",
+            action: "reclaim-storage",
+          },
+        },
+      },
+    });
+    await assert.rejects(http.request("/fixture"), HttpFailure);
+    seed.close();
+    seed = undefined;
+    const cli = (command: string) =>
+      execute(process.execPath, [binary, command, "--profile", profilePath, "--local-test"], {
+        timeout: 30000,
+      });
+    const before = JSON.parse((await cli("status")).stdout) as {
+      infrastructure: { held: boolean };
+    };
+    assert.equal(before.infrastructure.held, true, "status must never clear the hold");
+    guard = await Guard.acquire(join(directory, "daemon.guard.sqlite"));
+    await assert.rejects(cli("resume-infrastructure"), (error: unknown) => {
+      assert.match((error as { stderr: string }).stderr, /already locked/);
+      return true;
+    });
+    assert.equal(
+      (JSON.parse((await cli("status")).stdout) as typeof before).infrastructure.held,
+      true,
+    );
+    guard.close();
+    guard = undefined;
+    assert.match((await cli("resume-infrastructure")).stdout, /pause cleared/);
+    seed = await Ledger.open(directory, "ledger", { ...f.ledger.limits });
+    const reopened = new HttpTransport(f.profile, fetch, true);
+    reopened.bindLedger(seed);
+    assert.equal(reopened.pressureHeld, false);
+    assert.equal(reopened.pausedUntil, 0);
+    assert.equal(seed.get(a.identity.jobId)?.bodyHash, row.bodyHash);
+    assert.equal(seed.get(a.identity.jobId)?.state, "start_intent");
+    seed.recover();
+    assert.equal(seed.get(a.identity.jobId)?.state, "unknown");
+    assert.equal(
+      seed.claim(a.identity.jobId, "approval", "uncertain-root", a.identity.jobId),
+      false,
+    );
+    await assert.rejects(readFile(marker), { code: "ENOENT" });
+    assert.equal(server.requests.length, 1, "local recovery must not dispatch network work");
+  } finally {
+    guard?.close();
+    seed?.close();
     await server.close();
     await f.cleanup();
   }

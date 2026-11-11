@@ -175,7 +175,7 @@ export class Ledger {
       throw error;
     }
   }
-  capacity(extraBytes = 0, admission = false): void {
+  capacity(extraBytes = 0, admission = false, newJob = admission): void {
     const pages = this.db.prepare("PRAGMA page_count").get() as { page_count: number };
     const size = this.db.prepare("PRAGMA page_size").get() as { page_size: number };
     const rows = this.db.prepare("SELECT count(*) AS n FROM jobs").get() as { n: number };
@@ -189,7 +189,7 @@ export class Ledger {
     if (
       pages.page_count * size.page_size + extraBytes + (admission ? reserved : 0) >
         this.limits.ledgerBytes * (admission ? 0.75 : 1) ||
-      (admission && rows.n >= this.limits.historyRows)
+      (newJob && rows.n >= this.limits.historyRows)
     )
       throw new Error("local capacity exhausted; dedup and receipt history retained");
   }

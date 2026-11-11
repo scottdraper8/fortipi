@@ -18,6 +18,7 @@ fortipi-executor import --root-binding-id ROOT --request-id IMPORT_ID --approve 
 fortipi-executor policy --profile /protected/path/profile.json --trusted-host --accept-daemon-user-files-and-network
 fortipi-executor start --profile /protected/path/profile.json
 fortipi-executor status --profile /protected/path/profile.json
+fortipi-executor resume-infrastructure --profile /protected/path/profile.json
 fortipi-executor approvals list --profile /protected/path/profile.json
 fortipi-executor approve JOB_ID --digest EXACT_LOCAL_DIGEST --profile /protected/path/profile.json
 fortipi-executor reject JOB_ID --digest EXACT_LOCAL_DIGEST --profile /protected/path/profile.json
@@ -114,9 +115,14 @@ Quota pressure, known retry/reset timestamps and Retry-After delays are retained
 in SQLite across restart. The latest known bound controls retries; long delays
 are not shortened. Storage pressure without a known retry/reset stays held for
 explicit operator recovery, with no assumed daily reset. `status` exposes the
-redacted pressure and hold state. The exported `HttpTransport.clearPressure()`
-persists an explicit local recovery decision after resolving the reported cause;
-reconnect does not clear it or replay work.
+redacted pressure and hold state. After resolving the reported cause, stop the
+daemon, run `resume-infrastructure --profile /protected/path/profile.json`, and
+start it again. This explicit local action clears the persisted pause, preserves
+pending job identities and permits reconnect; it does not claim account headroom
+or replay effects. It refuses while the daemon holds its SQLite lifetime guard.
+Ordinary status, restart and reconnect never clear the hold. The exported
+`HttpTransport.clearPressure()` provides the same persistence operation to local
+embedders, which must stop their own transport before using it.
 
 Local reads first return metadata with hashes computed from retained revision
 bytes, then accept an exactly correlated transfer descriptor to produce chunks.
