@@ -1,0 +1,26 @@
+{
+  "head": { "object": { "type": "commit", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } },
+  "directory": [
+    {
+      "name": "src",
+      "path": "runtime/src",
+      "type": "dir",
+      "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "name": "package.json",
+      "path": "runtime/package.json",
+      "type": "file",
+      "sha": "cccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "release": {
+    "id": 123,
+    "draft": false,
+    "prerelease": false,
+    "tag_name": "v1.0.0",
+    "target_commitish": "main",
+    "published_at": "2026-11-10T12:00:00Z",
+    "body": "Synthetic fixture release note."
+  }
+}

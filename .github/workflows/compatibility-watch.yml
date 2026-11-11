@@ -1,0 +1,44 @@
+name: Compatibility review
+on:
+  pull_request:
+    paths:
+      - "tools/compatibility-watch/**"
+      - ".github/workflows/compatibility-watch.yml"
+      - "docs/maintenance.md"
+  schedule:
+    - cron: "23 14 * * 2"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: compatibility-watch-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            api.github.com:443
+            github.com:443
+            nodejs.org:443
+            release-assets.githubusercontent.com:443
+            agent.api.stepsecurity.io:443
+            prod.app-api.stepsecurity.io:443
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.13.0"
+          check-latest: false
+          package-manager-cache: false
+      - name: Verify review outcomes
+        run: node --test tools/compatibility-watch/watch.test.ts
+      - name: Review upstream identities
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/compatibility-watch/watch.ts

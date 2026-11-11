@@ -1,0 +1,243 @@
+{
+  "format": 1,
+  "entries": {
+    "workers-policy": {
+      "catalogSha256": "3e27f68e18881bb254fdd75a7f41dc27ad4cb5d25b2715de4643393f2187d6c0",
+      "snapshot": {
+        "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
+        "version": null,
+        "paths": {
+          "src/content/docs/workers/platform": "38cccd166d6ce5f2dba9bdc5061349acff703f29ed61c56151c5a518167298e4",
+          "src/content/partials/workers/outbound-request-body-limits.mdx": "18f851260038816761c8963e98fbb0ff7afa76ce583d3295d55ce0e90dad69f1",
+          "src/content/partials/workers/wall-time-limits.mdx": "49cc77460a529360532c1ba86132dc745dda113a063661481a99135104ad6336",
+          "src/content/partials/workers/compute-per-request.mdx": "2feb35882f85b440a0b31921823e8dfc26cccf137f100dc6e2c86ebe9457f331"
+        },
+        "sha256": "7f934dbe641db95e97834523b4b7f3ca415b79187b49c2354ea48f48db7efb5b"
+      },
+      "pins": {},
+      "reviewedAt": "2026-11-11T09:06:45.504Z",
+      "reviewNote": "Reviewed primary limits/pricing: Free 100000 daily requests, 10ms CPU and 128MB isolate memory; paid plan is distinct from zone plans. Retain conservative bounds; no account-wide headroom or deployed-fit claim."
+    },
+    "durable-objects-policy": {
+      "catalogSha256": "5cd8d1e065a2ed7926a4a6003a88ce78cea067a5dde560d9cca913ae5ebde8eb",
+      "snapshot": {
+        "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
+        "version": null,
+        "paths": {
+          "src/content/docs/durable-objects/platform": "7215c4c012c036406fa3be35249d42067abddac481a1e3acd10437dcd5ba1912",
+          "src/content/partials/durable-objects": "3620e4f9c29ad6c846400340d294214758d06c97b305673c48933c3f8470f2a4"
+        },
+        "sha256": "5fa701e3b0912e5d13d2aa40865e5caf7a6c0b7cab64dd1408d4e364700766fc"
+      },
+      "pins": {},
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed SQLite/SQL limits and shared pricing partials: Free storage is 5GB per account, operations over a Free allowance fail, daily allowances reset at 00:00 UTC. Retain durable exhaustion holds and explicit recovery; no account quota guarantee."
+    },
+    "containers-policy": {
+      "catalogSha256": "5efd8e57a15eefe48dc59f02503378485bd81a151367e1aadb31aa0b324a2979",
+      "snapshot": {
+        "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
+        "version": null,
+        "paths": {
+          "src/content/docs/containers/platform": "b4a6b47d56b17b53a9d5482759e90852d52de7c671acb410a0d0ce73b95bc5b4",
+          "src/content/partials/containers/instance-types.mdx": "7e09d9fe486ca468c253bcf5ec953f9cc820bd1b2e88613d1100847076600974"
+        },
+        "sha256": "ecf37695106b48775d6cac2b1a86d3ef41a81c5e33ecce04d181384aa4b8488e"
+      },
+      "pins": {},
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed platform limits/pricing and shared instance types. Containers require paid capability and bill provisioned memory/disk, active CPU and outbound transfer. Retain paid gate and conservative limits; no paid/FUSE deployment proof."
+    },
+    "dynamic-workers-policy": {
+      "catalogSha256": "8ea79c98cb02f0ca69e9b025f886f3b99c5d5da2bbb95fb07b31d37f9da980cc",
+      "snapshot": {
+        "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
+        "version": null,
+        "paths": {
+          "src/content/docs/dynamic-workers": "ce0f28a7b62d20d61b30b9d2547befd3b6f70fbb0c96a415b465aff02c6624cc"
+        },
+        "sha256": "fa27aa55a720aa408032badcaf1fd241a7a30b0b13f7bdf8715e41960533d7a2"
+      },
+      "pins": {},
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed pricing/API/limits: Workers Paid only, creation/request/CPU billing, four concurrent distinct workers per Worker request and ten collectively per Durable Object. Retain paid gate; no automatic limit/config migration."
+    },
+    "workers-compatibility": {
+      "catalogSha256": "4fd0686da2a0552c666942fc950197304baa684b1cd1233e5b443559767dd2e5",
+      "snapshot": {
+        "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
+        "version": null,
+        "paths": {
+          "src/content/docs/workers/configuration/compatibility-dates.mdx": "fe6715e5fcc7b59042450f660aea243a60257b76ed63b806064e2a0db9a7ea95",
+          "src/content/docs/workers/configuration/compatibility-flags.mdx": "77675f1756e82b577d1acb1b650b0c5f31c94f9356dbaaa5a413f3d6b7a57629",
+          "src/content/compatibility-flags": "fb0ff64f9423f3e676acbc358670f6dd2016ffd33df1960468e49918e5a20735"
+        },
+        "sha256": "c5895cc5d55a8de45ca36a3f6aea31750eb64eaa6e2ca815b446ce8da8176170"
+      },
+      "pins": {},
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed compatibility-date/flag documentation and flag data origin. FortiPi source uses 2026-11-10 with nodejs_compat and both request-signal flags. These references are watch anchors; changing runtime compatibility requires explicit validation."
+    },
+    "computer-fuse": {
+      "catalogSha256": "c4c8b17f74da3c8b3563522a2c0d5356d4805d624ce4de15cb25a3e8c34051cc",
+      "snapshot": {
+        "commit": "deb774ff962b9d070efc257b573b9ea2b4174036",
+        "version": "0.10.0",
+        "paths": {
+          "packages": "ea574495a6357c4c84c0e945a38671f40338c3893152a55bfc550d92a8d26097",
+          "docs": "2b92bf217058d66558eec34dbea1d374f765ad6b75b17a73b21423ed76787cf4",
+          "packages/computer/package.json": "be91b5a41fb24bd3bda98a463b9e42529b0c23eb0256ec8d1bf48b0dc19297c6",
+          "packages/computerd/package.json": "52b4baeb77754ef52f16387c57de0c4f0ca6f99d0953c1df70a4a3e11b68e353"
+        },
+        "sha256": "31dc7382f91e9fb0179ae7a61997df46489814086f8d0be28b12d28c1ad63d53"
+      },
+      "pins": {
+        "apps/worker/package.json#dependencies/@cloudflare/computer": "0.10.0"
+      },
+      "reviewedAt": "2026-11-11T09:09:14.379Z",
+      "reviewNote": "Reviewed Computer/computerd 0.10.0 manifests and changelogs. Computer renames the JavaScript backend to CodemodeBackend and changes its default persisted backend identity; computerd includes FUSE/native dependencies. Retain exact client pin and reviewed image provenance; native/paid/FUSE tests remain release gates. The official Computer docs tree is also watched for protocol/backend guidance changes."
+    },
+    "agents-lifecycle": {
+      "catalogSha256": "6845cb5c33905cbac363710a051956451ab229dde00e4dbaf1cd5a9a7fbca352",
+      "snapshot": {
+        "commit": "f0f4ed98f6733b1f09b615efe8de0b626b722691",
+        "version": "0.33.0",
+        "paths": {
+          "packages/agents": "feab7d876e0406a41018d219aea25886712160d6183c9462a1bb76f3b68105c0",
+          "packages/agents/package.json": "5a88cead6a563890a7a7bbfa17a719f0d1bc7b03e167e8a3f64235f74e900ab9",
+          "docs/agents/harnesses/pi.md": "879415c6f6ecf8fc5e6d5a1a9bba2f70e23cb37159517962848bdf5924d4239b"
+        },
+        "sha256": "17d34e5e3a7b3a38575487f96e401ae74a728999842cfff0b6c37d8fddc81e03"
+      },
+      "pins": {
+        "apps/worker/package.json#dependencies/agents": "0.33.0"
+      },
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed Agents 0.33.0 changelog and PiHarness guide: Pi 1.5 peers, Lifecycle host wake/recovery, batched streamed persistence and session.watch API. Pi 1.5 storage is not readable by 1.4. Retain pin; actual recovery/rollback constraints remain runtime release obligations."
+    },
+    "pi-runtime": {
+      "catalogSha256": "8626cad373ee3e1232bd93e85856e9b37ac9de02e5b2b1bc0ea096fdfc2ef8d0",
+      "snapshot": {
+        "commit": "b3c2e4a6bef8d370e311c472306c43a3f8f7308a",
+        "version": "1.5.2",
+        "paths": {
+          "packages": "494da1042431a4a4a41d0b764c53fd0e599ef26c8874acd020d8098e8f3e8679",
+          "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
+        },
+        "sha256": "c0acd3a16221b3e1d103b3c263813fc07ca3a74bea01cc824222b7d1b5ae739a"
+      },
+      "pins": {
+        "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
+        "apps/worker/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
+        "apps/worker/package.json#dependencies/@earendil-works/pi-schema": "1.5.2",
+        "apps/worker/package.json#dependencies/@earendil-works/chord": "1.5.2",
+        "apps/worker/package.json#dependencies/@earendil-works/pi-codemode": "1.5.2",
+        "apps/worker/package.json#dependencies/@earendil-works/pi-telemetry": "1.5.2",
+        "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
+        "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
+      },
+      "reviewedAt": "2026-11-11T09:32:51.350Z",
+      "reviewNote": "Reviewed primary compare 49fe0a2...b3c2e4a: one unreleased commit changes coding-agent llama.cpp default port 8080 to 9931 plus examples/tests; no durable API or package-version change. Retain locked 1.5.2; future provider onboarding must respect explicit configured URLs. No runtime compatibility claim."
+    },
+    "wrangler": {
+      "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
+      "snapshot": {
+        "commit": "877b249292307ae4dd282080e68b1d88c0fd0bb0",
+        "version": "4.160.0",
+        "paths": {
+          "packages/wrangler": "14c73e3746b41a2d045cc8e9fdc6a5fe032be82bee08c2bf6a5c380dbd27218a",
+          "packages/wrangler/package.json": "6072fef5cb634caf9daee4d5a6bcefd70f18ba0d14c7a911668274c3ce399dd1"
+        },
+        "sha256": "d16a6e2a779cd64107cd87bd351d339975374a9fa61e010a6e61359a18ae9548"
+      },
+      "pins": {
+        "apps/worker/package.json#devDependencies/wrangler": "4.160.0",
+        "packages/fortipi-cli/package.json#dependencies/wrangler": "4.160.0"
+      },
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed 4.160.0 manifest/changelog: bundled workerd 1.20261110.1/types, container upload retry handling and configuration/API additions. Retain exact CLI/Worker pins and existing installed prepare/deploy/image checks before any adoption."
+    },
+    "workerd": {
+      "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
+      "snapshot": {
+        "commit": "f93f331afd18b55b81d7e3b0e935ccab4a1b707f",
+        "version": "v1.20261111.1",
+        "sha256": "32c537eca732d796d5ced5fdcafd9489046e900bdfa592d4cc105cdbb1aa0f92",
+        "paths": {}
+      },
+      "pins": {
+        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261110.1"
+      },
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed v1.20261111.1 release and actual tag commit. Newer than the locked 1.20261110.1 runtime; notes include queued WebSocket memory accounting, SQLite CTE regression backout and container stream changes. Retain current lock; upstream/platform relevance needs candidate runtime/recovery review, not a safety inference."
+    },
+    "node": {
+      "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
+      "snapshot": {
+        "commit": "18b32a3b1552e199a01f1a8d9fd64aa756d3b75b",
+        "version": "v26.13.0",
+        "sha256": "081c4e4a94121658b630033a9d85fabdb2398bf446694f5b5f60ee5896f226e6",
+        "paths": {}
+      },
+      "pins": {
+        "package.json#fortipi/toolchain/node": "26.13.0"
+      },
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed official v26.13.0 release and resolved tag: Node 26 LTS transition, Linux libatomic prerequisite. Matches toolchain pin. This reference does not replace fresh prepublication Node security review or native ABI/build checks."
+    },
+    "pnpm": {
+      "catalogSha256": "e58410592c8f99f5a020cb7c675a8fb1adcab60b7954df4ee66f045f48f14708",
+      "snapshot": {
+        "commit": "0470052291b2ba369be93a9b696e0a0097722ba5",
+        "version": "v12.18.0",
+        "sha256": "c5cfce536bf2ff4177c36e0f78eeed7557dfc92263b8d25391ce6adcae2d4664",
+        "paths": {}
+      },
+      "pins": {
+        "package.json#packageManager": "pnpm@12.18.0"
+      },
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed v12.18.0 release/tag: lock/install behavior, platform variants and agent-skill approvals. Retain pinned manager and disabled skill directories; actual frozen root/isolated-tool installs are required."
+    },
+    "typescript": {
+      "catalogSha256": "281424da318292a0ed0449e4fe3cc2b3be9e207251b80380700eb539925f768c",
+      "snapshot": {
+        "commit": "2bd066d87f5bafd315be9f40889d0a60b9e58e0b",
+        "version": "typescript/v7.0.2",
+        "sha256": "23bd76de28e796f61d6aedeed55ba5e5c99d29c5aa23a91a7c7748a67a70fe3f",
+        "paths": {}
+      },
+      "pins": {
+        "package.json#devDependencies/typescript": "7.0.2"
+      },
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed official TypeScript v7.0.2 release pointer, which identifies microsoft/typescript-go tag typescript/v7.0.2 as the original release. Watch that actual compiler repository. Retain exact compiler and strict tools/project checks."
+    },
+    "native-pty": {
+      "catalogSha256": "5c05dd1d3d22ed65339aaf81944dfb4dcb4468424f4b94401581f5f714f7c36a",
+      "snapshot": {
+        "commit": "1def5774632305246fe21f0f69e23a664d6c5910",
+        "version": "v1.1.0",
+        "sha256": "5956cdb46fb74a15525c57103a5b31570ec3b4912e93ce848635235c4c4fdcae",
+        "paths": {}
+      },
+      "pins": {
+        "package.json#devDependencies/node-pty": "1.1.0"
+      },
+      "reviewedAt": "2026-11-11T09:06:45.505Z",
+      "reviewNote": "Reviewed official v1.1.0 release/tag: native terminal I/O, platform builds and prebuild handling. Matches pin; source build under Node 26.13.0 remains required. Native installed Windows/macOS/Linux behavior is not established by this reference."
+    },
+    "libfuse": {
+      "catalogSha256": "4bc2b53a9f9706982f692072144073110d84e6683787b1a204e7063dbe419bfc",
+      "snapshot": {
+        "commit": "3dbcfce64ba0dd529cec7b94305662e7901a991b",
+        "version": "fuse-3.18.3",
+        "sha256": "cc350effafd4b1b0ec4a05a716b0a7d467e830d39daddcd0cb145a65ae7f859c",
+        "paths": {}
+      },
+      "pins": {},
+      "reviewedAt": "2026-11-11T09:31:22.733Z",
+      "reviewNote": "Reviewed official 3.18.3 release: API/ABI and mount/unmount security changes require comparison with exact Debian source/patches. Native image security disposition remains open; no installed-version safety claim. Bind the integrated native freeze before release."
+    }
+  }
+}
