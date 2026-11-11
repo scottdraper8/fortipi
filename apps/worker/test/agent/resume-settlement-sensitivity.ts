@@ -30,9 +30,9 @@ try {
           builder.onLoad({ filter: /src\/agent\/controls\.ts$/ }, async (args) => {
             const source = await readFile(args.path, "utf8");
             const needle = 'admission.state === "settled",';
-            assert.equal(source.split(needle).length, 2);
+            assert.equal(source.split(needle).length, 3);
             changes++;
-            return { loader: "ts", contents: source.replace(needle, "true,") };
+            return { loader: "ts", contents: source.replaceAll(needle, "true,") };
           });
         },
       },

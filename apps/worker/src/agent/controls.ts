@@ -34,6 +34,28 @@ export class Controls {
     }
     check(mapped, "not_found", "Task admission unavailable");
     const key = `${auth.principalId}:${input.path.id}:${input.body.requestId}`;
+    // Known receipts precede maintenance. Sampling must stay outside the shared
+    // SQL transaction; only acknowledged prior work is eligible for retirement.
+    if (input.operationId === "resumeTask" && !(await store.get("task-control", key))) {
+      const admission = await store.get<Admission>("admission", mapped.key);
+      check(admission, "not_found", "Task admission unavailable");
+      const resources = scope({
+        agentIds: [agentId],
+        conversationIds: [admission.conversationId],
+        actions: ["tasks.resume"],
+      });
+      await this.conversations.host.authority.current(auth, resources);
+      check(
+        admission.state === "settled",
+        "conflict",
+        "Previous operation settlement must be acknowledged before resuming",
+      );
+      await this.conversations.host.authority.physical.makeRoom(
+        auth,
+        resources,
+        store.modelGrowth(),
+      );
+    }
     const receipt = await store.once("task-control", key, input, async (tx) => {
       if (input.operationId === "resumeTask") {
         const task = await store.get<D.Task>("task", input.path.id, tx);
