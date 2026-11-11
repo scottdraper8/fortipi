@@ -124,9 +124,13 @@ jobs:
       - name: Compile contract and maintained image tooling
         run: |
           pnpm exec tsc -p packages/fortipi-contract/tsconfig.json
+          pnpm exec tsc -p packages/fortipi-client/tsconfig.json
+          pnpm exec tsc -p packages/fortipi-executor/tsconfig.json
+          pnpm exec tsc -p packages/fortipi-tui/tsconfig.json
+          pnpm exec tsc -p packages/fortipi-cli/tsconfig.json
           pnpm exec tsc -p apps/worker/tsconfig.json --noEmit
           pnpm exec tsc -p tsconfig.tools.json --noEmit
-          node --test tools/unstale/verify-container-egress.test.ts apps/worker/test/backends/image-archive.test.ts
+          node --test tools/unstale/verify-container-egress.test.ts apps/worker/test/backends/image-archive.test.ts apps/worker/container/recipient.test.ts
       - name: Verify existing signed-source and ELF tools
         run: |
           /usr/bin/timeout 5 /usr/bin/gpgv --version
@@ -144,6 +148,12 @@ jobs:
       - name: Build the pinned image and collect its actual inventory
         id: build
         run: node --import ./tools/unstale/image-network-diagnostics.ts apps/worker/container/build.ts
+      - name: Capture audited builder and private daemon
+        run: node apps/worker/container/recipient.ts capture
+      - name: Provision empty recipient Docker (${{ matrix.mode }})
+        run: node tools/unstale/provision-docker.ts ${{ matrix.provision_args }}
+      - name: Load exact canonical archive into the empty recipient
+        run: node apps/worker/container/recipient.ts load
       - name: Verify ContainerHost transport (${{ matrix.mode }})
         run: node tools/unstale/run-container-probe.ts ${{ matrix.provision_args }}
       - name: Observe actual bridge and host container egress
