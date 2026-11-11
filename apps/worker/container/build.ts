@@ -5,10 +5,12 @@ import {
   copyFile,
   lstat,
   mkdir,
+  mkdtemp,
   open,
   readdir,
   readFile,
   readlink,
+  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -19,7 +21,11 @@ import { paragraphs, requiredPackages } from "./debian.ts";
 import { verifyNativeCompatibility } from "./elf-compatibility.ts";
 import { freezeEmbedded, prepareEmbedded } from "./embedded.ts";
 import { authenticateIndexes } from "./fuse-security.ts";
-import { inspectImageArchive, verifyBuildMetadata } from "./image-archive.ts";
+import {
+  canonicalizeImageArchive,
+  inspectImageArchive,
+  verifyBuildMetadata,
+} from "./image-archive.ts";
 import { filePolicy, type PrunePolicy, pruningPolicy } from "./image-prune.ts";
 import { imageInputs } from "./inputs.ts";
 import { compareRootfs, scanRootfs } from "./rootfs.ts";
@@ -684,8 +690,24 @@ async function build(pin: Freeze): Promise<void> {
   ]).trim();
   check(/^sha256:[a-f0-9]{64}$/.test(imageId), "Missing actual built image ID");
   const archive = resolve(output, "image.tar");
-  command("docker", ["save", "--output", archive, imageId]);
-  const inspected = await inspectImageArchive(archive, imageId, { pruning: pin.pruning });
+  const temporary = await mkdtemp(resolve(output, ".image-export-"));
+  const inspected = await (async () => {
+    try {
+      const raw = resolve(temporary, "raw.tar");
+      const candidate = resolve(temporary, "canonical.tar");
+      command("docker", ["save", "--output", raw, imageId]);
+      const selected = await canonicalizeImageArchive(raw, candidate, imageId);
+      const checked = await inspectImageArchive(candidate, imageId, { pruning: pin.pruning });
+      check(
+        JSON.stringify(checked.saved) === JSON.stringify(selected),
+        "Canonical selected image changed",
+      );
+      await rename(candidate, archive);
+      return checked;
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  })();
   const saved = inspected.saved;
   compareRootfs(cleaned.filesystem, inspected.filesystem);
   const statArgs = ["--rm", "--network=none", "--entrypoint", "stat"];

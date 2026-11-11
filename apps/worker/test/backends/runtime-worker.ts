@@ -1,4 +1,4 @@
-import { DurableObject } from "cloudflare:workers";
+import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Workspace, WorkspaceProxy } from "@cloudflare/computer";
 import { CodemodeBackend } from "@cloudflare/computer/backends/codemode";
 import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
@@ -9,6 +9,43 @@ import {
 import { ContainerHostTransport } from "../../src/container/host-transport.js";
 
 export { WorkspaceProxy };
+
+// Both probe targets use the same host fetch; StepSecurity supplies the policy.
+export class ProbeGateway extends WorkerEntrypoint {
+  override async fetch(request: Request): Promise<Response> {
+    const target =
+      request.url === "https://registry.npmjs.org/pnpm/12.18.0"
+        ? "allowed-registry"
+        : request.url === "https://example.com/"
+          ? "denied-example"
+          : undefined;
+    if (request.method !== "HEAD" || !target) return new Response(null, { status: 400 });
+    try {
+      const response = await fetch(request, {
+        redirect: "manual",
+        signal: AbortSignal.any([request.signal, AbortSignal.timeout(4000)]),
+      });
+      console.log(
+        `fortipi-gateway:${JSON.stringify({ target, forwarded: true, outcome: "response", status: response.status })}`,
+      );
+      return response;
+    } catch (error: unknown) {
+      console.log(
+        `fortipi-gateway:${JSON.stringify({
+          target,
+          forwarded: true,
+          outcome:
+            error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)
+              ? "aborted"
+              : "upstream-error",
+          status: null,
+        })}`,
+      );
+      // This status alone never establishes policy denial.
+      return new Response(null, { status: 502 });
+    }
+  }
+}
 
 export class ProbeHost extends DurableObject {
   #transport: ContainerHostTransport | undefined;
@@ -67,7 +104,14 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
           id: "probe",
           name: "computerd",
           restartAttempts: 0,
-          egress: { mode: "direct" },
+          egress: {
+            mode: "http-gateway",
+            gateway: (
+              this.ctx.exports as unknown as {
+                ProbeGateway(options: Record<string, never>): Fetcher;
+              }
+            ).ProbeGateway({}),
+          },
           connectTimeoutMs: 20_000,
           healthProbeTimeoutMs: 1000,
         })
