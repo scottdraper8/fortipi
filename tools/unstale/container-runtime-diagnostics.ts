@@ -1,9 +1,12 @@
 // CI-only bounded state observations while the one real transport fixture runs.
+import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { isIPv4 } from "node:net";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { repository } from "../../scripts/build-workspaces.ts";
+import { isStepSecuritySinkhole } from "./verify-container-egress.ts";
 
 const execute = promisify(execFile);
 const format =
@@ -39,6 +42,7 @@ if (
     ).stdout;
   let polls = 0;
   let healthAttempts = 0;
+  let dnsAttempted = false;
   let busy = false;
   let previous = "";
   async function observeHealth(id: string) {
@@ -59,6 +63,129 @@ if (
         unknown: httpStatus === null,
       }),
     );
+    return httpStatus === 200;
+  }
+  async function observeDns(id: string, imageId: string): Promise<void> {
+    const targets = [
+      ["internal-callback", "computer.internal"],
+      ["allowed-registry", "registry.npmjs.org"],
+      ["denied-example", "example.com"],
+    ] as const;
+    const signal = AbortSignal.timeout(6000);
+    const identityFormat =
+      '{"id":{{json .Id}},"imageId":{{json .Image}},"imageRef":{{json .Config.Image}},"pid":{{.State.Pid}},"startedAt":{{json .State.StartedAt}},"running":{{.State.Running}},"network":{{json .HostConfig.NetworkMode}}}';
+    interface Identity {
+      id: string;
+      imageId: string;
+      imageRef: string;
+      pid: number;
+      startedAt: string;
+      running: boolean;
+      network: string;
+    }
+    const inspect = async (ids: string[]): Promise<Identity[]> => {
+      const result = await execute("docker", ["inspect", "--format", identityFormat, ...ids], {
+        env,
+        signal,
+        timeout: 1000,
+        killSignal: "SIGKILL",
+        maxBuffer: 4096,
+        encoding: "utf8",
+      });
+      return result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Identity);
+    };
+    let results: { target: string; exit: string; classification: string }[];
+    try {
+      // Resolve only a public network reference; never inspect Env, Cmd or credentials.
+      const app = (await inspect([id]))[0];
+      assert.ok(app && app.id === id && app.imageId === imageId);
+      assert.ok(app.network.startsWith("container:"));
+      const sidecarRef = app.network.slice("container:".length);
+      assert.match(sidecarRef, /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/);
+      const before = await inspect([id, sidecarRef]);
+      assert.equal(before.length, 2);
+      assert.deepEqual(before[0], app);
+      assert.equal(before[0]?.id, id);
+      assert.equal(before[0]?.imageId, imageId);
+      assert.equal(before[0]?.network, app.network);
+      assert.equal(
+        before[1]?.imageRef,
+        "cloudflare/proxy-everything:3cb1195@sha256:0ef6716c52430096900b150d84a3302057d6cd2319dae7987128c85d0733e3c8",
+      );
+      assert.equal(before[1]?.network, "bridge");
+      for (const row of before) {
+        assert.match(row.id, /^[a-f0-9]{64}$/);
+        assert.match(row.imageId, /^sha256:[a-f0-9]{64}$/);
+        assert.ok(row.running === true && Number.isSafeInteger(row.pid) && row.pid > 1);
+        assert.match(row.startedAt, /^\d{4}-\d\d-\d\dT[0-9:.]+Z$/);
+      }
+      results = await Promise.all(
+        targets.map(async ([target, hostname]) => {
+          try {
+            const { stdout } = await execute(
+              "docker",
+              [
+                "exec",
+                id,
+                "/usr/bin/timeout",
+                "--signal=KILL",
+                "1",
+                "/usr/bin/getent",
+                "ahostsv4",
+                hostname,
+              ],
+              {
+                env,
+                signal,
+                timeout: 2000,
+                killSignal: "SIGKILL",
+                maxBuffer: 4096,
+                encoding: "utf8",
+              },
+            );
+            const addresses = [
+              ...new Set(
+                stdout
+                  .split("\n")
+                  .map((line) => line.split(/\s+/)[0] ?? "")
+                  .filter(isIPv4),
+              ),
+            ];
+            const classification = isStepSecuritySinkhole(addresses)
+              ? "provider-sinkhole"
+              : addresses.length === 1 && addresses[0] === "11.0.0.1"
+                ? "synthetic-allow"
+                : addresses.length > 0
+                  ? "resolved"
+                  : "unknown";
+            return { target, exit: "zero", classification };
+          } catch (error) {
+            const code = (error as { code?: unknown }).code;
+            return {
+              target,
+              exit:
+                code === 124 || code === 137
+                  ? "timeout"
+                  : code === 125 || code === 126 || code === 127
+                    ? "setup-failure"
+                    : typeof code === "number"
+                      ? "nonzero"
+                      : "unknown",
+              classification: "unknown",
+            };
+          }
+        }),
+      );
+      const after = await inspect(before.map((row) => row.id));
+      assert.deepEqual(after, before);
+    } catch {
+      results = targets.map(([target]) => ({ target, exit: "unknown", classification: "unknown" }));
+    }
+    for (const result of results)
+      console.error(JSON.stringify({ probe: "application-dns", ...result }));
   }
   async function observe() {
     if (busy) return;
@@ -140,7 +267,11 @@ if (
         );
         if (computerd) {
           healthAttempts++;
-          await observeHealth(computerd.id);
+          const healthy = await observeHealth(computerd.id);
+          if (healthy && !dnsAttempted) {
+            dnsAttempted = true;
+            await observeDns(computerd.id, metadata.imageId);
+          }
         }
       }
     } catch {

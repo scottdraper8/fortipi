@@ -65,6 +65,7 @@ async function command(file: string, args: string[], env: NodeJS.ProcessEnv, tim
 
 async function download(url: string, sha256: string, cacheName: string): Promise<Buffer> {
   let bytes: Buffer;
+  let downloaded = false;
   try {
     bytes = await readFile(resolve(repository, "dist/toolchain", cacheName));
   } catch (error) {
@@ -72,8 +73,15 @@ async function download(url: string, sha256: string, cacheName: string): Promise
     const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
     assert.ok(response.ok, `Public tooling download failed: HTTP ${response.status}`);
     bytes = Buffer.from(await response.arrayBuffer());
+    downloaded = true;
   }
   assert.equal(hash(bytes), sha256, `${cacheName}: reviewed identity changed`);
+  // The namespace verifier independently binds its daemon to this publisher archive.
+  if (downloaded && cacheName === "docker-29.9.3.tgz")
+    await writeFile(resolve(repository, "dist/toolchain", cacheName), bytes, {
+      flag: "wx",
+      mode: 0o600,
+    });
   return bytes;
 }
 
