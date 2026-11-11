@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
+import { verifyApplicationNamespace } from "../../../../tools/unstale/verify-app-network.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const directory = resolve(root, "apps/worker/dist/container");
@@ -97,6 +98,7 @@ try {
   process.stdout.write(
     `${JSON.stringify({ imageId: metadata.imageId, localExecution: true, realFuse: body.fuse, cloudVerified: false })}\n`,
   );
+  await verifyApplicationNamespace(metadata.imageId);
 } finally {
   try {
     const allowed = new Set(

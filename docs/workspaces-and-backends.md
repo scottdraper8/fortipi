@@ -209,10 +209,16 @@ digests are never presented as a final built image digest. A local image ID and
 archive hash do not establish a published registry manifest digest. CLI packaging
 and release must bind the actual selected image and source kit to the release
 commit and preserve applicable source/replacement obligations.
-The builder retains Buildx's actual manifest/config metadata, checks the loaded
-config ID, and records `builtManifestDigest`; `registryDigest` stays null until
-publication supplies an observed registry digest. This uses Docker's documented
-[build metadata output](https://docs.docker.com/reference/cli/docker/buildx/build/#write-build-result-metadata-to-a-file-metadata-file).
+The builder retains Buildx's actual exporter metadata separately from the saved
+image graph. It verifies Docker-save's OCI index, actual manifest/config/layer
+hashes and sizes, platform and loaded image identity. Classic-store config IDs
+and containerd manifest IDs must match the corresponding verified graph member.
+`builtManifestDigest` identifies
+that saved OCI manifest; `registryDigest` stays null until publication supplies an
+observed registry digest. Classic Moby's exporter may report its config under
+`containerimage.digest`; it is never relabeled as a manifest. See the pinned
+[Moby image exporter](https://github.com/moby/moby/blob/docker-v29.9.3/daemon/internal/builder-next/exporter/mobyexporter/export.go)
+and [Docker-save implementation](https://github.com/moby/moby/blob/docker-v29.9.3/daemon/internal/image/tarexport/save.go).
 
 `sources-and-notices.tar` contains the exact frozen source archives, embedded npm
 archives, Computer source, licenses and recipe, with an internal hash inventory.

@@ -1,0 +1,157 @@
+name: Container image proof
+on:
+  pull_request:
+    paths:
+      - .github/workflows/image-proof.yml
+      - apps/worker/container/**
+      - apps/worker/test/backends/**
+      - tools/unstale/provision-docker.ts
+      - tools/unstale/platform-tools.json
+      - tools/unstale/verify-container-egress.ts
+      - tools/unstale/verify-container-egress.test.ts
+      - tools/unstale/image-network-diagnostics.ts
+      - tools/unstale/container-runtime-diagnostics.ts
+      - tools/unstale/run-container-probe.ts
+      - tools/unstale/verify-app-network.ts
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/image-proof.yml
+      - apps/worker/container/**
+      - apps/worker/test/backends/**
+      - tools/unstale/provision-docker.ts
+      - tools/unstale/platform-tools.json
+      - tools/unstale/verify-container-egress.ts
+      - tools/unstale/verify-container-egress.test.ts
+      - tools/unstale/image-network-diagnostics.ts
+      - tools/unstale/container-runtime-diagnostics.ts
+      - tools/unstale/run-container-probe.ts
+      - tools/unstale/verify-app-network.ts
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: image-proof-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  CI: "true"
+  GOTOOLCHAIN: local
+  WRANGLER_SEND_METRICS: "false"
+  npm_config_node_gyp: ${{ github.workspace }}/node_modules/node-gyp/bin/node-gyp.js
+  npm_config_build_from_source: "true"
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+jobs:
+  image:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: Image proof (${{ matrix.mode }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: rootful
+            provision_args: ""
+          - mode: rootless
+            provision_args: --rootless
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            codeload.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            api.osv.dev:443
+            download.docker.com:443
+            auth.docker.io:443
+            registry-1.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            snapshot.debian.org:443
+            keyring.debian.org:443
+            go.dev:443
+            dl.google.com:443
+            proxy.golang.org:443
+            sum.golang.org:443
+            storage.googleapis.com:443
+            www.python.org:443
+            downloads.python.org:443
+            api.stepsecurity.io:443
+            agent.api.stepsecurity.io:443
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.13.0"
+          check-latest: false
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: "12.18.0"
+          run_install: false
+          cache: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15.2"
+          check-latest: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.4"
+          check-latest: false
+          cache: false
+      - run: node scripts/install-dependencies.ts
+      - run: pnpm --dir tools/unstale install --frozen-lockfile
+      - name: Observe host allowed and refused egress
+        run: node scripts/verify-foundation.ts --egress
+      - run: node tools/unstale/review-supply-chain.ts --locks --check
+      - run: pnpm run check:pins
+      - name: Compile contract and maintained image tooling
+        run: |
+          pnpm exec tsc -p packages/fortipi-contract/tsconfig.json
+          pnpm exec tsc -p apps/worker/tsconfig.json --noEmit
+          pnpm exec tsc -p tsconfig.tools.json --noEmit
+          node --test tools/unstale/verify-container-egress.test.ts apps/worker/test/backends/image-archive.test.ts
+      - name: Verify existing signed-source and ELF tools
+        run: |
+          /usr/bin/timeout 5 /usr/bin/gpgv --version
+          /usr/bin/timeout 5 /usr/bin/ar --version
+          /usr/bin/timeout 5 /usr/bin/xz --version
+          /usr/bin/timeout 5 /usr/bin/tar --version
+          /usr/bin/timeout 5 /usr/bin/objdump --version
+          /usr/bin/timeout 5 /usr/bin/nsenter --version
+      - name: Prepare authenticated inputs and challenge signature and ABI checks
+        run: |
+          node apps/worker/container/build.ts --prepare
+          node --test apps/worker/container/fuse-security.test.ts
+      - name: Provision reviewed Docker (${{ matrix.mode }})
+        run: node tools/unstale/provision-docker.ts ${{ matrix.provision_args }}
+      - name: Build the pinned image and collect its actual inventory
+        id: build
+        run: node --import ./tools/unstale/image-network-diagnostics.ts apps/worker/container/build.ts
+      - name: Verify ContainerHost transport (${{ matrix.mode }})
+        run: node tools/unstale/run-container-probe.ts ${{ matrix.provision_args }}
+      - name: Observe actual bridge and host container egress
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: node tools/unstale/verify-container-egress.ts
+      - name: Retain nonbinary verification evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: container-evidence-${{ matrix.mode }}-${{ env.SOURCE_SHA }}
+          path: |
+            apps/worker/dist/container/image-metadata.json
+            apps/worker/dist/container/installed-packages.txt
+            apps/worker/dist/container/license-inventory.json
+          if-no-files-found: warn
+          retention-days: 7
