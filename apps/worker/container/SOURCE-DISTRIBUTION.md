@@ -154,7 +154,15 @@ target rather than relying on shared-library substitution for its embedded code.
 This finding is scoped to FUSE and does not certify every image component.
 
 On an actual supported Linux amd64 runner, after the existing independent
-recipient import, run:
+recipient import, provision the pinned Meson with the existing Python3.15.2:
+
+```sh
+node tools/unstale/provision-meson.ts --python /absolute/path/to/python3.15
+```
+
+Prepend the emitted `bin` path to PATH. CI exports this private path automatically.
+The replacement gate rechecks the authenticated source tree and Python identity
+before use. Inside the existing verified rootless namespace, run:
 
 ```sh
 node apps/worker/container/library-replacement.ts \
@@ -163,9 +171,10 @@ node apps/worker/container/library-replacement.ts \
   --records "$RECORDS" --out NEW_REPLACEMENT_DIRECTORY --require-fuse
 ```
 
-The runner must already provide `cc`, Meson>=0.60, Ninja, Python, Linux development
-headers, `pkg-config`, `dpkg-source` and the reviewed Docker/BuildKit. The command
-installs nothing and disables Meson downloads. It extracts the exact DSC, changes
+The runner must already provide `cc`, Ninja, Linux development headers,
+`pkg-config`, `dpkg-source` and the reviewed Docker/BuildKit. The gate uses the
+repository's exact Meson1.12.1 source and bootstrap Python. It installs no runtime
+packages and disables Meson downloads. It extracts the exact DSC, changes
 `fuse_pkgversion()` without changing its signature/result, and rebuilds both the
 shared library and helper. It also modifies the LGPL `mount_util.c` compiled
 into the helper; standalone helper execution must produce that modification's
@@ -187,8 +196,9 @@ The helper is rebuilt from its full source and used in the modified fixture.
 
 Rootless execution must retain the existing recipient wrapper's verified user,
 network and mount namespaces and `--require-fuse`; launching it on the outer host
-does not qualify. The parent integrates this command after the existing harness
-has closed, in that same wrapper context. macOS/other architectures fail explicitly.
+does not qualify. `node tools/unstale/run-container-probe.ts --rootless --verify-library-replacement`
+invokes it after the existing harness closes, in the same verified context.
+macOS/other architectures fail explicitly.
 After Linux execution, repeat the artifact gate with
 `--replacement NEW_REPLACEMENT_DIRECTORY/library-replacement.json` and
 `--replacement-sha256 AUTHENTICATED_RECEIPT_SHA` to bind the runtime result to the
