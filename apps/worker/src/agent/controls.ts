@@ -57,17 +57,18 @@ export class Controls {
       );
     }
     const receipt = await store.once("task-control", key, input, async (tx) => {
+      const task = await store.get<D.Task>("task", input.path.id, tx);
+      check(task, "not_found", "Task unavailable");
       if (input.operationId === "resumeTask") {
-        const task = await store.get<D.Task>("task", input.path.id, tx);
         check(
           input.body.continuation === "resume" &&
-            task?.status.state === "waiting" &&
+            task.status.state === "waiting" &&
             task.status.supportedContinuations?.includes("resume"),
           "unsupported",
           "Requested continuation is unavailable",
           {
             supportedContinuations:
-              task?.status.state === "waiting" ? task.status.supportedContinuations : [],
+              task.status.state === "waiting" ? task.status.supportedContinuations : [],
           },
         );
       }
@@ -75,10 +76,28 @@ export class Controls {
         operationId: resourceId("m", agentId),
         durableIntent: true,
         disposition: {
-          state: "unknown",
+          state:
+            input.operationId === "cancelTask" &&
+            ["completed", "failed", "interrupted", "cancelled"].includes(task.status.state)
+              ? "already-terminal"
+              : "unknown",
           possibleExternalEffects: input.operationId === "cancelTask",
         },
       };
+      if (receipt.disposition.state === "already-terminal") {
+        await this.conversations.host.authority.current(
+          auth,
+          scope({
+            agentIds: [agentId],
+            conversationIds: [task.conversationId],
+            actions: ["tasks.cancel"],
+          }),
+          tx,
+        );
+        // The once receipt is durable; no new abort is needed. A terminal task
+        // projection does not establish that earlier external effects are absent.
+        return receipt;
+      }
       const growthBytes = input.operationId === "resumeTask" ? store.modelGrowth() : undefined;
       if (growthBytes !== undefined) {
         const admission = await store.get<Admission>("admission", mapped.key, tx);
