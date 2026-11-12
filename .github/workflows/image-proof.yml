@@ -22,7 +22,7 @@ on:
       - tools/unstale/run-container-probe.ts
       - tools/unstale/verify-app-network.ts
   push:
-    branches: [main]
+    branches: [main, "ci/fortipi-image-proof-*"]
     paths:
       - .github/workflows/image-proof.yml
       - apps/worker/container/**
@@ -82,6 +82,7 @@ jobs:
             release-assets.githubusercontent.com:443
             codeload.github.com:443
             results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
             registry.npmjs.org:443
             nodejs.org:443
             api.osv.dev:443
@@ -93,6 +94,7 @@ jobs:
             ghcr.io:443
             pkg-containers.githubusercontent.com:443
             snapshot.debian.org:443
+            security.debian.org:443
             keyring.debian.org:443
             go.dev:443
             dl.google.com:443
@@ -184,11 +186,38 @@ jobs:
       - name: Observe actual bridge and host container egress
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: node tools/unstale/verify-container-egress.ts
+      - name: Require hardener still active
+        if: always()
+        timeout-minutes: 1
+        run: /usr/bin/systemctl is-active --quiet agent.service
+      - name: Retain the qualified rootless image with its complete matching source kit
+        if: ${{ success() && matrix.mode == 'rootless' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: container-distribution-rootless-${{ env.SOURCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/worker/dist/container/image.tar
+            apps/worker/dist/container/sources-and-notices.tar
+            apps/worker/dist/container/image-metadata.json
+            apps/worker/dist/container/context
+            apps/worker/dist/container/installed-source-inventory.json
+            apps/worker/dist/container/installed-packages.txt
+            apps/worker/dist/container/license-inventory.json
+            apps/worker/dist/container/image-source-verification.json
+            apps/worker/dist/container/filesystem-preservation.json
+            apps/worker/dist/container/buildx-metadata.json
+            apps/worker/dist/container/native-compatibility.json
+            apps/worker/dist/container/source-revision.json
+            apps/worker/dist/container/source-names.json
+            apps/worker/dist/container/library-replacement/library-replacement.json
+            apps/worker/dist/container/library-replacement/modification.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Retain nonbinary verification evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: container-evidence-${{ matrix.mode }}-${{ env.SOURCE_SHA }}
+          name: container-evidence-${{ matrix.mode }}-${{ env.SOURCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             apps/worker/dist/container/image-metadata.json
             apps/worker/dist/container/installed-packages.txt

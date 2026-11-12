@@ -31,6 +31,8 @@ jobs:
             registry.npmjs.org:443 nodejs.org:443 api.osv.dev:443
             www.python.org:443 downloads.python.org:443 pypi.org:443 files.pythonhosted.org:443
             ghcr.io:443 pkg-containers.githubusercontent.com:443
+            auth.docker.io:443 registry-1.docker.io:443
+            production.cloudflare.docker.com:443 production.cloudfront.docker.com:443
             snapshot.debian.org:443 security.debian.org:443 keyring.debian.org:443
             api.stepsecurity.io:443 agent.api.stepsecurity.io:443
       - name: Require actual hardener service
