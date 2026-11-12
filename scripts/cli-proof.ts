@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { materializeSourceKitInventory } from "./image-source-distribution.ts";
 
 const execute = promisify(execFile);
 const script = fileURLToPath(import.meta.url);
@@ -279,17 +280,16 @@ async function context() {
       metadata.sourceKitSha256,
     );
     failure = "qualified context/support input copy";
-    for (const path of [
-      "context",
-      "source-kit-inventory.json",
-      "source-revision.json",
-      "sources-and-notices.tar",
-    ])
+    for (const path of ["context", "source-revision.json", "sources-and-notices.tar"])
       await cp(join(source, path), join(target, path), {
         recursive: true,
         errorOnExist: true,
         force: false,
       });
+    await materializeSourceKitInventory(
+      { kit: join(target, "sources-and-notices.tar"), kitSha256: metadata.sourceKitSha256 },
+      join(target, "source-kit-inventory.json"),
+    );
   } finally {
     await git("worktree", "remove", "--force", checkout);
     await rm(directory, { recursive: true, force: true });

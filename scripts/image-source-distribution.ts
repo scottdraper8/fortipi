@@ -853,13 +853,11 @@ export async function verifyKitSignatures(directory: string, freeze: Freeze): Pr
     await rm(home, { recursive: true, force: true });
   }
 }
-/** Caller owns directory cleanup. No artifact-carried program is executed. */
-export async function verifySourceKit(
-  options: KitOptions,
-  directory: string,
-): Promise<VerifiedKit> {
+/** Authenticate the tar and its complete inventory closure; retain the producer's exact JSON bytes. */
+export async function readSourceKitInventory(
+  options: Pick<KitOptions, "kit" | "kitSha256">,
+): Promise<{ entries: Map<string, FsEntry>; inventoryBytes: Buffer }> {
   assert.match(options.kitSha256, hex);
-  assert.match(options.commit, /^[a-f0-9]{40}$/);
   assert.equal(
     await hashFile(options.kit),
     options.kitSha256,
@@ -873,6 +871,25 @@ export async function verifySourceKit(
   const inventoryBytes = file(entries, "source-kit-inventory.json").data;
   assert.ok(inventoryBytes);
   verifyKitInventory(entries, json<Record<string, string>>(inventoryBytes));
+  return { entries, inventoryBytes };
+}
+
+/** Never overwrite an existing file or serialize a replacement inventory. */
+export async function materializeSourceKitInventory(
+  options: Pick<KitOptions, "kit" | "kitSha256">,
+  destination: string,
+): Promise<void> {
+  const { inventoryBytes } = await readSourceKitInventory(options);
+  await writeFile(destination, inventoryBytes, { flag: "wx", mode: 0o644 });
+}
+
+/** Caller owns directory cleanup. No artifact-carried program is executed. */
+export async function verifySourceKit(
+  options: KitOptions,
+  directory: string,
+): Promise<VerifiedKit> {
+  assert.match(options.commit, /^[a-f0-9]{40}$/);
+  const { entries } = await readSourceKitInventory(options);
   // Scan first: extractTar never sees unvalidated paths, duplicates, links or special entries.
   await mkdir(directory, { recursive: true });
   assert.ok(
