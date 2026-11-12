@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
+import { repository } from "../../build-workspaces.ts";
+import { execute, loadCandidate } from "../../prepare-release.ts";
 import {
   type ArtifactReference,
   assertDeployment,
@@ -18,6 +21,7 @@ import {
   type ProofInput,
   REPOSITORY,
   REPOSITORY_ID,
+  readJson,
   saveJson,
   sha256,
   trustedMain,
@@ -27,6 +31,7 @@ import {
   verifyReleaseGates,
 } from "../../verify-release-gates.ts";
 import {
+  actualCapsule,
   candidate,
   directoryArchive,
   fact,
@@ -245,7 +250,8 @@ test("current readiness uses completed per-slot job and actual archive while its
   };
   const path = resolve(root, "readiness.json");
   await writeFile(path, `${canonicalJson(ready)}\n`);
-  const zip = await jsonArchive(ready, "readiness.json");
+  let zip = await jsonArchive(ready, "readiness.json");
+  let zipDelay = 0;
   const ref: ArtifactReference = {
     runId: 20,
     runAttempt: 2,
@@ -268,7 +274,7 @@ test("current readiness uses completed per-slot job and actual archive while its
       return;
     }
     if (route === "/ready.zip") {
-      response.end(zip.bytes);
+      setTimeout(() => response.end(zip.bytes), zipDelay);
       return;
     }
     if (route === `/repos/${REPOSITORY}`) value = { id: REPOSITORY_ID, full_name: REPOSITORY };
@@ -391,6 +397,43 @@ test("current readiness uses completed per-slot job and actual archive while its
         "readiness",
         now + 16 * 60000,
       ),
+    );
+    const replaceReadiness = async (checkedAt: string) => {
+      const old = zip;
+      d.checkedAt = checkedAt;
+      ready.checkedAt = checkedAt;
+      zip = await jsonArchive(ready, "readiness.json");
+      await old.close();
+      ref.artifactDigest = `sha256:${sha256(zip.bytes)}`;
+      await writeFile(path, `${canonicalJson(ready)}\n`);
+    };
+    // Actual clock and delayed HTTP/ZIP: no mocked Date or refreshed old proof.
+    await replaceReadiness(new Date(Date.now() - 899000).toISOString());
+    zipDelay = 1800;
+    await assert.rejects(
+      verifyCurrentReadiness(
+        c,
+        hash,
+        path,
+        ref,
+        githubRequest(undefined, server.transport),
+        "readiness",
+      ),
+      /Stale\/future proof/,
+    );
+    assert.ok(Date.now() - Date.parse(ready.checkedAt) > 900000);
+    zipDelay = 0;
+    await replaceReadiness(new Date().toISOString());
+    assert.deepEqual(
+      await verifyCurrentReadiness(
+        c,
+        hash,
+        path,
+        ref,
+        githubRequest(undefined, server.transport),
+        "readiness",
+      ),
+      [d],
     );
   } finally {
     if (originalRun === undefined) delete process.env.GITHUB_RUN_ID;
@@ -706,6 +749,129 @@ test("receipt hashes and fixed freshness reject changed results, unavailable cla
       assertDeployment({ ...d, capabilities: { ...d.capabilities, loaders: true } }),
     );
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("native aggregation preserves transported bytes/modes and the original observation age", {
+  timeout: 60000,
+}, async (t) => {
+  const root = await temporary("fortipi-native-enforcement-");
+  const path = await actualCapsule(resolve(root, "candidate"));
+  const loaded = await loadCandidate(path);
+  const input = resolve(root, "input");
+  await mkdir(input);
+  const times = [1, 2, 3].map((hours) => new Date(Date.now() - hours * 3600000).toISOString());
+  const original = new Map<string, Buffer>();
+  for (const [index, platform] of ["darwin", "linux", "win32"].entries()) {
+    const directory = resolve(input, platform);
+    await mkdir(directory);
+    await saveJson(resolve(directory, "result.json"), { platform, syntheticObservation: true });
+    const files = await inventory(directory);
+    const result = files[0];
+    assert.ok(result);
+    const gate: GateReceipt = {
+      schemaVersion: 1,
+      kind: "native",
+      candidateSha256: loaded.hash,
+      sourceCommit: loaded.candidate.sourceCommit,
+      scope: loaded.candidate.scope,
+      producer: { ...loaded.candidate.producer, workflowId: 1, runId: 10, runAttempt: 1 },
+      checkedAt: String(times[index]),
+      claims: [{ id: "portable-daemon", outcome: "pass", result }],
+      platforms: [platform as "darwin" | "linux" | "win32"],
+      deployments: [],
+      files,
+    };
+    assertGate(gate);
+    await saveJson(resolve(directory, "gate.json"), gate);
+    original.set(platform, await readFile(resolve(directory, "gate.json")));
+  }
+  const server = await httpFixture((request, response) => {
+    assert.equal(request.url, "/repos/scottdraper8/fortipi/actions/workflows/release.yml");
+    response.setHeader("content-type", "application/json");
+    response.end('{"id":1}');
+  });
+  const aggregate = async (name: string) =>
+    execute(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `
+    const original=globalThis.fetch;
+    globalThis.fetch=(url,options)=>original(${JSON.stringify(server.origin)}+new URL(url).pathname,options);
+    const {aggregateNative}=await import(${JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href)});
+    try { await aggregateNative(${JSON.stringify(path)},${JSON.stringify(input)},${JSON.stringify(resolve(root, name))}); }
+    catch(error) { console.log(error.message); process.exitCode=1; }
+  `,
+      ],
+      repository,
+      {
+        PATH: process.env.PATH,
+        LANG: "C",
+        GITHUB_REPOSITORY: REPOSITORY,
+        GITHUB_REF: "refs/heads/main",
+        GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_RUN_ID: "20",
+        GITHUB_RUN_ATTEMPT: "1",
+      },
+      30000,
+    );
+  try {
+    await t.test(
+      "0644 ZIP transport changes no receipt/result bytes or tar bin modes",
+      async () => {
+        const control = await aggregate("mode600");
+        assert.equal(control.code, 0, control.stdout);
+        for (const platform of original.keys()) {
+          const directory = resolve(input, platform);
+          await chmod(resolve(directory, "result.json"), 0o644);
+          await chmod(resolve(directory, "gate.json"), 0o644);
+          const gate = await readJson(resolve(directory, "gate.json"));
+          assertGate(gate);
+          await verifyPayload(directory, gate.files, ["gate.json"]);
+        }
+        const transported = await aggregate("mode644");
+        assert.equal(transported.code, 0, transported.stdout);
+        const gate = await readJson(resolve(root, "mode644/gate.json"));
+        assertGate(gate);
+        for (const claim of gate.claims) {
+          assert.equal(claim.result.mode, 0o644);
+          assert.ok(gate.files.some((f) => canonicalJson(f) === canonicalJson(claim.result)));
+        }
+        for (const [platform, bytes] of original)
+          assert.deepEqual(await readFile(resolve(root, "mode644", platform, "gate.json")), bytes);
+        assert.deepEqual((await loadCandidate(path)).candidate.packages, loaded.candidate.packages);
+      },
+    );
+    await t.test(
+      "25-hour input is refused and fresh aggregation retains the oldest observation",
+      async () => {
+        for (const platform of original.keys()) {
+          const target = resolve(input, platform, "gate.json");
+          await chmod(resolve(input, platform, "result.json"), 0o600);
+          await chmod(target, 0o600);
+          const gate = await readJson(target);
+          assertGate(gate);
+          gate.checkedAt = new Date(Date.now() - 25 * 3600000).toISOString();
+          assert.throws(() => freshness(gate.checkedAt, 24), /Stale\/future/);
+          await saveJson(target, gate, false);
+        }
+        const stale = await aggregate("stale");
+        assert.notEqual(stale.code, 0, "Expired native evidence was renewed without execution");
+        assert.match(stale.stdout, /Stale\/future proof/);
+        for (const [platform, bytes] of original)
+          await writeFile(resolve(input, platform, "gate.json"), bytes);
+        const fresh = await aggregate("oldest");
+        assert.equal(fresh.code, 0, fresh.stdout);
+        const gate = await readJson(resolve(root, "oldest/gate.json"));
+        assertGate(gate);
+        assert.equal(gate.checkedAt, times[2]);
+      },
+    );
+  } finally {
+    await server.close();
     await rm(root, { recursive: true, force: true });
   }
 });

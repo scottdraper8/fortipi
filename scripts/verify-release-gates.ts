@@ -852,7 +852,7 @@ export async function verifyReleaseGates(
   candidateArtifact: ArtifactReference,
   proofs: ProofInput[],
   request: GitHubRequest,
-  now = Date.now(),
+  now?: number,
   currentReadiness?: CurrentReadinessContext,
 ): Promise<void> {
   assertCandidate(candidate);
@@ -964,6 +964,11 @@ export async function verifyReleaseGates(
     stable(independent.flatMap((p) => p.receipt.deployments)),
     "Readiness target drift",
   );
+  // Authorization must use the clock after all API, archive and filesystem awaits.
+  const authorizedAt = now ?? Date.now();
+  for (const proof of proofs)
+    if (kinds.includes(proof.receipt.kind))
+      freshness(proof.receipt.checkedAt, policy[proof.receipt.kind].hours, authorizedAt);
 }
 export function cliArgs(args = process.argv.slice(3)): Record<string, string> {
   assert.equal(args.length % 2, 0);
@@ -1091,16 +1096,25 @@ export async function readProofBundle(
     proofs,
   };
 }
+interface CurrentReadinessObservation {
+  checkedAt: string;
+  expiresAt: number;
+  deployments: DeploymentIdentity[];
+}
+function currentReadinessFreshness(observation: CurrentReadinessObservation, now: number): void {
+  assert.ok(observation.expiresAt > now, "Current readiness artifact expired");
+  freshness(observation.checkedAt, 0.25, now);
+  for (const deployment of observation.deployments) freshness(deployment.checkedAt, 0.25, now);
+}
 /** Current jobs use completed `needs` facts; they never certify their own future run conclusion. */
-export async function verifyCurrentReadiness(
+async function currentReadinessObservation(
   candidate: CandidateManifest,
   candidateHash: string,
   path: string,
   artifact: ArtifactReference,
   request: GitHubRequest,
   jobName: "readiness" | "final-readiness",
-  now = Date.now(),
-): Promise<DeploymentIdentity[]> {
+): Promise<CurrentReadinessObservation> {
   assertCandidate(candidate);
   await trustedMain(candidate, request);
   integer(artifact.runId);
@@ -1179,7 +1193,7 @@ export async function verifyCurrentReadiness(
     created >= Date.parse(string(job.started_at)) &&
       created <= Date.parse(string(job.completed_at)),
   );
-  assert.ok(Date.parse(string(saved.expires_at)) > now);
+  const expiresAt = Date.parse(string(saved.expires_at));
   const actual = await request.verifyArtifact(artifact, "readiness.json");
   assert.ok(actual);
   assert.equal(
@@ -1192,7 +1206,7 @@ export async function verifyCurrentReadiness(
   assert.equal(ready.schemaVersion, 1);
   assert.equal(ready.candidateSha256, candidateHash);
   assert.equal(ready.sourceCommit, candidate.sourceCommit);
-  freshness(string(ready.checkedAt), 0.25, now);
+  const checkedAt = string(ready.checkedAt);
   assert.ok(Array.isArray(ready.deployments));
   ready.deployments.forEach(assertDeployment);
   assert.deepEqual(
@@ -1203,9 +1217,28 @@ export async function verifyCurrentReadiness(
     assert.equal(d.candidateSha256, candidateHash);
     assert.equal(d.sourceCommit, candidate.sourceCommit);
     assert.equal(d.assetManifestSha256, candidate.assetManifestSha256);
-    freshness(d.checkedAt, 0.25, now);
   }
-  return ready.deployments;
+  return { checkedAt, expiresAt, deployments: ready.deployments };
+}
+export async function verifyCurrentReadiness(
+  candidate: CandidateManifest,
+  candidateHash: string,
+  path: string,
+  artifact: ArtifactReference,
+  request: GitHubRequest,
+  jobName: "readiness" | "final-readiness",
+  now?: number,
+): Promise<DeploymentIdentity[]> {
+  const observation = await currentReadinessObservation(
+    candidate,
+    candidateHash,
+    path,
+    artifact,
+    request,
+    jobName,
+  );
+  currentReadinessFreshness(observation, now ?? Date.now());
+  return observation.deployments;
 }
 export async function verifyCurrentReadinessSet(
   candidate: CandidateManifest,
@@ -1213,7 +1246,7 @@ export async function verifyCurrentReadinessSet(
   proofs: ProofInput[],
   context: CurrentReadinessContext,
   request: GitHubRequest,
-  now = Date.now(),
+  now?: number,
 ): Promise<DeploymentIdentity[]> {
   const run = integer(Number(process.env.GITHUB_RUN_ID));
   const attempt = integer(Number(process.env.GITHUB_RUN_ATTEMPT));
@@ -1229,7 +1262,7 @@ export async function verifyCurrentReadinessSet(
     total = Number(data.total_count);
   }
   const prefix = context.phase === "readiness" ? "refresh" : "final-refresh";
-  const observed: DeploymentIdentity[] = [];
+  const observations: CurrentReadinessObservation[] = [];
   for (const backend of ["free", "cloud-js", "linux"]) {
     const name = `${prefix}-${backend}-${candidate.sourceCommit}-${candidate.scope}-${run}-${attempt}`;
     const matches = artifacts.filter((a) => a.name === name);
@@ -1244,22 +1277,26 @@ export async function verifyCurrentReadinessSet(
       artifactDigest: string(artifact.digest),
       candidateSha256: hash,
     };
-    observed.push(
-      ...(await verifyCurrentReadiness(
+    observations.push(
+      await currentReadinessObservation(
         candidate,
         hash,
         resolve(context.directory, safePath(name), "readiness.json"),
         ref,
         request,
         context.phase,
-        now,
-      )),
+      ),
     );
   }
+  // Recheck every observation together after the final network await. A previous slot
+  // may have expired while another archive or the protected-main identity was fetched.
+  await trustedMain(candidate, request);
+  const authorizedAt = now ?? Date.now();
+  for (const observation of observations) currentReadinessFreshness(observation, authorizedAt);
   for (const proof of proofs)
     if (proof.receipt.kind !== "readiness")
-      freshness(proof.receipt.checkedAt, policy[proof.receipt.kind].hours, now);
-  return observed;
+      freshness(proof.receipt.checkedAt, policy[proof.receipt.kind].hours, authorizedAt);
+  return observations.flatMap((observation) => observation.deployments);
 }
 export async function dispatchEnvironment(): Promise<void> {
   assert.equal(process.env.GITHUB_REPOSITORY, REPOSITORY);
@@ -1318,7 +1355,7 @@ if (import.meta.main) {
       assert.ok(phase === "readiness" || phase === "final-readiness");
       await verifyReleaseGates(
         ...base,
-        Date.now(),
+        undefined,
         args.readiness ? { directory: resolve(args.readiness), phase } : undefined,
       );
     }

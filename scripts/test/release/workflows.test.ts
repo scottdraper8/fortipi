@@ -14,6 +14,13 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
     parse(await readFile(resolve(repository, ".github/workflows/deploy.yml"), "utf8")),
   );
   const jobs = object(release.jobs);
+  const finalSteps = object(jobs.finalize).steps;
+  assert.ok(Array.isArray(finalSteps));
+  assert.ok(
+    String(object(object(finalSteps[0]).with)["allowed-endpoints"])
+      .split(/\s+/)
+      .includes("uploads.github.com:443"),
+  );
   assert.deepEqual(object(jobs.publish).needs, ["proofs", "readiness"]);
   assert.deepEqual(object(jobs["final-readiness"]).needs, ["proofs", "publish"]);
   assert.deepEqual(object(jobs.finalize).needs, ["proofs", "publish", "final-readiness"]);

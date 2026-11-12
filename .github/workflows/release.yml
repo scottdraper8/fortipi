@@ -377,7 +377,12 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: publication-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/publication
+          path: |
+            ${{ runner.temp }}/publication/journal.json
+            ${{ runner.temp }}/publication/provenance.json
+            ${{ runner.temp }}/publication/verified-bundles.json
+            ${{ runner.temp }}/publication/registry-evidence-inventory.json
+            ${{ runner.temp }}/publication/registry-evidence/**
           if-no-files-found: error
           retention-days: 30
   native-receipt:
@@ -623,7 +628,7 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints:
-            api.github.com:443 github.com:443 release-assets.githubusercontent.com:443
+            api.github.com:443 uploads.github.com:443 github.com:443 release-assets.githubusercontent.com:443
             *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.stepsecurity.io:443 registry.npmjs.org:443
             nodejs.org:443
       - run: /usr/bin/systemctl is-active --quiet agent.service
@@ -679,6 +684,11 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/publication
+          path: |
+            ${{ runner.temp }}/publication/journal.json
+            ${{ runner.temp }}/publication/provenance.json
+            ${{ runner.temp }}/publication/verified-bundles.json
+            ${{ runner.temp }}/publication/registry-evidence-inventory.json
+            ${{ runner.temp }}/publication/registry-evidence/**
           if-no-files-found: error
           retention-days: 30

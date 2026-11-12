@@ -34,6 +34,7 @@ import {
   commitPattern,
   digest,
   type FileRecord,
+  freshness,
   type GateReceipt,
   type GitHubRequest,
   git,
@@ -1369,7 +1370,6 @@ export async function publishCandidate(
         { directory: readinessDirectory, phase: "readiness" },
         githubRequest(process.env.GITHUB_TOKEN),
       );
-      await trustedMain(candidate, githubRequest(process.env.GITHUB_TOKEN));
       return execute(
         pnpm,
         [
@@ -1981,11 +1981,15 @@ export async function aggregateNative(
   await mkdir(out, { mode: 0o700 });
   const claims: GateReceipt["claims"] = [];
   const platforms: GateReceipt["platforms"] = [];
+  let oldest: string | undefined;
   for (const entry of await readdir(input)) {
     safePath(entry);
     const from = resolve(input, entry);
     const gate = await readJson(resolve(from, "gate.json"));
     assertGate(gate);
+    assert.equal(gate.kind, "native");
+    freshness(gate.checkedAt, 24);
+    if (!oldest || Date.parse(gate.checkedAt) < Date.parse(oldest)) oldest = gate.checkedAt;
     assert.equal(gate.candidateSha256, loaded.hash);
     assert.equal(gate.sourceCommit, loaded.candidate.sourceCommit);
     assert.equal(gate.scope, loaded.candidate.scope);
@@ -2004,6 +2008,17 @@ export async function aggregateNative(
     });
   }
   assert.deepEqual([...platforms].sort(), ["darwin", "linux", "win32"]);
+  const files = await inventory(out);
+  // ZIP transport normalizes regular-file modes. Bind aggregate claims to the verified
+  // copied inventory while preserving each original receipt and result byte-for-byte.
+  for (const claim of claims) {
+    const actual = files.find((file) => file.path === claim.result.path);
+    assert.ok(actual);
+    assert.equal(actual.size, claim.result.size);
+    assert.equal(actual.sha256, claim.result.sha256);
+    claim.result = actual;
+  }
+  assert.ok(oldest);
   const gate: GateReceipt = {
     schemaVersion: 1,
     kind: "native",
@@ -2011,12 +2026,14 @@ export async function aggregateNative(
     sourceCommit: loaded.candidate.sourceCommit,
     scope: loaded.candidate.scope,
     producer: await producer(repository, true),
-    checkedAt: new Date().toISOString(),
+    checkedAt: oldest,
     claims,
     platforms,
     deployments: [],
-    files: await inventory(out),
+    files,
   };
+  // Aggregation is not a new daemon observation, including time spent awaiting its producer.
+  freshness(gate.checkedAt, 24);
   assertGate(gate);
   await saveJson(resolve(out, "gate.json"), gate);
 }

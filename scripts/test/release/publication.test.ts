@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { glob, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { createInterface } from "node:readline";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
+import { parse } from "yaml";
 import { repository } from "../../build-workspaces.ts";
 import { pnpmExecutable } from "../../pnpm-executable.ts";
 import {
@@ -19,6 +24,140 @@ import {
   sha256,
 } from "../../verify-release-gates.ts";
 import { candidate, fixtureFiles, httpFixture, temporary } from "./fixtures.ts";
+
+test("SIGKILL retains upload intent; workflow ZIP excludes ephemeral locks and recovery never reuploads", {
+  timeout: 20000,
+}, async () => {
+  const root = await temporary("fortipi-publication-crash-");
+  const publication = resolve(root, "publication");
+  await mkdir(publication);
+  const journalPath = resolve(publication, "journal.json");
+  const c = candidate();
+  await fixtureFiles(root, c);
+  let zip = Buffer.alloc(0);
+  const server = await httpFixture((request, response) => {
+    if (request.url === "/zip") response.end(zip);
+    else {
+      response.statusCode = 404;
+      response.end();
+    }
+  });
+  const child = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `
+    const {publishPackages}=await import(${JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href)});
+    await publishPackages(${JSON.stringify(c)},${JSON.stringify(sha256("candidate"))},${JSON.stringify(root)},${JSON.stringify(journalPath)},async()=>{
+      console.log("intent-ready");
+      return new Promise(()=>setTimeout(()=>process.exit(2),15000));
+    },()=>fetch(${JSON.stringify(server.origin)}));
+  `,
+    ],
+    {
+      cwd: root,
+      env: { PATH: process.env.PATH, LANG: "C", GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  const closed = once(child, "close");
+  const lines = createInterface({ input: child.stdout });
+  const errors: Buffer[] = [];
+  child.stderr.on("data", (chunk) => errors.push(Buffer.from(chunk)));
+  try {
+    assert.deepEqual(
+      await Promise.race([
+        once(lines, "line"),
+        closed.then((result) => {
+          throw new Error(`Child exited ${result}: ${Buffer.concat(errors).toString("utf8")}`);
+        }),
+      ]),
+      ["intent-ready"],
+    );
+    const durable = await readFile(journalPath);
+    const journal = object(JSON.parse(durable.toString("utf8")));
+    assert.ok(Array.isArray(journal.packages));
+    assert.equal(object(journal.packages[0]).state, "upload-intent");
+    child.kill("SIGKILL");
+    assert.deepEqual(await closed, [null, "SIGKILL"]);
+    assert.ok((await stat(`${journalPath}.lock`)).isFile());
+    // Use the actual workflow's selectors and the actual strict ZIP reader, not a mirrored payload predicate.
+    const jobs = object(
+      object(parse(await readFile(resolve(repository, ".github/workflows/release.yml"), "utf8")))
+        .jobs,
+    );
+    for (const jobName of ["publish", "finalize"]) {
+      const steps = object(jobs[jobName]).steps;
+      assert.ok(Array.isArray(steps));
+      const upload = steps
+        .map(object)
+        .find(
+          (s) =>
+            String(s.uses).startsWith("actions/upload-artifact") &&
+            String(object(s.with).name).startsWith(
+              jobName === "publish" ? "publication-" : "release-",
+            ),
+        );
+      assert.ok(upload);
+      const paths = String(object(upload.with).path)
+        .replaceAll("$" + "{{ runner.temp }}", root)
+        .split(/\s+/);
+      const selected = new Set<string>();
+      for (const pattern of paths) {
+        for await (const path of glob(pattern)) {
+          if ((await stat(path)).isDirectory()) {
+            for await (const file of glob(`${path}/**/*`))
+              if ((await stat(file)).isFile()) selected.add(file);
+          } else selected.add(path);
+        }
+      }
+      const archive = resolve(root, `${jobName}.zip`);
+      const packed = await execute(
+        "/usr/bin/zip",
+        ["-q", archive, ...[...selected].map((p) => p.slice(publication.length + 1)).sort()],
+        publication,
+      );
+      assert.equal(packed.code, 0);
+      zip = await readFile(archive);
+      const ref = {
+        runId: 10,
+        runAttempt: 2,
+        artifactId: 1,
+        artifactName: "publication-fixture",
+        artifactDigest: `sha256:${sha256(zip)}`,
+        candidateSha256: sha256("candidate"),
+      };
+      const request = githubRequest(undefined, () => fetch(`${server.origin}/zip`));
+      assert.deepEqual(await request.verifyArtifact(ref, "journal.json"), durable);
+    }
+    assert.deepEqual(await readFile(journalPath), durable);
+    const restored = resolve(root, "recovered-journal.json");
+    await writeFile(restored, durable, { mode: 0o600 });
+    let reuploads = 0;
+    await assert.rejects(
+      publishPackages(
+        c,
+        sha256("candidate"),
+        root,
+        restored,
+        async () => {
+          reuploads++;
+          throw new Error("Must not upload");
+        },
+        server.transport,
+      ),
+      /Uncertain prior upload/,
+    );
+    assert.equal(reuploads, 0);
+  } finally {
+    child.kill("SIGKILL");
+    await closed;
+    lines.close();
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("actual child observes durable intent before HTTP acceptance; lost availability reconciles without a second upload", async () => {
   const root = await temporary("fortipi-publication-");
