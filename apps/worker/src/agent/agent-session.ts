@@ -991,12 +991,6 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
     );
     const page = await this.store.replay(cid, { after, limit: 100 });
     for (const event of page.events) this.#send(connection, event);
-    const current = connection.state;
-    check(current, "unauthenticated", "Missing attachment");
-    connection.setState({
-      ...current,
-      subscriptions: { ...current.subscriptions, [cid]: page.nextAfter },
-    });
     if (page.hasMore) {
       this.#send(connection, {
         type: "resync_required",
@@ -1005,7 +999,14 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         retainedFloor: page.retainedFloor,
       });
       connection.close(1013, "Replay backlog exceeded");
+      return;
     }
+    const current = connection.state;
+    check(current, "unauthenticated", "Missing attachment");
+    connection.setState({
+      ...current,
+      subscriptions: { ...current.subscriptions, [cid]: page.nextAfter },
+    });
   }
   async #notify(cid: string): Promise<void> {
     await this.#socketLanes.run(cid, async () => {
