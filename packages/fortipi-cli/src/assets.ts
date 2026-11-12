@@ -3,6 +3,7 @@ import { copyFile, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/pr
 import { dirname, join, resolve } from "node:path";
 import { canonicalJson } from "fortipi-contract";
 import type { AssetManifest } from "./asset-manifest.js";
+import { assetPath } from "./asset-manifest.js";
 import type { OperatorConfig } from "./config.js";
 import { operatorConfig, readConfig, readJson } from "./config.js";
 import { CliError, check } from "./errors.js";
@@ -12,8 +13,8 @@ import { cliPackageRoot } from "./wrangler.js";
 export const sha256 = (bytes: string | Uint8Array): string =>
   createHash("sha256").update(bytes).digest("hex");
 const relativeAsset = (path: string) =>
-  /^(worker|contracts|templates|linux|licenses)\/[A-Za-z0-9_./-]+$/.test(path) &&
-  path.split("/").every((p) => p !== "." && p !== ".." && p.length > 0) &&
+  /^(worker|contracts|templates|linux|licenses)\//.test(path) &&
+  assetPath(path) &&
   !/(^|\/)(\.env[^/]*|auth\.json|node_modules|\.wrangler)(\/|$)/.test(path);
 async function walk(root: string, prefix = ""): Promise<string[]> {
   const files: string[] = [];
@@ -79,11 +80,14 @@ export async function verifyAssets(
   check(
     paths.every(relativeAsset) &&
       paths.join() === [...new Set(paths)].sort().join() &&
+      new Set(paths.map((p) => p.toLowerCase())).size === paths.length &&
       paths.includes(manifest.entry) &&
       [
         "templates/wrangler.base.json",
         "templates/wrangler.container.json",
         "contracts/openapi.json",
+        "linux/container/Dockerfile",
+        "linux/image-metadata.json",
       ].every((p) => paths.includes(p)) &&
       paths.some((p) => p.startsWith("licenses/")) &&
       paths.some((p) => p.startsWith("contracts/schemas/")),
@@ -97,6 +101,16 @@ export async function verifyAssets(
     const stat = await lstat(path);
     check(
       stat.nlink === 1 &&
+        record.kind ===
+          (
+            {
+              worker: "worker",
+              contracts: "contract",
+              templates: "template",
+              linux: "linux",
+              licenses: "license",
+            } as Record<string, string>
+          )[record.path.split("/")[0] ?? ""] &&
         Number.isSafeInteger(record.size) &&
         record.size >= 0 &&
         stat.size === record.size &&
@@ -106,6 +120,29 @@ export async function verifyAssets(
       3,
     );
   }
+  const image = (await readJson(join(root, "linux/image-metadata.json"))) as Record<
+    string,
+    unknown
+  >;
+  check(
+    manifest.image &&
+      manifest.image.metadataSha256 ===
+        sha256(await readFile(join(root, "linux/image-metadata.json"))) &&
+      manifest.image.sourceCommit === image.sourceCommit &&
+      manifest.image.imageId === image.imageId &&
+      manifest.image.builtManifestDigest === image.builtManifestDigest &&
+      manifest.image.registryDigest === null &&
+      image.registryDigest === null &&
+      manifest.image.platform === "linux/amd64" &&
+      image.platform === "linux/amd64" &&
+      /^[a-f0-9]{40}$/.test(manifest.image.sourceCommit) &&
+      /^sha256:[a-f0-9]{64}$/.test(manifest.image.imageId) &&
+      /^sha256:[a-f0-9]{64}$/.test(manifest.image.builtManifestDigest) &&
+      manifest.image.contextInventorySha256 ===
+        sha256(canonicalJson(manifest.files.filter((r) => r.path.startsWith("linux/container/")))),
+    "image_provenance_changed",
+    3,
+  );
   return { manifest, manifestSha256: sha256(bytes) };
 }
 type WranglerConfig = Record<string, unknown> & {
@@ -113,10 +150,17 @@ type WranglerConfig = Record<string, unknown> & {
   migrations: { tag: string; new_sqlite_classes?: string[] }[];
   compatibility_flags: string[];
 };
+export interface MigrationHistory {
+  sourceCommit: string;
+  assetManifestSha256: string;
+  migrations: WranglerConfig["migrations"];
+  containers: boolean;
+}
 export async function composeDeployment(
   config: OperatorConfig,
   assets: string,
   manifest: AssetManifest,
+  history?: MigrationHistory,
 ): Promise<WranglerConfig> {
   operatorConfig(config);
   const base = (await readJson(join(assets, "templates/wrangler.base.json"))) as WranglerConfig;
@@ -151,6 +195,7 @@ export async function composeDeployment(
     "find_additional_modules",
     "observability",
     "limits",
+    "no_bundle",
   ];
   check(
     Object.keys(base).every((k) => allowed.includes(k)),
@@ -174,8 +219,39 @@ export async function composeDeployment(
     base.durable_objects.bindings.push(...overlay.durable_objects.bindings);
     base.migrations.push(...overlay.migrations);
     base.containers = overlay.containers;
-    // Actual image/context provenance and path rebasing must be qualified with producer5/3.
-    throw new CliError("actual_linux_asset_qualification_required", 3);
+    check(
+      manifest.image && manifest.image.builtManifestDigest === config.runtime.execution.imageDigest,
+      "reviewed_linux_image_digest_required",
+      3,
+    );
+    for (const container of base.containers as {
+      class_name: string;
+      images: Record<string, { dockerfile: string; build_context: string }>;
+    }[]) {
+      check(
+        container.class_name === "LinuxContainerHost" &&
+          Object.keys(container.images).join() === "computerd" &&
+          container.images.computerd?.dockerfile === "./assets/linux/container/Dockerfile" &&
+          container.images.computerd.build_context === "./assets/linux/container",
+        "image_context_changed",
+        3,
+      );
+    }
+  }
+  if (history) {
+    check(
+      /^[a-f0-9]{40}$/.test(history.sourceCommit) &&
+        /^[a-f0-9]{64}$/.test(history.assetManifestSha256) &&
+        Array.isArray(history.migrations) &&
+        history.migrations.length > 0 &&
+        history.migrations.length <= 32 &&
+        (!history.containers || config.runtime.execution.kind === "linux") &&
+        history.migrations.length <= base.migrations.length &&
+        canonicalJson(base.migrations.slice(0, history.migrations.length)) ===
+          canonicalJson(history.migrations),
+      "migration_history_requires_explicit_repair",
+      3,
+    );
   }
   return {
     ...base,
@@ -192,12 +268,54 @@ export interface PrepareReceipt {
   assetManifestSha256: string;
   configSha256: string;
   operator: OperatorConfig;
+  history?: MigrationHistory;
 }
-export async function prepare(configPath: string, directory: string): Promise<PrepareReceipt> {
+export async function prepare(
+  configPath: string,
+  directory: string,
+  previousDirectory?: string,
+): Promise<PrepareReceipt> {
   const config = await readConfig(configPath);
   const source = join(cliPackageRoot, "worker-assets");
   const { manifest, manifestSha256 } = await verifyAssets(source);
-  const wrangler = await composeDeployment(config, source, manifest);
+  let history: MigrationHistory | undefined;
+  if (previousDirectory) {
+    const previous = resolve(previousDirectory);
+    await safeParents(previous);
+    const receipt = (await readJson(join(previous, "prepare-receipt.json"))) as PrepareReceipt;
+    const prior = await verifyAssets(join(previous, "assets"));
+    operatorConfig(receipt.operator);
+    check(
+      receipt.schemaVersion === 1 &&
+        receipt.assetManifestSha256 === prior.manifestSha256 &&
+        receipt.sourceCommit === prior.manifest.sourceCommit &&
+        receipt.packageVersion === prior.manifest.packageVersion &&
+        receipt.configSha256 === sha256(canonicalJson(receipt.operator.runtime)) &&
+        receipt.operator.deployment.name === config.deployment.name &&
+        receipt.operator.deployment.origin === config.deployment.origin &&
+        receipt.operator.deployment.accountId === config.deployment.accountId,
+      "previous_deployment_identity_changed",
+      3,
+    );
+    const priorConfig = await composeDeployment(
+      receipt.operator,
+      join(previous, "assets"),
+      prior.manifest,
+      receipt.history,
+    );
+    check(
+      canonicalJson(await readJson(join(previous, "wrangler.json"))) === canonicalJson(priorConfig),
+      "previous_config_changed",
+      3,
+    );
+    history = {
+      sourceCommit: prior.manifest.sourceCommit,
+      assetManifestSha256: prior.manifestSha256,
+      migrations: priorConfig.migrations,
+      containers: receipt.operator.runtime.execution.kind === "linux",
+    };
+  }
+  const wrangler = await composeDeployment(config, source, manifest, history);
   directory = resolve(directory);
   await safeParents(dirname(directory));
   try {
@@ -218,6 +336,7 @@ export async function prepare(configPath: string, directory: string): Promise<Pr
     assetManifestSha256: manifestSha256,
     configSha256: sha256(canonicalJson(config.runtime)),
     operator: config,
+    ...(history ? { history } : {}),
   };
   await writeFile(join(directory, "wrangler.json"), `${canonicalJson(wrangler)}\n`, {
     flag: "wx",
@@ -249,6 +368,7 @@ export async function verifyPrepared(directory: string): Promise<PrepareReceipt>
     receipt.operator,
     join(directory, "assets"),
     installed.manifest,
+    receipt.history,
   );
   check(
     canonicalJson(await readJson(join(directory, "wrangler.json"))) === canonicalJson(expected),

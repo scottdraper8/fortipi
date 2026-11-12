@@ -515,6 +515,20 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
           request.query.limit ?? 100,
           token?.after,
         );
+        let nextPageToken: string | undefined;
+        if (rows.length === (request.query.limit ?? 100)) {
+          nextPageToken = id();
+          await this.store.put("page", nextPageToken, {
+            principalId: ctx.principalId,
+            after: rows.at(-1)!.id,
+          });
+        }
+        await this.authority.current(
+          ctx,
+          scope({ agentIds: [this.agentId], actions: [route.action] }),
+        );
+        // Filter each item after the final awaited authority check. Another
+        // conversation's grant can keep this credential valid as one expires.
         const items = rows
           .filter(
             (row) =>
@@ -529,18 +543,6 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
               ),
           )
           .map((row) => row.value.conversation);
-        let nextPageToken: string | undefined;
-        if (rows.length === (request.query.limit ?? 100)) {
-          nextPageToken = id();
-          await this.store.put("page", nextPageToken, {
-            principalId: ctx.principalId,
-            after: rows.at(-1)!.id,
-          });
-        }
-        await this.authority.current(
-          ctx,
-          scope({ agentIds: [this.agentId], actions: [route.action] }),
-        );
         return { status: 200, body: { items, ...(nextPageToken ? { nextPageToken } : {}) } };
       }
       if (request.operationId === "submitMessage")

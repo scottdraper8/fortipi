@@ -93,7 +93,13 @@ export async function runCommand(input: string[], context: CommandContext): Prom
       });
       return { state: "cloudflare_login_completed" };
     case "prepare":
-      return prepare(get("config"), get("directory"));
+      return prepare(
+        get("config"),
+        get("directory"),
+        typeof args.options["previous-directory"] === "string"
+          ? args.options["previous-directory"]
+          : undefined,
+      );
     case "deploy": {
       check(
         !args.options.bootstrap || ["local", "existing"].includes(get("bootstrap")),

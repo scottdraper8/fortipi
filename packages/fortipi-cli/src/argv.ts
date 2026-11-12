@@ -15,7 +15,7 @@ export const commands: Record<string, readonly string[]> = {
   "config validate": ["config", "remote"],
   "config get": [],
   "config apply": ["input", "expected-version"],
-  prepare: ["config", "directory"],
+  prepare: ["config", "directory", "previous-directory"],
   deploy: ["directory", "bootstrap", "dry-run"],
   status: [],
   inspect: ["kind", "id"],
