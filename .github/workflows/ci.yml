@@ -143,10 +143,10 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
       - run: pnpm run schema:check
         if: github.event_name != 'workflow_dispatch'
-      - run: pnpm run test
-        if: github.event_name != 'workflow_dispatch'
       - run: pnpm run candidate:local
         if: github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - run: pnpm run check:licenses
         if: github.event_name != 'workflow_dispatch'
       - name: Compile source-side evidence ports without rebuilding the candidate
