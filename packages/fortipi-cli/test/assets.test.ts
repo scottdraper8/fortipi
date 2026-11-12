@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { cp, lstat, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { cp, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { canonicalJson } from "fortipi-contract";
 import { prepare, verifyAssets, verifyPrepared } from "../dist/assets.js";
@@ -11,7 +12,7 @@ import { deploy } from "../dist/deployment.js";
 import { packageWorkerAssets, regularFiles } from "../scripts/package-worker-assets.ts";
 import { config, temp } from "./fixtures.ts";
 
-const root = resolve(new URL("../../../", import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const assets = resolve(root, "packages/fortipi-cli/worker-assets");
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 
@@ -32,12 +33,15 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
   const commit = (
     await promisify(execFile)("git", ["rev-parse", "HEAD"], { cwd: root })
   ).stdout.trim();
+  const reproduction = join(root, "dist", `cli-assets-reproduction-${randomUUID()}`);
+  t.after(() => rm(reproduction, { recursive: true, force: true }));
   await packageWorkerAssets({
     workerBuild: "apps/worker/dist/worker",
     commit,
     version: first.manifest.packageVersion,
+    outputDirectory: reproduction,
   });
-  assert.deepEqual(await readFile(join(assets, "asset-manifest.json")), manifestBytes);
+  assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
   const native = await config();
   native.runtime.workspace = { kind: "local", executorId: "my-device", rootBindingId: "my-root" };
   const input = join(directory, "operator.json");
@@ -148,4 +152,43 @@ test("real prepared bytes, missing files and path escape are rejected before any
   bytes.files[0].path = "../outside";
   await writeFile(join(copy, "asset-manifest.json"), `${canonicalJson(bytes)}\n`);
   await assert.rejects(verifyAssets(copy), /incomplete_asset_manifest/);
+});
+
+test("dry-build success requires real emitted module bytes, not only a successful subprocess exit", async (t) => {
+  const directory = await temp(t);
+  const input = join(directory, "operator.json");
+  await writeFile(input, JSON.stringify(await config()));
+  const prepared = join(directory, "prepared");
+  await prepare(input, prepared);
+  await assert.rejects(
+    deploy(
+      prepared,
+      { dryRun: true },
+      {
+        async run() {
+          return "";
+        },
+      },
+    ),
+    /wrangler_dry_build_module_identity_failed/,
+  );
+  const { manifest } = await verifyAssets();
+  const result = await deploy(
+    prepared,
+    { dryRun: true },
+    {
+      async run(request) {
+        const at = request.args.indexOf("--outdir");
+        const out = request.args[at + 1];
+        assert.ok(at >= 0 && out);
+        for (const file of manifest.files.filter((f) => f.kind === "worker")) {
+          const path = join(out, file.path.slice("worker/".length));
+          await mkdir(join(path, ".."), { recursive: true });
+          await cp(join(assets, file.path), path);
+        }
+        return "";
+      },
+    },
+  );
+  assert.equal("workerBytesVerified" in result && result.workerBytesVerified, true);
 });
