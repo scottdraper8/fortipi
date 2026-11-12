@@ -18,7 +18,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, posix, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { Parser } from "tar";

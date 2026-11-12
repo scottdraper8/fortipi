@@ -867,6 +867,7 @@ async function sourceKit(sources: NamedSource[], pruning: PrunePolicy): Promise<
     "image-archive.ts",
     "image-prune.ts",
     "recipient.ts",
+    "library-replacement.ts",
     "rootfs.ts",
     "debian-freeze.json",
     "debian-licenses.json",
@@ -903,6 +904,9 @@ async function sourceKit(sources: NamedSource[], pruning: PrunePolicy): Promise<
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
     "tools/unstale/platform-tools.json",
+    "scripts/image-source-distribution.ts",
+    "scripts/check-image-compliance.ts",
+    "tools/unstale/provision-meson.ts",
   ]) {
     if (
       digest(command("git", ["show", `${sourceCommit}:${name}`], { cwd: root })) !==

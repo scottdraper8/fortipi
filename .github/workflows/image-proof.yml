@@ -143,11 +143,17 @@ jobs:
         run: |
           node apps/worker/container/build.ts --prepare
           node --test apps/worker/container/fuse-security.test.ts
+          node scripts/check-image-compliance.ts
+      - name: Provision pinned Meson for recipient library rebuild
+        if: matrix.mode == 'rootless'
+        run: node tools/unstale/provision-meson.ts --python "$pythonLocation/bin/python3"
       - name: Provision reviewed Docker (${{ matrix.mode }})
         run: node tools/unstale/provision-docker.ts ${{ matrix.provision_args }}
       - name: Build the pinned image and collect its actual inventory
         id: build
-        run: node --import ./tools/unstale/image-network-diagnostics.ts apps/worker/container/build.ts
+        run: |
+          node --import ./tools/unstale/image-network-diagnostics.ts apps/worker/container/build.ts
+          node scripts/check-image-compliance.ts --image
       - name: Capture audited builder and private daemon
         run: node apps/worker/container/recipient.ts capture
       - name: Provision empty recipient Docker (${{ matrix.mode }})
@@ -155,7 +161,7 @@ jobs:
       - name: Load exact canonical archive into the empty recipient
         run: node apps/worker/container/recipient.ts load
       - name: Verify ContainerHost transport (${{ matrix.mode }})
-        run: node tools/unstale/run-container-probe.ts ${{ matrix.provision_args }}
+        run: node tools/unstale/run-container-probe.ts ${{ matrix.provision_args }} ${{ matrix.mode == 'rootless' && '--verify-library-replacement' || '' }}
       - name: Observe actual bridge and host container egress
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: node tools/unstale/verify-container-egress.ts
@@ -168,5 +174,8 @@ jobs:
             apps/worker/dist/container/image-metadata.json
             apps/worker/dist/container/installed-packages.txt
             apps/worker/dist/container/license-inventory.json
+            apps/worker/dist/container/image-source-verification.json
+            apps/worker/dist/container/library-replacement/library-replacement.json
+            apps/worker/dist/container/library-replacement/modification.json
           if-no-files-found: warn
           retention-days: 7

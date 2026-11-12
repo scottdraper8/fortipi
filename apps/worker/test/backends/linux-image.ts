@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, readlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTestHarness } from "wrangler";
+import { hashFile } from "../../../../scripts/image-source-distribution.ts";
 import {
   observeHarnessFetch,
   verifyApplicationNamespace,
   verifyGatewayEgress,
 } from "../../../../tools/unstale/verify-app-network.ts";
-import { verifyRecipientFixture } from "../../container/recipient.ts";
+import { proveLibraryReplacement } from "../../container/library-replacement.ts";
+import { sourceRevision, verifyRecipientFixture } from "../../container/recipient.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const directory = resolve(root, "apps/worker/dist/container");
@@ -158,4 +160,26 @@ try {
   } finally {
     await harness.close();
   }
+}
+if (process.argv.includes("--verify-library-replacement")) {
+  assert.ok(
+    process.argv.includes("--require-fuse"),
+    "Replacement needs the verified FUSE namespace",
+  );
+  const metadataPath = resolve(directory, "image-metadata.json");
+  const bound = JSON.parse(await readFile(metadataPath, "utf8")) as {
+    sourceCommit: string;
+    sourceKitSha256: string;
+  };
+  assert.equal(bound.sourceCommit, await sourceRevision());
+  await proveLibraryReplacement({
+    kit: resolve(directory, "sources-and-notices.tar"),
+    kitSha256: bound.sourceKitSha256,
+    commit: bound.sourceCommit,
+    image: resolve(directory, "image.tar"),
+    metadata: metadataPath,
+    metadataSha256: await hashFile(metadataPath),
+    records: directory,
+    out: resolve(directory, "library-replacement"),
+  });
 }

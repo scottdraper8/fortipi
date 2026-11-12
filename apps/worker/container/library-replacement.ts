@@ -2,9 +2,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { delimiter, dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import {
   commandOptions,
@@ -13,6 +13,7 @@ import {
   verifyImageSourceDistribution,
   verifySourceKit,
 } from "../../../scripts/image-source-distribution.ts";
+import { mesonPin, verifyMeson } from "../../../tools/unstale/provision-meson.ts";
 import { assertResolved, dynamicSymbols } from "./elf-compatibility.ts";
 import { sha256 } from "./fuse-security.ts";
 import { imageInputs } from "./inputs.ts";
@@ -130,6 +131,14 @@ export async function proveLibraryReplacement(
   options: ImageOptions & { out: string },
 ): Promise<void> {
   requireLinux(process.platform, process.arch);
+  const mesonBin = (process.env.PATH ?? "")
+    .split(delimiter)
+    .find(
+      (path) =>
+        path.startsWith(resolve(repository, "dist/toolchain/meson-")) && path.endsWith("/bin"),
+    );
+  assert.ok(mesonBin, "Pinned private Meson is required");
+  await verifyMeson(dirname(mesonBin), await realpath(resolve(mesonBin, "python3")));
   const { createTestHarness } = await import("wrangler");
   // Preserve only tool/private-daemon settings, never model/deployment credentials.
   await mkdir(options.out, { recursive: false });
@@ -143,6 +152,8 @@ export async function proveLibraryReplacement(
     BUILDX_BUILDER: "default",
     CI: "true",
     WRANGLER_SEND_METRICS: "false",
+    PYTHONDONTWRITEBYTECODE: "1",
+    PYTHONNOUSERSITE: "1",
   };
   const command = async (program: string, args: string[], cwd = repository) => {
     const result = await execute(program, args, {
@@ -175,7 +186,10 @@ export async function proveLibraryReplacement(
         `v${imageInputs.buildkit}`,
       ),
     );
-    const tools: Record<string, string> = {};
+    const tools: Record<string, string> = {
+      mesonSource: mesonPin.source,
+      mesonArchiveSha256: mesonPin.sourceArchiveSha256,
+    };
     for (const [program, args] of [
       ["cc", ["--version"]],
       ["meson", ["--version"]],

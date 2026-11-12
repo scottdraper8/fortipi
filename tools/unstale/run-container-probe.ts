@@ -172,15 +172,21 @@ if (import.meta.main) {
     env.DOCKER_CONFIG,
     resolve(dirname((env.DOCKER_HOST ?? "").slice("unix://".length)), "config"),
   );
+  const flags = process.argv.slice(2);
   assert.ok(
-    process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--rootless"),
+    flags.length <= 2 &&
+      new Set(flags).size === flags.length &&
+      flags.every((flag) => ["--rootless", "--verify-library-replacement"].includes(flag)),
   );
-  const rootless = process.argv[2] === "--rootless";
+  const rootless = flags.includes("--rootless");
+  const replacement = flags.includes("--verify-library-replacement");
+  assert.ok(!replacement || rootless, "Replacement requires the rootless FUSE namespace");
   const args = [
     "--import",
     resolve(repository, "tools/unstale/container-runtime-diagnostics.ts"),
     fixture,
   ];
+  if (replacement) args.push("--verify-library-replacement");
   if (rootless) {
     const pid = await rootlessContext(false);
     args.unshift("--import", self);
@@ -201,7 +207,8 @@ if (import.meta.main) {
     env,
     stdio: "inherit",
   });
-  const deadline = setTimeout(() => child.kill("SIGKILL"), 180000);
+  // Qualification adds a source rebuild and two real mounted fixtures.
+  const deadline = setTimeout(() => child.kill("SIGKILL"), replacement ? 480000 : 180000);
   await new Promise<void>((accept, reject) => {
     child.once("error", () => {
       clearTimeout(deadline);
