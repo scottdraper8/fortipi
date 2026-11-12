@@ -9,6 +9,7 @@ import {
 } from "fortipi-contract";
 import type * as D from "../../../src/boundary/dto.js";
 import type { Env } from "../../../src/boundary/env.js";
+import type { StorageSampleInput } from "../../../src/boundary/infrastructure.js";
 import { check, hash, id, json, outcome, ref, same, success } from "../../../src/control/store.js";
 import type { FixtureControl } from "./worker.js";
 
@@ -18,6 +19,33 @@ type RecipientEnv = Omit<Env, "CONTROL_PLANE"> & {
 
 /** Real SQLite authority floors with controlled lost acknowledgments; no product enforcement claim. */
 export class TestRecipient extends DurableObject<RecipientEnv> {
+  /** This controlled peer owns only its real SQLite/KV data, with no Computer children. */
+  async reportStorage(context: D.ResourceAuthContext, kind: "agent" | "workspace"): Promise<void> {
+    const sequence = ((await this.ctx.storage.get<number>("physicalSampleSequence")) ?? 0) + 1;
+    await this.ctx.storage.put("physicalSampleSequence", sequence);
+    const bytes = this.ctx.storage.sql.databaseSize;
+    const sample: StorageSampleInput = {
+      sampleId: id(),
+      policyVersion: 1,
+      sampleSeq: sequence,
+      observedAt: Date.now(),
+      coverage: kind === "agent" ? { kind, bytes } : { kind, bytes, censusVersion: sequence },
+      coveredReservationIds: [],
+    };
+    const response = await this.env.CONTROL_PLANE.getByName("control").fetch(
+      new Request("https://control.internal/internal/storage-sample", {
+        method: "POST",
+        headers: { "X-Fortipi-Context": JSON.stringify(context) },
+        body: JSON.stringify(sample),
+      }),
+    );
+    const result: unknown = await response.json();
+    check(
+      response.ok && result && typeof result === "object" && "ok" in result && result.ok === true,
+      "internal",
+      "Actual recipient physical sample was not accepted",
+    );
+  }
   async streamAudit(): Promise<string> {
     return json({
       calls: (await this.ctx.storage.get<number>("streamCalls")) ?? 0,

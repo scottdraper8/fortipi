@@ -39,6 +39,11 @@ test("actual Pi generation follows each persisted Agent selection rather than an
       assert.deepEqual(actual.entries.find((entry) => entry.text === `answer:${content}`)?.models, [
         modelId,
       ]);
+      await eventually(
+        () => h.api<D.ConversationProjection>(`/v1/conversations/${cid}`),
+        (response) =>
+          response.status === 200 && response.body.conversation.taskState.state === "completed",
+      );
     };
     await answer("alternate-selection", "fixture-alternate");
     const selected = { providerId: "cloudflare" as const, modelId: "@cf/zai-org/glm-5.3-flash" };

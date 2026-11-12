@@ -110,7 +110,13 @@ async function registration(
       executor: { executorId: resources.executorIds[0] ?? "missing", generation: 1 },
     }),
   );
-  return { ...ctx, registrationId: registered.registrationId };
+  const context = { ...ctx, registrationId: registered.registrationId };
+  const recipient =
+    kind === "agent"
+      ? h.env.AGENT_SESSIONS.getByName(h.agentId)
+      : h.env.WORKSPACES.getByName(resources.workspaceIds[0] ?? "missing");
+  await recipient.reportStorage(context, kind);
+  return context;
 }
 
 test("current Agent write metadata separates selected execution from local/Computer storage; Workspace and legacy reads stay storage-bound", async () => {
