@@ -15,6 +15,45 @@ import { childEnvironment, execute } from "../../prepare-release.ts";
 import { object, readJson, sha256 } from "../../verify-release-gates.ts";
 import { candidate, discard, httpFixture, temporary } from "./fixtures.ts";
 
+test("protected metadata reader admits only the exact recovery namespace inventory and retains its request bound", async () => {
+  const account = "a".repeat(32);
+  const path = "/workers/durable_objects/namespaces?page=1&per_page=1000";
+  const seen: string[] = [];
+  const rows = [{ id: "namespace-fixture", class: "AgentSession", use_sqlite: true }];
+  const server = await httpFixture((request, response) => {
+    assert.equal(request.method, "GET");
+    assert.equal(request.headers.authorization, "Bearer synthetic-cloud-read-only");
+    seen.push(request.url ?? "");
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ success: true, result: rows }));
+  });
+  try {
+    const read = cloudflareRequest(
+      account,
+      sha256(account),
+      "synthetic-cloud-read-only",
+      server.transport,
+    );
+    assert.deepEqual(await read(path), rows);
+    assert.deepEqual(seen, [`/client/v4/accounts/${account}${path}`]);
+    for (const rejected of [
+      "/workers/durable_objects/namespaces",
+      path.replace("page=1", "page=2"),
+      path.replace("1000", "1001"),
+      `${path}&other=true`,
+      "/workers/durable_objects/namespaces/fixture/objects",
+      "/workers/scripts/../secrets",
+    ])
+      await assert.rejects(read(rejected));
+    assert.equal(seen.length, 1, "Rejected routes must never reach credentialed transport");
+    for (let count = 1; count < 32; count++) await read(path);
+    await assert.rejects(read(path));
+    assert.equal(seen.length, 32, "Recovery must not broaden the existing request budget");
+  } finally {
+    await server.close();
+  }
+});
+
 test("actual CLI prepare plus HTTP version/rollout/configuration reads bind current Free identity and reject paid/split drift", {
   timeout: 120000,
 }, async () => {
