@@ -15,7 +15,13 @@ import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 import { Header } from "tar";
-import { mesonFiles, mesonPin, pythonIdentity, verifyMesonTree } from "./provision-meson.ts";
+import {
+  mesonFailure,
+  mesonFiles,
+  mesonPin,
+  pythonIdentity,
+  verifyMesonTree,
+} from "./provision-meson.ts";
 
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const source = new Map([
@@ -158,7 +164,34 @@ test("Python identity changes fail before execution and child failures remain bo
   await assert.rejects(pythonIdentity(path, expected), /Python identity changed/);
   // A real executable of the wrong kind must not inherit an ambient Python fallback;
   // its raw stderr/error object is never surfaced.
-  await assert.rejects(pythonIdentity(path, { ...expected, sha256: hash(await readFile(path)) }), {
-    message: "Meson provisioner: tool failed or timed out",
+  await assert.rejects(
+    pythonIdentity(path, { ...expected, sha256: hash(await readFile(path)) }),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, "Meson provisioner: tool failed or timed out");
+      assert.deepEqual(mesonFailure(error), {
+        probe: "meson-provisioning",
+        passed: false,
+        reason: "tool",
+        operation: "python",
+        kind: "nonzero",
+      });
+      for (const key of ["stderr", "stdout", "actual", "expected", "cause"])
+        assert.equal(Object.hasOwn(error, key), false);
+      return true;
+    },
+  );
+  const canary = "PRIVATE_MESON_ERROR_CANARY_53a9";
+  const foreign = Object.assign(new Error(canary, { cause: canary }), {
+    kind: canary,
+    operation: canary,
+    stderr: canary,
+    actual: canary,
   });
+  assert.deepEqual(mesonFailure(foreign), {
+    probe: "meson-provisioning",
+    passed: false,
+    reason: "unknown",
+  });
+  assert.equal(JSON.stringify(mesonFailure(foreign)).includes(canary), false);
 });

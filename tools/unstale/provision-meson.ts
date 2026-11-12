@@ -47,7 +47,61 @@ const hasControl = (value: string) =>
 const safePath = (path: string) =>
   isAbsolute(path) && !hasControl(path) && !path.includes(delimiter);
 
-async function command(file: string, args: string[], path: string): Promise<string> {
+const toolKinds = ["shared-library", "missing", "permission", "killed", "nonzero"] as const;
+type ToolOperation = "python" | "meson";
+class MesonToolError extends Error {
+  readonly kind: (typeof toolKinds)[number];
+  readonly operation: ToolOperation;
+  constructor(operation: ToolOperation, error: unknown) {
+    super("Meson provisioner: tool failed or timed out");
+    const e = error as { code?: unknown; killed?: unknown; stderr?: unknown } | null;
+    this.kind =
+      typeof e?.stderr === "string" && e.stderr.includes("error while loading shared libraries:")
+        ? "shared-library"
+        : e?.code === "ENOENT"
+          ? "missing"
+          : e?.code === "EACCES"
+            ? "permission"
+            : e?.killed === true
+              ? "killed"
+              : "nonzero";
+    this.operation = operation;
+  }
+}
+const reasons = [
+  ["Unsafe Python executable", "python-permissions"],
+  ["Pinned Python required", "python-version"],
+  ["Python identity changed", "python-identity"],
+  ["Meson archive identity changed", "archive-identity"],
+  ["Meson source changed", "source-identity"],
+  ["Meson private filesystem identity changed", "private-identity"],
+  ["Unsafe GITHUB_PATH file", "path-export"],
+  ["Explicit absolute Python path required", "python-path"],
+] as const;
+export function mesonFailure(error: unknown) {
+  return {
+    probe: "meson-provisioning",
+    passed: false,
+    reason:
+      error instanceof MesonToolError
+        ? "tool"
+        : error instanceof Error
+          ? (reasons.find(([message]) => error.message.startsWith(message))?.[1] ?? "unknown")
+          : "unknown",
+    ...(error instanceof MesonToolError
+      ? {
+          operation: ["python", "meson"].find((value) => value === error.operation) ?? "unknown",
+          kind: toolKinds.find((value) => value === error.kind) ?? "nonzero",
+        }
+      : {}),
+  };
+}
+async function command(
+  file: string,
+  args: string[],
+  path: string,
+  operation: ToolOperation,
+): Promise<string> {
   try {
     return (
       await exec(file, args, {
@@ -64,8 +118,8 @@ async function command(file: string, args: string[], path: string): Promise<stri
         maxBuffer: 4096,
       })
     ).stdout.trim();
-  } catch {
-    throw new Error("Meson provisioner: tool failed or timed out");
+  } catch (error) {
+    throw new MesonToolError(operation, error);
   }
 }
 
@@ -179,7 +233,7 @@ export async function pythonIdentity(
   };
   if (expected) assert.deepEqual(identity, expected, "Python identity changed");
   assert.equal(
-    await command(canonical, ["-I", "-S", "--version"], "/usr/bin:/bin"),
+    await command(canonical, ["-I", "-S", "--version"], "/usr/bin:/bin", "python"),
     `Python ${identity.version}`,
     "Pinned Python required",
   );
@@ -293,7 +347,12 @@ export async function verifyMeson(directory: string, pythonPath: string): Promis
   assert.deepEqual(saved, record(python), "Meson identity record changed");
   await verifyMesonTree(directory, files, python.path);
   assert.equal(
-    await command(resolve(directory, "bin/meson"), ["--version"], `${directory}/bin:/usr/bin:/bin`),
+    await command(
+      resolve(directory, "bin/meson"),
+      ["--version"],
+      `${directory}/bin:/usr/bin:/bin`,
+      "meson",
+    ),
     mesonPin.version,
     "Meson version changed",
   );
@@ -407,7 +466,8 @@ if (import.meta.main) {
     }
     await exportPath(directory);
     console.log(JSON.stringify({ version: mesonPin.version, directory, bin: `${directory}/bin` }));
-  } catch {
+  } catch (error) {
+    console.error(JSON.stringify(mesonFailure(error)));
     console.error(
       "Meson provisioning/verification failed; require pinned archive, Python and private tool identity",
     );
