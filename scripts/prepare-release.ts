@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { X509Certificate } from "node:crypto";
+import { createHash, X509Certificate } from "node:crypto";
 import { once } from "node:events";
 import {
   chmod,
@@ -181,7 +181,23 @@ async function checked(
 }
 export async function archiveInventory(
   path: string,
+  expected?: Pick<CandidatePackage, "name" | "sourceName" | "entries">,
 ): Promise<{ entries: FileRecord[]; manifest: Record<string, unknown> }> {
+  // Expected inventory comes from verified staging or the retained candidate, never tar headers.
+  // The source freeze independently pins the only payload eligible for a larger member.
+  const seaPath = "worker-assets/linux/container/computerd";
+  const sea =
+    expected?.sourceName === "fortipi-cli"
+      ? expected.entries.find((entry) => entry.path === seaPath)
+      : undefined;
+  if (sea) {
+    assert.match(expected?.name ?? "", /^@[a-z0-9][a-z0-9._-]*\/fortipi-cli$/);
+    const frozen = object(
+      await readJson(resolve(repository, "apps/worker/container/embedded-freeze.json")),
+    );
+    assert.equal(sea.sha256, digest(frozen.binarySha256), "Unreviewed archive SEA identity");
+    assert.ok(Number.isSafeInteger(sea.size) && sea.size > 0 && sea.size <= 200_000_000);
+  }
   const entries: FileRecord[] = [];
   const seen = new Set<string>();
   let manifest: Record<string, unknown> | undefined;
@@ -212,17 +228,32 @@ export async function archiveInventory(
           return;
         }
         total += entry.size;
-        assert.ok(entry.size <= 32_000_000 && total <= 200_000_000, "Archive byte bound");
-        const chunks: Buffer[] = [];
-        entry.on("data", (chunk: Buffer) => chunks.push(chunk));
+        const reviewedSea = sea && local === seaPath;
+        assert.ok(
+          (entry.size <= 32_000_000 || (reviewedSea && entry.size === sea.size)) &&
+            total <= 200_000_000,
+          "Archive byte bound",
+        );
+        const hash = createHash("sha256");
+        let size = 0;
+        const chunks: Buffer[] | undefined = local === "package.json" ? [] : undefined;
+        entry.on("data", (chunk: Buffer) => {
+          size += chunk.length;
+          hash.update(chunk);
+          chunks?.push(chunk);
+        });
         entry.on("end", () => {
           try {
-            const data = Buffer.concat(chunks);
-            assert.equal(data.length, entry.size);
+            assert.equal(size, entry.size);
+            const sha256 = hash.digest("hex");
+            if (reviewedSea) {
+              assert.equal(size, sea.size, "Archive SEA size differs");
+              assert.equal(sha256, sea.sha256, "Archive SEA hash differs");
+            }
             const mode = (entry.mode ?? 0) & 0o777;
             assert.ok((mode & 0o022) === 0, "Writable archive mode");
-            entries.push({ path: local, size: data.length, mode, sha256: sha256(data) });
-            if (local === "package.json") manifest = object(JSON.parse(data.toString("utf8")));
+            entries.push({ path: local, size, mode, sha256 });
+            if (chunks) manifest = object(JSON.parse(Buffer.concat(chunks).toString("utf8")));
           } catch (error) {
             failure = error;
           }
@@ -235,6 +266,7 @@ export async function archiveInventory(
   });
   if (failure) throw failure;
   assert.ok(manifest, "Missing package manifest");
+  if (expected) assert.equal(manifest.name, expected.name, "Archive package role differs");
   return { entries: entries.sort((a, b) => a.path.localeCompare(b.path, "en")), manifest };
 }
 export async function stageAndPack(
@@ -285,8 +317,12 @@ export async function stageAndPack(
       );
       safePath(filename);
       const file = resolve(output, filename);
-      const packed = await archiveInventory(file);
       const expected = await inventory(directory);
+      const packed = await archiveInventory(file, {
+        name: `@${scope}/fortipi-${source}`,
+        sourceName: `fortipi-${source}`,
+        entries: expected,
+      });
       assert.deepEqual(
         packed.manifest,
         await readJson(resolve(directory, "package.json")),
@@ -758,7 +794,7 @@ export async function loadCandidate(
     const bytes = await regularBytes(resolve(directory, p.tarball));
     assert.equal(sha256(bytes), p.sha256);
     assert.equal(sha512(bytes), p.integrity);
-    const packed = await archiveInventory(resolve(directory, p.tarball));
+    const packed = await archiveInventory(resolve(directory, p.tarball), p);
     assert.deepEqual(packed.entries, p.entries);
     assert.equal(packed.manifest.name, p.name);
     assert.equal(packed.manifest.version, p.version);
@@ -1667,7 +1703,7 @@ export async function installCandidate(
       const name = decodeURIComponent(route.slice(1));
       const pkg = candidate.packages.find((p) => p.name === name);
       assert.ok(pkg, "Out-of-scope candidate registry request");
-      const { manifest } = await archiveInventory(resolve(directory, pkg.tarball));
+      const { manifest } = await archiveInventory(resolve(directory, pkg.tarball), pkg);
       response.writeHead(200, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
