@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { X509Certificate } from "node:crypto";
+import { createHash, X509Certificate } from "node:crypto";
 import { once } from "node:events";
 import {
   chmod,
@@ -25,8 +25,11 @@ import { generateNotices, type NoticeReceipt } from "./generate-notices.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
 import { rewritePublishNames } from "./rewrite-publish-names.ts";
 import {
+  type ArtifactReference,
   assertCandidate,
   assertGate,
+  assertProducer,
+  assertSyntheticLocalGate,
   type CandidateManifest,
   type CandidatePackage,
   canonicalJson,
@@ -59,6 +62,7 @@ import {
   trustedMain,
   verifyCurrentReadinessSet,
   verifyPayload,
+  verifyProducer,
   versionPattern,
 } from "./verify-release-gates.ts";
 
@@ -99,6 +103,7 @@ export function childEnvironment(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessE
     "GITHUB_RUN_ATTEMPT",
     "GITHUB_WORKFLOW_REF",
     "GITHUB_EVENT_NAME",
+    "GITHUB_JOB",
     "GITHUB_SERVER_URL",
     "RUNNER_OS",
     "RUNNER_ARCH",
@@ -181,7 +186,23 @@ async function checked(
 }
 export async function archiveInventory(
   path: string,
+  expected?: Pick<CandidatePackage, "name" | "sourceName" | "entries">,
 ): Promise<{ entries: FileRecord[]; manifest: Record<string, unknown> }> {
+  // Expected inventory comes from verified staging or the retained candidate, never tar headers.
+  // The source freeze independently pins the only payload eligible for a larger member.
+  const seaPath = "worker-assets/linux/container/computerd";
+  const sea =
+    expected?.sourceName === "fortipi-cli"
+      ? expected.entries.find((entry) => entry.path === seaPath)
+      : undefined;
+  if (sea) {
+    assert.match(expected?.name ?? "", /^@[a-z0-9][a-z0-9._-]*\/fortipi-cli$/);
+    const frozen = object(
+      await readJson(resolve(repository, "apps/worker/container/embedded-freeze.json")),
+    );
+    assert.equal(sea.sha256, digest(frozen.binarySha256), "Unreviewed archive SEA identity");
+    assert.ok(Number.isSafeInteger(sea.size) && sea.size > 0 && sea.size <= 200_000_000);
+  }
   const entries: FileRecord[] = [];
   const seen = new Set<string>();
   let manifest: Record<string, unknown> | undefined;
@@ -212,17 +233,32 @@ export async function archiveInventory(
           return;
         }
         total += entry.size;
-        assert.ok(entry.size <= 32_000_000 && total <= 200_000_000, "Archive byte bound");
-        const chunks: Buffer[] = [];
-        entry.on("data", (chunk: Buffer) => chunks.push(chunk));
+        const reviewedSea = sea && local === seaPath;
+        assert.ok(
+          (entry.size <= 32_000_000 || (reviewedSea && entry.size === sea.size)) &&
+            total <= 200_000_000,
+          "Archive byte bound",
+        );
+        const hash = createHash("sha256");
+        let size = 0;
+        const chunks: Buffer[] | undefined = local === "package.json" ? [] : undefined;
+        entry.on("data", (chunk: Buffer) => {
+          size += chunk.length;
+          hash.update(chunk);
+          chunks?.push(chunk);
+        });
         entry.on("end", () => {
           try {
-            const data = Buffer.concat(chunks);
-            assert.equal(data.length, entry.size);
+            assert.equal(size, entry.size);
+            const sha256 = hash.digest("hex");
+            if (reviewedSea) {
+              assert.equal(size, sea.size, "Archive SEA size differs");
+              assert.equal(sha256, sea.sha256, "Archive SEA hash differs");
+            }
             const mode = (entry.mode ?? 0) & 0o777;
             assert.ok((mode & 0o022) === 0, "Writable archive mode");
-            entries.push({ path: local, size: data.length, mode, sha256: sha256(data) });
-            if (local === "package.json") manifest = object(JSON.parse(data.toString("utf8")));
+            entries.push({ path: local, size, mode, sha256 });
+            if (chunks) manifest = object(JSON.parse(Buffer.concat(chunks).toString("utf8")));
           } catch (error) {
             failure = error;
           }
@@ -235,6 +271,7 @@ export async function archiveInventory(
   });
   if (failure) throw failure;
   assert.ok(manifest, "Missing package manifest");
+  if (expected) assert.equal(manifest.name, expected.name, "Archive package role differs");
   return { entries: entries.sort((a, b) => a.path.localeCompare(b.path, "en")), manifest };
 }
 export async function stageAndPack(
@@ -285,8 +322,12 @@ export async function stageAndPack(
       );
       safePath(filename);
       const file = resolve(output, filename);
-      const packed = await archiveInventory(file);
       const expected = await inventory(directory);
+      const packed = await archiveInventory(file, {
+        name: `@${scope}/fortipi-${source}`,
+        sourceName: `fortipi-${source}`,
+        entries: expected,
+      });
       assert.deepEqual(
         packed.manifest,
         await readJson(resolve(directory, "package.json")),
@@ -366,6 +407,103 @@ export async function producer(
     integer(result.runAttempt);
   }
   return result;
+}
+/** Current evidence execution, independent of the immutable packing producer. */
+export async function evidenceProducer(
+  root: string,
+  candidate: CandidateManifest,
+  mode: "local" | "native" | "live",
+  request = githubRequest(process.env.GITHUB_TOKEN),
+): Promise<Producer> {
+  if (process.env.GITHUB_ACTIONS !== "true") {
+    assert.equal(mode, "local");
+    assert.equal(candidate.publishable, false);
+    assert.equal(candidate.scope, SYNTHETIC_SCOPE);
+    return {
+      workflowPath: ".github/workflows/ci.yml",
+      workflowSha256: sha256(await regularBytes(resolve(root, ".github/workflows/ci.yml"))),
+      workflowId: 0,
+      runId: 0,
+      runAttempt: 0,
+    };
+  }
+  assert.equal(process.env.GITHUB_REPOSITORY, REPOSITORY);
+  assert.equal(process.env.GITHUB_REPOSITORY_ID, String(REPOSITORY_ID));
+  assert.equal(process.env.GITHUB_SHA, candidate.sourceCommit);
+  const match = new RegExp(
+    `^${REPOSITORY}/(\\.github/workflows/(ci|release|deploy)\\.yml)@refs/`,
+  ).exec(string(process.env.GITHUB_WORKFLOW_REF));
+  assert.ok(match?.[1] && match[2], "Actual allowlisted evidence workflow required");
+  assert.equal(string(process.env.GITHUB_WORKFLOW_REF).split("@")[1], process.env.GITHUB_REF);
+  const workflowPath = match[1];
+  const workflow = match[2];
+  const job = process.env.GITHUB_JOB;
+  const event = process.env.GITHUB_EVENT_NAME;
+  if (workflow === "ci") {
+    assert.equal(job, "policy-and-integration");
+    assert.equal(mode, "local");
+    assert.ok(["push", "pull_request", "workflow_dispatch"].includes(string(event)));
+    if (event !== "workflow_dispatch") {
+      assert.equal(candidate.publishable, false);
+      assert.equal(candidate.scope, SYNTHETIC_SCOPE);
+    }
+  } else {
+    assert.ok(
+      (workflow === "release" && job === "native" && mode === "native") ||
+        (workflow === "release" && job === "publish" && mode === "local") ||
+        (workflow === "deploy" && job === "operate" && mode === "live"),
+      "Evidence workflow/job/mode mismatch",
+    );
+    assert.equal(event, "workflow_dispatch");
+    assert.equal(candidate.publishable, true);
+  }
+  if (event === "workflow_dispatch") assert.equal(process.env.GITHUB_REF, "refs/heads/main");
+  else if (event === "push") assert.equal(process.env.GITHUB_REF, "refs/heads/main");
+  else assert.match(string(process.env.GITHUB_REF), /^refs\/pull\/\d+\/merge$/);
+  const actual = object(await request(`/repos/${REPOSITORY}/actions/workflows/${workflow}.yml`));
+  assert.equal(actual.path, workflowPath);
+  assert.equal(actual.state, "active");
+  const result: Producer = {
+    workflowPath,
+    workflowSha256: sha256(await regularBytes(resolve(root, workflowPath))),
+    workflowId: integer(actual.id),
+    runId: integer(Number(process.env.GITHUB_RUN_ID)),
+    runAttempt: integer(Number(process.env.GITHUB_RUN_ATTEMPT)),
+  };
+  assertProducer(result);
+  return result;
+}
+export function evidenceEnvironment(producer: Producer, mode: "local" | "native" | "live") {
+  return childEnvironment({
+    FORTIPI_EVIDENCE_PRODUCER: canonicalJson(producer),
+    ...(mode === "live" ? { FORTIPI_ADMIN_TOKEN: process.env.FORTIPI_ADMIN_TOKEN } : {}),
+  });
+}
+export function assertEvidenceReceipt(
+  value: unknown,
+  loaded: { candidate: CandidateManifest; hash: string },
+  expected: Producer,
+  mode: "local" | "native" | "live",
+): asserts value is GateReceipt {
+  if (process.env.GITHUB_ACTIONS !== "true")
+    assertSyntheticLocalGate(value, loaded.candidate, mode);
+  else assertGate(value);
+  assert.deepEqual(value.producer, expected, "Evidence producer differs from actual execution");
+  assert.equal(value.kind, mode === "local" ? "integrated" : mode);
+  assert.equal(value.candidateSha256, loaded.hash);
+  assert.equal(value.sourceCommit, loaded.candidate.sourceCommit);
+  assert.equal(value.scope, loaded.candidate.scope);
+}
+/** Authenticate exact retained bytes; no repacking or promotion of a synthetic candidate. */
+export async function verifyRetainedCandidate(
+  candidate: CandidateManifest,
+  hash: string,
+  reference: ArtifactReference,
+  request: GitHubRequest,
+): Promise<void> {
+  assert.equal(reference.candidateSha256, hash, "Retained candidate hash mismatch");
+  await trustedMain(candidate, request);
+  await verifyProducer(candidate, "candidate", candidate.producer, reference, request);
 }
 export async function generateSbom(
   root: string,
@@ -758,7 +896,7 @@ export async function loadCandidate(
     const bytes = await regularBytes(resolve(directory, p.tarball));
     assert.equal(sha256(bytes), p.sha256);
     assert.equal(sha512(bytes), p.integrity);
-    const packed = await archiveInventory(resolve(directory, p.tarball));
+    const packed = await archiveInventory(resolve(directory, p.tarball), p);
     assert.deepEqual(packed.entries, p.entries);
     assert.equal(packed.manifest.name, p.name);
     assert.equal(packed.manifest.version, p.version);
@@ -1493,6 +1631,8 @@ export async function runEvidence(
   out: string,
   deployment?: string,
 ): Promise<void> {
+  const loaded = await loadCandidate(candidate);
+  const expectedProducer = await evidenceProducer(repository, loaded.candidate, mode);
   await regularBytes(resolve(repository, "tests/clients/run-evidence.ts"));
   assert.ok(
     resolve(fixture).startsWith(`${resolve(repository, "tests/clients/fixtures")}${sep}`) &&
@@ -1500,23 +1640,7 @@ export async function runEvidence(
     "Evidence fixture must be a trusted source descriptor",
   );
   await regularBytes(resolve(fixture));
-  const env = childEnvironment(
-    mode === "live" ? { FORTIPI_ADMIN_TOKEN: process.env.FORTIPI_ADMIN_TOKEN } : {},
-  );
-  for (const key of [
-    "GITHUB_ACTIONS",
-    "GITHUB_REPOSITORY",
-    "GITHUB_REPOSITORY_ID",
-    "GITHUB_SHA",
-    "GITHUB_REF",
-    "GITHUB_RUN_ID",
-    "GITHUB_RUN_ATTEMPT",
-    "GITHUB_WORKFLOW_REF",
-    "GITHUB_JOB",
-    "RUNNER_OS",
-    "RUNNER_ARCH",
-  ])
-    if (process.env[key]) env[key] = process.env[key];
+  const env = evidenceEnvironment(expectedProducer, mode);
   await checked(
     process.execPath,
     [
@@ -1536,11 +1660,7 @@ export async function runEvidence(
     true,
   );
   const receipt = await readJson(resolve(out, "gate.json"));
-  assertGate(receipt);
-  const loaded = await loadCandidate(candidate);
-  assert.equal(receipt.candidateSha256, loaded.hash);
-  assert.equal(receipt.sourceCommit, loaded.candidate.sourceCommit);
-  assert.equal(receipt.scope, loaded.candidate.scope);
+  assertEvidenceReceipt(receipt, loaded, expectedProducer, mode);
   await verifyPayload(out, receipt.files, ["gate.json"]);
 }
 /** Registry-resolved verification runs before any release finalization; exact bytes and the reviewed graph both matter. */
@@ -1667,7 +1787,7 @@ export async function installCandidate(
       const name = decodeURIComponent(route.slice(1));
       const pkg = candidate.packages.find((p) => p.name === name);
       assert.ok(pkg, "Out-of-scope candidate registry request");
-      const { manifest } = await archiveInventory(resolve(directory, pkg.tarball));
+      const { manifest } = await archiveInventory(resolve(directory, pkg.tarball), pkg);
       response.writeHead(200, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
@@ -2069,6 +2189,26 @@ if (import.meta.main) {
         string(args.out),
         args.deployment,
       );
+    } else if (operation === "retained-evidence") {
+      assert.equal(process.env.GITHUB_ACTIONS, "true");
+      assert.equal(process.env.GITHUB_EVENT_NAME, "workflow_dispatch");
+      assert.equal(process.env.GITHUB_REF, "refs/heads/main");
+      const loaded = await loadCandidate(string(args.candidate));
+      assert.equal(process.env.GITHUB_SHA, loaded.candidate.sourceCommit);
+      await privilegedCheckout(loaded.candidate);
+      await verifyRetainedCandidate(
+        loaded.candidate,
+        loaded.hash,
+        object(await readJson(string(args.reference))) as unknown as ArtifactReference,
+        githubRequest(process.env.GITHUB_TOKEN),
+      );
+      const current = await evidenceProducer(repository, loaded.candidate, "local");
+      assert.equal(current.workflowPath, ".github/workflows/ci.yml");
+      await writeFile(
+        string(process.env.GITHUB_OUTPUT),
+        `artifact=integrated-${loaded.candidate.sourceCommit}-${loaded.candidate.scope}-${current.runId}-${current.runAttempt}\n`,
+        { flag: "a" },
+      );
     } else if (operation === "install")
       console.log(
         JSON.stringify(await installCandidate(string(args.candidate), string(args.directory))),
@@ -2089,7 +2229,9 @@ if (import.meta.main) {
                 ? "TARGETS_REFERENCE"
                 : args.kind === "journal"
                   ? "JOURNAL_REFERENCE"
-                  : undefined;
+                  : args.kind === "candidate"
+                    ? "CANDIDATE_REFERENCE"
+                    : undefined;
       assert.ok(variable);
       const value = JSON.parse(string(process.env[variable], 60000));
       if (args.kind === "targets") assert.ok(Array.isArray(value));

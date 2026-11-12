@@ -82,7 +82,7 @@ test("repaired Lifecycle same-ID replacement preserves its newer wake", async ()
   const probe = env.PROBE.getByName("race");
   const drives: Promise<void>[] = [];
   try {
-    await probe.arm();
+    await probe.arm(true);
     const old = probe.drive();
     drives.push(old);
     void old.catch(() => {});
@@ -92,6 +92,7 @@ test("repaired Lifecycle same-ID replacement preserves its newer wake", async ()
     drives.push(newer);
     void newer.catch(() => {});
     await until(async () => (await probe.state()).newCalls === 1);
+    await probe.releaseOldFailure();
     await old;
     // A platform alarm may have won the first drive. Keep the replacement held
     // across the pinned retry's entire bounded jitter interval as well.
@@ -114,10 +115,11 @@ test("repaired Lifecycle same-ID replacement preserves its newer wake", async ()
     assert.equal(completed.effects, 0);
     assert.equal(completed.queued, 0, "The released replacement completes normally");
   } finally {
+    await probe.releaseOldFailure();
     await probe.release();
     for (const result of await Promise.allSettled(drives)) assert.equal(result.status, "fulfilled");
     await probe.close();
     await server.close();
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 });
   }
 });

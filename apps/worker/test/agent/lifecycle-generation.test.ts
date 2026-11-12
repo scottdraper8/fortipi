@@ -37,12 +37,13 @@ test("candidate immutable Lifecycle generation ID preserves newer wake and bound
   const env = await server.getWorker<{ PROBE: DurableObjectNamespace<RaceProbe> }>().getEnv();
   const probe = env.PROBE.getByName("candidate");
   try {
-    await probe.arm();
+    await probe.arm(true);
     const old = probe.drive();
     await until(async () => (await probe.state()).oldCalls === 1);
     await probe.replace(true);
     const newer = probe.drive();
     await until(async () => (await probe.state()).newCalls === 1);
+    await probe.releaseOldFailure();
     await old;
     await pause(1100);
     const held = await probe.state();
@@ -55,7 +56,7 @@ test("candidate immutable Lifecycle generation ID preserves newer wake and bound
     assert.ok(held.queued <= 2, "Generation strategy must not accumulate queued rows");
     await probe.release();
     await newer;
-    await pause(25);
+    await until(async () => ((await probe.state()).time ?? 0) > Date.now());
     const resumed = await probe.state();
     assert.equal(resumed.exists, true);
     assert.ok(
@@ -66,9 +67,10 @@ test("candidate immutable Lifecycle generation ID preserves newer wake and bound
     assert.equal(resumed.queued, 1, "Completed obsolete work must drain");
     console.log(JSON.stringify({ held, resumed }));
   } finally {
+    await probe.releaseOldFailure();
     await probe.release();
     await probe.close();
     await server.close();
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 });
   }
 });
