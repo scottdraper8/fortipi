@@ -47,6 +47,14 @@ export class Authority {
       "Credential revoked",
     );
     const deployment = await this.store.get<string>("meta", "deployment", tx);
+    const currentTime = Date.now();
+    check(
+      ctx.registrationId &&
+        ctx.deadline > currentTime &&
+        (ctx.credentialExpiresAt === null || ctx.credentialExpiresAt > currentTime),
+      "unauthorized",
+      "Current registered authority required",
+    );
     check(!deployment || deployment === ctx.deploymentId, "unauthorized", "Wrong deployment");
     check(permits(ctx.grants, resources), "unauthorized", "Resource grant required");
   }
