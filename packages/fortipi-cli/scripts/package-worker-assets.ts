@@ -151,6 +151,8 @@ export async function packageWorkerAssets(options: {
   workerBuild: string;
   commit: string;
   version: string;
+  /** Private test output only; the stable CLI always emits the canonical package tree. */
+  outputDirectory?: string;
 }): Promise<AssetManifest> {
   assert.equal(process.versions.node, "26.13.0", "Pinned Node required");
   assert.match(options.commit, /^[a-f0-9]{40}$/);
@@ -202,10 +204,34 @@ export async function packageWorkerAssets(options: {
   const closure = await workerClosure(build, entry);
   const inventory = (await json(resolve(root, "dist/supply-chain/inventory.json"))) as Inventory;
   const packages = new Set<string>();
+  const ownedInputs: string[] = [];
+  assert.ok(
+    Object.keys(metadata.inputs).some(
+      (name) => resolve(workerRoot, name) === resolve(workerRoot, "src/index.ts"),
+    ),
+    "Actual Worker entry source is missing from producer metadata",
+  );
   for (const name of Object.keys(metadata.inputs)) {
-    if (name.startsWith("\0") || name.includes(":")) continue; // Wrangler's virtual modules have no package bytes.
+    if (
+      name.startsWith("\0") ||
+      /^(?:node:|cloudflare:|cloudflare-internal:|node-built-in-modules:)/.test(name)
+    )
+      continue; // Known Wrangler host virtual modules have no package bytes.
     const path = resolve(workerRoot, name);
     assert.ok(inside(root, path), "Worker input escaped repository");
+    assert.ok(inside(root, await realpath(path)), "Worker input resolved outside checkout");
+    const stat = await lstat(path);
+    assert.ok(
+      stat.isFile() && !stat.isSymbolicLink() && stat.size === metadata.inputs[name]?.bytes,
+      "Worker input differs from producer metadata",
+    );
+    // The root build compiles contract/dist with the pinned compiler before bundling.
+    // Its tracked sources/schemas are covered by the whole-contract clean-tree check.
+    if (
+      !path.includes(`${sep}node_modules${sep}`) &&
+      !inside(resolve(root, "packages/fortipi-contract/dist"), path)
+    )
+      ownedInputs.push(relative(root, path));
     let parent = dirname(path);
     while (inside(root, parent)) {
       try {
@@ -226,7 +252,16 @@ export async function packageWorkerAssets(options: {
       parent = dirname(parent);
     }
   }
-  const destination = resolve(root, "packages/fortipi-cli/worker-assets");
+  assert.ok(ownedInputs.length > 0);
+  await git("ls-files", "--error-unmatch", "--", ...ownedInputs);
+  await git("diff", "--exit-code", "HEAD", "--", ...ownedInputs);
+  const destination = options.outputDirectory
+    ? resolve(options.outputDirectory)
+    : resolve(root, "packages/fortipi-cli/worker-assets");
+  assert.ok(
+    !options.outputDirectory || inside(resolve(root, "dist"), destination),
+    "Test output must remain in ignored build storage",
+  );
   const stage = await mkdtemp(resolve(root, "packages/fortipi-cli/.worker-assets-"));
   const records: AssetManifest["files"] = [];
   let imageRecord: AssetManifest["image"];

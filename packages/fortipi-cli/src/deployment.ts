@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { readFile, realpath, rm } from "node:fs/promises";
+import { lstat, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { boundedBytes } from "./admin.js";
 import type { PrepareReceipt } from "./assets.js";
-import { verifyPrepared } from "./assets.js";
+import { sha256, verifyAssets, verifyPrepared } from "./assets.js";
 import { CliError, check } from "./errors.js";
 import { profileRoot, protectDirectory, reserveProtected } from "./profiles.js";
 import type { CommandResult, DeploymentReceipt } from "./results.js";
@@ -82,10 +82,27 @@ export async function deploy(
         ...(options.signal ? { signal: options.signal } : {}),
         timeoutMs: options.timeoutMs ?? 120000,
       });
+      // The prepared template uses no_bundle: true. Verify actual emitted bytes,
+      // rather than interpreting a zero exit status as complete module output.
+      const assets = await verifyAssets(join(directory, "assets"));
+      for (const record of assets.manifest.files.filter((file) => file.kind === "worker")) {
+        const emitted = join(scratch, "build", record.path.slice("worker/".length));
+        let valid = false;
+        try {
+          const stat = await lstat(emitted);
+          valid =
+            stat.isFile() &&
+            !stat.isSymbolicLink() &&
+            stat.size === record.size &&
+            sha256(await readFile(emitted)) === record.sha256;
+        } catch {}
+        check(valid, "wrangler_dry_build_module_identity_failed", 1);
+      }
       return {
         state: "dry-build-completed",
         sourceCommit: prepared.sourceCommit,
         assetManifestSha256: prepared.assetManifestSha256,
+        workerBytesVerified: true,
       };
     }
     let token: string | undefined;
