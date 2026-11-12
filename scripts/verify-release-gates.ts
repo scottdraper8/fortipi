@@ -301,7 +301,7 @@ export async function inventory(root: string, prefix = ""): Promise<FileRecord[]
   );
   return result.sort((a, b) => a.path.localeCompare(b.path, "en"));
 }
-function records(value: unknown): asserts value is FileRecord[] {
+export function records(value: unknown): asserts value is FileRecord[] {
   assert.ok(
     Array.isArray(value) && value.length > 0 && value.length < 30000,
     "Missing artifact inventory",

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 import { c as createTar } from "tar";
 import { repository } from "../../build-workspaces.ts";
+import { releaseChecksums } from "../../collect-release-assets.ts";
 import type { NoticeReceipt } from "../../generate-notices.ts";
 import { archiveInventory, generateSbom, stageAndPack } from "../../prepare-release.ts";
 import {
@@ -61,6 +63,23 @@ test("actual five scoped pnpm packs retain staged bytes, executable bins, legal 
       );
     }
     await generateSbom(repository, directory, "fortipi-ci-test", "0.1.0", notices);
+    const releaseFiles = packed.packages.map((pkg) => ({
+      name: pkg.tarball.replaceAll("/", "__"),
+      sha256: pkg.sha256,
+    }));
+    const sums = releaseChecksums(releaseFiles).toString("utf8").trim().split("\n");
+    for (const line of sums) {
+      const [hash, name] = line.split("  ");
+      const pkg = packed.packages.find((pkg) => pkg.tarball.replaceAll("/", "__") === name);
+      assert.ok(pkg, "Checksum must address an actual exported asset name");
+      assert.equal(
+        createHash("sha256")
+          .update(await regularBytes(resolve(directory, pkg.tarball)))
+          .digest("hex"),
+        hash,
+      );
+      assert.ok(!name?.includes("/"));
+    }
     const bom = object(await readJson(resolve(directory, "sbom.json")));
     assert.equal(bom.bomFormat, "CycloneDX");
     assert.equal(bom.specVersion, "1.7");

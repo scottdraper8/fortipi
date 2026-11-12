@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
@@ -649,6 +649,8 @@ test("receipt hashes and fixed freshness reject changed results, unavailable cla
   try {
     await writeFile(resolve(root, "result.json"), "{}", { mode: 0o600 });
     const files = await inventory(root);
+    await chmod(resolve(root, "result.json"), 0o644);
+    await verifyPayload(root, files);
     const c = candidate();
     const receipt: GateReceipt = {
       schemaVersion: 1,

@@ -20,6 +20,7 @@ import {
   REPOSITORY,
   readJson,
   readProofBundle,
+  records,
   regularBytes,
   remoteHash,
   saveJson,
@@ -27,7 +28,16 @@ import {
   string,
   trustedMain,
   verifyCurrentReadinessSet,
+  verifyPayload,
 } from "./verify-release-gates.ts";
+export function releaseChecksums(files: { name: string; sha256: string }[]): Buffer {
+  return Buffer.from(
+    `${[...files]
+      .sort((a, b) => a.name.localeCompare(b.name, "en"))
+      .map((file) => `${file.sha256}  ${file.name}`)
+      .join("\n")}\n`,
+  );
+}
 
 /** Reconcile existing tags/releases/assets; never move a tag or overwrite an asset. */
 export async function collectReleaseAssets(
@@ -155,11 +165,8 @@ export async function collectReleaseAssets(
     await readJson(resolve(dirname(journalPath), "registry-evidence-inventory.json")),
   );
   assert.equal(registryInventory.candidateSha256, hash);
-  assert.deepEqual(
-    await inventory(resolve(dirname(journalPath), "registry-evidence")),
-    registryInventory.files,
-  );
-  const checksums = `${candidate.files.map((f) => `${f.sha256}  ${f.path}`).join("\n")}\n${hash}  candidate.json\n`;
+  records(registryInventory.files);
+  await verifyPayload(resolve(dirname(journalPath), "registry-evidence"), registryInventory.files);
   const outputs = [
     ...candidate.files.map((f) => ({
       name: f.path.replaceAll("/", "__"),
@@ -167,7 +174,6 @@ export async function collectReleaseAssets(
       sha256: f.sha256,
     })),
     { name: "candidate.json", bytes: () => regularBytes(candidatePath), sha256: hash },
-    { name: "SHA256SUMS", bytes: async () => Buffer.from(checksums), sha256: sha256(checksums) },
     ...(await Promise.all(
       ["provenance.json", "verified-bundles.json", basename(journalPath)].map(async (name) => {
         const path = resolve(dirname(journalPath), name);
@@ -206,6 +212,12 @@ export async function collectReleaseAssets(
       bytes: () => regularBytes(resolve(dirname(journalPath), "registry-evidence", file.path)),
       sha256: file.sha256,
     });
+  const checksumBytes = releaseChecksums(outputs);
+  outputs.push({
+    name: "SHA256SUMS",
+    bytes: async () => checksumBytes,
+    sha256: sha256(checksumBytes),
+  });
   assert.equal(
     new Set(outputs.map((f) => f.name)).size,
     outputs.length,
