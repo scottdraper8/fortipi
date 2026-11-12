@@ -955,6 +955,12 @@
       "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
       "files": []
     },
+    "@aws-sdk/credential-provider-login@3.972.92": {
+      "source": "@aws-sdk/core@3.981.0",
+      "inheritedFrom": "@aws-sdk/core@3.981.0",
+      "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
+      "files": []
+    },
     "@aws-sdk/nested-clients@3.998.3": {
       "source": "@aws-sdk/core@3.981.0",
       "inheritedFrom": "@aws-sdk/core@3.981.0",
