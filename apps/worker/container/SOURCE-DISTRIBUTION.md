@@ -30,7 +30,7 @@ Use a fresh checkout of the recorded commit from the published FortiPi repositor
 (`https://github.com/scottdraper8/fortipi`), preserving its Git identity. Compare
 the supplied source archive and recipe/metadata hashes before building. The release
 must publish that exact commit before distributing the kit. With the recorded
-Node26.13.0 and pnpm12.18.0 first on PATH, run `node scripts/install-dependencies.ts`
+Node26.13.1 and pnpm12.18.0 first on PATH, run `node scripts/install-dependencies.ts`
 at its root. This installs the exact reviewed `tar` dependency through the frozen
 lock; do not install a floating package or copy a dependency tree. The source
 snapshot supplies all installer/configuration inputs. Host `git`, `tar`, `ar`, `xz`,
@@ -42,6 +42,25 @@ Run `node apps/worker/container/build.ts --prepare` to verify/reconstruct the ki
 or `--verify` for the offline image and runtime fixture. Generated image recipes
 must match their recorded commit; construction-only kits mark mismatches and are
 not distributable images. No model/deployment credentials are needed in this flow.
+
+For a newly reviewed Computer/Node identity, `--prepare-inputs` authenticates and
+reconstructs source material without claiming an executable exists. On trusted
+Linux x64, `--freeze-embedded` then compiles the exact Computer0.11.1 source through
+the upstream esbuild recipe/bootstrap/addon shim and creates a SEA blob with the
+actual signed Node22.23.5 target. Only build-script entry/export mapping and
+diagnostic metadata are adapted; the complete adapter and original source ship.
+The same target Node runs exact postject1.0.0-alpha.6 with commander9.5.0, extracted
+from reviewed SRI archives without lifecycle scripts. They are isolated build
+tools, not image/runtime dependencies. The old image contributes only its
+unchanged source-bound FUSE addon; the Dockerfile copies the newly built SEA.
+Review and commit the resulting actual embedded freeze before final prepare/build.
+Missing outputs remain an explicit failed gate, never a metadata-only upgrade.
+The kit includes the signed Node runtime/source identities and archives, complete
+Node aggregate license, actual build/input receipt and both effective authenticated
+zlib patches. A fresh Linux prepare rebuilds and checks the actual frozen SEA;
+other hosts must receive that matching public binary/receipt handoff. Final image
+inventory, FUSE, egress and recipient modified-library/static-helper proofs must
+be repeated at the new identity. AD results do not transfer to these bytes.
 
 The final runtime contains **79 packages / 56 source identities / 182 source
 payloads**, including the retained libapt-pkg7.0 library and its apt source.
@@ -78,8 +97,10 @@ included in release packaging. Final-image absence, source delivery and rights
 remain subject to independent artifact review.
 
 The FUSE3 runtime and library are Debian amd64 **3.18.3-1**, selected only from the
-signed SID indexes at `20261110T000000Z`. All other dependencies retain the frozen
-Trixie/base identities. Their actual controls require libc6 >=2.38 and the existing
+signed SID indexes at `20261110T000000Z`. The sole additional security overlay is
+zlib1g and corresponding source at `1:1.3.dfsg+really1.3.1-1+deb13u1`, bound to the
+supplied signed trixie-security InRelease and immutable by-hash indexes. All other
+dependencies retain the frozen Trixie/base identities. The FUSE controls require libc6 >=2.38 and the existing
 mount package; the base supplies libc6 2.41. The previous adduser dependency is no
 longer selected. No development package is installed. The separately installed
 libfuse2t64 2.9.9-9 is not covered by the FUSE3 security comparison.

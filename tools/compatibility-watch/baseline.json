@@ -81,21 +81,21 @@
     "computer-fuse": {
       "catalogSha256": "c4c8b17f74da3c8b3563522a2c0d5356d4805d624ce4de15cb25a3e8c34051cc",
       "snapshot": {
-        "commit": "deb774ff962b9d070efc257b573b9ea2b4174036",
-        "version": "0.10.0",
+        "commit": "812bce58d2ea3735c12e6f6181c269c4010293df",
+        "version": "0.11.1",
         "paths": {
-          "packages": "ea574495a6357c4c84c0e945a38671f40338c3893152a55bfc550d92a8d26097",
-          "docs": "2b92bf217058d66558eec34dbea1d374f765ad6b75b17a73b21423ed76787cf4",
-          "packages/computer/package.json": "be91b5a41fb24bd3bda98a463b9e42529b0c23eb0256ec8d1bf48b0dc19297c6",
-          "packages/computerd/package.json": "52b4baeb77754ef52f16387c57de0c4f0ca6f99d0953c1df70a4a3e11b68e353"
+          "packages": "c686b85393428dfe50cc1ba9d7470914d0dfce519d836eb4681b1698fa6ef53e",
+          "docs": "dfe45e1aa8cf723fe56c72cd2c4918bdc9cd76b1270092de8968f807cfa75c46",
+          "packages/computer/package.json": "9888d861577c6f0e7e96da0f2e06d6255c5a1860854f0dbf9aa47d15e5b0c202",
+          "packages/computerd/package.json": "744f8a44e477171537588812f84da9491a650998cd07d6a37f86d9e4cc53aeb9"
         },
-        "sha256": "31dc7382f91e9fb0179ae7a61997df46489814086f8d0be28b12d28c1ad63d53"
+        "sha256": "1328ecc45339fc90a50589c912ef4b602697e3a2ab8f32b0e8df5b4b0bd18513"
       },
       "pins": {
-        "apps/worker/package.json#dependencies/@cloudflare/computer": "0.10.0"
+        "apps/worker/package.json#dependencies/@cloudflare/computer": "0.11.1"
       },
-      "reviewedAt": "2026-11-11T09:09:14.379Z",
-      "reviewNote": "Reviewed Computer/computerd 0.10.0 manifests and changelogs. Computer renames the JavaScript backend to CodemodeBackend and changes its default persisted backend identity; computerd includes FUSE/native dependencies. Retain exact client pin and reviewed image provenance; native/paid/FUSE tests remain release gates. The official Computer docs tree is also watched for protocol/backend guidance changes."
+      "reviewedAt": "2026-11-12T10:44:05.460Z",
+      "reviewNote": "Exact published0.11.1 source812bce58 reviewed with used API declarations/source maps and actual Loader close/reconnect/full-sync qualification; new pending-sync storage/fingerprint2 implications recorded in phase3/thread-3/image-security-upgrade.md. Daemon source is built anew with signed Node22.23.5; actual Linux SEA/image/runtime/recipient proofs still pending. This is not a clearance of the old prebuilt SEA or later upstream source. All other entries unchanged."
     },
     "agents-lifecycle": {
       "catalogSha256": "6845cb5c33905cbac363710a051956451ab229dde00e4dbaf1cd5a9a7fbca352",

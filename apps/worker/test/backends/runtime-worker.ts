@@ -109,6 +109,9 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
         ? this.container.handleFetch(request)
         : new Response(null, { status: 403 });
     const linux = url.searchParams.get("backend") === "linux";
+    await this.workspace?.close();
+    this.workspace = undefined;
+    this.container = undefined;
     let containerHost: FencedContainerAPI | undefined;
     if (linux) {
       if (!this.env.LINUX_CONTAINERS) throw new Error("Container binding required");
@@ -183,6 +186,68 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
     });
     this.workspace = ws;
     await ws.fs.mkdir("/workspace", { recursive: true });
+    if (linux && url.searchParams.has("process-group")) {
+      const pending = await ws.runtime.exec(
+        "set -eu\n(sleep 3; printf orphan > /workspace/pg-survived) &\nprintf ready > /workspace/pg-ready\nwait\n",
+        {
+          id: "probe-process-group",
+          backend: "probe",
+          cwd: "/workspace",
+          encoding: "utf8",
+          onInterrupt: "fail",
+          sync: "wait",
+          timeoutMs: 10000,
+        },
+      );
+      const terminal = pending.result();
+      const deadline = Date.now() + 5000;
+      for (;;) {
+        try {
+          if ((await ws.fs.readFile("/workspace/pg-ready", "utf8")) === "ready") break;
+        } catch (error) {
+          if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        }
+        if (Date.now() >= deadline) throw new Error("Actual process group did not reach readiness");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      await ws.runtime.killExec("probe-process-group", { backend: "probe", signal: "SIGTERM" });
+      const cancelled = await terminal;
+      if (
+        cancelled.status !== "cancelled" ||
+        cancelled.sync.status !== "complete" ||
+        cancelled.skipped.length !== 0
+      )
+        throw new Error("Cancelled group did not settle with complete scratch synchronization");
+      const observer = await ws.runtime.exec(
+        "set -eu\nsleep 4\ntest ! -e /workspace/pg-survived\nprintf process-group-stopped\n",
+        {
+          id: "probe-process-group-observer",
+          backend: "probe",
+          cwd: "/workspace",
+          encoding: "utf8",
+          onInterrupt: "fail",
+          sync: "wait",
+          timeoutMs: 8000,
+        },
+      );
+      const observed = await observer.result();
+      if (
+        observed.status !== "completed" ||
+        observed.exitCode !== 0 ||
+        observed.sync.status !== "complete" ||
+        observed.skipped.length !== 0
+      )
+        throw new Error(
+          "A descendant survived group cancellation or synchronization was incomplete",
+        );
+      return Response.json({
+        cancelled: cancelled.status,
+        observer: observed.status,
+        stdout: observed.stdout,
+        sync: observed.sync.status,
+        skipped: observed.skipped.length,
+      });
+    }
     await ws.fs.writeFile("/workspace/input.txt", "fortipi-mount-canary", { mode: 420 });
     const source = linux
       ? "set -eu\ncat /workspace/input.txt\nprintf 'fortipi-result' > /workspace/result.txt\ncat /workspace/result.txt\ncat /proc/self/mountinfo\n"
