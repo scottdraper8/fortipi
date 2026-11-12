@@ -5,8 +5,6 @@ saveExact: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
-  - wrangler@4.160.1
-  - miniflare@5.20261110.1-beta
   - "@cloudflare/workers-types@5.20261112.1"
 trustPolicy: no-downgrade
 trustLockfile: false

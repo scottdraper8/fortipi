@@ -8089,16 +8089,6 @@
     }
   },
   "exemptions": {
-    "wrangler@4.160.1": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-12T14:45:38.079Z",
-      "integrity": "sha512-gM8daj5geYTEw+038dV5OQAmrSIo/9e97FoJuNf+r9PllWR0ZnqMI2LXZZDSHpGsMez3mKKFYH5o/hBsf1ZTHg=="
-    },
-    "miniflare@5.20261110.1-beta": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-12T14:37:43.184Z",
-      "integrity": "sha512-CO8T1DO3/JFxEWvJ7yaHiPx5Ph/5FhRzYKve6cM8O2frHmY7yWudV5p8FU11bfGRAerChGpuK+l0HoxOCw2nFw=="
-    },
     "@cloudflare/workers-types@5.20261112.1": {
       "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
       "expires": "2026-11-13T01:00:52.446Z",

@@ -18,7 +18,7 @@ import { createServer } from "node:http";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import type { Review, SupplyChain } from "../../../scripts/check-pins.ts";
+import { type Lock, type Review, type SupplyChain, yaml } from "../../../scripts/check-pins.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "../../../scripts/pnpm-executable.ts";
 import { archiveEntries } from "../../../tools/unstale/review-supply-chain.ts";
 import { verifyAssets } from "../dist/assets.js";
@@ -111,6 +111,14 @@ export async function installConsumer(directory: string): Promise<Record<string,
   const review = JSON.parse(
     await readFile(join(root, "tools/unstale/supply-chain.json"), "utf8"),
   ) as SupplyChain;
+  const lock = await yaml<Lock>(root, "pnpm-lock.yaml");
+  // Historical review facts can outlive their cache; serve only this frozen graph.
+  const retained: SupplyChain["packages"] = {};
+  for (const id of Object.keys(lock.packages)) {
+    const record = review.packages[id];
+    assert.ok(record, "Locked distribution archive lacks reviewed inputs");
+    retained[id] = record;
+  }
   const cache = new Map<string, Promise<FixturePackage>>();
   const load = (record: Review): Promise<FixturePackage> => {
     const id = `${record.name}@${record.version}`;
@@ -147,8 +155,7 @@ export async function installConsumer(directory: string): Promise<Record<string,
       assert.ok(path.length <= 512);
       if (path.startsWith("/archive/")) {
         const id = decodeURIComponent(path.slice("/archive/".length).replace(/\.tgz$/, ""));
-        const pkg =
-          internal.get(id) ?? (review.packages[id] ? await load(review.packages[id]) : undefined);
+        const pkg = internal.get(id) ?? (retained[id] ? await load(retained[id]) : undefined);
         assert.ok(pkg, "Unreviewed fixture archive request");
         identities.add(id);
         response.writeHead(200, { "content-type": "application/octet-stream" });
@@ -158,7 +165,7 @@ export async function installConsumer(directory: string): Promise<Record<string,
       const name = decodeURIComponent(path.slice(1));
       assert.match(name, /^(?:@[a-z0-9_.-]+\/)?[a-z0-9_.-]+$/i);
       const packages = [...internal.values()].filter((p) => p.manifest.name === name);
-      for (const record of Object.values(review.packages).filter((p) => p.name === name))
+      for (const record of Object.values(retained).filter((p) => p.name === name))
         packages.push(await load(record));
       assert.ok(packages.length > 0, "Unreviewed fixture metadata request");
       const versions: Record<string, unknown> = {};
@@ -223,6 +230,7 @@ export async function installConsumer(directory: string): Promise<Record<string,
         "--config.package-import-method=copy",
         `--config.store-dir=${join(directory, "store")}`,
         "--config.auto-install-peers=false",
+        "--config.fetch-retries=0",
       ],
       { cwd: consumer, env, timeout: 300000, maxBuffer: 2 * 1024 * 1024 },
     );
