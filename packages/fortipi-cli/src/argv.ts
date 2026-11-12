@@ -104,7 +104,7 @@ export function integer(
 }
 export function help(command = ""): string {
   return command
-    ? `fortipi ${command}\nOptions: ${[...common, ...(commands[command] ?? [])].map((o) => `--${o}`).join(" ")}\nCredentials are never argv values. Operation input is non-secret JSON.\n`
+    ? `fortipi ${command}\nOptions: ${[...common, ...(commands[command] ?? [])].map((o) => `--${o}`).join(" ")}\nCredentials are never argv values. Operation input is non-secret JSON.\n${command === "executors bind" ? "Binds an existing registered local root to a logical workspace. --id is WORKSPACE_ID for rebind; executorId and rootBindingId belong in input.config. Uses the original WorkspaceBindingCreate or WorkspaceBindingPatch; rebind requires all CAS/import fields. Register the root separately with the local executor. No host path, registration or consent is changed.\n" : ""}`
     : `FortiPi management CLI\n${Object.keys(commands)
         .map((c) => `  fortipi ${c}`)
         .join("\n")}\nUse --help on a command.\n`;

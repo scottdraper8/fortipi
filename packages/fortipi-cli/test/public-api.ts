@@ -4,6 +4,7 @@ import type {
   CommandResult,
   CredentialDelivery,
   DeploymentReceipt,
+  ModelListing,
   OperatorConfig,
   PrepareReceipt,
   SafePressure,
@@ -28,5 +29,6 @@ export type PublicDtos =
   | DeploymentReceipt
   | PrepareReceipt
   | SetupResult
+  | ModelListing
   | SafePressure;
 export const publicClasses = [AdminClient, CliError];
