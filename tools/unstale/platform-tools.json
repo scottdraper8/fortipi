@@ -405,5 +405,25 @@
         "residualRisk": "Docker29.9.3 remains built with affected Go1.26.10 and is not claimed patched. A trusted caller may still cause job denial of service; shared/untrusted/production exposure is outside this disposition. No symbol-grep reachability waiver, full callgraph proof or security certification."
       }
     }
+  },
+  "meson": {
+    "version": "1.12.1",
+    "source": "70598bb7825f0f804fb31ec2795de5e79e7692a0",
+    "annotatedTag": "958d178d20ffa043ed64a95e3e7af3632b4d1c45",
+    "url": "https://codeload.github.com/mesonbuild/meson/tar.gz/70598bb7825f0f804fb31ec2795de5e79e7692a0",
+    "sourceArchiveSha256": "b2e94cdeb1f0a773b10760c1add9bb4d359e79d35528679324e3eb679c8ac662",
+    "entrypointSha256": "a84abd47e78259ea318a48163bcc3bc4e686c447e6cac4e20a709e1db6b187f0",
+    "license": "Apache-2.0",
+    "licensePath": "tools/unstale/licenses/mesonbuild/meson/70598bb7825f0f804fb31ec2795de5e79e7692a0/COPYING",
+    "licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "release": "https://github.com/mesonbuild/meson/releases/tag/1.12.1",
+    "publishedAt": "2026-09-22T22:58:10Z",
+    "securityReview": {
+      "checkedAt": "2026-11-12T00:56:25.287Z",
+      "source": "https://api.github.com/repos/mesonbuild/meson/security-advisories",
+      "publishedAdvisories": 0,
+      "tagVerification": "GitHub reports verified=false, reason=bad_email for annotated tag; no verified-signature claim."
+    },
+    "observation": "Official latest stable, annotated tag resolved to full commit. Direct upstream meson.py plus mesonbuild package; existing exact bootstrap Python only. CI build-host tool, no pip/package installation or product image bytes. Linux replacement qualification remains separate."
   }
 }

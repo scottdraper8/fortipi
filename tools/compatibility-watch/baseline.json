@@ -250,6 +250,23 @@
       },
       "reviewedAt": "2026-11-11T11:53:00.000Z",
       "reviewNote": "Reviewed official 3.18.3 mount/unmount security and API/ABI fixes; independent source/security review approved frozen image candidate731fc9b with signed Debian fuse3/libfuse3-4 3.18.3-1 and actual ELF resolution. Local pins now match that candidate. Actual native runtime, FUSE, replacement/relink and distribution verification remain release gates."
+    },
+    "meson": {
+      "catalogSha256": "0b5373e27fbb31c27f01648f0ba421670278667c9d418f4439d2df86478b39ff",
+      "snapshot": {
+        "commit": "70598bb7825f0f804fb31ec2795de5e79e7692a0",
+        "version": "1.12.1",
+        "sha256": "734811a67e79942c53dd3df64bf2e2b16ec7669c7328e0c73670740d616daddc",
+        "paths": {}
+      },
+      "pins": {
+        "tools/unstale/platform-tools.json#meson/version": "1.12.1",
+        "tools/unstale/platform-tools.json#meson/source": "70598bb7825f0f804fb31ec2795de5e79e7692a0",
+        "tools/unstale/platform-tools.json#meson/sourceArchiveSha256": "b2e94cdeb1f0a773b10760c1add9bb4d359e79d35528679324e3eb679c8ac662",
+        "tools/unstale/platform-tools.json#meson/licenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      "reviewedAt": "2026-11-12T03:10:28.983Z",
+      "reviewNote": "Reviewed official latest stable 1.12.1 release (empty notes), annotated tag958d178 to source70598bb, original meson.py/coredata.py (Python3.10+), pinned archive/entrypoint and Apache-2.0 COPYING identities. Retain exact source/archive/license pins. GitHub tag verification remains false/bad_email; no verified-signature or security claim. Release identity is a watch pointer; Python identity, build-option/API compatibility and actual FUSE rebuild/replacement/relink I/O remain separate acceptance."
     }
   }
 }

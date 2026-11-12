@@ -116,6 +116,94 @@ FortiPi's Sustainable Use License covers FortiPi-owned code. It does not replace
 or restrict the separate third-party licenses, source access, modification,
 replacement or debugging rights in these notices. Preserve all applicable
 copyright notices, GPL/LGPL texts, GCC exceptions and other component terms.
+For the LGPL combined work, recipients may modify the work for their own use
+and reverse engineer it to debug those modifications. FortiPi's terms do not
+restrict those permissions. See the shipped FUSE `LGPL2.txt`, especially
+[sections4 and6](https://github.com/libfuse/libfuse/blob/3dbcfce64ba0dd529cec7b94305662e7901a991b/LGPL2.txt).
+
+Concrete recipient checks use the complete committed checkout described above.
+Set `KIT` to the delivered `sources-and-notices.tar`, `IMAGE` to its canonical
+saved OCI archive, `META` to `image-metadata.json`, and `RECORDS` to the directory
+containing `installed-source-inventory.json` and `license-inventory.json`.
+Obtain `KIT_SHA`, `META_SHA` and `COMMIT` from independently authenticated release
+metadata; deriving expected hashes from an untrusted download authenticates nothing.
+Run the artifact gate with a new receipt path:
+
+```sh
+node scripts/image-source-distribution.ts \
+  --kit "$KIT" --kit-sha256 "$KIT_SHA" --commit "$COMMIT" \
+  --image "$IMAGE" --metadata "$META" --metadata-sha256 "$META_SHA" \
+  --records "$RECORDS" --out artifact-source-check.json
+```
+
+This rechecks actual tar members, Git archive/recipe bytes, every DSC sibling and
+final-package source dependency, original notices, dated Debian signatures and
+upstream FUSE signature. It reads the final image layers to check package status,
+native ELF hashes, notices and pruning. Its receipt explicitly leaves replacement
+and durable delivery unverified. A source hash for an old input cannot certify
+absence from the final distribution.
+
+The actual addon needs `libfuse3.so.4` dynamically, including
+`_fuse_new_31@FUSE_3.17`. Preserve that SONAME and the versioned imports when
+substituting a compatible library; recompiling the SEA/addon is unnecessary for
+this boundary. The retained `fusermount3` helper separately compiles
+`mount_util.c`, `fuse_log.c` and `util.c` into its executable, as shown by its
+[upstream Meson target](https://github.com/libfuse/libfuse/blob/3dbcfce64ba0dd529cec7b94305662e7901a991b/util/meson.build).
+Its complete source/build inputs are in the same FUSE DSC closure; rebuild that
+target rather than relying on shared-library substitution for its embedded code.
+This finding is scoped to FUSE and does not certify every image component.
+
+On an actual supported Linux amd64 runner, after the existing independent
+recipient import, provision the pinned Meson with the existing Python3.15.2:
+
+```sh
+node tools/unstale/provision-meson.ts --python /absolute/path/to/python3.15
+```
+
+Prepend the emitted `bin` path to PATH. CI exports this private path automatically.
+The replacement gate rechecks the authenticated source tree and Python identity
+before use. Inside the existing verified rootless namespace, run:
+
+```sh
+node apps/worker/container/library-replacement.ts \
+  --kit "$KIT" --kit-sha256 "$KIT_SHA" --commit "$COMMIT" \
+  --image "$IMAGE" --metadata "$META" --metadata-sha256 "$META_SHA" \
+  --records "$RECORDS" --out NEW_REPLACEMENT_DIRECTORY --require-fuse
+```
+
+The runner must already provide `cc`, Ninja, Linux development headers,
+`pkg-config`, `dpkg-source` and the reviewed Docker/BuildKit. The gate uses the
+repository's exact Meson1.12.1 source and bootstrap Python. It installs no runtime
+packages and disables Meson downloads. It extracts the exact DSC, changes
+`fuse_pkgversion()` without changing its signature/result, and rebuilds both the
+shared library and helper. It also modifies the LGPL `mount_util.c` compiled
+into the helper; standalone helper execution must produce that modification's
+nonce, while the original helper must not. The helper's only needed shared
+library must remain libc, so this separately demonstrates static relinking.
+Inspect `modified-fuse/`, `modification.json`,
+`meson-build/compile_commands.json` and `library-replacement.json` in that new
+directory. To try another compatible change, edit that source tree and repeat
+the recorded Meson setup/compile commands, then replace the generated context's
+library/helper and rebuild its Dockerfile with the same offline flags.
+
+The automatic original loader calls `fuse_native_runtime_info()`, which calls
+`fuse_pkgversion()`; the gate never calls the witness manually. Both baseline and
+modified fixtures must mount real FUSE and synchronize read/write bytes. The
+modified process must map the rebuilt library, call its nonce-bearing code and
+retain the exact original computerd/addon. The unchanged baseline must lack that
+witness. Missing-export and mismatched-receipt controls also fail closed.
+The helper is rebuilt from its full source and used in the modified fixture.
+
+Rootless execution must retain the existing recipient wrapper's verified user,
+network and mount namespaces and `--require-fuse`; launching it on the outer host
+does not qualify. `node tools/unstale/run-container-probe.ts --rootless --verify-library-replacement`
+invokes it after the existing harness closes, in the same verified context.
+macOS/other architectures fail explicitly.
+After Linux execution, repeat the artifact gate with
+`--replacement NEW_REPLACEMENT_DIRECTORY/library-replacement.json` and
+`--replacement-sha256 AUTHENTICATED_RECEIPT_SHA` to bind the runtime result to the
+exact image/kit. Producer identity and delivery/retention remain release gates;
+these local receipts cannot establish publication or durable source access.
 
 Release remains blocked until the final image inventory and source kit receive
 independent review and actual interface-compatible shared-library replacement is
