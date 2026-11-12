@@ -374,11 +374,33 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify(value));
   });
+  const retained = await temporary("fortipi-retained-order-");
+  const retainedPath = resolve(retained, "candidate.json");
+  await saveJson(retainedPath, c);
   try {
     const api = githubRequest("synthetic-github-role", server.transport);
     await trustedMain(c, api);
     await verifyProducer(c, "candidate", c.producer, ref, api, now);
     await verifyRetainedCandidate(c, packet.metadataSha256, ref, api);
+    // Deliberately absent payload: producer rejection must precede any payload walk/read.
+    mutate = "superseded";
+    await assert.rejects(
+      loadCandidate(retainedPath, {
+        reference: ref,
+        request: githubRequest(undefined, server.transport),
+      }),
+      /Superseded attempt/,
+    );
+    mutate = "";
+    calls.length = 0;
+    await assert.rejects(
+      loadCandidate(retainedPath, {
+        reference: ref,
+        request: githubRequest(undefined, server.transport),
+      }),
+      /Artifact payload differs/,
+    );
+    assert.ok(calls.includes("/retained.zip"), "Producer archive must be authenticated first");
     await assert.rejects(
       verifyRetainedCandidate(c, sha256("different retained candidate"), ref, api),
       /Retained candidate hash mismatch/,
@@ -439,6 +461,7 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
     await server.close();
     await packet.close();
     await substituted.close();
+    await rm(retained, { recursive: true, force: true });
   }
 });
 
