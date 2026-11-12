@@ -137,18 +137,19 @@ export class ControlPlane extends RealControlPlane {
   override async deliverExecutorFrame(ctx: D.AuthContext, input: D.ExecutorDelivery) {
     const result = await super.deliverExecutorFrame(ctx, input);
     if (!this.store.get("fixture", "trace-dispatch")) return result;
-    const identity =
-        input.frame.type === "job.committed" ? input.frame.payload.identity : undefined,
-      command =
-        identity &&
-        this.store.get<{ delivery: { connectionEpoch: number } }>(
-          "command",
-          `${identity.executionId}:job.committed:${input.frame.type === "job.committed" ? input.frame.payload.terminalVersion : 0}`,
-        ),
+    const commandKey =
+        input.frame.type === "job.committed"
+          ? `${input.frame.payload.identity.executionId}:job.committed:${input.frame.payload.terminalVersion}`
+          : null,
+      command = commandKey
+        ? this.store.get<{ delivery: { connectionEpoch: number } }>("command", commandKey)
+        : undefined,
       executor = this.store.get<{ epoch: number; status: string }>("executor", input.executorId);
     this.store.put("fixture-delivery", input.frame.type, {
       ...(result.ok ? { ok: true } : { ok: false, code: result.code, message: result.message }),
       executorId: input.executorId,
+      generation: input.generation,
+      commandKey,
       commandEpoch: command?.delivery.connectionEpoch ?? null,
       executorEpochAtAck: executor?.epoch ?? null,
       executorStatusAtAck: executor?.status ?? null,
@@ -160,10 +161,24 @@ export class ControlPlane extends RealControlPlane {
     if (path === "/__test/dispatch-trace") {
       if (request.method === "PUT") this.store.put("fixture", "trace-dispatch", true);
       const jobId = new URL(request.url).searchParams.get("job") ?? "";
-      const terminal = this.store.get<{ executorId: string }>("fixture-delivery", "job.committed");
+      const terminal = this.store.get<{
+        executorId: string;
+        generation: number;
+        commandKey: string | null;
+      }>("fixture-delivery", "job.committed");
       const executor = terminal
         ? this.store.get<{ epoch: number; status: string }>("executor", terminal.executorId)
         : undefined;
+      const command = terminal?.commandKey
+        ? this.store.get<{ peerApplied?: true; ack: D.DeliveryAck }>("command", terminal.commandKey)
+        : undefined;
+      const indexed = terminal
+        ? this.store
+            .page("command", 0, 4, {
+              recipient: `terminal:${terminal.executorId}:${terminal.generation}`,
+            })
+            .some((row) => row.key === terminal.commandKey)
+        : false;
       return Response.json({
         query: this.store.get("fixture-query", jobId) ?? null,
         local:
@@ -171,7 +186,15 @@ export class ControlPlane extends RealControlPlane {
             "fixture-local",
             new URL(request.url).searchParams.get("operation") ?? "",
           ) ?? [],
-        terminal: terminal ?? null,
+        terminal: terminal
+          ? {
+              ...terminal,
+              commandRetained: !!command,
+              receiptRetained: command?.ack.persisted === true,
+              peerApplied: command?.peerApplied === true,
+              indexed,
+            }
+          : null,
         executor: executor ? { epoch: executor.epoch, status: executor.status } : null,
       });
     }

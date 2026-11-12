@@ -375,8 +375,7 @@ export async function nativeProcessRecovery(
     });
     const canary = { nonce: crypto.randomUUID() };
     await service.api(`${probe}/canary`, canary, "PUT");
-    if (["attempted", "assign-ack", "result", "receipt"].includes(mode))
-      await service.api("/__test/dispatch-trace", {}, "PUT");
+    await service.api("/__test/dispatch-trace", {}, "PUT");
     if (mode === "seed") await service.api(`${probe}/fault`, "after-seed");
     if (mode === "attached") await service.api(`${probe}/fault`, "after-attach");
     if (["attempted", "result", "receipt"].includes(mode))
@@ -680,6 +679,26 @@ export async function nativeProcessRecovery(
       `${probe}/inspect?cid=${cid}`,
     );
     assert.equal(inspected.body.entries.filter((entry) => entry.kind === "pi.user").length, 1);
+    const acknowledged = await eventually(
+      async () =>
+        (
+          await service.api<{
+            terminal: {
+              peerApplied: boolean;
+              indexed: boolean;
+              commandRetained: boolean;
+              receiptRetained: boolean;
+            } | null;
+          }>(`/__test/dispatch-trace?job=${job.jobId}`)
+        ).body,
+      (trace) => trace.terminal?.peerApplied === true && trace.terminal.indexed === false,
+    );
+    assert.equal(
+      acknowledged.terminal?.commandRetained,
+      true,
+      "Peer ACK retires recovery selection, not the command receipt",
+    );
+    assert.equal(acknowledged.terminal?.receiptRetained, true);
     console.log(
       JSON.stringify({
         canarySurvived: true,
@@ -694,6 +713,8 @@ export async function nativeProcessRecovery(
         killedAfterWorkspaceReceipt: mode === "receipt",
         killedWithActualAssignAckHeld: mode === "assign-ack",
         activation,
+        serverPeerApplied: true,
+        terminalRecoveryIndexClosed: true,
       }),
     );
   } finally {
