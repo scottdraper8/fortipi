@@ -9,7 +9,7 @@ Agents assigned architecture, security, integration or final QA must read the or
 Maintain a concise agent-resume.md before compaction. Link canonical plans and evidence; replace stale status rather than append a diary.
 Keep generated big-build material under .agent-docs/tmp/big-build/. Do not copy logs into prompts or grow duplicate scratchpads.
 
-Verified local build tools: /Users/scott/Documents/Repos/fortipi/.agent-docs/tmp/toolchain/bin (Node 26.13.0, pnpm 12.18.0).
+Verified local build tools: put /Users/scott/Documents/Repos/fortipi/.agent-docs/tmp/toolchain-node26131/bin before /Users/scott/Documents/Repos/fortipi/.agent-docs/tmp/toolchain/bin on PATH (Node 26.13.1, pnpm 12.18.0). The older toolchain stays available for historical source reproduction; do not replace shared binaries during active jobs.
 Before Node/pnpm worktree commands, prepend that canonical directory to PATH. Downloads remain ignored; pin CI/runtime tooling in the actual manifests.
 Use TypeScript for the product and all repository-owned build/release/check tooling. Keep the deliberately independent non-TypeScript interoperability example isolated from the product/toolchain.
 
