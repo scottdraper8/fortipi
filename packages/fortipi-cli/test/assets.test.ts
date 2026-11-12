@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { canonicalJson } from "fortipi-contract";
+import { dependencyPatches } from "../../../scripts/dependency-patches.ts";
 import { prepare, verifyAssets, verifyPrepared } from "../dist/assets.js";
 import { deploy } from "../dist/deployment.js";
 import { packageWorkerAssets, regularFiles } from "../scripts/package-worker-assets.ts";
@@ -35,13 +36,38 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
   ).stdout.trim();
   const reproduction = join(root, "dist", `cli-assets-reproduction-${randomUUID()}`);
   t.after(() => rm(reproduction, { recursive: true, force: true }));
-  await packageWorkerAssets({
-    workerBuild: "apps/worker/dist/worker",
-    commit,
-    version: first.manifest.packageVersion,
-    outputDirectory: reproduction,
-  });
+  const reproduce = () =>
+    packageWorkerAssets({
+      workerBuild: "apps/worker/dist/worker",
+      commit,
+      version: first.manifest.packageVersion,
+      outputDirectory: reproduction,
+    });
+  await reproduce();
   assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
+  const patch = (await dependencyPatches(root, true))["agents@0.33.0"];
+  assert.ok(patch);
+  const stagedPatch = join(root, "dist/supply-chain/licenses/agents@0.33.0", patch.path);
+  const originalPatch = await readFile(stagedPatch);
+  assert.equal(hash(originalPatch), patch.sha256);
+  const bundledPatch = `licenses/agents_0.33.0/${patch.path}`;
+  assert.equal(
+    first.manifest.files.find((file) => file.path === bundledPatch)?.sha256,
+    patch.sha256,
+  );
+  assert.deepEqual(await readFile(join(reproduction, bundledPatch)), originalPatch);
+  try {
+    await rm(stagedPatch);
+    await assert.rejects(reproduce, /Missing reviewed bundled dependency patch: agents@0\.33\.0/);
+    assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
+    assert.deepEqual(await readFile(join(reproduction, bundledPatch)), originalPatch);
+    await writeFile(stagedPatch, Buffer.concat([originalPatch, Buffer.from("\nchanged\n")]));
+    await assert.rejects(reproduce, /Bundled dependency patch changed: agents@0\.33\.0/);
+    assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
+    assert.deepEqual(await readFile(join(reproduction, bundledPatch)), originalPatch);
+  } finally {
+    await writeFile(stagedPatch, originalPatch);
+  }
   const native = await config();
   native.runtime.workspace = { kind: "local", executorId: "my-device", rootBindingId: "my-root" };
   const input = join(directory, "operator.json");

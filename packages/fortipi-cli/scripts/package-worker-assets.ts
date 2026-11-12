@@ -445,13 +445,16 @@ export async function packageWorkerAssets(options: {
       const source = resolve(root, "dist/supply-chain/licenses", id.replaceAll("/", "__"));
       const texts = await regularFiles(source);
       assert.ok(texts.length, "Missing reviewed bundled license text");
+      const patch = patches[id];
+      if (patch)
+        assert.ok(texts.includes(patch.path), `Missing reviewed bundled dependency patch: ${id}`);
       const component = id.replace(/[^A-Za-z0-9_.-]/g, "_");
-      for (const name of texts)
-        await put(
-          `licenses/${component}/${name}`,
-          await readFile(resolve(source, name)),
-          "license",
-        );
+      for (const name of texts) {
+        const bytes = await readFile(resolve(source, name));
+        if (name === patch?.path)
+          assert.equal(sha256(bytes), patch.sha256, `Bundled dependency patch changed: ${id}`);
+        await put(`licenses/${component}/${name}`, bytes, "license");
+      }
       notices.push(
         `- ${id}: ${reviewed.license}; original archive SHA256 ${reviewed.archiveSha256}; ${patchStatus(patches[id])}`,
       );
