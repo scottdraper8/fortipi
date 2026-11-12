@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import {
   chmod,
   lstat,
@@ -22,6 +23,8 @@ import { parse } from "@babel/parser";
 import { type Node, VISITOR_KEYS } from "@babel/types";
 import { canonicalJson } from "fortipi-contract";
 import { version as compilerVersion } from "typescript";
+import { scanRootfs } from "../../../apps/worker/container/rootfs.ts";
+import { hashFile, verifyKitInventory } from "../../../scripts/image-source-distribution.ts";
 import type { AssetManifest } from "../src/asset-manifest.ts";
 import { assetPath } from "../src/asset-manifest.ts";
 
@@ -353,6 +356,33 @@ export async function packageWorkerAssets(options: {
         sha256(await readFile(resolve(workerRoot, "container/debian-freeze.json"))),
       );
       const context = resolve(workerRoot, "dist/container/context");
+      // A fresh asset inventory cannot bind changed inputs to an already-built
+      // image. Use the exact source kit recorded by that image, not today's kit.
+      const kit = resolve(workerRoot, "dist/container/sources-and-notices.tar");
+      assert.match(image.sourceKitSha256, /^[a-f0-9]{64}$/);
+      assert.equal(await hashFile(kit), image.sourceKitSha256, "Image source-kit changed");
+      const conveyed = await scanRootfs(
+        createReadStream(kit),
+        undefined,
+        new Set(["source-kit-inventory.json", "source-revision.json"]),
+      );
+      const inventoryBytes = conveyed.get("source-kit-inventory.json")?.data;
+      const revisionBytes = conveyed.get("source-revision.json")?.data;
+      assert.ok(inventoryBytes && revisionBytes, "Image source-kit records missing");
+      verifyKitInventory(conveyed, JSON.parse(inventoryBytes.toString()));
+      const revision = JSON.parse(revisionBytes.toString());
+      assert.equal(revision.sourceCommit, image.sourceCommit, "Image source-kit revision differs");
+      assert.equal(revision.recipeMatchesCommit, true, "Image source-kit is construction-only");
+      assert.equal(
+        conveyed.get("fortipi-source.tar")?.sha256,
+        revision.sourceArchiveSha256,
+        "Image source-kit source archive changed",
+      );
+      assert.equal(
+        conveyed.get("source-kit-recipe/debian-freeze.json")?.sha256,
+        image.freezeSha256,
+        "Image source-kit package freeze differs",
+      );
       assert.deepEqual(
         await readFile(resolve(context, "Dockerfile")),
         await readFile(resolve(workerRoot, "container/Dockerfile")),
@@ -361,19 +391,28 @@ export async function packageWorkerAssets(options: {
       const freeze = (await json(resolve(workerRoot, "container/debian-freeze.json"))) as {
         packages: { name: string; sha256: string }[];
       };
+      const recipeHash = conveyed.get("source-kit-recipe/Dockerfile")?.sha256;
+      assert.ok(recipeHash, "Image source-kit recipe missing");
+      const expectedContext = new Map<string, string>([
+        ["Dockerfile", recipeHash],
+        ...freeze.packages.map((p): [string, string] => [`packages/${p.name}.deb`, p.sha256]),
+        ...[...conveyed].flatMap(([path, entry]): [string, string][] =>
+          path.startsWith("context/notices/") && entry.type === "File" && entry.sha256
+            ? [[path.slice("context/".length), entry.sha256]]
+            : [],
+        ),
+      ]);
+      const contextFiles = await regularFiles(context);
       assert.deepEqual(
-        (await readdir(resolve(context, "packages"))).sort(),
-        freeze.packages.map((p) => `${p.name}.deb`).sort(),
-        "Image package context changed",
+        [...contextFiles].sort(),
+        [...expectedContext.keys()].sort(),
+        "Image context/source-kit member closure changed",
       );
-      for (const pin of freeze.packages)
-        assert.equal(
-          sha256(await readFile(resolve(context, "packages", `${pin.name}.deb`))),
-          pin.sha256,
-          "Image package identity changed",
-        );
-      for (const name of await regularFiles(context))
-        await put(`linux/container/${name}`, await readFile(resolve(context, name)), "linux");
+      for (const name of contextFiles) {
+        const bytes = await readFile(resolve(context, name));
+        assert.equal(sha256(bytes), expectedContext.get(name), `Image context changed: ${name}`);
+        await put(`linux/container/${name}`, bytes, "linux");
+      }
       const imageBytes = `${canonicalJson(image)}\n`;
       await put("linux/image-metadata.json", imageBytes, "linux");
       imageRecord = {

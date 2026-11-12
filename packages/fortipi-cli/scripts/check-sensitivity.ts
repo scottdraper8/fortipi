@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { cp, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 // Disposable compiled copies only. This is sensitivity evidence, never installed-distribution proof.
@@ -106,8 +106,34 @@ try {
   );
   await writeFile(adminPath, admin);
   await run("commands.test.ts", "validated infrastructure errors", true);
+  // Genuine emitted assets only: corrupt a disposable copy without changing its
+  // manifest, require the byte oracle to reject it, then restore and reverify.
+  await cp(join(source, "worker-assets"), join(root, "worker-assets"), { recursive: true });
+  const assetManifest = JSON.parse(
+    await readFile(join(root, "worker-assets/asset-manifest.json"), "utf8"),
+  ) as { entry: string };
+  const assetEntry = join(root, "worker-assets", assetManifest.entry);
+  const originalAsset = await readFile(assetEntry);
+  await writeFile(
+    assetEntry,
+    Buffer.concat([originalAsset, Buffer.from("\n// deliberate asset fault\n")]),
+  );
+  const verify = async (reject: boolean) =>
+    execute(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import assert from 'node:assert/strict';import {verifyAssets} from ${JSON.stringify(pathToFileURL(join(root, "dist/assets.js")).href)};
+     ${reject ? "await assert.rejects(verifyAssets(),/asset_integrity_failed/);" : "await verifyAssets();"}`,
+      ],
+      { cwd: root, timeout: 30000, maxBuffer: 65536 },
+    );
+  await verify(true);
+  await writeFile(assetEntry, originalAsset);
+  await verify(false);
   console.log(
-    "Permission bypass, role-environment leak, lost OAuth extensions, relative Windows helper and remote pressure text detected; restored copies pass. Worker-asset fault awaits genuine5 assets.",
+    "Permission bypass, role-environment leak, lost OAuth extensions, relative Windows helper, remote pressure text and genuine Worker-byte corruption detected; restored copies pass. This is source/asset sensitivity, not isolated offline Wrangler proof.",
   );
 } finally {
   await rm(root, { recursive: true, force: true });
