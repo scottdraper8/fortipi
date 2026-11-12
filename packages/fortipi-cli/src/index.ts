@@ -3,18 +3,20 @@ import type { OperationRequest, ProviderAuthDelete } from "fortipi-contract";
 import { AdminClient } from "./admin.js";
 import { argv, help, integer, required } from "./argv.js";
 import { prepare, verifyPrepared } from "./assets.js";
-import { readConfig, readJson, writeConfig } from "./config.js";
+import { readConfig, readJson } from "./config.js";
 import { issueCredential } from "./credentials.js";
 import { deploy } from "./deployment.js";
 import { CliError, check } from "./errors.js";
+import { initialize } from "./initialization.js";
 import { terminalInteraction } from "./interaction.js";
+import type { CliInteraction } from "./interaction-types.js";
 import { installationId, loginAndIngest } from "./model-auth.js";
 import { localModels, selectModel } from "./models.js";
 import { loadProfile, profilePath, profileRoot, protectDirectory } from "./profiles.js";
 import type { CommandOperation, CommandResult } from "./results.js";
-import { ensureModelAuthKey } from "./setup.js";
+import { ensureModelAuthKey, guidedSetup } from "./setup.js";
 import { launchTui } from "./tui.js";
-import { wrangler } from "./wrangler.js";
+import { type WranglerPort, wrangler } from "./wrangler.js";
 
 export { AdminClient } from "./admin.js";
 export type { PrepareReceipt } from "./assets.js";
@@ -28,10 +30,15 @@ export type {
   CredentialDelivery,
   DeploymentReceipt,
 } from "./results.js";
+export type { SetupResult } from "./setup.js";
 export interface CommandContext {
   signal: AbortSignal;
   profileDirectory?: string;
   allowLoopback?: boolean;
+  /** In-process adapters for controlled integration; never exposed as CLI options. */
+  transport?: typeof fetch;
+  wrangler?: WranglerPort;
+  interaction?: CliInteraction;
 }
 export async function runCommand(input: string[], context: CommandContext): Promise<CommandResult> {
   const args = argv(input);
@@ -40,12 +47,26 @@ export async function runCommand(input: string[], context: CommandContext): Prom
   const timeoutMs = args.options["timeout-ms"] ? integer(args, "timeout-ms", 1, 600000) : 30000;
   const root = context.profileDirectory ?? profileRoot();
   const selected = typeof args.options.profile === "string" ? args.options.profile : "default";
-  const client = async () =>
-    new AdminClient(await loadProfile(profilePath(selected, root), context.allowLoopback), {
+  const port = context.wrangler ?? wrangler;
+  const interaction = () => {
+    check(!args.options["non-interactive"], "interactive_terminal_required", 3);
+    return context.interaction ?? terminalInteraction(context.signal);
+  };
+  const client = async (expectedOrigin?: string) => {
+    const profile = await loadProfile(profilePath(selected, root), context.allowLoopback);
+    if (expectedOrigin)
+      check(
+        profile.endpoint === expectedOrigin && profile.role === "admin",
+        "exact_origin_admin_required",
+        3,
+      );
+    return new AdminClient(profile, {
       signal: context.signal,
       timeoutMs,
       ...(context.allowLoopback ? { allowLoopback: true } : {}),
+      ...(context.transport ? { transport: context.transport } : {}),
     });
+  };
   const readInput = async () => readJson(get("input"));
   const page = () => ({
     ...(args.options.limit ? { limit: integer(args, "limit", 1, 100) } : {}),
@@ -53,9 +74,10 @@ export async function runCommand(input: string[], context: CommandContext): Prom
   });
   switch (args.command) {
     case "init": {
-      // A complete canonical input makes independent workspace/execution/model choices explicit.
-      check(args.options.from, "canonical_from_config_required", 3);
-      await writeConfig(resolve(get("config")), await readConfig(get("from")));
+      await initialize(resolve(get("config")), {
+        ...(typeof args.options.from === "string" ? { from: args.options.from } : {}),
+        interaction,
+      });
       return { state: "initialized" };
     }
     case "config validate": {
@@ -78,12 +100,8 @@ export async function runCommand(input: string[], context: CommandContext): Prom
       return { valid: true };
     }
     case "login":
-      check(
-        !args.options["non-interactive"] && process.stdin.isTTY,
-        "cloudflare_login_requires_terminal",
-        3,
-      );
-      await wrangler.run({
+      interaction();
+      await port.run({
         args: ["login"],
         cwd: resolve("."),
         terminal: true,
@@ -105,19 +123,46 @@ export async function runCommand(input: string[], context: CommandContext): Prom
         !args.options.bootstrap || ["local", "existing"].includes(get("bootstrap")),
         "invalid_bootstrap_mode",
       );
-      return deploy(get("directory"), {
-        dryRun: !!args.options["dry-run"],
-        bootstrap: (args.options.bootstrap ?? "local") as "local" | "existing",
-        nonInteractive: !!args.options["non-interactive"],
-        profileName: selected,
-        signal: context.signal,
-        timeoutMs,
-      });
+      return deploy(
+        get("directory"),
+        {
+          dryRun: !!args.options["dry-run"],
+          bootstrap: (args.options.bootstrap ?? "local") as "local" | "existing",
+          nonInteractive: !!args.options["non-interactive"],
+          profileName: selected,
+          profileDirectory: root,
+          ...(context.transport ? { transport: context.transport } : {}),
+          signal: context.signal,
+          timeoutMs,
+        },
+        port,
+      );
     }
     case "setup":
-      // Asset qualification is a prerequisite before any login or bootstrap mutation.
-      await prepare(get("config"), get("directory"));
-      throw new CliError("setup_resource_grants_and_service5_qualification_required", 3);
+      return guidedSetup({
+        config: get("config"),
+        directory: get("directory"),
+        ...(typeof args.options.from === "string" ? { from: args.options.from } : {}),
+        root,
+        profile: selected,
+        nonInteractive: !!args.options["non-interactive"],
+        signal: context.signal,
+        interaction,
+        client,
+        port,
+        execute: (command) =>
+          runCommand(
+            [
+              ...command,
+              "--profile",
+              selected,
+              ...(args.options["non-interactive"] ? ["--non-interactive"] : []),
+              "--timeout-ms",
+              String(timeoutMs),
+            ],
+            context,
+          ),
+      });
     case "models list":
       return {
         items: localModels(
@@ -158,13 +203,11 @@ export async function runCommand(input: string[], context: CommandContext): Prom
       check(
         !!args.options["secret-stdin"] ||
           (!args.options["non-interactive"] &&
-            process.stdin.isTTY &&
-            process.stdout.isTTY &&
-            process.stderr.isTTY),
+            (!!context.interaction || (process.stdin.isTTY && process.stderr.isTTY))),
         "secret_input_required",
         3,
       );
-      await wrangler.run({
+      await port.run({
         args: ["secret", "put", name, "--config", resolve(get("directory"), "wrangler.json")],
         cwd: resolve(get("directory")),
         ...(args.options["secret-stdin"] ? { inheritInput: true } : { terminal: true }),
@@ -194,11 +237,11 @@ export async function runCommand(input: string[], context: CommandContext): Prom
         "exact_origin_admin_required",
         3,
       );
-      const interaction = terminalInteraction(context.signal);
+      const authInteraction = interaction();
       await protectDirectory(root);
       const installation = join(root, prepared.operator.deployment.name);
       await ensureModelAuthKey(
-        wrangler,
+        port,
         resolve(get("directory")),
         installation,
         profile.endpoint,
@@ -206,7 +249,13 @@ export async function runCommand(input: string[], context: CommandContext): Prom
       );
       await protectDirectory(installation);
       const id = await installationId(join(installation, "installation.json"));
-      return loginAndIngest(await client(), get("provider"), interaction, id, get("request-id"));
+      return loginAndIngest(
+        await client(),
+        get("provider"),
+        authInteraction,
+        id,
+        get("request-id"),
+      );
     }
     case "models status":
       return (await client()).call("getProviderAuthStatus", {

@@ -1,5 +1,6 @@
 import type { CredentialRef, OperationValue, Protocol, RevocationReceipt } from "fortipi-contract";
 import type { PrepareReceipt } from "./assets.js";
+import type { SetupResult } from "./setup.js";
 
 export interface DeploymentReceipt {
   workerName: string;
@@ -51,6 +52,7 @@ export type CommandOperation =
   | "getProviderAuthStatus"
   | "deleteProviderAuth";
 export type CommandResult =
+  | SetupResult
   | OperationValue<CommandOperation>
   | PrepareReceipt
   | DeploymentReceipt

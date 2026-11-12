@@ -7,10 +7,11 @@ import type {
   OperatorConfig,
   PrepareReceipt,
   SafePressure,
+  SetupResult,
 } from "fortipi-cli";
 import { AdminClient, CliError, operatorConfig, readConfig, runCommand } from "fortipi-cli";
 
-// A source-consumer boundary check. Installed strict-consumer evidence remains dependent on5.
+// Also compiled against the actual installed distribution by install-harness.ts.
 export async function consume(
   config: OperatorConfig,
   context: CommandContext,
@@ -26,5 +27,6 @@ export type PublicDtos =
   | CredentialDelivery
   | DeploymentReceipt
   | PrepareReceipt
+  | SetupResult
   | SafePressure;
 export const publicClasses = [AdminClient, CliError];

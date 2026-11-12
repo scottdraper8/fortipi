@@ -8,4 +8,4 @@ The public distribution will use independently installable npm packages and GitH
 
 Agent entry point: [AGENTS.md](AGENTS.md). Original requirements: [.agent-docs/initial-prompt.md](.agent-docs/initial-prompt.md).
 
-The [management CLI](packages/fortipi-cli/README.md) currently supports contract preparation and protected administration. Its genuine embedded Worker assets, installed dry-build and guided setup remain dependent on the integrated durable service. See the [operator guide](docs/operator-guide.md) for configuration and credential boundaries. No deployment or publication is claimed.
+The [management CLI](packages/fortipi-cli/README.md) provides interactive configuration, guided setup, genuine embedded Worker assets and protected administration. Guided setup keeps workspace, execution, model authentication and grants explicit, and preserves interrupted operation identities. See the [operator guide](docs/operator-guide.md) for configuration and recovery. Independent installed/platform and deployed acceptance remain release gates; no deployment or publication is claimed.

@@ -1,8 +1,8 @@
 import { CliError, check } from "./errors.js";
-import type { AuthInteraction } from "./model-auth.js";
+import type { CliInteraction } from "./interaction-types.js";
 
 /** OAuth interaction is terminal-only, including in JSON mode. Input is never echoed or retained. */
-export function terminalInteraction(signal: AbortSignal): AuthInteraction {
+export function terminalInteraction(signal: AbortSignal): CliInteraction {
   check(process.stdin.isTTY && process.stderr.isTTY, "oauth_interactive_terminal_required", 3);
   const write = (message: string) => process.stderr.write(`${message}\n`);
   return {

@@ -63,6 +63,8 @@ export interface DeployOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   profileName?: string;
+  profileDirectory?: string;
+  transport?: typeof fetch;
 }
 export async function deploy(
   directory: string,
@@ -118,7 +120,7 @@ export async function deploy(
         3,
       );
     } else {
-      const root = profileRoot();
+      const root = options.profileDirectory ?? profileRoot();
       await protectDirectory(root);
       token = (
         await localBootstrap(
@@ -152,10 +154,13 @@ export async function deploy(
         AbortSignal.timeout(options.timeoutMs ?? 30000),
         ...(options.signal ? [options.signal] : []),
       ]);
-      const response = await fetch(`${prepared.operator.deployment.origin}/health`, {
-        redirect: "error",
-        signal,
-      });
+      const response = await (options.transport ?? fetch)(
+        `${prepared.operator.deployment.origin}/health`,
+        {
+          redirect: "error",
+          signal,
+        },
+      );
       check(response.status === 200, "deployed_health_failed", 1);
       const health = JSON.parse(new TextDecoder().decode(await boundedBytes(response, 4096))) as {
         status?: unknown;
