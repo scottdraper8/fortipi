@@ -26,3 +26,5 @@ allowBuilds:
   "@google/genai@2.21.0": false
   core-js-pure@3.51.0: false
   protobufjs@7.6.6: false
+patchedDependencies:
+  '@earendil-works/pi-durable@1.5.2': patches/@earendil-works__pi-durable@1.5.2.patch

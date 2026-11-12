@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { parse, parseAllDocuments } from "yaml";
 import { filesBelow, projects, repository } from "./build-workspaces.ts";
+import { dependencyPatches } from "./dependency-patches.ts";
 
 export interface Manifest {
   name: string;
@@ -144,6 +145,7 @@ const requiredHooks = [
 ];
 
 export async function checkPins(root = repository): Promise<void> {
+  await dependencyPatches(root, true);
   const review = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
   assert.equal(review.format, 1);
   assert.deepEqual(review.advisory.findings, [], "Unresolved security advisories");
