@@ -28,6 +28,9 @@ export async function nativeService(
     localConsent?: boolean;
     approve?: boolean;
     maximumToolModel?: boolean;
+    main?: string;
+    control?: boolean;
+    reconciliation?: boolean;
     observeHttp?: (value: {
       path: string;
       method: string;
@@ -40,6 +43,7 @@ export async function nativeService(
   } = {},
 ) {
   const h = await harness({
+      ...(options.main ? { main: options.main } : {}),
       ...(options.free ? { traffic: "free" as const } : {}),
       ...(options.maximumToolModel ? { modelChunkBytes: 256 as const } : {}),
     }),
@@ -277,7 +281,8 @@ export async function nativeService(
         "workspace.write",
         "approvals.read",
         "approvals.decide",
-        ...(options.maximumToolModel ? ["tasks.cancel"] : []),
+        ...(options.maximumToolModel || options.control ? ["tasks.cancel"] : []),
+        ...(options.reconciliation ? ["jobs.reconcile", "jobs.read", "workspace.read"] : []),
       ],
     });
     const probe = h.env.AGENT_SESSIONS.getByName(agent.agentId);

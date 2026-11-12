@@ -53,7 +53,7 @@ export interface NativeRecoveryContext {
   view: () => Promise<View>;
 }
 
-/** Real service/process recovery; safe annotation remains in the disposable build. */
+/** Real service/process recovery against the production SAFE wrapper policy. */
 export async function nativeProcessRecovery(
   mode:
     | "running"
@@ -65,8 +65,8 @@ export async function nativeProcessRecovery(
     | "receipt" = "running",
   activation: "agent-first" | "executor-first" = "agent-first",
   recover?: {
-    outage: "until-uncertain" | "until-lease-expired";
-    verify: (context: NativeRecoveryContext) => Promise<void>;
+    outage: "natural" | "until-uncertain" | "until-lease-expired";
+    verify: (context: NativeRecoveryContext) => Promise<void | "continue">;
   },
 ) {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-native-service-kill-")),
@@ -81,7 +81,7 @@ export async function nativeProcessRecovery(
   let reconnectedAt = 0,
     offlineReleasedAt = 0;
   try {
-    let candidates = 0;
+    let wrappers = 0;
     let phaseBarriers = 0;
     await build({
       entryPoints: [resolve("apps/worker/test/agent/runtime-worker.ts")],
@@ -97,7 +97,7 @@ export async function nativeProcessRecovery(
       logLevel: "silent",
       plugins: [
         {
-          name: "owned-candidate-safe-wrapper",
+          name: "owned-production-safe-wrapper",
           setup(builder) {
             builder.onLoad({ filter: /test\/agent\/runtime-worker\.ts$/ }, async (args) => {
               if (mode !== "assign-ack") return;
@@ -165,10 +165,10 @@ export async function nativeProcessRecovery(
             });
             builder.onLoad({ filter: /src\/execution\/registry\.ts$/ }, async (args) => {
               const source = await readFile(args.path, "utf8"),
-                needle = 'replay: "unsafe"';
+                needle = 'replay: "safe"';
               assert.equal(source.split(needle).length, 2);
-              candidates++;
-              let contents = source.replace(needle, 'replay: "safe"');
+              wrappers++;
+              let contents = source;
               if (mode === "attached") {
                 const attached = "context.abortSignal?.throwIfAborted();";
                 assert.equal(contents.split(attached).length, 2);
@@ -191,7 +191,7 @@ export async function nativeProcessRecovery(
         },
       ],
     });
-    assert.equal(candidates, 1);
+    assert.equal(wrappers, 1);
     assert.equal(phaseBarriers, ["attempted", "result", "receipt"].includes(mode) ? 1 : 0);
     h = await processHarness(main);
     const service = h;
@@ -539,7 +539,7 @@ export async function nativeProcessRecovery(
           processStarts: 0,
           oneChild: true,
           queryOnlyUncertainty: true,
-          candidateSafeOnly: true,
+          candidateSafeOnly: false,
         }),
       );
       return;
@@ -621,7 +621,7 @@ export async function nativeProcessRecovery(
       if (activation === "agent-first") await reconnectAfterOutage();
     }
     if (recover) {
-      await recover.verify({
+      const disposition = await recover.verify({
         service,
         native,
         fixture: f,
@@ -640,7 +640,7 @@ export async function nativeProcessRecovery(
         offlineReleasedAt,
         view,
       });
-      return;
+      if (disposition !== "continue") return;
     }
     let final: View | undefined;
     for (let i = 0; i < 900; i++) {
@@ -706,7 +706,7 @@ export async function nativeProcessRecovery(
         processStarts: 1,
         childIdsRetained: true,
         changedCommitAndNativeAck: true,
-        candidateSafeOnly: true,
+        candidateSafeOnly: false,
         killedAfterSeed: mode === "seed",
         killedAfterAtomicAttachment: mode === "attached",
         killedAfterSavedResult: mode === "result",

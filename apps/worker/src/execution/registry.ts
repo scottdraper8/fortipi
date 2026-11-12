@@ -216,7 +216,7 @@ export function buildRegistry(deps: {
     description:
       "Request an exact authorized workspace tool operation. Host execution requires independent executor consent. Mutations wait for approval; uncertain dispatch is queried, never rerun.",
     parameters,
-    replay: "unsafe",
+    replay: "safe",
     execute: async (input, api, context) => {
       check(validTool(input), "invalid_request", "Invalid tool input");
       const args = input;

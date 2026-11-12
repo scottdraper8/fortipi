@@ -44,10 +44,9 @@ async function bundle(directory: string, fault: Fault) {
                 mutations++;
               }
               if (args.path.endsWith("registry.ts")) {
-                // Candidate safe policy is tested only in disposable output. Product stays
-                // unsafe until independent executor/ledger/fence proofs also pass.
-                assert.ok(contents.includes('replay: "unsafe"'));
-                contents = contents.replace('replay: "unsafe"', 'replay: "safe"');
+                // Exercise the actual production policy. Only the two named
+                // identity/transaction faults below alter disposable output.
+                assert.equal(contents.split('replay: "safe"').length, 2);
                 const start = contents.indexOf(
                   "      const childId = await api.commit(async (tx) => {",
                 );
