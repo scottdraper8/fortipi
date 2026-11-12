@@ -286,9 +286,68 @@ test("unprotected recipient invocation fails before Docker and emits only a fini
 });
 
 const canary = "PRIVATE_CANARY_never_emit_91d7";
+test("source revision stays bound to the checkout when launched from a different Git repository", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "fortipi-revision-"));
+  const execute = promisify(execFile);
+  const options = {
+    env: { PATH: process.env.PATH, HOME: directory, GIT_CONFIG_NOSYSTEM: "1" },
+    encoding: "utf8" as const,
+    timeout: 15000,
+    maxBuffer: 16384,
+  };
+  try {
+    const foreign = resolve(directory, "foreign");
+    const templates = resolve(directory, "templates");
+    await mkdir(templates);
+    await execute("git", ["init", "--quiet", `--template=${templates}`, foreign], options);
+    await execute(
+      "git",
+      [
+        "-C",
+        foreign,
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "-c",
+        "commit.gpgSign=false",
+        "commit",
+        "--allow-empty",
+        "--quiet",
+        "-m",
+        "foreign fixture",
+      ],
+      options,
+    );
+    const actual = (
+      await execute("git", ["-C", repository, "rev-parse", "HEAD"], options)
+    ).stdout.trim();
+    const unanchored = (
+      await execute("git", ["rev-parse", "HEAD"], { ...options, cwd: foreign })
+    ).stdout.trim();
+    assert.notEqual(
+      unanchored,
+      actual,
+      "The inherited-cwd countercase must identify a different repository",
+    );
+    const script = `const {sourceRevision}=await import(${JSON.stringify(new URL("./recipient.ts", import.meta.url).href)});process.stdout.write(await sourceRevision());`;
+    const result = await execute(process.execPath, ["--input-type=module", "-e", script], {
+      ...options,
+      cwd: foreign,
+    });
+    assert.equal(
+      result.stdout,
+      actual,
+      "Source proof must use the recorded checkout rather than inherited cwd",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 test("source diagnostics discard command output and classify only finite execution failures", () => {
   for (const [file, input, kind] of [
     ["git", { stderr: `fatal: detected dubious ownership ${canary}` }, "git-ownership"],
+    ["git", { stderr: `fatal: not a git repository ${canary}` }, "git-directory"],
     ["docker", { stderr: `detected dubious ownership ${canary}` }, "nonzero"],
     ["git", { killed: true, stderr: canary }, "timeout"],
     ["git", { code: "EACCES", stderr: canary }, "permission"],

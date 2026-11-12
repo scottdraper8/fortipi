@@ -133,6 +133,7 @@ const sourceSteps = [
 type SourceStep = (typeof sourceSteps)[number];
 const commandFailures = [
   "git-ownership",
+  "git-directory",
   "timeout",
   "permission",
   "missing-command",
@@ -152,13 +153,18 @@ export function recipientCommandFailure(file: string, error: unknown): Error {
     typeof value?.stderr === "string" &&
     value.stderr.includes("detected dubious ownership")
       ? "git-ownership"
-      : value?.killed === true
-        ? "timeout"
-        : value?.code === "EACCES"
-          ? "permission"
-          : value?.code === "ENOENT"
-            ? "missing-command"
-            : "nonzero";
+      : file === "git" &&
+          typeof value?.stderr === "string" &&
+          (value.stderr.includes("not a git repository") ||
+            value.stderr.includes("Unable to read current working directory"))
+        ? "git-directory"
+        : value?.killed === true
+          ? "timeout"
+          : value?.code === "EACCES"
+            ? "permission"
+            : value?.code === "ENOENT"
+              ? "missing-command"
+              : "nonzero";
   return new RecipientCommandError(kind);
 }
 
@@ -345,6 +351,10 @@ async function command(file: string, args: string[], timeout = 15000): Promise<s
 async function docker(args: string[], timeout?: number) {
   return command("docker", args, timeout);
 }
+/** Namespace entry may change cwd; provenance always names this checkout. */
+export async function sourceRevision(): Promise<string> {
+  return command("git", ["-C", repository, "rev-parse", "HEAD"]);
+}
 async function sourceProof(observe?: (step: SourceStep) => void) {
   observe?.("metadata-stat");
   const metadataPath = resolve(directory, "image-metadata.json");
@@ -354,7 +364,7 @@ async function sourceProof(observe?: (step: SourceStep) => void) {
   const metadataBytes = await readFile(metadataPath);
   const metadata = JSON.parse(metadataBytes.toString("utf8")) as Metadata;
   observe?.("git-revision");
-  assert.equal(metadata.sourceCommit, await command("git", ["rev-parse", "HEAD"]));
+  assert.equal(metadata.sourceCommit, await sourceRevision());
   observe?.("source-commit");
   assert.match(metadata.sourceCommit, /^[a-f0-9]{40}$/);
   observe?.("archive-digest");
