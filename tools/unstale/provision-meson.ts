@@ -219,13 +219,27 @@ export async function pythonIdentity(
   const canonical = await realpath(path);
   assert.ok(safePath(canonical), "Unsafe canonical Python path");
   const stat = await lstat(canonical);
-  assert.ok(
-    stat.isFile() &&
-      (stat.uid === 0 || stat.uid === process.getuid?.()) &&
-      (stat.mode & 0o111) !== 0 &&
-      (stat.mode & 0o022) === 0,
-    "Unsafe Python executable",
-  );
+  try {
+    assert.ok(
+      stat.isFile() &&
+        (stat.uid === 0 || stat.uid === process.getuid?.()) &&
+        (stat.mode & 0o111) !== 0 &&
+        (stat.mode & 0o022) === 0,
+      "Unsafe Python executable",
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        probe: "meson-python-input",
+        regular: stat.isFile(),
+        owner: stat.uid === 0 ? "root" : stat.uid === process.getuid?.() ? "caller" : "other",
+        executable: (stat.mode & 0o111) !== 0,
+        groupWritable: (stat.mode & 0o020) !== 0,
+        otherWritable: (stat.mode & 0o002) !== 0,
+      }),
+    );
+    throw error;
+  }
   const identity = {
     path: canonical,
     sha256: digest(await readFile(canonical)),
