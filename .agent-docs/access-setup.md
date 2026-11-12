@@ -11,6 +11,8 @@ Select production and add secrets:
 
 Restrict the token to the one target account. For the initial deployment, grant **Admin at the Workers product scope** in that account. Cloudflare's current roles require product-level Admin to create a new Worker; Editor and per-Worker grants apply to existing Workers. After bootstrap, a replacement token can use Editor scoped to the deployed FortiPi Worker for updates, secrets and observability; keep product-level Admin only for operations that actually create additional Workers. Durable Objects inherit the implementing Worker's role and do not need a separate role.
 
+When the dashboard asks for resource scope, select **Entire Account** for the target account and retain only the specific permissions below. No domain purchase is required: the initial origin uses Cloudflare's provided `<worker>.<account-subdomain>.workers.dev` address.
+
 Additional account permissions:
 - Account Settings: Read
 - Workers AI: Edit (model discovery/testing and optional direct API use)
