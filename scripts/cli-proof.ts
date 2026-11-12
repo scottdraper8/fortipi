@@ -2,7 +2,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import {
+  access,
   chmod,
   cp,
   lstat,
@@ -30,6 +32,13 @@ const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest(
 const inside = (parent: string, path: string) => path.startsWith(`${parent}${sep}`);
 type OwnerPort = "install-harness" | "offline-consumer" | "notices";
 type HostTool = "unshare" | "mount" | "setpriv" | "unzip" | "ip";
+const hostTools: Record<HostTool, string> = {
+  unshare: "/usr/bin/unshare",
+  mount: "/usr/bin/mount",
+  setpriv: "/usr/bin/setpriv",
+  unzip: "/usr/bin/unzip",
+  ip: "/usr/sbin/ip",
+};
 type InputGate =
   | `eligibility.${
       | "platform"
@@ -89,6 +98,30 @@ async function regular(path: string) {
   else if (!stat.isFile()) failure = "non-regular-file";
   assert.ok(stat.isFile() && !stat.isSymbolicLink(), "Required regular proof input is absent");
 }
+// Only the fixed hostTools map uses this policy; repository ports keep regular().
+export async function canonicalHostExecutable(alias: string): Promise<string> {
+  const previous = failure;
+  const path = await realpath(alias);
+  failure = "host-tool-outside-system-prefix";
+  assert.ok(
+    ["/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/"].some((prefix) => path.startsWith(prefix)),
+  );
+  failure = "host-tool-untrusted-directory";
+  for (let directory = dirname(path); ; directory = dirname(directory)) {
+    const stat = await lstat(directory);
+    assert.ok(stat.isDirectory() && stat.uid === 0 && (stat.mode & 0o022) === 0);
+    if (directory === "/") break;
+  }
+  failure = "host-tool-untrusted-file";
+  const stat = await lstat(path);
+  assert.ok(
+    stat.isFile() && stat.uid === 0 && (stat.mode & 0o022) === 0 && (stat.mode & 0o111) !== 0,
+  );
+  await access(path, constants.X_OK);
+  failure = previous;
+  return path;
+}
+const hostTool = (name: HostTool) => canonicalHostExecutable(hostTools[name]);
 async function eligible() {
   inputGate("eligibility.platform");
   assert.equal(process.platform, "linux", "Proof requires actual Linux before any home lookup");
@@ -131,15 +164,9 @@ async function inputs() {
     inputGate(`inputs.owner.${port}.tracked`);
     await git("ls-files", "--error-unmatch", path);
   }
-  for (const [name, tool] of [
-    ["unshare", "/usr/bin/unshare"],
-    ["mount", "/usr/bin/mount"],
-    ["setpriv", "/usr/bin/setpriv"],
-    ["unzip", "/usr/bin/unzip"],
-    ["ip", "/usr/sbin/ip"],
-  ] as const) {
+  for (const name of ["unshare", "mount", "setpriv", "unzip", "ip"] as const) {
     inputGate(`inputs.host.${name}`);
-    await regular(tool);
+    await hostTool(name);
   }
   gate = "phase";
   failure = "phase guard or required input";
@@ -214,11 +241,12 @@ async function image() {
   try {
     const path = join(directory, "metadata.zip");
     await writeFile(path, await bounded(archive, 65536), { flag: "wx" });
-    const entries = (await run("/usr/bin/unzip", ["-Z1", path])).stdout.trim().split("\n");
+    const unzip = await hostTool("unzip");
+    const entries = (await run(unzip, ["-Z1", path])).stdout.trim().split("\n");
     assert.ok(entries.length <= 32 && entries.every((entry) => !entry.split("/").includes("..")));
     const names = entries.filter((entry) => /(^|\/)image-metadata\.json$/.test(entry));
     assert.equal(names.length, 1, "One actual image metadata entry is required");
-    const bytes = Buffer.from((await run("/usr/bin/unzip", ["-p", path, names[0] ?? ""])).stdout);
+    const bytes = Buffer.from((await run(unzip, ["-p", path, names[0] ?? ""])).stdout);
     assert.equal(sha256(bytes), imageHash, "Parent-qualified metadata bytes changed");
     const metadata = JSON.parse(bytes.toString());
     assert.equal(metadata.sourceCommit, imageSource);
@@ -294,7 +322,8 @@ async function namespace(boundary: Boundary) {
   assert.match(boundary.bridge, /^\/opt\/fortipi-cli-proof-[0-9-]+$/);
   assert.match(boundary.userHome, /^\/home\/fortipi-cli-proof-[0-9-]+$/);
   process.chdir("/");
-  const mount = (args: string[]) => run("/usr/bin/mount", args, "/");
+  const mountPath = await hostTool("mount");
+  const mount = (args: string[]) => run(mountPath, args, "/");
   const bind = async (source: string, target: string, readonly = true) => {
     await mkdir(dirname(target), { recursive: true });
     const stat = await lstat(source);
@@ -304,7 +333,7 @@ async function namespace(boundary: Boundary) {
     if (readonly) await mount(["-o", "remount,bind,ro,nosuid,nodev", target]);
   };
   await mount(["--make-rprivate", "/"]);
-  await run("/usr/sbin/ip", ["link", "set", "lo", "up"], "/");
+  await run(await hostTool("ip"), ["link", "set", "lo", "up"], "/");
   await bind(boundary.consumer, join(boundary.bridge, "consumer"));
   await bind(boundary.userHome, join(boundary.bridge, "user-home"), false);
   // Mask host homes, caches, sockets and checkout only in this private mount namespace.
@@ -331,7 +360,7 @@ async function namespace(boundary: Boundary) {
     CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false",
   };
   const result = await execute(
-    "/usr/bin/setpriv",
+    await hostTool("setpriv"),
     [
       `--reuid=${boundary.uid}`,
       `--regid=${boundary.gid}`,
@@ -428,7 +457,7 @@ async function offline() {
       "/usr/bin/sudo",
       [
         "-n",
-        "/usr/bin/unshare",
+        await hostTool("unshare"),
         "--mount",
         "--net",
         "--pid",
