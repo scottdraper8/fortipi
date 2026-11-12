@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import test from "node:test";
-import { wireLimits } from "fortipi-contract";
+import { Ajv2020 } from "ajv/dist/2020.js";
+import { schemaRefs, schemaRegistry, wireLimits } from "fortipi-contract";
 import { FortiPiClient } from "../../../../packages/fortipi-client/dist/node.js";
 import type * as D from "../../src/boundary/dto.js";
 import { bootstrap, eventually, harness, setup } from "../agent/harness.ts";
 import type { TestAgentSession } from "./stream-boundaries-worker.js";
+
+// Independent diagnostic consumer of the exact shipped schemas, never a changed
+// SDK validator or a substitute response. Only error paths/limits are reported.
+const diagnosticAjv = new Ajv2020({ strict: true, allErrors: true, validateFormats: false });
+for (const schema of Object.values(schemaRegistry)) diagnosticAjv.addSchema(schema);
+const projectionShape = diagnosticAjv.compile({ $ref: schemaRefs.ConversationProjection });
 
 test("a retained valid-message projection remains recoverable through the real public SDK JSON bound", async (t) => {
   const h = await harness({ main: resolve("apps/worker/test/api/stream-boundaries-worker.ts") });
@@ -73,7 +80,7 @@ test("a retained valid-message projection remains recoverable through the real p
   }
 });
 
-test("a real public100KiB Pi answer remains readable by the strict unmodified SDK", async () => {
+test("a real public100KiB Pi answer remains readable by the strict unmodified SDK", async (t) => {
   const h = await harness({ modelChunkBytes: 256 });
   try {
     const { agent, conversation } = await setup(h);
@@ -96,6 +103,24 @@ test("a real public100KiB Pi answer remains readable by the strict unmodified SD
       },
       (rows) =>
         rows.find((row) => row.receipt?.operationId === sent.operationId)?.state === "settled",
+    );
+    const raw = await h.api<D.ConversationProjection>(
+      `/v1/conversations/${conversation.conversationId}`,
+    );
+    assert.equal(raw.status, 200);
+    t.diagnostic(
+      JSON.stringify({
+        outboundValid: projectionShape(raw.body),
+        errors: projectionShape.errors?.map(({ instancePath, schemaPath, keyword, params }) => ({
+          instancePath,
+          schemaPath,
+          keyword,
+          params,
+        })),
+        assistantCharacters: raw.body.messages
+          .filter((message) => message.role === "assistant")
+          .map((message) => message.content.length),
+      }),
     );
     const snapshot = await client.conversations.get(conversation.conversationId);
     assert.ok(

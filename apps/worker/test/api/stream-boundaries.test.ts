@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
+import process from "node:process";
 import test from "node:test";
 import { wireLimits } from "fortipi-contract";
 import type * as D from "../../src/boundary/dto.js";
@@ -23,7 +24,9 @@ interface CloseSample {
   code: number;
   attachment: Attachment;
 }
-const main = resolve("apps/worker/test/api/stream-boundaries-worker.ts");
+const main =
+  process.env.FORTIPI_STREAM_TEST_MAIN ??
+  resolve("apps/worker/test/api/stream-boundaries-worker.ts");
 const scope = (agentId: string, conversationIds: string[]): D.ResourceScope => ({
   agentIds: [agentId],
   conversationIds,
@@ -32,6 +35,96 @@ const scope = (agentId: string, conversationIds: string[]): D.ResourceScope => (
   backendIds: [],
   tools: [],
   actions: ["events.read"],
+});
+
+test("a real socket lifetime bounds aggregate frames and bytes without a fabricated drain counter", {
+  timeout: 40000,
+}, async (t) => {
+  for (const boundary of ["frames", "bytes"] as const) {
+    await t.test(boundary, async (t) => {
+      // Real storage, transport and delivery; synthetic principal traffic isolates
+      // the transport bound. The separate Free cases retain their original caps.
+      const h = await harness({ main });
+      let socket: WebSocket | undefined;
+      try {
+        const { agent, conversation } = await setup(h);
+        const cid = conversation.conversationId;
+        const probe = h.env.AGENT_SESSIONS.getByName(agent.agentId) as Probe;
+        const snapshot = await probe.streamSnapshot(cid);
+        const client = await connect(h, scope(agent.agentId, [cid]));
+        socket = client.socket;
+        assert.deepEqual(await probe.observeSocketClose(), [{ bufferedAmountPresent: false }]);
+        assert.equal((await client.response(subscribe(cid, snapshot.lastEventSeq))).type, "ack");
+        if (boundary === "frames") {
+          // Invalid commands need no new business authority and still consume
+          // real outbound frames. Reserve pressure must not grant unlimited errors.
+          for (let index = 0; index < wireLimits.socketFrames + 2; index++) {
+            if (socket.readyState !== WebSocket.OPEN) break;
+            const length = client.frames.length;
+            socket.send(JSON.stringify({ type: "invalid", requestId: crypto.randomUUID() }));
+            await eventually(
+              async () => client.frames.length > length || socket?.readyState !== WebSocket.OPEN,
+              Boolean,
+            );
+            if (client.frames.some((frame) => frame.type === "resync_required")) break;
+          }
+        } else {
+          // Every page fits1MiB independently. Their combined encoded bytes must
+          // still be bounded when the platform exposes no drainage observation.
+          for (let index = 0; index < 2; index++) {
+            await probe.appendStreamMessages(cid, 8, 65536);
+            await probe.notifyStream(cid);
+            await eventually(
+              async () =>
+                client.frames.filter((frame) => typeof frame.eventSeq === "number").length >=
+                  (index + 1) * 8 ||
+                client.frames.some((frame) => frame.type === "resync_required"),
+              Boolean,
+            );
+            if (client.frames.some((frame) => frame.type === "resync_required")) break;
+          }
+        }
+        const frames = client.frames.length;
+        const bytes = client.frames.reduce(
+          (sum, frame) => sum + new TextEncoder().encode(JSON.stringify(frame)).length,
+          0,
+        );
+        t.diagnostic(`${boundary}: received frames=${frames}, encoded bytes=${bytes}`);
+        assert.ok(frames <= wireLimits.socketFrames, "A lifetime may not exceed256 frames");
+        assert.ok(bytes <= wireLimits.socketBytes, "A lifetime may not exceed1MiB encoded bytes");
+        assert.equal((await client.closed())?.code, 1013);
+        const budgets: { value: { frames: number; bytes: number; closed: boolean } }[] = JSON.parse(
+          await probe.socketBudgetJson(),
+        );
+        assert.equal(budgets.length, 1);
+        assert.deepEqual(
+          budgets.map(({ value }) => [value.frames, value.bytes, value.closed]),
+          [[frames, bytes, true]],
+          "Actual lifetime publication equals its retained application allowance",
+        );
+        if (boundary === "bytes") {
+          assert.equal(client.frames.at(-1)?.type, "resync_required");
+          const samples: CloseSample[] = JSON.parse(await probe.closeSamplesJson());
+          const closed = samples.find((entry) => entry.code === 1013);
+          assert.ok(closed);
+          assert.equal(closed.attachment.__user.subscriptions[cid], snapshot.lastEventSeq + 8);
+          const live = client.frames.filter(
+            (frame) => typeof frame.eventSeq === "number",
+          ) as unknown as D.KnownDurableEvent[];
+          const after = live.at(-1)?.eventSeq ?? snapshot.lastEventSeq;
+          const rest = await replayAll(h, cid, after, snapshot.lastEventSeq + 16);
+          assert.equal(
+            live.length + rest.length,
+            16,
+            "Reconnect recovers the unsent immutable IDs",
+          );
+        }
+      } finally {
+        socket?.close();
+        await h.close();
+      }
+    });
+  }
 });
 async function connect(h: Harness, resources: D.ResourceScope, token = bootstrap) {
   const ticket = await h.api<D.TicketReceipt>(
@@ -106,6 +199,67 @@ function subscribe(cid: string, after: number, limit = 100): Frame {
     input: { operationId: "replayEvents", path: { id: cid }, query: { after, limit } },
   };
 }
+test("concurrent subscriptions retain four scopes and reject the fifth before its ACK", {
+  timeout: 30000,
+}, async () => {
+  const h = await harness({ main });
+  let socket: WebSocket | undefined;
+  let cleanup: Probe | undefined;
+  try {
+    const { agent, conversation } = await setup(h);
+    const conversations = [conversation];
+    for (let index = 0; index < 4; index++) {
+      const created = await h.api<D.Conversation>(`/v1/agents/${agent.agentId}/conversations`, {
+        requestId: crypto.randomUUID(),
+      });
+      assert.equal(created.status, 201);
+      conversations.push(created.body);
+    }
+    const probe = h.env.AGENT_SESSIONS.getByName(agent.agentId) as Probe;
+    cleanup = probe;
+    const client = await connect(
+      h,
+      scope(
+        agent.agentId,
+        conversations.map((row) => row.conversationId),
+      ),
+    );
+    socket = client.socket;
+    await probe.observeSocketClose();
+    const before = await probe.replayCaptures();
+    await probe.holdDelivery();
+    const first = client.response(subscribe(conversation.conversationId, 1));
+    await eventually(() => probe.deliveryHeld(), Boolean);
+    const others = conversations
+      .slice(1)
+      .map((row) => client.response(subscribe(row.conversationId, 1)));
+    await eventually(
+      () => probe.replayCaptures(),
+      (count) => count >= before + 5,
+    );
+    await probe.releaseDelivery();
+    const results = await Promise.all([first, ...others]);
+    assert.equal(
+      results.filter((result) => result.type === "ack").length,
+      4,
+      "At most four subscriptions may be acknowledged",
+    );
+    assert.equal(results.filter((result) => result.type === "error").length, 1);
+    assert.equal((await client.closed())?.code, 1013);
+    const samples: CloseSample[] = JSON.parse(await probe.closeSamplesJson());
+    const closed = samples.find((entry) => entry.code === 1013);
+    assert.ok(closed);
+    assert.equal(
+      Object.keys(closed.attachment.__user.subscriptions).length,
+      4,
+      "All four acknowledged subscriptions must survive concurrent publication",
+    );
+  } finally {
+    await cleanup?.releaseDelivery();
+    socket?.close();
+    await h.close();
+  }
+});
 async function attachment(probe: Probe): Promise<Attachment> {
   const report = JSON.parse(await probe.socketReport()) as { attachment: Attachment }[];
   assert.equal(report.length, 1);
@@ -374,58 +528,66 @@ test("actual retained attachment enforces ticket scope, replay floor and expirin
   }
 });
 
-test("expiry during a captured replay cannot publish its receipt or stored events", {
-  timeout: 20000,
-}, async () => {
-  const h = await harness({ main, traffic: "free" });
-  let socket: WebSocket | undefined;
-  let probe: Probe | undefined;
-  try {
-    const { agent, conversation } = await setup(h);
-    const cid = conversation.conversationId;
-    probe = h.env.AGENT_SESSIONS.getByName(agent.agentId) as Probe;
-    await probe.appendStreamEvents(cid, 1);
-    const expiresAt = Date.now() + 5000;
-    const resources = scope(agent.agentId, [cid]);
-    const minted = await h.api<D.CredentialReceipt>("/v1/admin/credentials", {
-      requestId: crypto.randomUUID(),
-      role: "client",
-      expiresAt: Date.now() + 60000,
-      grants: [
-        {
-          grantId: "replay-expiry",
-          version: 1,
-          expiresAt,
-          resources: { ...resources, actions: ["events.read", "tickets.mint"] },
-        },
-      ],
-    });
-    assert.equal(minted.status, 201);
-    if (minted.body.state !== "issued") assert.fail("Scoped synthetic credential required");
-    const client = await connect(h, resources, minted.body.token);
-    socket = client.socket;
-    await probe.holdReplay(cid);
-    const pending = client.response(subscribe(cid, 0));
-    await eventually(() => probe!.replayHeld(), Boolean);
-    await pause(Math.max(0, expiresAt - Date.now() + 25));
-    await probe.releaseReplay();
-    const result = await pending;
-    assert.equal(
-      result.type,
-      "error",
-      "Authority expiring during replay must be checked before publication",
-    );
-    assert.ok(
-      ["unauthorized", "unauthenticated"].includes((result.error as { code: string }).code),
-    );
-    assert.ok(
-      !client.frames.some((frame) => frame.receipt || frame.eventSeq !== undefined),
-      "No captured private replay data may follow expiry",
-    );
-    assert.equal((await client.closed())?.code, 1008);
-  } finally {
-    await probe?.releaseReplay();
-    socket?.close();
-    await h.close();
-  }
-});
+for (const phase of ["captured replay", "queued delivery"] as const)
+  test(`expiry during ${phase} cannot publish its receipt or stored events`, {
+    timeout: 20000,
+  }, async () => {
+    const h = await harness({ main, traffic: "free" });
+    let socket: WebSocket | undefined;
+    let probe: Probe | undefined;
+    try {
+      const { agent, conversation } = await setup(h);
+      const cid = conversation.conversationId;
+      probe = h.env.AGENT_SESSIONS.getByName(agent.agentId) as Probe;
+      await probe.appendStreamEvents(cid, 1);
+      const expiresAt = Date.now() + 5000;
+      const resources = scope(agent.agentId, [cid]);
+      const minted = await h.api<D.CredentialReceipt>("/v1/admin/credentials", {
+        requestId: crypto.randomUUID(),
+        role: "client",
+        expiresAt: Date.now() + 60000,
+        grants: [
+          {
+            grantId: "replay-expiry",
+            version: 1,
+            expiresAt,
+            resources: { ...resources, actions: ["events.read", "tickets.mint"] },
+          },
+        ],
+      });
+      assert.equal(minted.status, 201);
+      if (minted.body.state !== "issued") assert.fail("Scoped synthetic credential required");
+      const client = await connect(h, resources, minted.body.token);
+      socket = client.socket;
+      if (phase === "captured replay") await probe.holdReplay(cid);
+      else await probe.holdDelivery();
+      const pending = client.response(subscribe(cid, 0));
+      const active = probe;
+      await eventually(
+        () => (phase === "captured replay" ? active.replayHeld() : active.deliveryHeld()),
+        Boolean,
+      );
+      await pause(Math.max(0, expiresAt - Date.now() + 25));
+      await probe.releaseReplay();
+      await probe.releaseDelivery();
+      const result = await pending;
+      assert.equal(
+        result.type,
+        "error",
+        "Authority expiring during replay must be checked before publication",
+      );
+      assert.ok(
+        ["unauthorized", "unauthenticated"].includes((result.error as { code: string }).code),
+      );
+      assert.ok(
+        !client.frames.some((frame) => frame.receipt || frame.eventSeq !== undefined),
+        "No captured private replay data may follow expiry",
+      );
+      assert.equal((await client.closed())?.code, 1008);
+    } finally {
+      await probe?.releaseReplay();
+      await probe?.releaseDelivery();
+      socket?.close();
+      await h.close();
+    }
+  });

@@ -11,7 +11,7 @@ const encodedBytes = (value: unknown): number =>
 // existing WebSocket acknowledgement wrapper and one terminal resync frame.
 const requestId = "x".repeat(128);
 const maximumSequence = Number.MAX_SAFE_INTEGER;
-const resyncBytes = encodedBytes({
+export const resyncFrameBytes = encodedBytes({
   type: "resync_required",
   requestId,
   reason: "cursor.expired",
@@ -21,7 +21,7 @@ const ackBytes = (operationId: string) =>
   encodedBytes({ type: "ack", requestId, operationId, receipt: null }) - 4;
 const replayPayloadBytes =
   Math.min(wireLimits.jsonBytes, wireLimits.socketBytes) -
-  resyncBytes -
+  resyncFrameBytes -
   encodedBytes({
     type: "ack",
     requestId,
@@ -314,7 +314,7 @@ export class Store {
       };
       const available =
         Math.min(wireLimits.jsonBytes, wireLimits.socketBytes) -
-        resyncBytes -
+        resyncFrameBytes -
         ackBytes("getConversation") -
         encodedBytes(snapshot);
       let bytes = 0,

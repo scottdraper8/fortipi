@@ -46,7 +46,7 @@ import { AgentExports } from "./exports.js";
 import { piStorageWatermark } from "./pi-storage.js";
 import { Projection } from "./projection.js";
 import { Recovery } from "./recovery.js";
-import { type ConversationRow, Store } from "./store.js";
+import { type ConversationRow, resyncFrameBytes, Store } from "./store.js";
 
 interface SocketAuthority {
   auth: D.AuthContext;
@@ -58,6 +58,12 @@ interface SocketState {
   generation: number;
   grantVersion: number;
   subscriptions: Record<string, number>;
+}
+interface SocketBudget {
+  frames: number;
+  bytes: number;
+  closed: boolean;
+  expiresAt: number;
 }
 export class AgentSession extends DurableObject<Env> implements AgentSessionRpc {
   declare fetch: (request: Request) => Promise<Response>;
@@ -81,6 +87,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
   readonly exports: AgentExports;
   readonly #sockets: WebSockets;
   readonly #socketLanes = new Lanes();
+  readonly #socketDeliveryLanes = new Lanes();
   readonly #modelLanes = new Lanes();
   readonly #hintIds = new Set<number>();
   #hintScheduled = false;
@@ -811,13 +818,38 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
   async #attachSocket(connection: Connection, request: Request): Promise<void> {
     const authority = await this.#socketAuthority(request);
     const authorityId = id();
-    await this.store.put(
-      "socket-authority",
-      authorityId,
-      authority,
-      undefined,
-      authority.identity.expiresAt,
-    );
+    const resources = scope({ ...authority.identity.resources, actions: ["events.read"] });
+    await this.store.transaction(async (tx) => {
+      await this.authority.current(authority.auth, resources, tx);
+      const expired = await tx.all<{ id: string }>(
+        "SELECT id FROM fp_records_v1 WHERE kind='socket-authority' AND due<=? ORDER BY due,id LIMIT 100",
+        Date.now(),
+      );
+      for (const row of expired) {
+        await this.store.remove("socket-authority", row.id, tx);
+        await this.store.remove("socket-delivery", row.id, tx);
+      }
+      await this.store.put(
+        "socket-authority",
+        authorityId,
+        authority,
+        tx,
+        authority.identity.expiresAt,
+      );
+      await this.store.put(
+        "socket-delivery",
+        authorityId,
+        {
+          frames: 0,
+          bytes: 0,
+          closed: false,
+          expiresAt: authority.identity.expiresAt,
+        } satisfies SocketBudget,
+        tx,
+        authority.identity.expiresAt,
+      );
+    });
+    await this.authority.current(authority.auth, resources);
     connection.setState({
       authorityId,
       credentialId: authority.identity.credentialId,
@@ -862,19 +894,104 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       await this.authority.authorize(auth, action, resources.conversationIds[0], resources);
     return auth;
   }
-  #send(connection: Connection, value: unknown): void {
-    const data = JSON.stringify(value);
-    const buffered =
-      "bufferedAmount" in connection && typeof connection.bufferedAmount === "number"
-        ? connection.bufferedAmount
-        : 0;
-    check(
-      buffered + new TextEncoder().encode(data).byteLength <= wireLimits.socketBytes,
-      "quota_exceeded",
-      "Socket backlog exceeded",
-      pressure("concurrency", wireLimits.socketBytes, "Socket backlog exceeded"),
-    );
-    connection.send(data);
+  async #send(
+    connection: Connection<SocketState>,
+    values: unknown[],
+    current?: {
+      auth: D.AuthContext;
+      resources: D.ResourceScope;
+      subscription?: { conversationId: string; cursor: number | null; expectedAfter?: number };
+    },
+    resync?: D.ResyncRequired,
+    forceResync = false,
+  ): Promise<boolean> {
+    if (values.length === 0 && !forceResync) return true;
+    const authorityId = connection.state?.authorityId;
+    check(authorityId, "unauthenticated", "Socket attachment missing");
+    // Workers exposes no drain observation. A durable cumulative allowance
+    // bounds even a never-draining connection; it is not a backlog measurement.
+    // Charging precedes publication and is never reset by a restored attachment.
+    return this.#socketDeliveryLanes.run(authorityId, async () => {
+      const encoded = values.map((value) => JSON.stringify(value));
+      const reserved = await this.store.transaction(async (tx) => {
+        if (current) await this.authority.current(current.auth, current.resources, tx);
+        const budget = await this.store.get<SocketBudget>("socket-delivery", authorityId, tx);
+        check(budget, "interrupted", "Socket delivery allowance unavailable; reconnect");
+        check(
+          Number.isSafeInteger(budget.frames) &&
+            budget.frames >= 0 &&
+            budget.frames <= wireLimits.socketFrames &&
+            Number.isSafeInteger(budget.bytes) &&
+            budget.bytes >= 0 &&
+            budget.bytes <= wireLimits.socketBytes,
+          "interrupted",
+          "Socket delivery allowance invalid; reconnect",
+        );
+        if (budget.closed) return { frames: [], closed: true, alreadyClosed: true };
+        const frames: string[] = [];
+        for (const data of encoded) {
+          const bytes = new TextEncoder().encode(data).length;
+          // Keep one bounded terminal control frame available for resync.
+          if (
+            budget.frames + 1 >= wireLimits.socketFrames ||
+            budget.bytes + bytes + resyncFrameBytes > wireLimits.socketBytes
+          )
+            break;
+          budget.frames++;
+          budget.bytes += bytes;
+          frames.push(data);
+        }
+        budget.closed = forceResync || frames.length < encoded.length;
+        if (budget.closed && resync) {
+          const terminal = JSON.stringify(resync);
+          budget.frames++;
+          budget.bytes += new TextEncoder().encode(terminal).length;
+          frames.push(terminal);
+        }
+        await this.store.put("socket-delivery", authorityId, budget, tx, budget.expiresAt);
+        return { frames, closed: budget.closed, alreadyClosed: false };
+      });
+      if (current) await this.authority.current(current.auth, current.resources);
+      if (reserved.alreadyClosed) return false;
+      let attachment: SocketState | undefined;
+      const change = current?.subscription;
+      if (change) {
+        const state = connection.state;
+        check(state, "unauthenticated", "Socket attachment missing");
+        check(
+          current.resources.conversationIds.includes(change.conversationId),
+          "unauthorized",
+          "Subscription scope mismatch",
+        );
+        if (
+          change.expectedAfter !== undefined &&
+          state.subscriptions[change.conversationId] !== change.expectedAfter
+        ) {
+          if (reserved.closed) connection.close(1013, "Stream requires resync");
+          return false;
+        }
+        const subscriptions = { ...state.subscriptions };
+        if (change.cursor === null) delete subscriptions[change.conversationId];
+        else subscriptions[change.conversationId] = change.cursor;
+        check(
+          Object.keys(subscriptions).length <= 4,
+          "quota_exceeded",
+          "Too many subscriptions",
+          pressure("concurrency", 4, "Too many subscriptions"),
+        );
+        attachment = { ...state, subscriptions };
+        check(
+          new TextEncoder().encode(JSON.stringify(attachment)).length <= 2048,
+          "payload_too_large",
+          "Attachment limit exceeded",
+        );
+      }
+      for (const data of reserved.frames) connection.send(data);
+      if (attachment && !reserved.closed) connection.setState(attachment);
+      if (reserved.closed && !reserved.alreadyClosed)
+        connection.close(1013, "Stream delivery allowance exhausted; reconnect");
+      return !reserved.closed;
+    });
   }
   async #message(raw: Connection, message: string | ArrayBuffer | ArrayBufferView): Promise<void> {
     const connection = raw as Connection<SocketState>;
@@ -890,28 +1007,26 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       validate<D.ClientCommand>("ClientCommand", command);
       requestId = command.requestId;
       if (command.type === "ping") {
-        await this.#socketContext(
-          connection,
-          scope({ agentIds: [this.agentId], actions: ["events.read"] }),
-        );
-        this.#send(connection, { type: "ack", requestId, operationId: "ping" });
+        const resources = scope({ agentIds: [this.agentId], actions: ["events.read"] });
+        const auth = await this.#socketContext(connection, resources);
+        await this.#send(connection, [{ type: "ack", requestId, operationId: "ping" }], {
+          auth,
+          resources,
+        });
         return;
       }
       if (command.type === "conversation.unsubscribe") {
-        await this.#socketContext(
-          connection,
-          scope({
-            agentIds: [this.agentId],
-            conversationIds: [command.conversationId],
-            actions: ["events.read"],
-          }),
-        );
-        const state = connection.state;
-        check(state, "unauthenticated", "Missing attachment");
-        const subscriptions = { ...state.subscriptions };
-        delete subscriptions[command.conversationId];
-        connection.setState({ ...state, subscriptions });
-        this.#send(connection, { type: "ack", requestId, operationId: command.type });
+        const resources = scope({
+          agentIds: [this.agentId],
+          conversationIds: [command.conversationId],
+          actions: ["events.read"],
+        });
+        const auth = await this.#socketContext(connection, resources);
+        await this.#send(connection, [{ type: "ack", requestId, operationId: command.type }], {
+          auth,
+          resources,
+          subscription: { conversationId: command.conversationId, cursor: null },
+        });
         return;
       }
       const input =
@@ -930,48 +1045,40 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         await this.#socketLanes.run(command.input.path.id, async () => {
           const page = await this.store.replay(command.input.path.id, command.input.query);
           await this.authority.current(auth, resources);
-          const state = connection.state;
-          check(state, "unauthenticated", "Missing attachment");
-          check(
-            Object.keys(state.subscriptions).length < 4 ||
-              command.input.path.id in state.subscriptions,
-            "quota_exceeded",
-            "Too many subscriptions",
-            pressure("concurrency", 4, "Too many subscriptions"),
-          );
-          this.#send(connection, {
-            type: "ack",
-            requestId,
-            operationId: "replayEvents",
-            receipt: page,
-          });
-          const attachment = {
-            ...state,
-            subscriptions: { ...state.subscriptions, [command.input.path.id]: page.through },
-          };
-          check(
-            new TextEncoder().encode(JSON.stringify(attachment)).length <= 2048,
-            "payload_too_large",
-            "Attachment limit exceeded",
-          );
-          connection.setState(attachment);
+          if (
+            !(await this.#send(
+              connection,
+              [{ type: "ack", requestId, operationId: "replayEvents", receipt: page }],
+              {
+                auth,
+                resources,
+                subscription: { conversationId: command.input.path.id, cursor: page.through },
+              },
+              {
+                type: "resync_required",
+                requestId,
+                reason: "overflow",
+                retainedFloor: page.retainedFloor,
+              },
+            ))
+          )
+            return;
           await this.#deliver(connection, command.input.path.id);
         });
         return;
       }
       const response = unwrap(await this.handleApi(auth, input));
       await this.authority.current(auth, resources);
-      this.#send(connection, {
-        type: "ack",
-        requestId,
-        operationId: input.operationId,
-        receipt: response.body,
-      });
+      await this.#send(
+        connection,
+        [{ type: "ack", requestId, operationId: input.operationId, receipt: response.body }],
+        { auth, resources },
+      );
     } catch (error) {
       const failed = failure(error, requestId);
       const { ok: _ok, ...body } = failed;
       try {
-        this.#send(connection, { type: "error", requestId, error: body });
+        await this.#send(connection, [{ type: "error", requestId, error: body }]);
       } catch {
         connection.close(1013, "Stream overflow");
         return;
@@ -993,23 +1100,25 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
     const auth = await this.#socketContext(connection, resources);
     const page = await this.store.replay(cid, { after, limit: 100 });
     await this.authority.current(auth, resources);
-    for (const event of page.events) this.#send(connection, event);
-    if (page.hasMore) {
-      this.#send(connection, {
-        type: "resync_required",
-        requestId: id(),
-        reason: "overflow",
-        retainedFloor: page.retainedFloor,
-      });
-      connection.close(1013, "Replay backlog exceeded");
+    if (
+      !(await this.#send(
+        connection,
+        page.events,
+        {
+          auth,
+          resources,
+          subscription: { conversationId: cid, cursor: page.nextAfter, expectedAfter: after },
+        },
+        {
+          type: "resync_required",
+          requestId: id(),
+          reason: "overflow",
+          retainedFloor: page.retainedFloor,
+        },
+        page.hasMore,
+      ))
+    )
       return;
-    }
-    const current = connection.state;
-    check(current, "unauthenticated", "Missing attachment");
-    connection.setState({
-      ...current,
-      subscriptions: { ...current.subscriptions, [cid]: page.nextAfter },
-    });
   }
   async #notify(cid: string): Promise<void> {
     await this.#socketLanes.run(cid, async () => {
@@ -1017,8 +1126,12 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         if (connection.state?.subscriptions[cid] !== undefined)
           try {
             await this.#deliver(connection, cid);
-          } catch {
-            connection.close(1008, "Stream requires authorization or resync");
+          } catch (error) {
+            const code = failure(error, id()).code;
+            connection.close(
+              code === "unauthorized" || code === "unauthenticated" ? 1008 : 1013,
+              "Stream requires authorization or resync",
+            );
           }
     });
   }
