@@ -386,7 +386,12 @@ export async function inspectImageArchive(
   file: string,
   imageId: string,
   options: { filesystem?: boolean; pruning?: PrunePolicy } = {},
-): Promise<{ saved: SavedImage; filesystem: Map<string, FsEntry>; configuration: ImageConfig }> {
+): Promise<{
+  saved: SavedImage;
+  filesystem: Map<string, FsEntry>;
+  configuration: ImageConfig;
+  diffIds: string[];
+}> {
   assert.match(imageId, /^sha256:[a-f0-9]{64}$/);
   const { members } = await imageMembers(file);
   function json<T>(path: string): T {
@@ -659,6 +664,7 @@ export async function inspectImageArchive(
     },
     filesystem,
     configuration: config.config ?? {},
+    diffIds: [...config.rootfs.diff_ids],
   };
 }
 
