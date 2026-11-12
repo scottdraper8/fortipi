@@ -747,6 +747,7 @@ export async function prepareCandidate(
   );
   await mkdir(dirname(destination), { recursive: true });
   await mkdir(destination, { mode: 0o700 });
+  let phase = "foundation inventory";
   try {
     const pnpm = await pnpmExecutable();
     // Foundation inventory precedes the asset producer. Its normal checker reauthenticates all cached SRI archives.
@@ -758,6 +759,7 @@ export async function prepareCandidate(
       300000,
       true,
     );
+    phase = "Worker build";
     await checked(pnpm, ["run", "build"], root, childEnvironment(), 600000, true);
     assert.equal(
       object(
@@ -766,6 +768,7 @@ export async function prepareCandidate(
       options.commitSha,
       "Embedded assets must be built at this candidate source",
     );
+    phase = "compatibility review";
     const compatibility = await execute(
       process.execPath,
       [
@@ -782,6 +785,7 @@ export async function prepareCandidate(
       0,
       "Compatibility watch requires review at this candidate SHA",
     );
+    phase = "notices";
     const notices = await generateNotices(root);
     for (const args of [
       ["run", "typecheck"],
@@ -791,16 +795,22 @@ export async function prepareCandidate(
       ["run", "check:licenses"],
       ["run", "unstale:check"],
       ["run", "test"],
-    ])
+    ]) {
+      phase = `source check ${args[1]}`;
       await checked(pnpm, args, root, childEnvironment(), 900000, true);
+    }
+    phase = "pre-commit checks";
     await checked("pre-commit", ["run", "--all-files"], root, childEnvironment(), 600000, true);
+    phase = "package archives";
     const packed = await stageAndPack(
       root,
       resolve(destination, "packs"),
       options.scope,
       options.version,
     );
+    phase = "SBOM";
     await generateSbom(root, destination, options.scope, options.version, notices);
+    phase = "specification and source payload";
     for (const file of [
       "openapi.yaml",
       ...(await inventory(resolve(root, "packages/fortipi-contract/schemas"))).map(
@@ -833,6 +843,7 @@ export async function prepareCandidate(
       },
       resolve(destination, "image/source-kit-inventory.json"),
     );
+    phase = "candidate manifest";
     const candidate: CandidateManifest = {
       schemaVersion: 1,
       repository: REPOSITORY,
@@ -878,6 +889,7 @@ export async function prepareCandidate(
     const candidateSha256 = await saveJson(candidateManifestPath, candidate);
     return { schemaVersion: 1, candidateManifestPath, candidateSha256 };
   } catch (error) {
+    console.error(`Candidate preparation failed during ${phase}.`);
     await rm(destination, { recursive: true, force: true });
     throw error;
   }
