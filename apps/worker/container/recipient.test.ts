@@ -22,6 +22,7 @@ import {
   assertImportedImage,
   assertRecipientPostBinding,
   assertRecipientTag,
+  recipientCommandFailure,
   recipientFailure,
   recipientFixtureFailure,
   singleImportedImage,
@@ -285,6 +286,30 @@ test("unprotected recipient invocation fails before Docker and emits only a fini
 });
 
 const canary = "PRIVATE_CANARY_never_emit_91d7";
+test("source diagnostics discard command output and classify only finite execution failures", () => {
+  for (const [file, input, kind] of [
+    ["git", { stderr: `fatal: detected dubious ownership ${canary}` }, "git-ownership"],
+    ["docker", { stderr: `detected dubious ownership ${canary}` }, "nonzero"],
+    ["git", { killed: true, stderr: canary }, "timeout"],
+    ["git", { code: "EACCES", stderr: canary }, "permission"],
+    ["git", { code: "ENOENT", stderr: canary }, "missing-command"],
+    ["git", { code: 128, stderr: canary }, "nonzero"],
+  ] as const) {
+    const error = recipientCommandFailure(file, input);
+    const result = recipientFixtureFailure("source", error, undefined, "git-revision");
+    assert.equal(result.source, "git-revision");
+    assert.equal(result.command, kind);
+    assert.equal(error.message, "Recipient proof command failed");
+    assert.equal(JSON.stringify([result, error]).includes(canary), false);
+    for (const key of ["stderr", "stdout", "code", "cause", "actual", "expected"])
+      assert.equal(Object.hasOwn(error, key), false);
+  }
+  const foreign = Object.assign(new Error(canary), { kind: "git-ownership" });
+  const result = recipientFixtureFailure("source", foreign, undefined, canary);
+  assert.equal(result.source, "unknown");
+  assert.equal(Object.hasOwn(result, "command"), false);
+  assert.equal(JSON.stringify(result).includes(canary), false);
+});
 test("fixture diagnostics retain only closed stage/binding labels and existing safe image reasons", () => {
   const foreign = Object.assign(new Error(canary, { cause: { [canary]: canary } }), {
     actual: canary,

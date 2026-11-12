@@ -118,6 +118,49 @@ const bindingSteps = [
 ] as const;
 type FixtureStage = (typeof fixtureStages)[number];
 type BindingStep = (typeof bindingSteps)[number];
+const sourceSteps = [
+  "metadata-stat",
+  "metadata-read",
+  "git-revision",
+  "source-commit",
+  "archive-digest",
+  "kit-digest",
+  "pruning-policy",
+  "image-graph",
+  "selected-graph",
+  "runtime-config",
+] as const;
+type SourceStep = (typeof sourceSteps)[number];
+const commandFailures = [
+  "git-ownership",
+  "timeout",
+  "permission",
+  "missing-command",
+  "nonzero",
+] as const;
+class RecipientCommandError extends Error {
+  readonly kind: (typeof commandFailures)[number];
+  constructor(kind: (typeof commandFailures)[number]) {
+    super("Recipient proof command failed");
+    this.kind = kind;
+  }
+}
+export function recipientCommandFailure(file: string, error: unknown): Error {
+  const value = error as { code?: unknown; killed?: unknown; stderr?: unknown } | null;
+  const kind =
+    file === "git" &&
+    typeof value?.stderr === "string" &&
+    value.stderr.includes("detected dubious ownership")
+      ? "git-ownership"
+      : value?.killed === true
+        ? "timeout"
+        : value?.code === "EACCES"
+          ? "permission"
+          : value?.code === "ENOENT"
+            ? "missing-command"
+            : "nonzero";
+  return new RecipientCommandError(kind);
+}
 
 // Public Config schema: Moby 29.9.3 api/types/container/config.go plus
 // DockerOCIImageConfig's embedded OCI fields. This is diagnostic-only.
@@ -218,13 +261,24 @@ export function recipientFailure(stage: Stage, error: unknown, fallback: Reason 
   };
 }
 /** Only fixed labels cross the fixture's error boundary; never assertion payloads. */
-export function recipientFixtureFailure(stage: string, error: unknown, bindingStep?: string) {
+export function recipientFixtureFailure(
+  stage: string,
+  error: unknown,
+  bindingStep?: string,
+  sourceStep?: string,
+) {
   return {
     ...recipientFailure("docker-binding", error),
     probe: "recipient-fixture",
     stage: fixtureStages.find((known) => known === stage) ?? "unknown",
     ...(stage === "binding"
       ? { binding: bindingSteps.find((known) => known === bindingStep) ?? "unknown" }
+      : {}),
+    ...(stage === "source"
+      ? { source: sourceSteps.find((known) => known === sourceStep) ?? "unknown" }
+      : {}),
+    ...(error instanceof RecipientCommandError
+      ? { command: commandFailures.find((known) => known === error.kind) ?? "nonzero" }
       : {}),
   };
 }
@@ -284,33 +338,43 @@ async function command(file: string, args: string[], timeout = 15000): Promise<s
     return (
       await execute(file, args, { env, timeout, maxBuffer: 1024 * 1024, encoding: "utf8" })
     ).stdout.trim();
-  } catch {
-    throw new Error("Recipient proof command failed");
+  } catch (error) {
+    throw recipientCommandFailure(file, error);
   }
 }
 async function docker(args: string[], timeout?: number) {
   return command("docker", args, timeout);
 }
-async function sourceProof() {
+async function sourceProof(observe?: (step: SourceStep) => void) {
+  observe?.("metadata-stat");
   const metadataPath = resolve(directory, "image-metadata.json");
   const stat = await lstat(metadataPath);
   assert.ok(stat.isFile() && stat.size < 1024 * 1024);
+  observe?.("metadata-read");
   const metadataBytes = await readFile(metadataPath);
   const metadata = JSON.parse(metadataBytes.toString("utf8")) as Metadata;
+  observe?.("git-revision");
   assert.equal(metadata.sourceCommit, await command("git", ["rev-parse", "HEAD"]));
+  observe?.("source-commit");
   assert.match(metadata.sourceCommit, /^[a-f0-9]{40}$/);
+  observe?.("archive-digest");
   assert.equal(await digest(resolve(directory, "image.tar")), metadata.archiveSha256);
+  observe?.("kit-digest");
   assert.equal(
     await digest(resolve(directory, "sources-and-notices.tar")),
     metadata.sourceKitSha256,
   );
+  observe?.("pruning-policy");
   const freeze = JSON.parse(
     await readFile(resolve(import.meta.dirname, "debian-freeze.json"), "utf8"),
   ) as { pruning: PrunePolicy };
+  observe?.("image-graph");
   const graph = await inspectImageArchive(resolve(directory, "image.tar"), metadata.imageId, {
     pruning: freeze.pruning,
   });
+  observe?.("selected-graph");
   assert.deepEqual(graph.saved, metadata.savedImage, "Recipient input selected graph changed");
+  observe?.("runtime-config");
   assert.equal(
     hash(Buffer.from(JSON.stringify(graph.configuration))),
     metadata.runtimeImageConfigSha256,
@@ -715,11 +779,14 @@ async function loadArchive(expectedSha256: string): Promise<void> {
 export async function verifyRecipientFixture(): Promise<string> {
   let stage: FixtureStage = "receipt";
   let bindingStep: BindingStep | undefined;
+  let sourceStep: SourceStep | undefined;
   try {
     const receipt = await readReceipt();
     assert.equal(receipt.phase, "loaded", "Recipient import proof is required");
     stage = "source";
-    const source = await sourceProof();
+    const source = await sourceProof((step) => {
+      sourceStep = step;
+    });
     stage = "source-match";
     matchSource(receipt, source);
     stage = "binding";
@@ -749,7 +816,7 @@ export async function verifyRecipientFixture(): Promise<string> {
     assert.equal(imageId, receipt.imageId, "Recipient fixture image changed");
     return imageId;
   } catch (error) {
-    console.error(JSON.stringify(recipientFixtureFailure(stage, error, bindingStep)));
+    console.error(JSON.stringify(recipientFixtureFailure(stage, error, bindingStep, sourceStep)));
     throw new Error("Recipient import fixture binding failed");
   }
 }
