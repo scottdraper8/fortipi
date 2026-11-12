@@ -209,6 +209,7 @@ jobs:
           "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json" --confirm "$CONFIRM"
       - name: Actual owner10 live verification with application role only
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
         run:
           node scripts/deploy-smoke.ts evidence --candidate "$RUNNER_TEMP/candidate/candidate.json" --fixture

@@ -459,6 +459,27 @@ export function assertDeployment(value: unknown): asserts value is DeploymentIde
   string(d.checkedAt);
 }
 export function assertGate(value: unknown): asserts value is GateReceipt {
+  assertGateShape(value, true);
+}
+/** Local observations cannot enter any privileged gate reader. */
+export function assertSyntheticLocalGate(
+  value: unknown,
+  candidate: CandidateManifest,
+  mode: "local" | "native" | "live",
+): asserts value is GateReceipt {
+  assertCandidate(candidate);
+  assert.equal(mode, "local");
+  assert.notEqual(process.env.GITHUB_ACTIONS, "true");
+  assert.equal(candidate.publishable, false);
+  assert.equal(candidate.scope, SYNTHETIC_SCOPE);
+  assertGateShape(value, false);
+  assert.equal(value.kind, "integrated");
+  assert.equal(value.sourceCommit, candidate.sourceCommit);
+  assert.equal(value.scope, candidate.scope);
+  for (const id of [value.producer.workflowId, value.producer.runId, value.producer.runAttempt])
+    assert.equal(id, 0);
+}
+function assertGateShape(value: unknown, trusted: boolean): asserts value is GateReceipt {
   const g = object(value);
   closed(g, [
     "schemaVersion",
@@ -479,7 +500,7 @@ export function assertGate(value: unknown): asserts value is GateReceipt {
   assert.match(string(g.sourceCommit), commitPattern);
   string(g.scope);
   string(g.checkedAt);
-  assertProducer(g.producer);
+  assertProducer(g.producer, trusted);
   records(g.files);
   assert.ok(Array.isArray(g.claims) && g.claims.length > 0);
   const ids = new Set();
