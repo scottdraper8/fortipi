@@ -44,6 +44,7 @@ export async function nativeProcessRecovery(
     | "assign-ack"
     | "result"
     | "receipt" = "running",
+  activation: "agent-first" | "executor-first" = "agent-first",
 ) {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-native-service-kill-")),
     main = join(directory, "worker.js"),
@@ -572,8 +573,9 @@ export async function nativeProcessRecovery(
       await service.crash();
       await connection;
       await service.start();
+      if (activation === "executor-first") await connect();
       assert.deepEqual((await service.api(`${probe}/canary`)).body, canary);
-      await connect();
+      if (activation === "agent-first") await connect();
     }
     let final: View | undefined;
     for (let i = 0; i < 900; i++) {
@@ -625,6 +627,7 @@ export async function nativeProcessRecovery(
         killedAfterSavedResult: mode === "result",
         killedAfterWorkspaceReceipt: mode === "receipt",
         killedWithActualAssignAckHeld: mode === "assign-ack",
+        activation,
       }),
     );
   } finally {
