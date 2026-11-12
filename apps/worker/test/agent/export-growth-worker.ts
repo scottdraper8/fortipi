@@ -1,8 +1,7 @@
 import { scope } from "../../src/api/common.js";
-import { routeRequest } from "../../src/api/router.js";
 import type * as D from "../../src/boundary/dto.js";
 import type { Env } from "../../src/boundary/env.js";
-import {
+import base, {
   TestAgentSession as BaseAgent,
   ControlPlane as BaseControlPlane,
 } from "./runtime-worker.js";
@@ -83,7 +82,11 @@ export class ControlPlane extends BaseControlPlane {
             settlement?: { disposition: string };
             covered?: boolean;
           }>("capacity_reservation", 0, 100)
-          .filter((row) => row.value.reservation.operationId === this.#operationId)
+          .filter(
+            (row) =>
+              row.value.reservation.operationId ===
+              (url.searchParams.get("operation") ?? this.#operationId),
+          )
           .map((row) => ({
             reservation: row.value.reservation,
             disposition: row.value.settlement?.disposition,
@@ -99,6 +102,18 @@ export class TestAgentSession extends BaseAgent {
   #armFailures = 0;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    const prepare = this.exports.prepare.bind(this.exports);
+    this.exports.prepare = async (...args) => {
+      const descriptor = await prepare(...args);
+      if ((await this.store.get("fixture", "fault")) === "export-after-ready") {
+        await this.store.transaction(async (tx) => {
+          await this.store.remove("fixture", "fault", tx);
+          await this.store.put("fixture", "barrier", "export-after-ready", tx);
+        });
+        await new Promise<void>((accept) => setTimeout(accept, 300000));
+      }
+      return descriptor;
+    };
     const arm = this.conversations.host.arm;
     this.conversations.host.arm = async () => {
       if (this.#failArm) {
@@ -130,8 +145,22 @@ export class TestAgentSession extends BaseAgent {
         );
       }
       return Response.json({
+        barrier: (await this.store.get("fixture", "barrier")) ?? null,
         armFailures: this.#armFailures,
         retainedExports: (await this.store.page("export", 100)).map((row) => row.id),
+        retainedMetadata: (
+          await this.store.page<{
+            exportId: string;
+            sha256: string;
+            size: number;
+            createdAt: number;
+          }>("export", 100)
+        ).map(({ value }) => ({
+          exportId: value.exportId,
+          sha256: value.sha256,
+          size: value.size,
+          createdAt: value.createdAt,
+        })),
         growth: await this.growthReport(),
         physical: this.store.physicalBytes(),
         report: JSON.parse(await this.lastPhysicalSample()),
@@ -147,7 +176,7 @@ export class TestAgentSession extends BaseAgent {
   }
 }
 export default {
-  async fetch(request: Request, env: Env) {
+  async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/__export-growth/mode")
       return env.CONTROL_PLANE.getByName("control").fetch(request);
@@ -162,6 +191,6 @@ export default {
       const control = await (await env.CONTROL_PLANE.getByName("control").fetch(request)).json();
       return Response.json({ local, control });
     }
-    return routeRequest(request, env);
+    return base.fetch(request, env);
   },
-};
+} satisfies ExportedHandler<Env>;
