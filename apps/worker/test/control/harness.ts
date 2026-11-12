@@ -155,7 +155,7 @@ export async function harness<T extends FixtureControl = FixtureControl>(
     directory,
     async close() {
       await server.close();
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 });
     },
   };
 }

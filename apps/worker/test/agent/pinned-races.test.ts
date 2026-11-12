@@ -15,8 +15,8 @@ async function until(predicate: () => Promise<boolean>): Promise<void> {
   }
   assert.fail("Race barrier not reached");
 }
-test("characterize pinned Pi Node-only delayed publication rejection defect", async () => {
-  // These are upstream negative controls, not Worker/service acceptance.
+test("patched Pi delayed publication rejects its caller without a process-level rejection", async () => {
+  // Actual Node/SQLite controls run under the fatal rejection policy.
   // The calibrated actual Worker/task-runtime cases live in the Inspector test.
   for (const mode of ["cancel", "preaborted", "aftercall", "shutdown"]) {
     const directory = await mkdtemp(join(tmpdir(), "fortipi-node-pin-"));
@@ -49,17 +49,10 @@ test("characterize pinned Pi Node-only delayed publication rejection defect", as
           });
         },
       );
-      if (mode === "cancel") {
-        assert.equal(result.code, 0, result.error);
-        assert.match(result.out, /"callerRejection":true/);
-      } else {
-        assert.equal(
-          result.code,
-          1,
-          `${mode}: known Node diagnostic changed; reevaluate pinned compatibility`,
-        );
-        assert.match(result.error, mode === "shutdown" ? /Harness is closed/ : /pin-race-stop/);
-      }
+      assert.equal(result.code, 0, `${mode}: ${result.error}`);
+      assert.match(result.out, new RegExp(`"mode":"${mode}"`));
+      assert.match(result.out, /"callerRejection":true/);
+      assert.match(result.out, /"falseCompletion":false/);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
