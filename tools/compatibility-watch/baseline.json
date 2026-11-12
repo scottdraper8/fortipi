@@ -81,59 +81,59 @@
     "computer-fuse": {
       "catalogSha256": "c4c8b17f74da3c8b3563522a2c0d5356d4805d624ce4de15cb25a3e8c34051cc",
       "snapshot": {
-        "commit": "812bce58d2ea3735c12e6f6181c269c4010293df",
+        "commit": "de44ba6f3bf5cce67e9c9ecb6e561fdbc6f682ee",
         "version": "0.11.1",
         "paths": {
-          "packages": "c686b85393428dfe50cc1ba9d7470914d0dfce519d836eb4681b1698fa6ef53e",
-          "docs": "dfe45e1aa8cf723fe56c72cd2c4918bdc9cd76b1270092de8968f807cfa75c46",
+          "packages": "9e188792e4a332ffd24be4f51944069dfb1de9c1c5039aab921dc6bc0a3e460e",
+          "docs": "55666044ed613ac3f69857feca38ffbc6b28d3ef87e82fcf40218beb54221498",
           "packages/computer/package.json": "9888d861577c6f0e7e96da0f2e06d6255c5a1860854f0dbf9aa47d15e5b0c202",
           "packages/computerd/package.json": "744f8a44e477171537588812f84da9491a650998cd07d6a37f86d9e4cc53aeb9"
         },
-        "sha256": "1328ecc45339fc90a50589c912ef4b602697e3a2ab8f32b0e8df5b4b0bd18513"
+        "sha256": "a22383768a1f0c39719c873195f1054ebad49d8010f705af365b09e964611ca9"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@cloudflare/computer": "0.11.1"
       },
-      "reviewedAt": "2026-11-12T10:44:05.460Z",
-      "reviewNote": "Exact published0.11.1 source812bce58 reviewed with used API declarations/source maps and actual Loader close/reconnect/full-sync qualification; new pending-sync storage/fingerprint2 implications recorded in phase3/thread-3/image-security-upgrade.md. Daemon source is built anew with signed Node22.23.5; actual Linux SEA/image/runtime/recipient proofs still pending. This is not a clearance of the old prebuilt SEA or later upstream source. All other entries unchanged."
+      "reviewedAt": "2026-11-12T18:07:03.606Z",
+      "reviewNote": "Reviewed immutable812bce58 to de44ba6f (PR323): optional Codemode scheme and browser specifier descriptions; codemode default and FortiPi modules:{} / onInterrupt:fail remain. Close/drain, SQL, journal/fingerprint2, container/RPC/auth, computerd/FUSE/native ABI and manifests/locks have no applicable change. Published0.11.1 remains source812b; installed SDK and accepted8ead image/source stay unchanged. Reference-only review, not adoption of unpublished code or new runtime/security/live proof. Scope: phase3/thread-8/candidate-computer-review.md."
     },
     "agents-lifecycle": {
       "catalogSha256": "6845cb5c33905cbac363710a051956451ab229dde00e4dbaf1cd5a9a7fbca352",
       "snapshot": {
-        "commit": "f0f4ed98f6733b1f09b615efe8de0b626b722691",
+        "commit": "46daba47a5f675aae42aa0514ce96437c804f3cd",
         "version": "0.33.0",
         "paths": {
-          "packages/agents": "feab7d876e0406a41018d219aea25886712160d6183c9462a1bb76f3b68105c0",
+          "packages/agents": "d4484938f9173885c752234a12d7657fa33cd939d6ef5e29e426364853f3d24e",
           "packages/agents/package.json": "5a88cead6a563890a7a7bbfa17a719f0d1bc7b03e167e8a3f64235f74e900ab9",
           "docs/agents/harnesses/pi.md": "879415c6f6ecf8fc5e6d5a1a9bba2f70e23cb37159517962848bdf5924d4239b"
         },
-        "sha256": "17d34e5e3a7b3a38575487f96e401ae74a728999842cfff0b6c37d8fddc81e03"
+        "sha256": "540ffe8532de9ef4f1c6fc6ffc0c3ebaeccce7f48297a17a875b1bf600223670"
       },
       "pins": {
         "apps/worker/package.json#dependencies/agents": "0.33.0"
       },
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed Agents 0.33.0 changelog and PiHarness guide: Pi 1.5 peers, Lifecycle host wake/recovery, batched streamed persistence and session.watch API. Pi 1.5 storage is not readable by 1.4. Retain pin; actual recovery/rollback constraints remain runtime release obligations."
+      "reviewedAt": "2026-11-12T18:07:33.885Z",
+      "reviewNote": "Reviewed exact f0f4ed98...46daba47 three-commit range. 5071 Lifecycle retry/outcome fence is the accepted declared patch. Direct WebSockets is used: qualified application attachment/message/post-authority guards reject missing or host-closed state and closed durable budgets; actual queued-frame/host1008 proof is bounded, not SDK transport or post-eviction clearance. CapnWeb disabled; CP native WS separate. Routed Queue/Scheduler and Agents-managed MCP changes unused. Retain agents0.33.0/patch/lock. Reference only; no unpublished adoption, runtime/image/deployed approval. Evidence: phase3/thread-8/candidate-agents-pi-review.md."
     },
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "74dcca7d4140403eaa81c3e7124e73b63a0cb106",
+        "commit": "2443c687e3fbc53af7b3a8ab8dc21a170cdf0d51",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
-          "packages/ai": "0c86af0adc997540076dbd8717f3e644e2069562875e2aff2e2015560d7a9531",
-          "packages/chord": "2d2eb45934bdb40e41a447b16223220da9a9b422166af1389b9aa74a80dacbf2",
+          "packages/ai": "91ed66697d7398fb0d507afeaa6b6b06f4ad4972aeae8117dbf3d8c297766235",
+          "packages/chord": "6cd48e22d7ff31d762141e9e41c5d16f8c74363f4556609086f4918f7af29a64",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
-          "packages/durable": "d59a45112e58a585d28e45f15fcb021171410e2529a1c674a5991ea09eddbbfc",
-          "packages/env": "fbd7273e15859bbe168fe54230baef84741bb7f0864725fd63bf1ef6b97f8e25",
+          "packages/durable": "dc87d765abc06c7764d3569f4bfc5aacb424eec3573a9aabd4197c346d5ef2fa",
+          "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
           "packages/mcp": "1f337636b01da98ca9088abb679318bdcf3b9f06ac9f14d56d63a4825b33df2a",
           "packages/schema": "1cac0355eee29b45658e037766a7b983f01a57dfa444d973e66365317f6c1752",
           "packages/telemetry": "cb8f452fda82cec5074961cc6854226cd74474490b92b3208a13e26e84ff28e7",
-          "packages/tui": "6f78a812e7b746d74b2e502e3718486f5ef9fff01d0942860e5d87a754fe95d7",
+          "packages/tui": "9b71a3439eb5858a0b46a15713ad41690e5ed5c6fef8d8fb38b259617530fd9f",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "90ecc38eca5f45a0946c22916a29d36f21f35fce4953ed5123603dcfee1b1a6c"
+        "sha256": "46a12a829e55265f016cb328f07de3b4e17e89d6538d61d389d14b7f7255ff13"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -145,26 +145,26 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-11T10:00:56.008Z",
-      "reviewNote": "Reviewed 49fe0a2...74dcca7 primary diffs: AI README/tests and unrelated coding-agent port/docs changes, no selected runtime API/package version change. Scope now explicitly covers used Pi packages and shared agent/env/mcp sources, excluding unused coding-agent/evals. Retain locked1.5.2; this is a reference, not runtime compatibility proof."
+      "reviewedAt": "2026-11-12T18:35:13.533Z",
+      "reviewNote": "Reviewed exact74dcca...2443 using full scoped tree/archive closure and uncapped incremental comparison. Existing waiter backport retained; unpublished durable namespace/Chord/web changes not adopted. Earned Anthropic nonstrict root additionalProperties loss repaired only by official aa47 declared PiAI1.5.2 patch966118ea; a360900 independently qualified original Request RED/patched GREEN, explicit/omitted/strict controls, archive/lock preservation and242 asset closure. Trusted AJV enforcement remains. Subsequent841dc changes only apps/p2 CSS/test; watched hashes unchanged. Retain installed versions and prior patches. Reference review resolves this defect, not live/provider/image/deployed/release approval. Evidence: thread-8/candidate-agents-pi-review.md and thread-5/pi-anthropic-schema-{repair,enforcer}.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "1e688baedfe8b61b091043832b438c362590953a",
+        "commit": "51faf22a92fc307194c25e37473a2805c00dbd02",
         "version": "4.161.0",
         "paths": {
-          "packages/wrangler": "e6aa62717481212d88874105f9aabf65921047e53ea27bc7a8938423c6739815",
+          "packages/wrangler": "6e8a66ea26338a8e574f43cccb43625d9a0c3116eb7d82e7cd4c5d0261b4cba9",
           "packages/wrangler/package.json": "c877d86ad89cff48b01d169528c09ea474627cc41beaba1314d273c32ac66fba"
         },
-        "sha256": "77a89dbdddad0367772d8d863a83ca0ac3211211c12b09c50d0f1475d52cf4ae"
+        "sha256": "b69306ae9601823ea3ff811a6e036fc67537e0812e6d6240d3cb180b99aa7101"
       },
       "pins": {
         "apps/worker/package.json#devDependencies/wrangler": "4.161.0",
         "packages/fortipi-cli/package.json#dependencies/wrangler": "4.161.0"
       },
-      "reviewedAt": "2026-11-12T14:35:17.707Z",
-      "reviewNote": "Reviewed exact published Wrangler4.161.0 and Miniflare5.20261110.2-beta source1e688ba plus actual archive/source claims, SRI/signatures, lifecycle/licenses/OSV. Experimental Build Output sourcemaps, relative asset redirects, Netlify detection and remote-session/profile fixes reviewed; FortiPi keeps JSONC/ordinary CLI/local-only dev with unchanged credential allowlists and no static assets remote bindings. Both SDK packages still EXACT-pin workerd1.20261110.1; workers-types5.20261112.1 remains peer-compatible. Actual narrow Harness/installed-consumer/strict/notice/schema evidence and limits: phase3/thread-1/sdk-4161-followup.md. Release reference only; later unpublished main remains unacknowledged and deployed/image/runtime proof is separate."
+      "reviewedAt": "2026-11-12T17:58:35.928Z",
+      "reviewNote": "Reviewed immutable1e688ba...51faf22 primary compare and all4commits; independently verified frozen16:54:34 snapshot/path hashes and unchanged published Wrangler4.161.0/Miniflare5.20261110.2-beta SRIs, both exact workerd1.20261110.1. Only Wrangler production delta is c889551b local hot-reload GET/HEAD retry-queue drain; applicable to that dev race, not a demonstrated security fix. Fixed-source listen/fetch/close and fresh-process recovery do not prove hot-reload behavior; pinned release lacks this unpublished fix and no hot-reload clearance is claimed. Browser Run quick actions/session disconnect, Waku and remote-KV E2E changes are unused/fixture-only. Schema, ordinary prepare/deploy/login/secret/credential environments and Container image APIs unchanged. Retain installed published graph; do not adopt unpublished main. Reviewed reference only, not runtime/deployed/image/release approval; paid work deferred. Evidence: phase3/thread-8/candidate-wrangler-review.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
@@ -183,16 +183,16 @@
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
       "snapshot": {
-        "commit": "e9c277643b0249c50f6e6de5413be8a88ea11b6a",
-        "version": "v26.13.1",
-        "sha256": "84d91b281316e78e5dc988526d4545e46c431dd6544107003a86a08dcbd27e5f",
+        "commit": "dd138afdd6f2edfff2153c0b964a56f0ae8de7e0",
+        "version": "v27.0.0-alpha.0.1.0",
+        "sha256": "5db017d2dba8625951b2a948b9a54ffe7cc5d41be233da438b3a59ab8ccdfadb",
         "paths": {}
       },
       "pins": {
         "package.json#fortipi/toolchain/node": "26.13.1"
       },
-      "reviewedAt": "2026-11-12T09:46:34.863Z",
-      "reviewNote": "Reviewed official 2026-11-11 Node 26.13.1 security release/advisory and exact release tag. Replaces host/product-minimum 26.13.0 for high/medium HTTP2/TLS/HTTPS and other fixes; official archive signed SHA256 verified with active Node release key. Bundled npm observed 11.20.0 unchanged; local native/type/license/installed-consumer evidence in phase3/thread-1/node-security-patch.md. Historical Linux/image/embedded Node identities remain separate, not newly certified. No other watch entry accepted."
+      "reviewedAt": "2026-11-12T17:58:37.207Z",
+      "reviewNote": "Reviewed official Node v27.0.0-alpha.0.1.0 release/tag dd138af (annotated ddfef317), explicitly Alpha despite GitHub prerelease=false. Official production guidance requires Active/Maintenance LTS and still identifies 26.13.1 as Latest LTS; retain exact security-patched 26.13.1 and signed archive identity from phase3/thread-1/node-security-patch.md. November11 security advisory remains current. Alpha child_process/X509/DNS/SEA/runtime changes are not adopted or certified; native ABI and historical embedded Node/image identities remain separate. Only Node reference reviewed; details phase3/thread-8/candidate-node-review.md."
     },
     "pnpm": {
       "catalogSha256": "e58410592c8f99f5a020cb7c675a8fb1adcab60b7954df4ee66f045f48f14708",
