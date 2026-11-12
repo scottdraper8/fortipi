@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, X509Certificate } from "node:crypto";
 import { once } from "node:events";
+import { createReadStream } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -209,8 +210,7 @@ export async function archiveInventory(
   let manifest: Record<string, unknown> | undefined;
   let total = 0;
   let failure: unknown;
-  await listTar({
-    file: path,
+  const parser = listTar({
     strict: true,
     onReadEntry(entry) {
       try {
@@ -262,14 +262,30 @@ export async function archiveInventory(
             if (chunks) manifest = object(JSON.parse(Buffer.concat(chunks).toString("utf8")));
           } catch (error) {
             failure = error;
+            parser.abort(error instanceof Error ? error : new Error("Archive rejected"));
           }
         });
       } catch (error) {
         failure = error;
-        entry.resume();
+        parser.abort(error instanceof Error ? error : new Error("Archive rejected"));
       }
     },
   });
+  const finished = once(parser, "end");
+  const input = createReadStream(path, { highWaterMark: 64 * 1024 });
+  input.on("error", (error) => {
+    failure = error;
+    parser.abort(error);
+  });
+  parser.once("error", () => input.destroy());
+  try {
+    input.pipe(parser);
+    await finished;
+  } catch (error) {
+    throw failure ?? error;
+  } finally {
+    input.destroy();
+  }
   if (failure) throw failure;
   assert.ok(manifest, "Missing package manifest");
   if (expected) assert.equal(manifest.name, expected.name, "Archive package role differs");
