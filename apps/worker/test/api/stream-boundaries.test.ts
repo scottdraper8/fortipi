@@ -14,6 +14,7 @@ interface Attachment {
   __pk: { uri: string };
   __user: {
     authorityId: string;
+    closed?: boolean;
     credentialId: string;
     generation: number;
     grantVersion: number;
@@ -35,6 +36,127 @@ const scope = (agentId: string, conversationIds: string[]): D.ResourceScope => (
   backendIds: [],
   tools: [],
   actions: ["events.read"],
+});
+
+test("a real command queued across authorization cannot enter the API after the host closes its socket", {
+  timeout: 20000,
+}, async (t) => {
+  const h = await harness({ main });
+  let socket: WebSocket | undefined;
+  let probe: Probe | undefined;
+  try {
+    const { agent, conversation } = await setup(h);
+    const cid = conversation.conversationId;
+    const other = await h.api<D.Conversation>(`/v1/agents/${agent.agentId}/conversations`, {
+      requestId: crypto.randomUUID(),
+    });
+    assert.equal(other.status, 201);
+    const resources = {
+      ...scope(agent.agentId, [cid]),
+      actions: ["events.read", "messages.submit"],
+    };
+    const credential = await h.api<D.CredentialReceipt>("/v1/admin/credentials", {
+      requestId: crypto.randomUUID(),
+      role: "client",
+      grants: [
+        {
+          grantId: "stream",
+          version: 1,
+          resources: { ...resources, actions: [...resources.actions, "tickets.mint"] },
+        },
+      ],
+    });
+    assert.equal(credential.status, 201);
+    if (credential.body.state !== "issued") assert.fail("Synthetic client issuance required");
+    const client = await connect(h, resources, credential.body.token);
+    socket = client.socket;
+    const actor = h.env.AGENT_SESSIONS.getByName(agent.agentId) as Probe;
+    probe = actor;
+    await probe.observeSocketClose();
+    assert.equal(
+      (await client.response({ type: "ping", requestId: crypto.randomUUID() })).type,
+      "ack",
+    );
+    const before = await probe.streamSnapshot(cid);
+    const requestId = crypto.randomUUID();
+    await probe.holdSocketCommand(cid, requestId);
+    socket.send(
+      JSON.stringify({
+        type: "message.submit",
+        requestId,
+        input: {
+          operationId: "submitMessage",
+          path: { id: cid },
+          query: {},
+          body: {
+            clientRequestId: crypto.randomUUID(),
+            content: "post-host-close",
+            busyBehavior: "followUp",
+          },
+        },
+      }),
+    );
+    await eventually(
+      () => actor.socketCommandReport(),
+      (value) => value.held,
+    );
+    const denied = await client.response({
+      type: "conversation.unsubscribe",
+      requestId: crypto.randomUUID(),
+      conversationId: other.body.conversationId,
+    });
+    assert.equal(denied.type, "error");
+    assert.equal((await client.closed())?.code, 1008);
+    const held = await probe.socketCommandReport();
+    const budgetBeforeRelease = await probe.socketBudgetJson();
+    assert.equal(held.submissionCalls, 0);
+    assert.equal(held.finished, false);
+    await probe.releaseSocketCommand();
+    const after = await eventually(
+      () => actor.socketCommandReport(),
+      (value) => value.finished,
+    );
+    const snapshot = await probe.streamSnapshot(cid);
+    const closes: CloseSample[] = JSON.parse(await probe.closeSamplesJson());
+    assert.ok(
+      closes.some((entry) => entry.code === 1008),
+      "The actual host closed the native socket",
+    );
+    t.diagnostic(
+      JSON.stringify({
+        hostClosed: true,
+        beforeCommandCalls: held.submissionCalls,
+        afterCommandCalls: after.submissionCalls,
+        submissionOutcome: after.submissionOutcome,
+        beforeCursor: before.lastEventSeq,
+        afterCursor: snapshot.lastEventSeq,
+      }),
+    );
+    assert.equal(
+      after.submissionCalls,
+      0,
+      "Host closure must reject the queued command before API execution",
+    );
+    assert.equal(
+      await probe.socketBudgetJson(),
+      budgetBeforeRelease,
+      "A closed socket cannot charge another delivery frame",
+    );
+    assert.equal(
+      closes.find((entry) => entry.code === 1008)?.attachment.__user.closed,
+      true,
+      "Host closure is retained in the real hibernation attachment",
+    );
+    assert.equal(
+      snapshot.lastEventSeq,
+      before.lastEventSeq,
+      "No durable event may be appended by the closed socket",
+    );
+  } finally {
+    await probe?.releaseSocketCommand();
+    socket?.close();
+    await h.close();
+  }
 });
 
 test("a real socket lifetime bounds aggregate frames and bytes without a fabricated drain counter", {

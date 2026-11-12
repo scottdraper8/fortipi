@@ -22,8 +22,70 @@ export class TestAgentSession extends RuntimeAgent {
   #deliveryHold: { entered: boolean; gate: PromiseWithResolvers<void> } | undefined;
   readonly #deliveryWrites = new WeakSet<Sql>();
   #replayCaptures = 0;
+  #commandGate:
+    | {
+        conversationId: string;
+        requestId: string;
+        entered: boolean;
+        finished: boolean;
+        release: PromiseWithResolvers<void>;
+      }
+    | undefined;
+  #submissionCalls = 0;
+  #submissionOutcome: number | string | null = null;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    const authorize = this.authority.authorize.bind(this.authority);
+    this.authority.authorize = async (...args) => {
+      await authorize(...args);
+      const gate = this.#commandGate;
+      if (
+        gate &&
+        !gate.entered &&
+        args[1] === "messages.submit" &&
+        args[2] === gate.conversationId
+      ) {
+        gate.entered = true;
+        // Hold only after the real authority check, outside every storage queue.
+        await gate.release.promise;
+      }
+    };
+    const handleApi = this.handleApi.bind(this);
+    this.handleApi = async (...args) => {
+      if (args[1].operationId === "submitMessage") this.#submissionCalls++;
+      const result = await handleApi(...args);
+      if (args[1].operationId === "submitMessage")
+        this.#submissionOutcome = result.ok ? result.value.status : result.code;
+      return result;
+    };
+    const host = this as unknown as {
+      webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void>;
+    };
+    const message = host.webSocketMessage.bind(host);
+    // Observe completion of the actual platform-delivered callback. Lifecycle
+    // installs this public DO handler configurable but non-writable.
+    Object.defineProperty(this, "webSocketMessage", {
+      configurable: true,
+      value: async (socket: WebSocket, data: string | ArrayBuffer) => {
+        let requestId: unknown;
+        if (typeof data === "string") {
+          try {
+            const value: unknown = JSON.parse(data);
+            if (value && typeof value === "object" && "requestId" in value)
+              requestId = value.requestId;
+          } catch {
+            // The real handler retains validation/error behavior.
+          }
+        }
+        const gate = this.#commandGate;
+        const capture = gate?.requestId === requestId ? gate : undefined;
+        try {
+          await message(socket, data);
+        } finally {
+          if (capture) capture.finished = true;
+        }
+      },
+    });
     const replay = this.store.replay.bind(this.store);
     this.store.replay = async (...args) => {
       const value = await replay(...args);
@@ -76,6 +138,26 @@ export class TestAgentSession extends RuntimeAgent {
   }
   replayCaptures() {
     return this.#replayCaptures;
+  }
+  holdSocketCommand(conversationId: string, requestId: string) {
+    this.#commandGate = {
+      conversationId,
+      requestId,
+      entered: false,
+      finished: false,
+      release: Promise.withResolvers<void>(),
+    };
+  }
+  releaseSocketCommand() {
+    this.#commandGate?.release.resolve();
+  }
+  socketCommandReport() {
+    return {
+      held: this.#commandGate?.entered ?? false,
+      finished: this.#commandGate?.finished ?? false,
+      submissionCalls: this.#submissionCalls,
+      submissionOutcome: this.#submissionOutcome,
+    };
   }
 
   // Read-only observation around the real public socket.close; no forged

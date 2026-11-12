@@ -54,6 +54,7 @@ interface SocketAuthority {
 }
 interface SocketState {
   authorityId: string;
+  closed?: true;
   credentialId: string;
   generation: number;
   grantVersion: number;
@@ -714,7 +715,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
           state.credentialId === input.subject.credentialId &&
           state.generation < input.subject.minimumGeneration
         )
-          connection.close(1008, "Authority revoked");
+          this.#closeSocket(connection, 1008, "Authority revoked");
       }
       return ack;
     });
@@ -910,12 +911,28 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       subscriptions: {},
     } satisfies SocketState);
   }
+  #closeSocket(connection: Connection<SocketState>, code: number, reason: string): void {
+    const state = connection.state;
+    if (state?.closed) return;
+    if (state) connection.setState({ ...state, closed: true });
+    connection.close(code, reason);
+  }
+  async #socketOpen(connection: Connection<SocketState>): Promise<void> {
+    const state = connection.state;
+    check(state && !state.closed, "unauthenticated", "Socket closed or attachment missing");
+    const budget = await this.store.get<SocketBudget>("socket-delivery", state.authorityId);
+    check(
+      budget && !budget.closed && !connection.state?.closed,
+      "unauthenticated",
+      "Socket closed or delivery allowance unavailable",
+    );
+  }
   async #socketContext(
     connection: Connection<SocketState>,
     resources: D.ResourceScope,
   ): Promise<D.AuthContext> {
     const state = connection.state;
-    check(state, "unauthenticated", "Socket attachment missing");
+    check(state && !state.closed, "unauthenticated", "Socket closed or attachment missing");
     const authority = await this.store.get<SocketAuthority>("socket-authority", state.authorityId);
     check(
       authority && authority.identity.expiresAt > Date.now(),
@@ -944,6 +961,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
     };
     for (const action of resources.actions)
       await this.authority.authorize(auth, action, resources.conversationIds[0], resources);
+    await this.#socketOpen(connection);
     return auth;
   }
   async #send(
@@ -957,6 +975,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
     resync?: D.ResyncRequired,
     forceResync = false,
   ): Promise<boolean> {
+    if (connection.state?.closed) return false;
     if (values.length === 0 && !forceResync) return true;
     const authorityId = connection.state?.authorityId;
     check(authorityId, "unauthenticated", "Socket attachment missing");
@@ -1004,6 +1023,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         return { frames, closed: budget.closed, alreadyClosed: false };
       });
       if (current) await this.authority.current(current.auth, current.resources);
+      if (connection.state?.closed) return false;
       if (reserved.alreadyClosed) return false;
       let attachment: SocketState | undefined;
       const change = current?.subscription;
@@ -1019,7 +1039,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
           change.expectedAfter !== undefined &&
           state.subscriptions[change.conversationId] !== change.expectedAfter
         ) {
-          if (reserved.closed) connection.close(1013, "Stream requires resync");
+          if (reserved.closed) this.#closeSocket(connection, 1013, "Stream requires resync");
           return false;
         }
         const subscriptions = { ...state.subscriptions };
@@ -1033,7 +1053,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         );
         attachment = { ...state, subscriptions };
         check(
-          new TextEncoder().encode(JSON.stringify(attachment)).length <= 2048,
+          new TextEncoder().encode(JSON.stringify({ ...attachment, closed: true })).length <= 2048,
           "payload_too_large",
           "Attachment limit exceeded",
         );
@@ -1041,7 +1061,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       for (const data of reserved.frames) connection.send(data);
       if (attachment && !reserved.closed) connection.setState(attachment);
       if (reserved.closed && !reserved.alreadyClosed)
-        connection.close(1013, "Stream delivery allowance exhausted; reconnect");
+        this.#closeSocket(connection, 1013, "Stream delivery allowance exhausted; reconnect");
       return !reserved.closed;
     });
   }
@@ -1049,6 +1069,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
     const connection = raw as Connection<SocketState>;
     let requestId = id();
     try {
+      await this.#socketOpen(connection);
       check(
         typeof message === "string" &&
           new TextEncoder().encode(message).length <= wireLimits.jsonBytes,
@@ -1132,12 +1153,13 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       try {
         await this.#send(connection, [{ type: "error", requestId, error: body }]);
       } catch {
-        connection.close(1013, "Stream overflow");
+        this.#closeSocket(connection, 1013, "Stream overflow");
         return;
       }
       if (failed.code === "unauthorized" || failed.code === "unauthenticated")
-        connection.close(1008, "Authority expired");
-      else if (failed.code === "quota_exceeded") connection.close(1013, "Stream overflow");
+        this.#closeSocket(connection, 1008, "Authority expired");
+      else if (failed.code === "quota_exceeded")
+        this.#closeSocket(connection, 1013, "Stream overflow");
     }
   }
   async #deliver(connection: Connection<SocketState>, cid: string): Promise<void> {
@@ -1180,7 +1202,8 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
             await this.#deliver(connection, cid);
           } catch (error) {
             const code = failure(error, id()).code;
-            connection.close(
+            this.#closeSocket(
+              connection,
               code === "unauthorized" || code === "unauthenticated" ? 1008 : 1013,
               "Stream requires authorization or resync",
             );
