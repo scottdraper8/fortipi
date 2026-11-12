@@ -22,11 +22,59 @@ export async function publicFlow(
 ) {
   const { agentId, conversationId } = input;
   const observe = (phase: string) => input.observe?.(phase);
+  const started = Date.now();
+  const backoffs: number[] = [];
+  async function request<T>(operation: () => Promise<T>): Promise<T> {
+    for (;;) {
+      try {
+        return await operation();
+      } catch (error) {
+        const pressure = error as {
+          code?: string;
+          status?: number;
+          retryable?: boolean;
+          retryAfterMs?: number;
+          details?: { retryAfterMs?: number };
+        };
+        const wait = pressure.retryAfterMs ?? pressure.details?.retryAfterMs;
+        // Only an explicit public refusal authorizes this bounded retry. Each
+        // mutating closure below retains its original intent/request ID. A
+        // transport/uncertain failure is never replayed by this observer.
+        if (
+          pressure.code !== "rate_limited" ||
+          pressure.status !== 429 ||
+          pressure.retryable !== true ||
+          !Number.isSafeInteger(wait) ||
+          !wait ||
+          wait < 1 ||
+          wait > 60000 ||
+          backoffs.length >= 3 ||
+          Date.now() + wait > started + 240000
+        )
+          throw error;
+        backoffs.push(wait);
+        await new Promise<void>((accept) => setTimeout(accept, wait));
+      }
+    }
+  }
+  async function connect(open: () => ReturnType<typeof client.conversations.subscribe>) {
+    return request(async () => {
+      const candidate = open();
+      try {
+        await candidate.ready;
+        return candidate;
+      } catch (error) {
+        candidate.close();
+        await candidate.done.catch(() => {});
+        throw error;
+      }
+    });
+  }
   observe("negotiate");
-  const protocol = await client.negotiate();
+  const protocol = await request(() => client.negotiate());
   requireFact(protocol.protocolVersion === "1.0", "Actual discovery negotiation required");
   observe("original-snapshot");
-  const original = await client.conversations.get(conversationId);
+  const original = await request(() => client.conversations.get(conversationId));
   const seen: DurableEvent[] = [];
   let appliedSequence = original.lastEventSeq;
   let volatile = 0;
@@ -43,26 +91,28 @@ export async function publicFlow(
     seen.push(structuredClone(event));
   };
   observe("first-subscribe");
-  let subscription = client.conversations.subscribe(conversationId, {
-    agentId,
-    maxReconnects: 0,
-    onSnapshot(snapshot) {
-      appliedSequence = snapshot.lastEventSeq;
-    },
-    onEvent: accept,
-  });
+  let subscription = await connect(() =>
+    client.conversations.subscribe(conversationId, {
+      agentId,
+      maxReconnects: 0,
+      onSnapshot(snapshot) {
+        appliedSequence = snapshot.lastEventSeq;
+      },
+      onEvent: accept,
+    }),
+  );
   let offlineObserver: ReturnType<typeof second.conversations.subscribe> | undefined;
   try {
     await subscription.ready;
     const intent = client.messageIntent(conversationId, "seed1010-public-first", "followUp");
     observe("first-send");
-    const first = await intent.send();
+    const first = await request(() => intent.send());
     await until(async () =>
       seen.some((e) => e.type === "task.completed" && "taskId" in e && e.taskId === first.taskId),
     );
     observe("first-task-observe");
     requireFact(
-      (await client.tasks.get(first.taskId)).status.state === "completed",
+      (await request(() => client.tasks.get(first.taskId))).status.state === "completed",
       "Real terminal task required",
     );
     requireFact(
@@ -81,7 +131,7 @@ export async function publicFlow(
     );
     observe("first-receipt-retry");
     requireFact(
-      JSON.stringify(await intent.send()) === JSON.stringify(first),
+      JSON.stringify(await request(() => intent.send())) === JSON.stringify(first),
       "Explicit idempotent send must retain actual receipt",
     );
     const saved = subscription.cursor,
@@ -91,34 +141,46 @@ export async function publicFlow(
     await subscription.done;
     const offlineCompletions = new Set<string>();
     observe("second-client-subscribe");
-    offlineObserver = second.conversations.subscribe(conversationId, {
-      agentId,
-      maxReconnects: 0,
-      onSnapshot() {},
-      onEvent(event) {
-        if (event.durability === "durable" && event.type === "task.completed" && event.taskId)
-          offlineCompletions.add(event.taskId);
-      },
-    });
+    offlineObserver = await connect(() =>
+      second.conversations.subscribe(conversationId, {
+        agentId,
+        onSnapshot() {},
+        onEvent(event) {
+          if (event.durability === "durable" && event.type === "task.completed" && event.taskId)
+            offlineCompletions.add(event.taskId);
+        },
+      }),
+    );
     await offlineObserver.ready;
     observe("offline-send");
-    const offline = await second.conversations.send(conversationId, {
+    const offlineInput = {
       clientRequestId: crypto.randomUUID(),
       content: "seed1010-public-offline",
-      busyBehavior: "followUp",
-    });
+      busyBehavior: "followUp" as const,
+    };
+    const offline = await request(() => second.conversations.send(conversationId, offlineInput));
     await until(async () => offlineCompletions.has(offline.taskId));
+    // This socket only acknowledges the second client's terminal fact. Close
+    // it before a rate-guided HTTP wait can outlive an otherwise idle stream.
+    observe("offline-observer-close");
+    offlineObserver.close();
+    try {
+      await offlineObserver.done;
+    } catch (error) {
+      requireFact(
+        (error as { code?: string })?.code === "aborted",
+        "Unexpected failure while closing the acknowledged second-client observer",
+      );
+    }
+    offlineObserver = undefined;
     observe("offline-task-observe");
     requireFact(
-      (await second.tasks.get(offline.taskId)).status.state === "completed",
+      (await request(() => second.tasks.get(offline.taskId))).status.state === "completed",
       "The second client's actual committed completion must agree with public task state",
     );
-    offlineObserver.close();
-    await offlineObserver.done;
-    offlineObserver = undefined;
     requireFact(subscription.cursor === saved, "Disconnected projection cursor cannot advance");
     observe("offline-stored-replay");
-    const page = await second.conversations.events(conversationId, { after: saved });
+    const page = await request(() => second.conversations.events(conversationId, { after: saved }));
     requireFact(
       page.events.length > 0 &&
         page.events.some(
@@ -129,16 +191,18 @@ export async function publicFlow(
     const stored = page.events.map((e) => JSON.stringify(e));
     const start = seen.length;
     observe("original-client-resume");
-    subscription = client.conversations.subscribe(conversationId, {
-      agentId,
-      after: saved,
-      scope,
-      maxReconnects: 0,
-      onSnapshot() {
-        throw new Error("Retained cursor unexpectedly replaced by a snapshot");
-      },
-      onEvent: accept,
-    });
+    subscription = await connect(() =>
+      client.conversations.subscribe(conversationId, {
+        agentId,
+        after: saved,
+        scope,
+        maxReconnects: 0,
+        onSnapshot() {
+          throw new Error("Retained cursor unexpectedly replaced by a snapshot");
+        },
+        onEvent: accept,
+      }),
+    );
     await subscription.ready;
     await until(async () =>
       seen.some((e) => e.type === "task.completed" && "taskId" in e && e.taskId === offline.taskId),
@@ -149,7 +213,7 @@ export async function publicFlow(
       "Stored original event envelopes must equal applied offline replay",
     );
     observe("final-snapshot");
-    const projection = await client.conversations.get(conversationId);
+    const projection = await request(() => client.conversations.get(conversationId));
     requireFact(
       projection.lastEventSeq >= subscription.cursor &&
         projection.lastEventSeq > original.lastEventSeq,
@@ -169,6 +233,7 @@ export async function publicFlow(
       appliedEvents: seen.length,
       cursor: subscription.cursor,
       volatileEventsObserved: volatile,
+      publicRateLimitBackoffsMs: backoffs,
     };
   } finally {
     offlineObserver?.close();

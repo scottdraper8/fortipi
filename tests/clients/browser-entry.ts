@@ -57,7 +57,7 @@ const port: BrowserPort = {
           ...diagnostic,
           code: error.code,
           status: error.status,
-          retryAfterMs: error.retryAfterMs,
+          retryAfterMs: error.retryAfterMs ?? error.details?.retryAfterMs,
           ...(pressure
             ? {
                 pressure: {

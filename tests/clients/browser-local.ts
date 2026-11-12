@@ -52,7 +52,7 @@ async function browserProcess(args: string[], cwd: string, env: NodeJS.ProcessEn
       void stopTree(child).catch(() => child.kill("SIGKILL"));
     }, 30000);
   };
-  const timer = setTimeout(stop, 150000);
+  const timer = setTimeout(stop, 270000);
   child.stdout.on("data", (bytes: Buffer) => {
     if (Buffer.byteLength(stdout) + bytes.length > 1048576) stop();
     else stdout += bytes.toString();
