@@ -537,6 +537,10 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
             after: rows.at(-1)!.id,
           });
         }
+        await this.authority.current(
+          ctx,
+          scope({ agentIds: [this.agentId], actions: [route.action] }),
+        );
         return { status: 200, body: { items, ...(nextPageToken ? { nextPageToken } : {}) } };
       }
       if (request.operationId === "submitMessage")
@@ -595,15 +599,27 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         );
         return { status: 200, body };
       }
-      if (request.operationId === "describeJob")
-        return {
-          status: 200,
-          body: this.jobs.public((await this.jobs.state(request.path.id)).job),
-        };
-      if (request.operationId === "describeTask")
-        return { status: 200, body: await this.store.get<D.Task>("task", request.path.id) };
-      if (request.operationId === "describeApproval")
-        return { status: 200, body: await this.store.get<D.Approval>("approval", request.path.id) };
+      if (
+        request.operationId === "describeJob" ||
+        request.operationId === "describeTask" ||
+        request.operationId === "describeApproval"
+      ) {
+        const body =
+          request.operationId === "describeJob"
+            ? this.jobs.public((await this.jobs.state(request.path.id)).job)
+            : request.operationId === "describeTask"
+              ? await this.store.get<D.Task>("task", request.path.id)
+              : await this.store.get<D.Approval>("approval", request.path.id);
+        await this.authority.current(
+          ctx,
+          scope({
+            agentIds: [this.agentId],
+            conversationIds: resource.conversationId ? [resource.conversationId] : [],
+            actions: [route.action],
+          }),
+        );
+        return { status: 200, body };
+      }
       if (request.operationId === "decideApproval")
         return {
           status: 200,
