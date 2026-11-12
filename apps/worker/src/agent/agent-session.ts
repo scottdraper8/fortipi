@@ -420,6 +420,15 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
     }
     return { conversationId: key };
   }
+  async #repairBeforeRead(): Promise<void> {
+    try {
+      await this.projection.drain({ maxItems: 8, deadline: Date.now() + 5000 });
+    } catch {
+      // Admission/creation work was durably armed before effects. An unwritable
+      // repair marker cannot make a committed projection unreadable. The read
+      // still checks its own current authority and returns only committed H.
+    }
+  }
   async handleApi<K extends D.AgentOperationId>(
     ctx: D.AuthContext,
     input: D.OperationRequest<K>,
@@ -559,7 +568,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       if (request.operationId === "getConversation") {
         const existing = await this.store.get<ConversationRow>("conversation", request.path.id);
         check(existing?.published, "not_found", "Conversation unavailable");
-        await this.projection.drain({ maxItems: 8, deadline: Date.now() + 5000 });
+        await this.#repairBeforeRead();
         const body = await this.store.snapshot(request.path.id);
         await this.authority.current(
           ctx,
@@ -574,7 +583,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
       if (request.operationId === "replayEvents") {
         const existing = await this.store.get<ConversationRow>("conversation", request.path.id);
         check(existing?.published, "not_found", "Conversation unavailable");
-        await this.projection.drain({ maxItems: 8, deadline: Date.now() + 5000 });
+        await this.#repairBeforeRead();
         const body = await this.store.replay(request.path.id, request.query);
         await this.authority.current(
           ctx,
