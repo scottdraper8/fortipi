@@ -10,6 +10,8 @@ The accepted receipt binds operation, message, task and original event sequence.
 
 Creation and fork intents identify their actual Pi allocation with an application document written by the supported creation hook. Recovery scans bounded pages for that provenance. It does not create another conversation merely because an allocation response was lost. Fork history must come from the actual committed source prefix.
 
+Creation identities and growth estimates now precede model selection and capacity calls. Fork preparation scans the captured public entry prefix in pages of at most100 entries, persisting its cursor and5-second continuation. Its prospective estimate includes actual encoded public history and the object's observed physical high-water mark, not only the serialized fork instruction. The estimate is fixed before the capacity request. A hard hold or declared positive backoff is persisted before returning a failed public attempt; a queued drain rechecks eligibility after acquiring the same lane. Explicit matching retries remain available, while known completed receipts precede new sampling or capacity work.
+
 ## Application log and wake recovery
 
 Committed Pi entries and submission outcomes drive the application projection. Stream deltas and commit hints are advisory. Source identity, canonical messages, task mappings, admission receipts and terminal attestations survive replay-window reclamation. Snapshot and replay reads use a consistent application transaction; expired cursors require resynchronization.
@@ -20,7 +22,7 @@ The pinned Lifecycle same-ID replacement primitive loses a newer wake in the rep
 
 ## Dispatch and cancellation
 
-A tool's durable Pi task identity maps to one job and immutable argument digest. Child creation and its document reference share one `api.commit`. Human approval precedes target reservation and lease acquisition; executor consent remains independent. Before dispatch, the application retains the exact execution, reservation, lease, generation and fence.
+A tool's durable Pi task identity maps to one job and immutable argument digest. Child creation and its document reference share one `api.commit`. The initial job mapping also seeds validated base-manifest, root-binding and transfer-limit metadata atomically. Human approval precedes target reservation and lease acquisition; executor consent remains independent. Before dispatch, the application retains the exact execution, reservation, lease, generation and fence.
 
 After a dispatch attempt, recovery queries the existing execution. Absence or a lost response does not authorize another start. Prepared results remain pending until staging and the authoritative receipt, or verified unchanged-base evidence, have been checked. A lost commit response requires recovery of the matching retained authority fact and exact receipt. It cannot promote a different job, base, target or stale lease.
 
@@ -55,6 +57,8 @@ Storage uses conservative operational admission watermarks, actual public databa
 Every Agent registry uses the same actor controller for bounded encoded provider output, raw event work, queued bytes and concurrent provider lanes. Contiguous same-kind/index deltas batch at4KiB/100ms before isolated partial snapshots, preserving content and boundaries. Cancellation cannot free an uncooperative provider's lane without public result closure. A run's four-tool-round limit uses supported Pi configuration and survives reopen. These controls bound infrastructure work rather than provider usage.
 
 New model operations persist a stable prospective growth estimate before business effects; current public size plus unspent estimates determines queued admission. A consumed ACK alone cannot clear that estimate. Definitively unadmitted busy/idle attempts separately retain unused/0 proof and reclaim only after their queued observation is acknowledged. The public Pi Storage facade checks the watermark before the original commit without an outer transaction or delayed receipts. It delegates all reads, ID allocation, publication and close behavior. Owned writes check inside their existing queue. Already acknowledged competing writes survive refusal; physical overshoot and an unwritable marker remain possible, so this is an operational watermark rather than a universal hard bound.
+
+An export's ready/partial descriptor describes immutable bytes, independently of its pending capacity settlement. Copy memory is serialized per Agent, while existing Lifecycle repair handles retained settlement debt outside that lane. After normal scoped owner authorization, the retained-descriptor branch repeats local authority checks and starts no settlement RPC or wake/marker write. Actual settlement ACK and subsequent queued physical sample ACK remain necessary to clear the original growth claim. Free's1MiB per-artifact limit can yield an honest partial export; a backup containing only live references is insufficient.
 
 Actual local process recovery establishes survival of a committed canary, allocation provenance and one accepted Pi input across abrupt death. The sensitivity command builds disposable outputs, removes stable admission identity or splits child-reference persistence, and requires actual duplicate inputs or children. It does not count a compiler failure or timeout as detection.
 

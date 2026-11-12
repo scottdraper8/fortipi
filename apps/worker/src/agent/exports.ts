@@ -1,10 +1,11 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { EntryId } from "@earendil-works/pi-durable";
-import { check, digest, resourceId, ServiceError, same, scope, unwrap } from "../api/common.js";
+import { check, digest, resourceId, same, scope, unwrap } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Jobs } from "../execution/jobs.js";
 import type { Authority } from "./authority.js";
 import type { Conversations } from "./conversations.js";
+import { repairRetryAt } from "./repair-retry.js";
 import type { ConversationRow, Store } from "./store.js";
 
 interface RetainedExport {
@@ -60,6 +61,13 @@ export class AgentExports {
     );
   }
   async prepare(auth: D.AuthContext, input: D.ExportRequest): Promise<D.ExportDescriptor> {
+    return this.#prepare(auth, input, false);
+  }
+  async #prepare(
+    auth: D.AuthContext,
+    input: D.ExportRequest,
+    ownsCopyLane: boolean,
+  ): Promise<D.ExportDescriptor> {
     check(
       input.deadline > Date.now() &&
         Number.isSafeInteger(input.maxBytes) &&
@@ -98,7 +106,7 @@ export class AgentExports {
     }
     // Bound retained-copy working memory actor-wide; SQL/CP calls stay outside
     // one another's transactions. This lane does not own timers or execution.
-    return this.conversations.lanes.run("exports", async () => {
+    const copy = async (): Promise<D.ExportDescriptor> => {
       const prior = await this.store.get<RetainedExport>("export", input.exportId);
       if (prior) {
         check(
@@ -320,7 +328,18 @@ export class AgentExports {
       await this.conversations.host.arm();
       await this.authority.current(auth, resources);
       return this.descriptor(retained);
-    });
+    };
+    const attempt = async () => {
+      try {
+        return await copy();
+      } catch (error) {
+        const work = await this.store.get<ExportWork>("export-work", input.exportId);
+        if (work?.fingerprint === fingerprint && work.auth.principalId === auth.principalId)
+          await this.#defer(input.exportId, error);
+        throw error;
+      }
+    };
+    return ownsCopyLane ? attempt() : this.conversations.lanes.run("exports", attempt);
   }
   async #retained(retained: RetainedExport, auth: D.AuthContext): Promise<D.ExportDescriptor> {
     const resources = scope({ ...retained.resources, actions: [retained.action] });
@@ -328,27 +347,9 @@ export class AgentExports {
     return this.descriptor(retained);
   }
   async #defer(exportId: string, error: unknown): Promise<void> {
-    const retry = error instanceof ServiceError ? error.details?.retryAfterMs : undefined;
-    const held =
-      error instanceof ServiceError &&
-      (error.retryable === false ||
-        retry === 0 ||
-        error.code === "unauthorized" ||
-        error.code === "unauthenticated");
     const current = await this.store.get<ExportWork>("export-work", exportId);
     if (current)
-      await this.store.put(
-        "export-work",
-        exportId,
-        current,
-        undefined,
-        held
-          ? null
-          : Date.now() +
-              (typeof retry === "number" && Number.isSafeInteger(retry) && retry > 0
-                ? retry
-                : 30000),
-      );
+      await this.store.put("export-work", exportId, current, undefined, repairRetryAt(error));
   }
   async #complete(work: ExportWork, auth: D.AuthContext): Promise<void> {
     const resources = scope({ ...work.input.resources, actions: [work.input.action] });
@@ -394,7 +395,18 @@ export class AgentExports {
       try {
         if (await this.store.get("export", row.id)) {
           await this.#complete(row.value, auth);
-        } else await this.prepare(auth, { ...row.value.input, deadline: auth.deadline });
+        } else
+          await this.conversations.lanes.run("exports", async () => {
+            const current = await this.store.db.get<{ data: string }>(
+              "SELECT data FROM fp_records_v1 WHERE kind='export-work' AND id=? AND due<=?",
+              row.id,
+              Date.now(),
+            );
+            if (current) {
+              const work = JSON.parse(current.data) as ExportWork;
+              await this.#prepare(auth, { ...work.input, deadline: auth.deadline }, true);
+            }
+          });
       } catch (error) {
         await this.#defer(row.id, error);
       }

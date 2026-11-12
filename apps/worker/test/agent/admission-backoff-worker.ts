@@ -21,6 +21,7 @@ export class ControlPlane extends BaseControlPlane {
   #mode = "";
   #calls = 0;
   #lastFailureAt = 0;
+  #creation = false;
   override async reserveCapacity(
     auth: D.AuthContext,
     input: {
@@ -31,7 +32,8 @@ export class ControlPlane extends BaseControlPlane {
       admissionSlots: number;
     },
   ): Promise<D.Outcome<D.CapacityReservation>> {
-    if (!input.admissionSlots || !this.#mode) return super.reserveCapacity(auth, input);
+    if (!this.#mode || (this.#creation ? input.admissionSlots !== 0 : !input.admissionSlots))
+      return super.reserveCapacity(auth, input);
     this.#calls++;
     this.#lastFailureAt = Date.now();
     return this.#mode === "hold"
@@ -66,6 +68,7 @@ export class ControlPlane extends BaseControlPlane {
     const url = new URL(request.url);
     if (url.pathname === "/__admission-backoff/mode") {
       this.#mode = url.searchParams.get("mode") ?? "";
+      this.#creation = url.searchParams.get("target") === "creation";
       return Response.json(true);
     }
     if (url.pathname === "/__admission-backoff/trace")
@@ -85,7 +88,20 @@ export class TestAgentSession extends BaseAgent {
       const intents = await this.store.db.all<{ data: string; due: number | null }>(
         "SELECT data,due FROM fp_records_v1 WHERE kind='admission-intent' ORDER BY id LIMIT 100",
       );
+      const creations = await this.store.db.all<{ data: string; due: number | null }>(
+        "SELECT data,due FROM fp_records_v1 WHERE kind='creation' AND json_extract(data,'$.state')!='complete' ORDER BY id LIMIT 100",
+      );
       return Response.json({
+        creations: creations.map((row) => {
+          const value = JSON.parse(
+            row.data,
+          ) as import("../../src/agent/conversations.js").CreationIntent;
+          return {
+            operationId: value.operationId,
+            conversationId: value.conversationId,
+            due: row.due,
+          };
+        }),
         progress,
         intents: intents.map((row) => ({
           ...(JSON.parse(row.data) as AdmissionIntent),

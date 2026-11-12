@@ -3,6 +3,7 @@ import type { ConversationId, EntryId } from "@earendil-works/pi-durable";
 import { check, ServiceError, same } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Admission, AdmissionIntent, Conversations, CreationIntent } from "./conversations.js";
+import { repairRetryAt } from "./repair-retry.js";
 import type { ConversationRow } from "./store.js";
 
 export class Projection {
@@ -180,35 +181,26 @@ export class Projection {
         break;
       }
       try {
-        await this.conversations.lanes.run(row.value.conversationId, () =>
-          this.conversations.finishSubmission(row.value),
-        );
+        await this.conversations.lanes.run(row.value.conversationId, async () => {
+          const current = await store.db.get<{ data: string }>(
+            "SELECT data FROM fp_records_v1 WHERE kind='admission-intent' AND id=? AND due<=?",
+            row.id,
+            Date.now(),
+          );
+          if (current)
+            await this.conversations.finishSubmission(JSON.parse(current.data) as AdmissionIntent);
+        });
       } catch (error) {
         const permanent =
           error instanceof ServiceError &&
           (error.code === "unauthorized" || error.code === "unauthenticated");
-        const retryAfterMs =
-          error instanceof ServiceError ? error.details?.retryAfterMs : undefined;
-        const held =
-          permanent ||
-          (error instanceof ServiceError && error.retryable === false) ||
-          retryAfterMs === 0;
-        const retryAt = held
-          ? null
-          : Date.now() +
-            (typeof retryAfterMs === "number" &&
-            Number.isSafeInteger(retryAfterMs) &&
-            retryAfterMs > 0
-              ? retryAfterMs
-              : 30000);
-        const current = await store.get<AdmissionIntent>("admission-intent", row.id);
-        if (current) await store.put("admission-intent", row.id, current, undefined, retryAt);
+        const retryAt = repairRetryAt(error);
         await store.put("admission-pressure", row.id, {
           code: error instanceof ServiceError ? error.code : "interrupted",
           requiresCurrentAuthority: permanent,
           retryAt,
         });
-        if (!held) remaining = true;
+        if (retryAt !== null) remaining = true;
       }
       processed++;
     }
@@ -223,11 +215,18 @@ export class Projection {
         break;
       }
       try {
-        await this.conversations.lanes.run("creation", () =>
-          this.conversations.finishCreation(row.value),
-        );
-      } catch {
-        remaining = true;
+        await this.conversations.lanes.run("creation", async () => {
+          const current = await store.db.get<{ data: string }>(
+            "SELECT data FROM fp_records_v1 WHERE kind='creation' AND id=? AND due<=?",
+            row.id,
+            Date.now(),
+          );
+          if (current)
+            await this.conversations.finishCreation(JSON.parse(current.data) as CreationIntent);
+        });
+      } catch (error) {
+        const retryAt = repairRetryAt(error);
+        if (retryAt !== null) remaining = true;
       }
       processed++;
     }

@@ -46,7 +46,28 @@ for (const mode of ["hold", "backoff"] as const)
       assert.equal(validError(failed.body.error), true, JSON.stringify(validError.errors));
       const before = await trace();
       assert.equal(before.local.intents.length, 1);
+      assert.equal(
+        before.control.calls,
+        1,
+        "A known direct admission failure must not automatically reserve again",
+      );
+      if (mode === "hold")
+        assert.equal(
+          before.local.intents[0]?.due,
+          null,
+          "Direct admission failure must persist its hard hold before returning",
+        );
+      else
+        assert.ok(
+          (before.local.intents[0]?.due ?? 0) >= before.control.lastFailureAt + 120000,
+          "Direct admission failure must persist its complete positive backoff before returning",
+        );
       const pending = await trace(true);
+      assert.equal(
+        pending.control.calls,
+        before.control.calls,
+        "First drain cannot retry a known ineligible admission",
+      );
       assert.equal(pending.local.inspection.inputSubmissions, 0);
       assert.equal(pending.local.intents[0]?.operationId, before.local.intents[0]?.operationId);
       assert.deepEqual(pending.local.growth, before.local.growth);

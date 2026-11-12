@@ -6,13 +6,22 @@ import {
   type Cursor,
   defineDoc,
   type EntryId,
-  type SubmissionRecord,
 } from "@earendil-works/pi-durable";
 import type { PiHarness } from "agents/harness/pi";
-import { check, digest, Lanes, resourceId, same, scope, unwrap } from "../api/common.js";
+import {
+  check,
+  digest,
+  Lanes,
+  resourceId,
+  ServiceError,
+  same,
+  scope,
+  unwrap,
+} from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Authority } from "./authority.js";
-import type { ConversationRow, Store } from "./store.js";
+import { repairRetryAt } from "./repair-retry.js";
+import type { ConversationRow, GrowthClaim, Store } from "./store.js";
 
 export const CreationDoc = defineDoc({
   kind: "fortipi.creation",
@@ -35,7 +44,11 @@ export interface CreationIntent {
   parent?: string;
   through?: number;
   at?: number;
-  model: D.ModelConfig;
+  model?: D.ModelConfig;
+  operationId?: string;
+  growthBytes?: number;
+  policyVersion?: number;
+  forkEstimate?: { highWater: number; bytes: number; complete: boolean; cursor?: Cursor };
 }
 export interface Admission {
   key: string;
@@ -148,29 +161,6 @@ export class Conversations {
       let intent = await store.get<CreationIntent>("creation", key);
       if (intent) check(intent.digest === fingerprint, "conflict", "Creation identity changed");
       else {
-        store.admissionHeadroom(4096);
-        const model = await this.host.selectModel(
-          auth,
-          parent ? "conversations.fork" : "conversations.create",
-          parent?.conversation.conversationId,
-        );
-        await this.host.authority.physical.beforeGrowth(
-          auth,
-          scope({
-            agentIds: [this.host.agentId],
-            conversationIds: parent ? [parent.conversation.conversationId] : [],
-            actions: [parent ? "conversations.fork" : "conversations.create"],
-          }),
-        );
-        const capacity = unwrap(
-          await this.host.authority.control.reserveCapacity(auth, {
-            operationId: `create_${await digest({ key })}`,
-            ownerId: this.host.agentId,
-            policyVersion: 1,
-            bytes: 4096,
-            admissionSlots: 0,
-          }),
-        );
         if (parent) {
           check(
             fork && fork.through > 0 && fork.through <= parent.last,
@@ -198,7 +188,7 @@ export class Conversations {
             parent: parent.conversation.conversationId,
             through: fork.through,
             at: source.entry,
-            model,
+            forkEstimate: { highWater: store.physicalBytes(), bytes: 0, complete: false },
           };
         } else
           intent = {
@@ -208,21 +198,33 @@ export class Conversations {
             title: body.title ?? "Conversation",
             auth,
             state: "pending",
-            model,
           };
+        const candidate = intent;
+        const operationId = resourceId("m", this.host.agentId);
+        candidate.operationId = operationId;
+        candidate.policyVersion = store.policy.version;
+        const metadataBytes = new TextEncoder().encode(JSON.stringify(candidate)).length + 8192;
+        let growthBytes = (candidate.forkEstimate?.highWater ?? 0) + metadataBytes;
+        candidate.growthBytes = growthBytes;
+        const resources = scope({
+          agentIds: [this.host.agentId],
+          conversationIds: parent ? [parent.conversation.conversationId] : [],
+          actions: [parent ? "conversations.fork" : "conversations.create"],
+        });
+        await this.host.authority.physical.makeRoom(auth, resources, candidate.growthBytes);
         await store.transaction(async (tx) => {
-          await this.host.authority.current(
-            auth,
-            scope({
-              agentIds: [this.host.agentId],
-              conversationIds: parent ? [parent.conversation.conversationId] : [],
-              actions: [parent ? "conversations.fork" : "conversations.create"],
-            }),
-            tx,
-          );
-          await store.put("creation", key, intent, tx, Date.now());
+          await this.host.authority.current(auth, resources, tx);
+          if (candidate.forkEstimate) {
+            candidate.forkEstimate.highWater = Math.max(
+              candidate.forkEstimate.highWater,
+              store.physicalBytes(),
+            );
+            growthBytes = candidate.forkEstimate.highWater + metadataBytes;
+            candidate.growthBytes = growthBytes;
+          }
+          await store.claimGrowth(operationId, growthBytes, tx);
+          await store.put("creation", key, candidate, tx, Date.now());
           await store.put("meta", "deployment", auth.deploymentId, tx);
-          await store.put("creation-capacity", key, capacity, tx);
         });
       }
       await this.host.arm();
@@ -230,9 +232,66 @@ export class Conversations {
     });
   }
   async finishCreation(intent: CreationIntent): Promise<D.Conversation> {
+    try {
+      return await this.#finishCreation(intent);
+    } catch (error) {
+      const retryAt = repairRetryAt(error);
+      const current = await this.host.store.get<CreationIntent>("creation", intent.key);
+      if (current && current.state !== "complete")
+        await this.host.store.put("creation", intent.key, current, undefined, retryAt);
+      throw error;
+    }
+  }
+  async #finishCreation(intent: CreationIntent): Promise<D.Conversation> {
     const { store, pi } = this.host;
     const old = await store.get<ConversationRow>("conversation", intent.conversationId);
     if (old?.published) return this.#settleCreation(intent, old.conversation);
+    const auth = { ...intent.auth, deadline: Date.now() + 30000 };
+    const action = intent.parent ? "conversations.fork" : "conversations.create";
+    const resources = scope({
+      agentIds: [this.host.agentId],
+      conversationIds: intent.parent ? [intent.parent] : [],
+      actions: [action],
+    });
+    await this.host.authority.current(auth, resources);
+    if (intent.forkEstimate && !intent.forkEstimate.complete)
+      await this.#estimateFork(intent, auth, resources);
+    if (!intent.model) {
+      const model = await this.host.selectModel(auth, action, intent.parent);
+      await store.transaction(async (tx) => {
+        await this.host.authority.current(auth, resources, tx);
+        intent.model = model;
+        await store.put("creation", intent.key, intent, tx, Date.now());
+      });
+    }
+    const model = intent.model;
+    check(model, "interrupted", "Creation model unavailable");
+    if (!(await store.get("creation-capacity", intent.key))) {
+      check(
+        intent.operationId &&
+          intent.growthBytes !== undefined &&
+          intent.policyVersion !== undefined,
+        "interrupted",
+        "Creation reservation identity unavailable",
+      );
+      const operationId = intent.operationId;
+      await this.host.authority.physical.beforeGrowth(auth, resources);
+      const capacity = unwrap(
+        await this.host.authority.control.reserveCapacity(auth, {
+          operationId: intent.operationId,
+          ownerId: this.host.agentId,
+          policyVersion: intent.policyVersion,
+          bytes: intent.growthBytes,
+          admissionSlots: 0,
+        }),
+      );
+      await store.transaction(async (tx) => {
+        await this.host.authority.current(auth, resources, tx);
+        await store.bindGrowth(operationId, capacity.reservationId, tx);
+        await store.put("creation-capacity", intent.key, capacity, tx);
+      });
+    }
+    await this.host.authority.current(auth, resources);
     const harness = await pi.pi();
     if (!intent.piId) {
       // Reconcile the allocation commit before creating anything. Scan at most one bounded page per invocation.
@@ -251,7 +310,12 @@ export class Conversations {
       else if (page.next) {
         intent.scan = page.next;
         await store.put("creation", intent.key, intent, store.db, Date.now());
-        check(false, "interrupted", "Creation recovery continues", { reason: "uncertain_effects" });
+        throw new ServiceError(
+          "unavailable",
+          "Creation recovery continues",
+          { retryAfterMs: 5000 },
+          true,
+        );
       } else {
         await this.host.authority.authorize(
           { ...intent.auth, deadline: Date.now() + 30000 },
@@ -281,13 +345,15 @@ export class Conversations {
       }
       intent.state = "allocated";
       delete intent.scan;
-      await store.put("creation", intent.key, intent, store.db, Date.now());
+      await store.transaction(async (tx) => {
+        await this.host.authority.current(auth, resources, tx);
+        await store.put("creation", intent.key, intent, tx, Date.now());
+      });
     }
     check(intent.piId, "interrupted", "Allocation recovery pending");
     const piId = intent.piId;
-    await pi
-      .session(piId)
-      .setModel({ provider: intent.model.providerId, id: intent.model.modelId });
+    await this.host.authority.current(auth, resources);
+    await pi.session(piId).setModel({ provider: model.providerId, id: model.modelId });
     const conversation: D.Conversation = {
       conversationId: intent.conversationId,
       agentId: this.host.agentId,
@@ -297,6 +363,7 @@ export class Conversations {
       taskState: { state: "idle" },
     };
     await store.transaction(async (tx) => {
+      await this.host.authority.current(auth, resources, tx);
       if (await store.get("conversation", intent.conversationId, tx)) return;
       await store.put(
         "conversation",
@@ -333,13 +400,20 @@ export class Conversations {
         100,
         BACKGROUND_CONTEXT,
       );
+      await this.host.authority.current(auth, resources);
       for (const entry of entries.items) {
         if (row.bookmark && entry.id <= Number(row.bookmark)) continue;
         await this.projectEntry(row, entry);
       }
       if (entries.next)
-        check(false, "interrupted", "Fork prefix copy continues", { reason: "uncertain_effects" });
+        throw new ServiceError(
+          "unavailable",
+          "Fork prefix copy continues",
+          { retryAfterMs: 5000 },
+          true,
+        );
       await store.transaction(async (tx) => {
+        await this.host.authority.current(auth, resources, tx);
         const current = await store.get<ConversationRow>("conversation", intent.conversationId, tx);
         check(current, "interrupted", "Fork mapping unavailable");
         current.published = true;
@@ -361,25 +435,116 @@ export class Conversations {
       (await store.get<ConversationRow>("conversation", intent.conversationId))!.conversation,
     );
   }
+  async #estimateFork(
+    intent: CreationIntent,
+    auth: D.AuthContext,
+    resources: D.ResourceScope,
+  ): Promise<void> {
+    const { store, pi } = this.host;
+    const prior = intent.forkEstimate;
+    check(
+      prior && intent.parent && intent.at && intent.operationId && intent.growthBytes !== undefined,
+      "interrupted",
+      "Fork estimate identity unavailable",
+    );
+    const operationId = intent.operationId;
+    const parent = await store.get<ConversationRow>("conversation", intent.parent);
+    check(parent, "conflict", "Fork source unavailable");
+    await this.host.authority.current(auth, resources);
+    const harness = await pi.pi();
+    const page = await harness.commit(
+      (tx) =>
+        tx.scanEntries(
+          {
+            conversationId: Number(parent.piId) as ConversationId,
+            maxEntryId: intent.at as EntryId,
+            order: "ascending",
+          },
+          Math.min(100, store.policy.bounds.sqlPageRows),
+          prior.cursor,
+        ),
+      BACKGROUND_CONTEXT,
+    );
+    await this.host.authority.current(auth, resources);
+    const estimate: NonNullable<CreationIntent["forkEstimate"]> = {
+      highWater: prior.highWater,
+      bytes:
+        prior.bytes +
+        page.items.reduce(
+          (sum, entry) => sum + new TextEncoder().encode(JSON.stringify(entry)).length,
+          0,
+        ),
+      complete: !page.next,
+      ...(page.next ? { cursor: page.next } : {}),
+    };
+    // Public copied history and an actual object high-water mark are estimates
+    // of prospective copy growth, never a physical upper bound or a measurement
+    // of the not-yet-created child. Refine only BEFORE any capacity RPC.
+    const bytes = Math.max(
+      intent.growthBytes,
+      estimate.bytes + new TextEncoder().encode(JSON.stringify(intent)).length + 8192,
+    );
+    await store.transaction(async (tx) => {
+      await this.host.authority.current(auth, resources, tx);
+      const claim = await store.get<GrowthClaim>("growth-claim", operationId, tx);
+      check(
+        claim && !claim.reservationId && claim.bytes === intent.growthBytes,
+        "conflict",
+        "Fork growth is already bound or changed",
+      );
+      store.admissionHeadroom((await store.pendingGrowth(tx)) - claim.bytes + bytes);
+      await store.put("growth-claim", operationId, { ...claim, bytes }, tx);
+      intent.forkEstimate = estimate;
+      intent.growthBytes = bytes;
+      await store.put("creation", intent.key, intent, tx, Date.now());
+    });
+    if (page.next)
+      throw new ServiceError(
+        "unavailable",
+        "Fork history estimate continues",
+        { retryAfterMs: 5000 },
+        true,
+      );
+  }
   async #settleCreation(
     intent: CreationIntent,
     conversation: D.Conversation,
   ): Promise<D.Conversation> {
-    if (intent.state === "complete") return conversation;
     const { store } = this.host;
+    const auth = { ...intent.auth, deadline: Date.now() + 30000 };
+    const resources = scope({
+      agentIds: [this.host.agentId],
+      conversationIds: intent.parent ? [intent.parent] : [],
+      actions: [intent.parent ? "conversations.fork" : "conversations.create"],
+    });
+    await this.host.authority.current(auth, resources);
+    if (intent.state === "complete") return conversation;
     const capacity = await store.get<D.CapacityReservation>("creation-capacity", intent.key);
-    if (capacity)
-      unwrap(
-        await this.host.authority.control.settleCapacity(
-          { ...intent.auth, deadline: Date.now() + 30000 },
-          { reservationId: capacity.reservationId, disposition: "consumed" },
-        ),
+    if (capacity) {
+      const settled = unwrap(
+        await this.host.authority.control.settleCapacity(auth, {
+          reservationId: capacity.reservationId,
+          disposition: "consumed",
+        }),
       );
+      check(
+        same(settled, { ...capacity, state: "settled" }),
+        "conflict",
+        "Creation settlement identity changed",
+      );
+    }
     intent.state = "complete";
     await store.transaction(async (tx) => {
+      await this.host.authority.current(auth, resources, tx);
       await store.put("creation", intent.key, intent, tx);
-      if (capacity) await this.host.authority.physical.completed(capacity.reservationId, tx);
+      if (capacity)
+        await this.host.authority.physical.completed(
+          capacity.reservationId,
+          tx,
+          intent.operationId,
+        );
     });
+    await this.host.authority.current(auth, resources);
     return conversation;
   }
   async submit(
@@ -487,6 +652,22 @@ export class Conversations {
     });
   }
   async finishSubmission(intent: AdmissionIntent): Promise<D.AdmissionReceipt> {
+    try {
+      return await this.#finishSubmission(intent);
+    } catch (error) {
+      const current = await this.host.store.get<AdmissionIntent>("admission-intent", intent.key);
+      if (current)
+        await this.host.store.put(
+          "admission-intent",
+          intent.key,
+          current,
+          undefined,
+          repairRetryAt(error),
+        );
+      throw error;
+    }
+  }
+  async #finishSubmission(intent: AdmissionIntent): Promise<D.AdmissionReceipt> {
     const { store } = this.host;
     const old = await store.get<Admission>("admission", intent.key);
     if (old) return old.receipt ?? this.finishAdmission(old);

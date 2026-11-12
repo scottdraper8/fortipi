@@ -31,7 +31,7 @@ export async function retainedModelConfigurations(
     const pending = await tx.all<{ model: string }>(
       `SELECT json_extract(data,'$.model') AS model FROM fp_records_v1
        WHERE (kind='admission' AND json_extract(data,'$.state') IN ('pending','accepted','settlement_pending'))
-          OR (kind='creation' AND json_extract(data,'$.state') IN ('pending','allocated'))
+          OR (kind='creation' AND json_extract(data,'$.state') IN ('pending','allocated') AND json_extract(data,'$.model') IS NOT NULL)
           OR (kind='admission-intent' AND json_extract(data,'$.state')='pending' AND json_extract(data,'$.model') IS NOT NULL)
        GROUP BY model LIMIT 33`,
     );
