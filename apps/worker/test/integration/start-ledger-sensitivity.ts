@@ -27,6 +27,7 @@ const execute = promisify(execFile);
 
 export interface StartLedgerSensitivity {
   id: "start-ledger-dedup";
+  scope: "ledger-to-os-start-boundary";
   outcome: "killed" | "survived" | "unavailable";
   source?: string;
   sourceSha256?: string;
@@ -34,6 +35,12 @@ export interface StartLedgerSensitivity {
   baseline?: StartObservation;
   mutant?: StartObservation;
   restored?: StartObservation;
+  protectedRuntime: {
+    baseline?: StartObservation;
+    mutant?: StartObservation;
+    restored?: StartObservation;
+    limitation: string;
+  };
   limitation?: string;
 }
 
@@ -91,8 +98,13 @@ function environment(): NodeJS.ProcessEnv {
 export async function runStartLedgerSensitivity(): Promise<StartLedgerSensitivity> {
   const result: StartLedgerSensitivity = {
     id: "start-ledger-dedup",
+    scope: "ledger-to-os-start-boundary",
     outcome: "unavailable",
     source,
+    protectedRuntime: {
+      limitation:
+        "The complete local runtime retains independent workspace-journal protection; no full-runtime killed-mutant claim.",
+    },
   };
   const original = await readFile(join(root, source), "utf8");
   result.sourceSha256 = hash(original);
@@ -111,12 +123,12 @@ export async function runStartLedgerSensitivity(): Promise<StartLedgerSensitivit
       ],
       { env: environment(), timeout: 60000, maxBuffer: 1000000 },
     );
-  const probe = async (phase: string): Promise<StartObservation> => {
-    const coverage = join(temporary, `coverage-${phase}`);
+  const probe = async (phase: string, mode: "scenario" | "boundary"): Promise<StartObservation> => {
+    const coverage = join(temporary, `coverage-${phase}-${mode}`);
     const compiled = join(executor, "dist/ledger.js");
     const code = await readFile(compiled, "utf8");
     const target = site(code);
-    const output = await execute(process.execPath, [child, "scenario", executor, nonce], {
+    const output = await execute(process.execPath, [child, mode, executor, nonce], {
       env: { ...environment(), NODE_V8_COVERAGE: coverage },
       timeout: 20000,
       maxBuffer: 1000000,
@@ -192,7 +204,8 @@ export async function runStartLedgerSensitivity(): Promise<StartLedgerSensitivit
     );
     await compile("packages/fortipi-contract");
     await compile("packages/fortipi-executor");
-    result.baseline = await probe("baseline");
+    result.protectedRuntime.baseline = await probe("baseline", "scenario");
+    result.baseline = await probe("baseline", "boundary");
     assert.deepEqual(result.baseline.records, [nonce], "baseline external start oracle failed");
     const target = site(original);
     const replacement =
@@ -210,15 +223,22 @@ export async function runStartLedgerSensitivity(): Promise<StartLedgerSensitivit
         original.slice(0, target.start) + replacement + original.slice(target.end),
       );
       await compile("packages/fortipi-executor");
-      result.mutant = await probe("mutant");
+      result.protectedRuntime.mutant = await probe("mutant", "scenario");
+      result.mutant = await probe("mutant", "boundary");
     } finally {
       await writeFile(ledger, original);
       await compile("packages/fortipi-executor");
-      result.restored = await probe("restored");
+      result.protectedRuntime.restored = await probe("restored", "scenario");
+      result.restored = await probe("restored", "boundary");
       assert.deepEqual(result.restored.records, [nonce], "restored external start oracle failed");
       assert.equal(result.restored.compiledSha256, result.baseline.compiledSha256);
     }
     assert.notEqual(result.mutant.compiledSha256, result.baseline.compiledSha256);
+    for (const observed of Object.values(result.protectedRuntime))
+      if (typeof observed === "object")
+        assert.deepEqual(observed.records, [nonce], "Complete-runtime protection changed");
+    result.limitation =
+      "Component scope omits daemon scheduling/authority/consent, LocalWorkspace/Computer journals, recovery/quarantine and network delivery. It cannot establish complete or deployed executor replay.";
     if (
       result.mutant.records.length === 2 &&
       result.mutant.records.every((record) => record === nonce)
