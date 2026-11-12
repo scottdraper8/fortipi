@@ -6,6 +6,14 @@ on:
       - apps/worker/container/**
       - apps/worker/test/backends/**
       - tools/unstale/provision-docker.ts
+      - tools/unstale/provision-meson.ts
+      - tools/unstale/private-python.ts
+      - tools/unstale/private-python.test.ts
+      - tools/unstale/provision-meson.test.ts
+      - scripts/image-source-distribution.ts
+      - scripts/image-source-distribution.test.ts
+      - scripts/image-source-distribution.enforcer.test.ts
+      - scripts/check-image-compliance.ts
       - tools/unstale/platform-tools.json
       - tools/unstale/verify-container-egress.ts
       - tools/unstale/verify-container-egress.test.ts
@@ -20,6 +28,14 @@ on:
       - apps/worker/container/**
       - apps/worker/test/backends/**
       - tools/unstale/provision-docker.ts
+      - tools/unstale/provision-meson.ts
+      - tools/unstale/private-python.ts
+      - tools/unstale/private-python.test.ts
+      - tools/unstale/provision-meson.test.ts
+      - scripts/image-source-distribution.ts
+      - scripts/image-source-distribution.test.ts
+      - scripts/image-source-distribution.enforcer.test.ts
+      - scripts/check-image-compliance.ts
       - tools/unstale/platform-tools.json
       - tools/unstale/verify-container-egress.ts
       - tools/unstale/verify-container-egress.test.ts

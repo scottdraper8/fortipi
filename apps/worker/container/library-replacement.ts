@@ -340,10 +340,24 @@ export async function proveLibraryReplacement(
       /_fuse_new_31/,
       "Missing-export negative control did not fail",
     );
-    const runFixture = async (id: string, name: string, witness: boolean) => {
+    const baseTag = "fortipi-computerd:verified";
+    assert.equal(
+      await command("docker", ["image", "inspect", baseTag, "--format", "{{.Id}}"]),
+      image.imageId,
+      "Local base tag differs from imported canonical image",
+    );
+    const runFixture = async (id: string, tag: string, name: string, witness: boolean) => {
+      assert.match(tag, /^fortipi-(?:computerd:verified|replacement:[a-f0-9]{24})$/);
+      assert.equal(
+        await command("docker", ["image", "inspect", tag, "--format", "{{.Id}}"]),
+        id,
+        "Local fixture tag changed",
+      );
       const context = resolve(options.out, `${name}-context`);
       await mkdir(context);
-      await writeFile(resolve(context, "Dockerfile"), `FROM ${id}\n`);
+      // BuildKit interprets a bare sha256 image ID as a registry repository.
+      // Resolve a checked local tag, then independently verify the selected ID.
+      await writeFile(resolve(context, "Dockerfile"), `FROM ${tag}\n`);
       const harness = createTestHarness({
         root: repository,
         workers: [
@@ -461,7 +475,7 @@ export async function proveLibraryReplacement(
         await harness.close();
       }
     };
-    const baseline = await runFixture(image.imageId, "baseline", false);
+    const baseline = await runFixture(image.imageId, baseTag, "baseline", false);
     assert.equal(
       await command("docker", [
         "run",
@@ -482,9 +496,15 @@ export async function proveLibraryReplacement(
     await copyFile(resolve(native, "rebuilt-helper"), resolve(context, "fusermount3"));
     await writeFile(
       resolve(context, "Dockerfile"),
-      `FROM ${image.imageId}\nCOPY libfuse3.so.4 /opt/fortipi-replacement/libfuse3.so.4\nCOPY fusermount3 /usr/bin/fusermount3\nRUN chown 0:0 /usr/bin/fusermount3 && chmod 4755 /usr/bin/fusermount3\nENV LD_LIBRARY_PATH=/opt/fortipi-replacement\n`,
+      `FROM ${baseTag}\nCOPY libfuse3.so.4 /opt/fortipi-replacement/libfuse3.so.4\nCOPY fusermount3 /usr/bin/fusermount3\nRUN chown 0:0 /usr/bin/fusermount3 && chmod 4755 /usr/bin/fusermount3\nENV LD_LIBRARY_PATH=/opt/fortipi-replacement\n`,
+    );
+    assert.equal(
+      await command("docker", ["image", "inspect", baseTag, "--format", "{{.Id}}"]),
+      image.imageId,
+      "Local base tag changed before rebuild",
     );
     const iid = resolve(options.out, "replacement-image-id");
+    const replacementTag = `fortipi-replacement:${randomBytes(12).toString("hex")}`;
     await command("docker", [
       "buildx",
       "build",
@@ -494,13 +514,21 @@ export async function proveLibraryReplacement(
       "--network=none",
       "--provenance=false",
       "--load",
+      "--tag",
+      replacementTag,
       "--iidfile",
       iid,
       context,
     ]);
     const replacementId = (await readFile(iid, "utf8")).trim();
     assert.match(replacementId, /^sha256:[a-f0-9]{64}$/);
-    ownImages.push(replacementId);
+    assert.notEqual(replacementId, image.imageId);
+    ownImages.push(replacementTag);
+    assert.equal(
+      await command("docker", ["image", "inspect", replacementTag, "--format", "{{.Id}}"]),
+      replacementId,
+      "Replacement tag differs from actual build output",
+    );
     assert.equal(
       await command("docker", [
         "run",
@@ -514,7 +542,7 @@ export async function proveLibraryReplacement(
       ]),
       `fusermount3 version: 3.18.3\n${nonce}`,
     );
-    const replacement = await runFixture(replacementId, "modified", true);
+    const replacement = await runFixture(replacementId, replacementTag, "modified", true);
     assert.equal(await verifyRecipientFixture(), image.imageId);
     assert.equal(await hashFile(options.image), image.imageArchiveSha256);
     const receipt = {
