@@ -956,6 +956,8 @@ export class Conversations {
       "entry-public",
       `${entry.conversationId}:${entry.id}`,
     );
+    // Retained source mappings (including fork inheritance) remain immutable.
+    // Correct text concatenation applies only to a previously unprojected entry.
     const messages = entry.model ?? [];
     const text = messages
       .flatMap((m) =>
@@ -963,7 +965,7 @@ export class Conversations {
           ? [m.content]
           : m.content.filter((p) => p.type === "text").map((p) => p.text),
       )
-      .join("\n");
+      .join("");
     const role: D.Message["role"] =
       entry.kind === "pi.user" ? "user" : entry.kind === "pi.toolResult" ? "tool" : "assistant";
     const projected =

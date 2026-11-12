@@ -10,7 +10,7 @@ import {
   type LifecycleJobOutcome,
 } from "agents/lifecycle";
 import { isCapnWebTransportUpgrade, WebSockets } from "agents/websockets";
-import { routeCatalog, wireLimits } from "fortipi-contract";
+import { type RouteDefinition, routeCatalog, wireLimits } from "fortipi-contract";
 import {
   check,
   errorResponse,
@@ -769,7 +769,10 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         ]),
       );
       validate(matched.route.query, query);
-      const body = matched.route.body ? await boundedJson(request) : undefined;
+      const { bodyBytes }: RouteDefinition = matched.route;
+      const body = matched.route.body
+        ? await boundedJson(request, bodyBytes ?? wireLimits.jsonBytes, auth.deadline)
+        : undefined;
       if (matched.route.body) validate(matched.route.body, body);
       const input = {
         operationId: matched.route.operationId,

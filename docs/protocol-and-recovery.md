@@ -16,6 +16,8 @@ Creation identities and growth estimates now precede model selection and capacit
 
 Committed Pi entries and submission outcomes drive the application projection. Stream deltas and commit hints are advisory. Source identity, canonical messages, task mappings, admission receipts and terminal attestations survive replay-window reclamation. Snapshot and replay reads use a consistent application transaction; expired cursors require resynchronization.
 
+New entry projections concatenate their canonical text blocks without adding separators. Previously retained public mappings and emitted events remain unchanged, including when inherited by a fork; this correction does not rewrite historical public text or identities.
+
 Application repair uses a fixed registered Lifecycle job type and persisted generation-specific job IDs. A successor is armed before its predecessor is retired. App state revalidates ownership after awaits; an older Lifecycle outcome can finish only its old row. Ordinary continuation uses the supported `rescheduleAt` outcome. Dirty notifications coalesce. PiHarness retains ownership of its separate task wake mechanism.
 
 The pinned Lifecycle same-ID replacement primitive loses a newer wake in the reproduced stale-retry race. Production repair avoids that primitive. The pinned Pi delayed-publication rejection issue is reproduced in strict Node children; calibrated actual workerd checks preserve rejection without an uncaught failure, including task-runtime child waits. These diagnostics do not imply an upstream fix was adopted.
