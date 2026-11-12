@@ -63,7 +63,7 @@ export async function protectInstall(directory: string): Promise<void> {
 
 export async function installConsumer(directory: string): Promise<Record<string, unknown>> {
   assert.ok(isAbsolute(directory));
-  assert.equal(process.versions.node, "26.13.0");
+  assert.equal(process.versions.node, "26.13.1");
   const assets = await verifyAssets();
   await mkdir(directory, { mode: 0o700 });
   const packs = join(directory, "packs");

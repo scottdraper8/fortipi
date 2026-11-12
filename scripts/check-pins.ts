@@ -205,7 +205,7 @@ export async function checkPins(root = repository): Promise<void> {
   const top = manifests.get("package.json");
   assert.equal(top?.packageManager, "pnpm@12.18.0");
   assert.equal(manifests.get("tools/unstale/package.json")?.packageManager, top?.packageManager);
-  assert.equal(top?.fortipi?.toolchain.node, "26.13.0");
+  assert.equal(top?.fortipi?.toolchain.node, "26.13.1");
   const reviewedIdentities = new Set<string>();
   for (const prefix of ["", "tools/unstale/"]) {
     const policy = await yaml<Record<string, unknown>>(root, `${prefix}pnpm-workspace.yaml`);

@@ -512,7 +512,7 @@ retain the complete upstream MIT notice supplied by the repository license gate.
 
 ## Reproducible evidence and limits
 
-Run from the worktree with the canonical Node26.13.0/pnpm12.18.0 toolchain first:
+Run from the worktree with the Node26.13.1/pnpm12.18.0 PATH described in `docs/toolchain.md`:
 
 ```sh
 node packages/fortipi-contract/scripts/generate.ts --check

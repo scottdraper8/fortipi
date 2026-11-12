@@ -58,7 +58,7 @@ export async function verifyAssets(
       /^[a-f0-9]{64}$/.test(manifest.lockSha256) &&
       canonicalJson(manifest.toolchain) ===
         canonicalJson({
-          node: "26.13.0",
+          node: "26.13.1",
           pnpm: "12.18.0",
           wrangler: "4.160.1",
           compiler: "7.0.2",

@@ -21,7 +21,7 @@ export interface WranglerPort {
   run(request: WranglerRequest): Promise<string>;
 }
 export async function wranglerBin(): Promise<string> {
-  check(process.versions.node === "26.13.0", "verified_node_26_13_required", 3);
+  check(process.versions.node === "26.13.1", "verified_node_26_13_required", 3);
   const path = createRequire(import.meta.url).resolve("wrangler/package.json");
   const manifest = JSON.parse(await readFile(path, "utf8")) as {
     version: string;

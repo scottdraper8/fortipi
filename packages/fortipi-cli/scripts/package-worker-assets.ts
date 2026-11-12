@@ -157,7 +157,7 @@ export async function packageWorkerAssets(options: {
   /** Private test output only; the stable CLI always emits the canonical package tree. */
   outputDirectory?: string;
 }): Promise<AssetManifest> {
-  assert.equal(process.versions.node, "26.13.0", "Pinned Node required");
+  assert.equal(process.versions.node, "26.13.1", "Pinned Node required");
   assert.match(options.commit, /^[a-f0-9]{40}$/);
   assert.equal(await git("rev-parse", "HEAD"), options.commit, "Checkout commit differs");
   await git(
