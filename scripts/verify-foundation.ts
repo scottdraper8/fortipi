@@ -298,12 +298,12 @@ async function metadata(root: string): Promise<void> {
   );
   for (const path of await filesBelow(root)) {
     const local = relative(root, path).split(sep).join("/");
-    const javascript = /\.[cm]?js$/.test(local);
     const python = local.endsWith(".py");
     if (
       /\.(?:[cm]?js|py|sh|bash|zsh|ps1)$/.test(local) &&
       !(python && local.startsWith("examples/python-client/")) &&
-      !(javascript && local.startsWith("packages/fortipi-cli/worker-assets/"))
+      // Generated assets include upstream legal source; bundle/license checks cover them.
+      !local.startsWith("packages/fortipi-cli/worker-assets/")
     )
       throw new Error(`Maintained automation must be TypeScript: ${path}`);
   }
