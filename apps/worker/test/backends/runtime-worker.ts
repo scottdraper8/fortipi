@@ -15,6 +15,11 @@ import { hostContext, hostOwnershipDigest } from "../../src/container/host-conte
 import { ContainerHostTransport } from "../../src/container/host-transport.js";
 import { requireThat } from "../../src/workspace/errors.js";
 import {
+  cancellationDiagnostic,
+  cancellationGroupSource,
+  cancellationObserverSource,
+} from "./cancellation-fixture.ts";
+import {
   bindLocalImage,
   type LocalImageBinding,
   normalizeLocalInspection,
@@ -276,21 +281,32 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
       return Response.json({ connected: true });
     }
     if (linux && url.searchParams.has("process-group")) {
-      const pending = await ws.runtime.exec(
-        "set -eu\n(sleep 3; printf orphan > /workspace/pg-survived) &\nprintf ready > /workspace/pg-ready\nwait\n",
-        {
-          id: "probe-process-group",
-          backend: "probe",
-          cwd: "/workspace",
-          encoding: "utf8",
-          onInterrupt: "fail",
-          sync: "wait",
-          timeoutMs: 10000,
-        },
-      );
+      const pending = await ws.runtime.exec(cancellationGroupSource, {
+        id: "probe-process-group",
+        backend: "probe",
+        cwd: "/workspace",
+        encoding: "utf8",
+        onInterrupt: "fail",
+        sync: "wait",
+        timeoutMs: 10000,
+      });
       const terminal = pending.result();
-      const deadline = Date.now() + 5000;
+      void terminal.catch(() => {});
+      const readinessStarted = Date.now();
+      const deadline = readinessStarted + 5000;
+      let readyPulls = 0;
       for (;;) {
+        // fs reads the host store; a running command has not reached its automatic post-drain pull.
+        for await (const progress of ws.pull("probe")) {
+          readyPulls++;
+          requireThat(
+            progress.skipped === 0,
+            "conflict",
+            "Cancellation readiness pull skipped scratch changes",
+          );
+          if (Date.now() >= deadline)
+            throw new Error("Actual process group readiness pull exceeded its deadline");
+        }
         try {
           if ((await ws.fs.readFile("/workspace/pg-ready", "utf8")) === "ready") break;
         } catch (error) {
@@ -299,32 +315,38 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
         if (Date.now() >= deadline) throw new Error("Actual process group did not reach readiness");
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
+      const readyElapsedMs = Date.now() - readinessStarted;
       await ws.runtime.killExec("probe-process-group", { backend: "probe", signal: "SIGTERM" });
       const cancelled = await terminal;
+      console.log(
+        JSON.stringify(cancellationDiagnostic("cancel", cancelled, readyPulls, readyElapsedMs)),
+      );
       if (
         cancelled.status !== "cancelled" ||
         cancelled.sync.status !== "complete" ||
-        cancelled.skipped.length !== 0
+        cancelled.skipped.length !== 0 ||
+        cancelled.sync.skipped.length !== 0
       )
         throw new Error("Cancelled group did not settle with complete scratch synchronization");
-      const observer = await ws.runtime.exec(
-        "set -eu\nsleep 4\ntest ! -e /workspace/pg-survived\nprintf process-group-stopped\n",
-        {
-          id: "probe-process-group-observer",
-          backend: "probe",
-          cwd: "/workspace",
-          encoding: "utf8",
-          onInterrupt: "fail",
-          sync: "wait",
-          timeoutMs: 8000,
-        },
-      );
+      const observer = await ws.runtime.exec(cancellationObserverSource, {
+        id: "probe-process-group-observer",
+        backend: "probe",
+        cwd: "/workspace",
+        encoding: "utf8",
+        onInterrupt: "fail",
+        sync: "wait",
+        timeoutMs: 8000,
+      });
       const observed = await observer.result();
+      console.log(
+        JSON.stringify(cancellationDiagnostic("observer", observed, readyPulls, readyElapsedMs)),
+      );
       if (
         observed.status !== "completed" ||
         observed.exitCode !== 0 ||
         observed.sync.status !== "complete" ||
-        observed.skipped.length !== 0
+        observed.skipped.length !== 0 ||
+        observed.sync.skipped.length !== 0
       )
         throw new Error(
           "A descendant survived group cancellation or synchronization was incomplete",
