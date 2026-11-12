@@ -392,7 +392,11 @@ export class Dispatch {
       disposition,
     };
   }
-  #completionRecord(ctx: D.AuthContext, identity: D.ExecutionIdentity): DispatchRecord {
+  #recoveryRecord(
+    ctx: D.AuthContext,
+    identity: D.ExecutionIdentity,
+    requireAttempted = true,
+  ): DispatchRecord {
     check(
       valid("executor-messages", "ExecutorFrame", {
         type: "job.query",
@@ -421,7 +425,7 @@ export class Dispatch {
     };
     requireGrant(ctx, "jobs.dispatch", resources);
     check(
-      record.attempted &&
+      (!requireAttempted || record.attempted) &&
         identity.target.kind === "executor" &&
         same(reservation.credential, ref(ctx)) &&
         same(this.store.get("reservation_id", reservation.reservationId), reservation) &&
@@ -467,7 +471,7 @@ export class Dispatch {
   }
   completion(ctx: D.AuthContext, identity: D.ExecutionIdentity): boolean {
     try {
-      this.#completionRecord(ctx, identity);
+      this.#recoveryRecord(ctx, identity);
       return true;
     } catch (error) {
       if (!(error instanceof ControlError)) throw error;
@@ -476,9 +480,21 @@ export class Dispatch {
   }
   async query(ctx: D.AuthContext, identity: D.ExecutionIdentity): Promise<D.ExecutionObservation> {
     const completion = this.completion(ctx, identity);
-    const current = () =>
-      completion ? this.#completionRecord(ctx, identity) : this.record(ctx, identity);
+    const current = () => {
+      if (completion) return this.#recoveryRecord(ctx, identity);
+      try {
+        // A retained, unsent intent permits its registered owner's query only.
+        // completion() still requires an attempt before granting repair capacity.
+        return this.#recoveryRecord(ctx, identity, false);
+      } catch (error) {
+        if (!(error instanceof ControlError)) throw error;
+        return this.record(ctx, identity);
+      }
+    };
     const record = current();
+    // No assignment was sent through this authority. Do not ask the executor to
+    // attest to an assignment it never received or manufacture a closed ledger.
+    if (!record.attempted) return { identity, state: "unknown" };
     if (record.observation?.state === "terminal") return record.observation;
     const late = this.store.page<{ result: D.PreparedResult }>("late_result", 0, 1, {
       subject: identity.executionId,
