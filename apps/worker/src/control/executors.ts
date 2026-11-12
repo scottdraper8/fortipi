@@ -28,6 +28,13 @@ export class Executors {
   readonly store: Store;
   readonly identities: Identities;
   readonly receive: (ctx: D.AuthContext, frame: D.ExecutorDelivery) => Promise<D.DeliveryAck>;
+  readonly recoverTerminal: (
+    ctx: D.AuthContext,
+    executorId: string,
+    generation: number,
+    epoch: number,
+    registration: boolean,
+  ) => Promise<void>;
   private beats = new Map<string, number>();
   private waiters = new Map<string, Waiter>();
   constructor(
@@ -35,11 +42,13 @@ export class Executors {
     store: Store,
     identities: Identities,
     receive: (ctx: D.AuthContext, frame: D.ExecutorDelivery) => Promise<D.DeliveryAck>,
+    recoverTerminal: Executors["recoverTerminal"] = async () => {},
   ) {
     this.state = state;
     this.store = store;
     this.identities = identities;
     this.receive = receive;
+    this.recoverTerminal = recoverTerminal;
   }
   attachment(socket: WebSocket): Attachment | undefined {
     try {
@@ -343,6 +352,13 @@ export class Executors {
           },
         } satisfies D.ExecutorFrame),
       );
+      await this.recoverTerminal(
+        { ...ctx, deadline: Math.min(ctx.deadline, a.identity.expiresAt) },
+        executor.executorId,
+        executor.generation,
+        a.epoch,
+        true,
+      ).catch(() => {});
       return;
     }
     check(a.registered, "unauthorized", "Executor must register first");
@@ -358,6 +374,13 @@ export class Executors {
       socket.serializeAttachment(a);
       this.beats.set(this.key(executor.executorId, a.epoch), a.lastBeat);
       socket.send(json({ ...frame, payload: { ...frame.payload, timestamp: Date.now() } }));
+      await this.recoverTerminal(
+        { ...ctx, deadline: Math.min(ctx.deadline, a.identity.expiresAt) },
+        executor.executorId,
+        executor.generation,
+        a.epoch,
+        false,
+      ).catch(() => {});
       return;
     }
     check(
@@ -367,6 +390,7 @@ export class Executors {
         "job.cancel_ack",
         "job.output",
         "job.prepared_result",
+        "job.committed_ack",
         "local_policy.pending",
         "local_policy.decision",
         "workspace.response",
@@ -380,12 +404,18 @@ export class Executors {
       !this.waiters.has(frame.requestId)
     )
       return;
-    const ack = await this.receive(ctx, {
-      executorId: executor.executorId,
-      generation: executor.generation,
-      connectionEpoch: a.epoch,
-      frame,
-    });
+    const ack = await this.receive(
+      frame.type === "job.committed_ack"
+        ? { ...ctx, deadline: Math.min(ctx.deadline, a.identity.expiresAt) }
+        : ctx,
+      {
+        executorId: executor.executorId,
+        generation: executor.generation,
+        connectionEpoch: a.epoch,
+        frame,
+      },
+    );
+    if (frame.type === "job.committed_ack") return;
     const waiter = this.waiters.get(frame.requestId);
     if (waiter) {
       clearTimeout(waiter.timer);

@@ -1,13 +1,26 @@
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
 import { indexArtifacts } from "./artifact-index.js";
-import { emptyScope, permits, requireGrant } from "./authorization.js";
+import { contains, emptyScope, permits, requireGrant } from "./authorization.js";
+import type { Capacity } from "./capacity.js";
 import { type Directory, valid } from "./directory.js";
 import { type DispatchRecord, sameExecution } from "./dispatch.js";
 import type { Executors } from "./executors.js";
 import type { Identities } from "./identity.js";
 import { postponeRepair, repairAccepted } from "./repair.js";
-import { check, fail, hash, id, json, next, ref, type Store, same, within } from "./store.js";
+import {
+  ControlError,
+  check,
+  fail,
+  hash,
+  id,
+  json,
+  next,
+  ref,
+  type Store,
+  same,
+  within,
+} from "./store.js";
 import type { ExecutorState, Tickets } from "./tickets.js";
 
 interface Inbox {
@@ -25,7 +38,17 @@ interface Command {
   digest: string;
   attempts: number;
   workspaceProofAction?: string;
+  peerApplied?: true;
 }
+interface TerminalRecovery {
+  generation: number;
+  epoch: number;
+  through: number;
+  after: number;
+  complete: boolean;
+}
+const terminalRecipient = (executorId: string, generation: number): string =>
+  `terminal:${executorId}:${generation}`;
 export interface LocalTransport {
   request: D.LocalWorkspaceRequest;
   requestId: string;
@@ -39,23 +62,289 @@ export class Delivery {
   readonly directory: Directory;
   readonly env: Env;
   readonly tickets: Tickets;
+  readonly capacity: Pick<Capacity, "admitRequest">;
+  private readonly terminalRecovery = new Set<string>();
   constructor(
     store: Store,
     identities: Identities,
     directory: Directory,
     env: Env,
     tickets: Tickets,
+    capacity: Pick<Capacity, "admitRequest">,
   ) {
     this.store = store;
     this.identities = identities;
     this.directory = directory;
     this.env = env;
     this.tickets = tickets;
+    this.capacity = capacity;
+  }
+  private saveCommand(key: string, command: Command, due: number | null = null): void {
+    const delivery = command.delivery;
+    this.store.put(
+      "command",
+      key,
+      command,
+      "",
+      delivery.frame.type === "job.committed" && !command.peerApplied
+        ? terminalRecipient(delivery.executorId, delivery.generation)
+        : "",
+      due,
+    );
+  }
+  /** Observational closure only: no lease, job, dispatch or authority mutation. */
+  async confirmTerminal(
+    peer: D.AuthContext,
+    executorId: string,
+    generation: number,
+    epoch: number | undefined,
+    proof: D.JobCommitted,
+  ): Promise<D.DeliveryAck> {
+    const current = (): void => {
+      const credential = this.identities.current(peer);
+      requireGrant(peer, "executors.register", { ...emptyScope(), executorIds: [executorId] });
+      const executor = this.store.get<ExecutorState>("executor", executorId);
+      check(
+        credential.role === "executor" &&
+          credential.executorId === executorId &&
+          executor?.credentialId === peer.credentialId &&
+          executor.status === "online" &&
+          Number.isSafeInteger(epoch) &&
+          epoch !== undefined &&
+          epoch > 0 &&
+          executor.epoch === epoch &&
+          executor.generation === generation,
+        "unauthenticated",
+        "Terminal confirmation requires its current registered executor",
+      );
+    };
+    current();
+    const key = `${proof.identity.executionId}:job.committed:${proof.terminalVersion}`;
+    const command = (): Command => {
+      const retained = this.store.get<Command>("command", key);
+      const dispatch = this.store.get<DispatchRecord>("dispatch", proof.identity.executionId);
+      check(
+        retained &&
+          retained.delivery.frame.type === "job.committed" &&
+          retained.delivery.executorId === executorId &&
+          retained.delivery.generation === generation &&
+          proof.identity.target.kind === "executor" &&
+          proof.identity.target.executorId === executorId &&
+          proof.identity.target.generation === generation &&
+          dispatch?.attempted &&
+          sameExecution(dispatch.intent.assignment.identity, proof.identity) &&
+          same(retained.delivery.frame.payload, proof),
+        "conflict",
+        "Terminal confirmation differs from its retained command",
+      );
+      return retained;
+    };
+    command();
+    const digest = await hash(json(proof));
+    return this.store.tx(() => {
+      current();
+      const retained = command();
+      check(retained.digest === digest, "conflict", "Terminal confirmation digest differs");
+      if (!retained.peerApplied) {
+        retained.peerApplied = true;
+        this.saveCommand(key, retained);
+      }
+      return retained.ack;
+    });
+  }
+  private saveRecovery(kind: "migration" | "terminal-recovery", key: string, value: unknown): void {
+    if (!this.store.get(kind, key))
+      check(
+        this.store.storage.sql.databaseSize +
+          new TextEncoder().encode(json(value)).length * 3 +
+          4096 <=
+          this.store.admissionBytes,
+        "quota_exceeded",
+        "Control storage admission preserves repair headroom",
+      );
+    this.store.put(kind, key, value);
+  }
+  /** Existing kind/recipient indexes suffice. Old command bodies/receipts remain unchanged. */
+  private indexTerminalCommands(): boolean {
+    const migration = this.store.get<{ after: number; through: number; complete: boolean }>(
+      "migration",
+      "terminal-command-recipient-v1",
+    ) ?? { after: 0, through: this.store.maxSeq(), complete: false };
+    if (migration.complete) return true;
+    const rows = this.store.page<Command>("command", migration.after, 16);
+    for (const row of rows) {
+      if (row.seq > migration.through) break;
+      if (row.value.delivery.frame.type === "job.committed")
+        this.saveCommand(row.key, row.value, row.due);
+      migration.after = row.seq;
+    }
+    migration.complete = rows.length < 16 || (rows.at(-1)?.seq ?? 0) >= migration.through;
+    this.saveRecovery("migration", "terminal-command-recipient-v1", migration);
+    return migration.complete;
+  }
+  /** Registration and its authenticated heartbeat continuation only; never called by an alarm. */
+  async recoverTerminal(
+    peer: D.AuthContext,
+    executorId: string,
+    generation: number,
+    epoch: number,
+    registration: boolean,
+    executors: Executors,
+  ): Promise<void> {
+    const current = (): void => {
+      this.identities.current(peer);
+      requireGrant(peer, "executors.register", { ...emptyScope(), executorIds: [executorId] });
+      const executor = this.store.get<ExecutorState>("executor", executorId);
+      check(
+        peer.role === "executor" &&
+          executor?.credentialId === peer.credentialId &&
+          executor.status === "online" &&
+          executor.generation === generation &&
+          executor.epoch === epoch,
+        "unauthenticated",
+        "Terminal recovery requires its current registered executor",
+      );
+    };
+    current();
+    let progress = this.store.get<TerminalRecovery>("terminal-recovery", executorId);
+    if (
+      registration ||
+      !progress ||
+      progress.epoch !== epoch ||
+      progress.generation !== generation
+    ) {
+      this.capacity.admitRequest(peer.principalId);
+      progress = { generation, epoch, through: this.store.maxSeq(), after: 0, complete: false };
+      this.saveRecovery("terminal-recovery", executorId, progress);
+    }
+    if (
+      !progress ||
+      progress.complete ||
+      progress.epoch !== epoch ||
+      progress.generation !== generation ||
+      this.terminalRecovery.has(executorId)
+    )
+      return;
+    this.terminalRecovery.add(executorId);
+    try {
+      if (
+        !this.store.get<{ complete: boolean }>("migration", "terminal-command-recipient-v1")
+          ?.complete
+      ) {
+        this.capacity.admitRequest(peer.principalId);
+        if (!this.indexTerminalCommands()) return;
+      }
+      const rows = this.store.page<Command>("command", progress.after, 4, {
+        recipient: terminalRecipient(executorId, generation),
+      });
+      const stopAt = Math.min(peer.deadline, Date.now() + 5000);
+      for (const row of rows) {
+        current();
+        if (row.seq > progress.through) break;
+        if (Date.now() >= stopAt) return;
+        const command = row.value;
+        if (
+          command.delivery.frame.type === "job.committed" &&
+          command.delivery.connectionEpoch < epoch
+        ) {
+          const identity = command.delivery.frame.payload.identity;
+          const dispatch = this.store.get<DispatchRecord>("dispatch", identity.executionId);
+          const reservation = dispatch?.intent.reservation;
+          const owner = {
+            ...command.ctx,
+            deadline: Math.min(stopAt, Date.now() + 5000),
+            requestId: id(),
+          };
+          try {
+            check(
+              dispatch && reservation && same(reservation.credential, ref(owner)),
+              "unauthorized",
+              "Retained terminal owner differs",
+            );
+            this.identities.current(owner);
+            const registered = this.store.get<D.AuthorityRegistration>(
+              "recipient",
+              reservation.registrationIds.agent,
+            );
+            check(
+              registered?.recipient.kind === "agent" &&
+                registered.recipient.id === reservation.agentId &&
+                same(registered.credential, ref(owner)),
+              "unauthorized",
+              "Retained terminal registration differs",
+            );
+            owner.registrationId = registered.registrationId;
+            const ownerCurrent = (): void => {
+              current();
+              this.identities.current(owner);
+              const resources = {
+                ...emptyScope(),
+                agentIds: [reservation.agentId],
+                conversationIds: [reservation.conversationId],
+                workspaceIds: [reservation.workspaceId],
+                executorIds: [executorId],
+                tools: [dispatch.intent.assignment.tool],
+                actions: reservation.actions,
+              };
+              requireGrant(owner, "jobs.dispatch", resources);
+              const registration = this.store.get<D.AuthorityRegistration>(
+                "recipient",
+                registered.registrationId,
+              );
+              const retained = this.store.get<Command>("command", row.key);
+              check(
+                registration &&
+                  registration.recipient.kind === "agent" &&
+                  registration.recipient.id === reservation.agentId &&
+                  same(registration.credential, ref(owner)) &&
+                  contains(registration.resources, {
+                    ...resources,
+                    actions: ["jobs.dispatch"],
+                    tools: registration.resources.tools.length === 0 ? [] : resources.tools,
+                  }) &&
+                  retained?.digest === command.digest &&
+                  same(ref(retained.ctx), ref(command.ctx)),
+                "unauthorized",
+                "Retained terminal owner or registration changed",
+              );
+            };
+            ownerCurrent();
+            this.capacity.admitRequest(owner.principalId);
+            await this.forward(
+              owner,
+              { ...command.delivery, connectionEpoch: epoch },
+              executors,
+              ownerCurrent,
+            );
+            ownerCurrent();
+          } catch (error) {
+            current();
+            // Transient pressure retains this exact cursor for the next authenticated frame.
+            if (
+              !(error instanceof ControlError) ||
+              !["unauthenticated", "unauthorized", "conflict", "not_found", "unsupported"].includes(
+                error.code,
+              )
+            )
+              return;
+          }
+        }
+        progress.after = row.seq;
+        current();
+        this.saveRecovery("terminal-recovery", executorId, progress);
+      }
+      progress.complete = rows.length < 4 || (rows.at(-1)?.seq ?? 0) >= progress.through;
+      current();
+      this.saveRecovery("terminal-recovery", executorId, progress);
+    } finally {
+      this.terminalRecovery.delete(executorId);
+    }
   }
   async forward(
     ctx: D.AuthContext,
     input: D.ExecutorDelivery,
     executors: Executors,
+    foregroundCurrent?: () => void,
   ): Promise<D.DeliveryAck> {
     this.identities.current(ctx);
     const frame = input.frame;
@@ -103,6 +392,7 @@ export class Delivery {
     const workspaceResources = { ...resources, tools: [] };
     let workspaceProofAction: string | undefined;
     const currentAuthority = (): void => {
+      foregroundCurrent?.();
       this.identities.current(ctx);
       requireGrant(ctx, "jobs.dispatch", resources);
       if (workspaceProofAction) requireGrant(ctx, workspaceProofAction, workspaceResources);
@@ -320,7 +610,7 @@ export class Delivery {
         // The payload/digest and durable transport receipt remain unchanged.
         old.delivery = delivery;
         if (workspaceProofAction) old.workspaceProofAction = workspaceProofAction;
-        this.store.put("command", key, old, "", "", Date.now());
+        this.saveCommand(key, old, Date.now());
         return old;
       }
       const command: Command = {
@@ -338,7 +628,7 @@ export class Delivery {
         attempts: 0,
         ...(workspaceProofAction ? { workspaceProofAction } : {}),
       };
-      this.store.put("command", key, command, "", "", Date.now());
+      this.saveCommand(key, command, Date.now());
       return command;
     });
     await this.drainCommand(key, executors);
@@ -347,6 +637,10 @@ export class Delivery {
   async drainCommand(key: string, executors: Executors): Promise<void> {
     const command = this.store.get<Command>("command", key);
     if (!command) return;
+    if (command.peerApplied) {
+      this.saveCommand(key, command);
+      return;
+    }
     try {
       const liveCtx = { ...command.ctx, deadline: Date.now() + 5000 };
       this.identities.current(liveCtx);
@@ -389,7 +683,7 @@ export class Delivery {
         // A superseded transport attempt cannot become current in the background.
         // Retain its receipt without futile alarms; a fresh authorized retry can
         // capture the replacement channel after revalidating the same command.
-        this.store.put("command", key, command);
+        this.saveCommand(key, command);
         return;
       }
       if (frame.type === "job.lease_update") {
@@ -402,24 +696,21 @@ export class Delivery {
           retained.expiresAt <= Date.now() ||
           frame.payload.expiresAt <= Date.now()
         ) {
-          this.store.put("command", key, command);
+          this.saveCommand(key, command);
           return;
         }
         if (retained.leaseVersion > frame.payload.leaseVersion) {
-          this.store.put("command", key, command);
+          this.saveCommand(key, command);
           return;
         }
       }
       executors.send(command.delivery.executorId, command.delivery.generation, frame);
-      this.store.put("command", key, command); // receipt retained; socket send is not a commit acknowledgment
+      this.saveCommand(key, command); // receipt retained; socket send is not a commit acknowledgment
     } catch {
       command.attempts = next(command.attempts);
-      this.store.put(
-        "command",
+      this.saveCommand(
         key,
         command,
-        "",
-        "",
         Date.now() + Math.min(3600000, 1000 * 2 ** Math.min(12, command.attempts)),
       );
     }
@@ -441,6 +732,14 @@ export class Delivery {
       "Stale executor delivery",
     );
     const frame = input.frame;
+    if (frame.type === "job.committed_ack")
+      return this.confirmTerminal(
+        ctx,
+        input.executorId,
+        input.generation,
+        input.connectionEpoch,
+        frame.payload,
+      );
     let identity: D.ExecutionIdentity | undefined;
     let sequence = 0;
     let executionId: string | undefined;
