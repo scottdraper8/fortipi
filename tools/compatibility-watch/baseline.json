@@ -118,22 +118,22 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "74dcca7d4140403eaa81c3e7124e73b63a0cb106",
+        "commit": "2443c687e3fbc53af7b3a8ab8dc21a170cdf0d51",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
-          "packages/ai": "0c86af0adc997540076dbd8717f3e644e2069562875e2aff2e2015560d7a9531",
-          "packages/chord": "2d2eb45934bdb40e41a447b16223220da9a9b422166af1389b9aa74a80dacbf2",
+          "packages/ai": "91ed66697d7398fb0d507afeaa6b6b06f4ad4972aeae8117dbf3d8c297766235",
+          "packages/chord": "6cd48e22d7ff31d762141e9e41c5d16f8c74363f4556609086f4918f7af29a64",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
-          "packages/durable": "d59a45112e58a585d28e45f15fcb021171410e2529a1c674a5991ea09eddbbfc",
-          "packages/env": "fbd7273e15859bbe168fe54230baef84741bb7f0864725fd63bf1ef6b97f8e25",
+          "packages/durable": "dc87d765abc06c7764d3569f4bfc5aacb424eec3573a9aabd4197c346d5ef2fa",
+          "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
           "packages/mcp": "1f337636b01da98ca9088abb679318bdcf3b9f06ac9f14d56d63a4825b33df2a",
           "packages/schema": "1cac0355eee29b45658e037766a7b983f01a57dfa444d973e66365317f6c1752",
           "packages/telemetry": "cb8f452fda82cec5074961cc6854226cd74474490b92b3208a13e26e84ff28e7",
-          "packages/tui": "6f78a812e7b746d74b2e502e3718486f5ef9fff01d0942860e5d87a754fe95d7",
+          "packages/tui": "9b71a3439eb5858a0b46a15713ad41690e5ed5c6fef8d8fb38b259617530fd9f",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "90ecc38eca5f45a0946c22916a29d36f21f35fce4953ed5123603dcfee1b1a6c"
+        "sha256": "46a12a829e55265f016cb328f07de3b4e17e89d6538d61d389d14b7f7255ff13"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -145,8 +145,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-11T10:00:56.008Z",
-      "reviewNote": "Reviewed 49fe0a2...74dcca7 primary diffs: AI README/tests and unrelated coding-agent port/docs changes, no selected runtime API/package version change. Scope now explicitly covers used Pi packages and shared agent/env/mcp sources, excluding unused coding-agent/evals. Retain locked1.5.2; this is a reference, not runtime compatibility proof."
+      "reviewedAt": "2026-11-12T18:35:13.533Z",
+      "reviewNote": "Reviewed exact74dcca...2443 using full scoped tree/archive closure and uncapped incremental comparison. Existing waiter backport retained; unpublished durable namespace/Chord/web changes not adopted. Earned Anthropic nonstrict root additionalProperties loss repaired only by official aa47 declared PiAI1.5.2 patch966118ea; a360900 independently qualified original Request RED/patched GREEN, explicit/omitted/strict controls, archive/lock preservation and242 asset closure. Trusted AJV enforcement remains. Subsequent841dc changes only apps/p2 CSS/test; watched hashes unchanged. Retain installed versions and prior patches. Reference review resolves this defect, not live/provider/image/deployed/release approval. Evidence: thread-8/candidate-agents-pi-review.md and thread-5/pi-anthropic-schema-{repair,enforcer}.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
