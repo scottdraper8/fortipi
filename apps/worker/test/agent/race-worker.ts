@@ -89,6 +89,8 @@ export class RaceProbe extends DurableObject {
   private slowPublication = false;
   private delayedPublications = 0;
   private readonly newer = Promise.withResolvers<void>();
+  private holdFirstFailure = false;
+  private oldFailure = Promise.withResolvers<void>();
   private readonly taskReady = Promise.withResolvers<void>();
   private readonly startWait = Promise.withResolvers<void>();
   private readonly waitCalled = Promise.withResolvers<void>();
@@ -118,7 +120,11 @@ export class RaceProbe extends DurableObject {
       name,
     );
   }
-  async arm(): Promise<void> {
+  async arm(holdFirstFailure = false): Promise<void> {
+    // Retry jitter may be zero. Fence tests must commit the replacement or
+    // cancellation before releasing the first failure that permits a retry.
+    this.holdFirstFailure = holdFirstFailure;
+    this.oldFailure = Promise.withResolvers<void>();
     await this.lifecycle.start();
     await this.db.run(
       "INSERT INTO fp_race_v1 VALUES('generation',1) ON CONFLICT(name) DO UPDATE SET value=1",
@@ -155,6 +161,9 @@ export class RaceProbe extends DurableObject {
   async release(): Promise<void> {
     this.newer.resolve();
   }
+  async releaseOldFailure(): Promise<void> {
+    this.oldFailure.resolve();
+  }
   async state(): Promise<{
     exists: boolean;
     fn?: string;
@@ -177,7 +186,10 @@ export class RaceProbe extends DurableObject {
   async onJob(context: LifecycleJobContext): Promise<LifecycleJobOutcome> {
     if (context.job.fn === "old") {
       await this.mark("old-calls");
-      if (context.attempt === 1) throw new Error("synthetic-first-callback-failure");
+      if (context.attempt === 1) {
+        if (this.holdFirstFailure) await this.oldFailure.promise;
+        throw new Error("synthetic-first-callback-failure");
+      }
       // Durable app intent revalidation suppresses stale effects, independently of Lifecycle's row outcome.
       await this.db.transaction(async (tx) => {
         const current = await tx.get<{ value: number }>(

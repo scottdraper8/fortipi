@@ -38,7 +38,7 @@ for (const mode of ["cancel", "replace"] as const) {
     const probe = env.PROBE.getByName(`actual-${mode}`);
     const drives: Promise<void>[] = [];
     try {
-      await probe.arm();
+      await probe.arm(true);
       const old = probe.drive();
       drives.push(old);
       void old.catch(() => {});
@@ -57,6 +57,7 @@ for (const mode of ["cancel", "replace"] as const) {
           (state) => state.newCalls === 1,
         );
       }
+      await probe.releaseOldFailure();
       await old;
       // Keep the replacement held across the existing fixture's complete
       // one-second retry interval, even if a platform alarm won the drive.
@@ -75,12 +76,13 @@ for (const mode of ["cancel", "replace"] as const) {
         assert.equal(held.queued, 1);
       }
     } finally {
+      await probe.releaseOldFailure();
       await probe.release();
       for (const result of await Promise.allSettled(drives))
         assert.equal(result.status, "fulfilled");
       await probe.close();
       await server.close();
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 });
     }
   });
 }
