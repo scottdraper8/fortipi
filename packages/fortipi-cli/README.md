@@ -40,9 +40,17 @@ Build and installed verification (maintainers):
 
 ```sh
 pnpm run build
-node --test packages/fortipi-cli/test/*.test.ts
+node --test --test-concurrency=1 packages/fortipi-cli/test/*.test.ts
 node packages/fortipi-cli/test/install-harness.ts /absolute/fresh-distribution-directory
 ```
+
+Packaging requires the complete original image context and its matching
+`apps/worker/dist/container/sources-and-notices.tar`. The archive hash must equal
+the actual image metadata's `sourceKitSha256`; its strict member inventory,
+source revision, recipe, package freeze and every context byte must match.
+Recreating a kit from a newer checkout does not qualify the earlier image.
+The provenance countercase temporarily changes a generated context member and
+restores it; run the asset suites serially.
 
 The harness uses actual CLI/contract packs and a bounded localhost registry serving
 only reviewed cached public archives, with no upstream fallback or workspace links.
