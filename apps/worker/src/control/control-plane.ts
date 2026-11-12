@@ -246,7 +246,11 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.CancelRequest,
   ): Promise<D.Outcome<D.CancelDisposition>> {
-    return this.#call(ctx, () => this.dispatch.cancel(ctx, input));
+    return this.#call(
+      ctx,
+      () => this.dispatch.cancel(ctx, input),
+      () => this.dispatch.completion(ctx, input.identity),
+    );
   }
   async deliverExecutorFrame(
     ctx: D.AuthContext,

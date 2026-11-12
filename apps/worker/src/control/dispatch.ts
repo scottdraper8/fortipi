@@ -516,7 +516,17 @@ export class Dispatch {
     return { identity, state: "unknown" };
   }
   async cancel(ctx: D.AuthContext, input: D.CancelRequest): Promise<D.CancelDisposition> {
-    const record = this.record(ctx, input.identity, "jobs.cancel");
+    const current = () => {
+      try {
+        return this.record(ctx, input.identity, "jobs.cancel");
+      } catch (error) {
+        if (!(error instanceof ControlError) || error.code !== "unauthorized") throw error;
+        // Cancellation cleans up only this registered owner's
+        // already-attempted execution, under one current complete grant.
+        return this.#recoveryRecord(ctx, input.identity);
+      }
+    };
+    const record = current();
     if (record.cancel) {
       check(
         record.cancel.requestId === input.requestId && record.cancel.reason === input.reason,
@@ -534,8 +544,9 @@ export class Dispatch {
       "unsupported",
       "Backend cancellation belongs to workspace",
     );
+    let frame: D.ExecutorFrame | undefined;
     try {
-      const frame = await this.executors.exchange(
+      frame = await this.executors.exchange(
         input.identity.target.executorId,
         input.identity.target.generation,
         {
@@ -545,9 +556,10 @@ export class Dispatch {
         },
         ctx.deadline,
       );
-      if (frame.type === "job.cancel_ack" && same(frame.payload.identity, input.identity))
-        return frame.payload.disposition;
     } catch {}
+    current();
+    if (frame?.type === "job.cancel_ack" && same(frame.payload.identity, input.identity))
+      return frame.payload.disposition;
     return { state: "unknown", possibleExternalEffects: true };
   }
 }
