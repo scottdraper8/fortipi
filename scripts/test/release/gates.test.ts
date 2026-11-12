@@ -3,6 +3,7 @@ import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
+import { create as createTar } from "tar";
 import { repository } from "../../build-workspaces.ts";
 import {
   assertEvidenceReceipt,
@@ -29,6 +30,7 @@ import {
   REPOSITORY,
   REPOSITORY_ID,
   readJson,
+  regularBytes,
   SYNTHETIC_SCOPE,
   saveJson,
   sha256,
@@ -271,6 +273,7 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
   const calls: string[] = [];
   let leaked = false;
   const packet = await metadataArchive(c);
+  let archiveBytes = packet.bytes;
   const substituted = await metadataArchive({ ...c, producer: { ...c.producer, runId: 11 } });
   const ref: ArtifactReference = {
     runId: 10,
@@ -311,7 +314,7 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
           ? Buffer.from("changed")
           : mutate === "substitute"
             ? substituted.bytes
-            : packet.bytes,
+            : archiveBytes,
       );
       return;
     }
@@ -457,6 +460,74 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
       ),
       /Candidate bytes differ/,
     );
+    // A synthetic successful producer over actual small package archives tests
+    // the reader protocol; this fixture is not source/license approval.
+    mutate = "";
+    const actual = structuredClone(c);
+    const sources = await temporary("fortipi-reader-pack-source-");
+    let realZip: Awaited<ReturnType<typeof directoryArchive>> | undefined;
+    try {
+      for (const pkg of actual.packages) {
+        const sourceRoot = resolve(sources, pkg.sourceName);
+        const files: Record<string, Buffer> = {
+          "package.json": Buffer.from(JSON.stringify({ name: pkg.name, version: pkg.version })),
+        };
+        if (pkg.sourceName === "fortipi-cli") {
+          files["worker-assets/asset-manifest.json"] = Buffer.from("assets");
+          files["node_modules/reader-fixture/index.js"] = Buffer.from("export const value = 1;\n");
+        }
+        pkg.entries = [];
+        for (const [path, bytes] of Object.entries(files)) {
+          const destination = resolve(sourceRoot, "package", path);
+          await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o700 });
+          await writeFile(destination, bytes, { mode: 0o600 });
+          pkg.entries.push({ path, size: bytes.length, mode: 0o600, sha256: sha256(bytes) });
+        }
+        pkg.entries.sort((a, b) => a.path.localeCompare(b.path, "en"));
+        const tarball = resolve(retained, pkg.tarball);
+        await mkdir(resolve(tarball, ".."), { recursive: true });
+        await createTar({ cwd: sourceRoot, file: tarball, gzip: true }, ["package"]);
+        const bytes = await regularBytes(tarball);
+        pkg.sha256 = sha256(bytes);
+        pkg.integrity = `sha512-${(await import("node:crypto")).createHash("sha512").update(bytes).digest("base64")}`;
+      }
+      await mkdir(resolve(retained, "image"), { recursive: true });
+      await writeFile(resolve(retained, "sbom.json"), "{}");
+      await writeFile(resolve(retained, "image/sources-and-notices.tar"), "sourcekit");
+      await rm(retainedPath);
+      actual.files = await inventory(retained);
+      ref.candidateSha256 = await saveJson(retainedPath, actual);
+      realZip = await directoryArchive(retained);
+      archiveBytes = realZip.bytes;
+      ref.artifactDigest = `sha256:${sha256(archiveBytes)}`;
+      const loaded = await loadCandidate(retainedPath, {
+        reference: ref,
+        request: githubRequest(undefined, server.transport),
+      });
+      assert.deepEqual(loaded.candidate, actual);
+      await assert.rejects(loadCandidate(retainedPath), /Unsafe artifact path/);
+      const cli = actual.packages.find((pkg) => pkg.sourceName === "fortipi-cli");
+      const member = cli?.entries.find((entry) => entry.path.startsWith("node_modules/"));
+      assert.ok(member);
+      const originalHash = member.sha256;
+      member.sha256 = sha256("wrong producer member hash");
+      ref.candidateSha256 = await saveJson(retainedPath, actual, false);
+      await realZip.close();
+      realZip = await directoryArchive(retained);
+      archiveBytes = realZip.bytes;
+      ref.artifactDigest = `sha256:${sha256(archiveBytes)}`;
+      await assert.rejects(
+        loadCandidate(retainedPath, {
+          reference: ref,
+          request: githubRequest(undefined, server.transport),
+        }),
+        /Authorized archive hash differs/,
+      );
+      member.sha256 = originalHash;
+    } finally {
+      await realZip?.close();
+      await rm(sources, { recursive: true, force: true });
+    }
   } finally {
     await server.close();
     await packet.close();

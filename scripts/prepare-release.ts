@@ -48,6 +48,7 @@ import {
   inventory,
   object,
   type Producer,
+  packageEntryPath,
   packageOrder,
   privilegedCheckout,
   REPOSITORY,
@@ -186,10 +187,55 @@ async function checked(
   );
   return result.stdout;
 }
+type ArchivePackage = Pick<CandidatePackage, "name" | "sourceName" | "entries">;
+interface ArchivePlan {
+  name: string;
+  sourceName: string;
+  files: ReadonlyMap<string, Readonly<FileRecord>>;
+  directories: ReadonlySet<string>;
+  total: number;
+}
+const archivePlans = new WeakMap<object, ArchivePlan>();
+/** Private retained authority: reached only after external producer verification. */
+function archiveAuthority(expected: ArchivePackage): object {
+  const files = new Map<string, Readonly<FileRecord>>();
+  const directories = new Set<string>();
+  let total = 0;
+  for (const entry of expected.entries) {
+    const path = packageEntryPath(entry.path);
+    assert.ok(!files.has(path), "Duplicate authorized archive file");
+    assert.ok(Number.isSafeInteger(entry.size) && entry.size >= 0);
+    total += entry.size;
+    assert.ok(Number.isSafeInteger(total), "Authorized archive size overflow");
+    files.set(path, Object.freeze({ ...entry }));
+    const parts = path.split("/");
+    while (parts.length > 1) {
+      parts.pop();
+      directories.add(parts.join("/"));
+    }
+  }
+  const handle = Object.freeze({});
+  archivePlans.set(handle, {
+    name: expected.name,
+    sourceName: expected.sourceName,
+    files,
+    directories,
+    total,
+  });
+  return handle;
+}
 export async function archiveInventory(
   path: string,
-  expected?: Pick<CandidatePackage, "name" | "sourceName" | "entries">,
+  expected?: ArchivePackage,
+  authority?: object,
 ): Promise<{ entries: FileRecord[]; manifest: Record<string, unknown> }> {
+  const plan = authority ? archivePlans.get(authority) : undefined;
+  if (authority) assert.ok(plan, "Unrecognized archive authority");
+  if (plan) {
+    assert.equal(expected?.name, plan.name);
+    assert.equal(expected?.sourceName, plan.sourceName);
+  }
+  const byteLimit = plan?.sourceName === "fortipi-cli" ? plan.total : 200_000_000;
   // Expected inventory comes from verified staging or the retained candidate, never tar headers.
   // The source freeze independently pins the only payload eligible for a larger member.
   const seaPath = "worker-assets/linux/container/computerd";
@@ -212,6 +258,8 @@ export async function archiveInventory(
   let failure: unknown;
   const parser = listTar({
     strict: true,
+    maxMetaEntrySize: 1024 * 1024,
+    maxDecompressionRatio: 1000,
     onReadEntry(entry) {
       try {
         assert.ok(
@@ -222,22 +270,36 @@ export async function archiveInventory(
           entry.resume();
           return;
         }
-        const local = safePath(entry.path.slice(8).replace(/\/$/, ""));
+        const raw = entry.path.slice(8).replace(/\/$/, "");
+        const local =
+          plan && entry.type === "Directory" ? raw : (plan ? packageEntryPath : safePath)(raw);
         assert.ok(!seen.has(local.toLowerCase()), "Duplicate normalized archive path");
         seen.add(local.toLowerCase());
+        assert.ok(seen.size < 30000, "Archive record bound");
         assert.ok(
           entry.type === "File" || entry.type === "Directory",
           "Special archive entry rejected",
         );
         if (entry.type === "Directory") {
+          if (plan) assert.ok(plan.directories.has(local), "Unknown authorized archive directory");
           entry.resume();
           return;
         }
         total += entry.size;
+        const authorized = plan?.files.get(local);
+        if (plan) {
+          assert.ok(authorized, "Unknown authorized archive member");
+          assert.equal(entry.size, authorized.size, "Authorized archive size differs");
+          assert.equal(
+            (entry.mode ?? 0) & 0o777,
+            authorized.mode,
+            "Authorized archive mode differs",
+          );
+        }
         const reviewedSea = sea && local === seaPath;
         assert.ok(
           (entry.size <= 32_000_000 || (reviewedSea && entry.size === sea.size)) &&
-            total <= 200_000_000,
+            total <= byteLimit,
           "Archive byte bound",
         );
         const hash = createHash("sha256");
@@ -252,6 +314,8 @@ export async function archiveInventory(
           try {
             assert.equal(size, entry.size);
             const sha256 = hash.digest("hex");
+            if (authorized)
+              assert.equal(sha256, authorized.sha256, "Authorized archive hash differs");
             if (reviewedSea) {
               assert.equal(size, sea.size, "Archive SEA size differs");
               assert.equal(sha256, sea.sha256, "Archive SEA hash differs");
@@ -272,6 +336,8 @@ export async function archiveInventory(
     },
   });
   const finished = once(parser, "end");
+  const timer = setTimeout(() => parser.abort(new Error("Archive verification timeout")), 120000);
+  timer.unref();
   const input = createReadStream(path, { highWaterMark: 64 * 1024 });
   input.on("error", (error) => {
     failure = error;
@@ -284,9 +350,14 @@ export async function archiveInventory(
   } catch (error) {
     throw failure ?? error;
   } finally {
+    clearTimeout(timer);
     input.destroy();
   }
   if (failure) throw failure;
+  if (plan) {
+    assert.equal(total, plan.total, "Authorized archive total differs");
+    assert.equal(entries.length, plan.files.size, "Incomplete authorized archive");
+  }
   assert.ok(manifest, "Missing package manifest");
   if (expected) assert.equal(manifest.name, expected.name, "Archive package role differs");
   return { entries: entries.sort((a, b) => a.path.localeCompare(b.path, "en")), manifest };
@@ -933,7 +1004,11 @@ export async function loadCandidate(
     const bytes = await regularBytes(resolve(directory, p.tarball));
     assert.equal(sha256(bytes), p.sha256);
     assert.equal(sha512(bytes), p.integrity);
-    const packed = await archiveInventory(resolve(directory, p.tarball), p);
+    const packed = await archiveInventory(
+      resolve(directory, p.tarball),
+      p,
+      retained ? archiveAuthority(p) : undefined,
+    );
     assert.deepEqual(packed.entries, p.entries);
     assert.equal(packed.manifest.name, p.name);
     assert.equal(packed.manifest.version, p.version);

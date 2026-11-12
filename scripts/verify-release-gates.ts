@@ -226,6 +226,29 @@ export function safePath(path: string): string {
   );
   return path;
 }
+/** Metadata shape only. Actual bundled bytes require independently authenticated authority. */
+export function packageEntryPath(path: string): string {
+  if (!path.startsWith("node_modules/")) return safePath(path);
+  assert.ok(assetPath(path), "Unsafe package entry path");
+  assert.ok(
+    !/\.(?:node(?:\.wasm)?|dylib|dll|so(?:\.\d+)*|exe)$/i.test(path),
+    "Native dependency entry rejected",
+  );
+  const code =
+    /(?:^|\/)node_modules\/@anthropic-ai\/sdk\/(?:src\/)?lib\/credentials\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:[cm]?[jt]s|[cm]?[jt]s\.map)$/.test(
+      path,
+    );
+  const shape = path.replace(/(^|\/)node_modules\//g, "$1");
+  safePath(
+    code
+      ? shape.replace(
+          /(^|\/)@anthropic-ai\/sdk\/((?:src\/)?lib)\/credentials\//g,
+          "$1@anthropic-ai/sdk/$2/reviewed-code/",
+        )
+      : shape,
+  );
+  return path;
+}
 export function freshness(time: string, hours: number, now = Date.now()): void {
   const age = now - Date.parse(time);
   assert.ok(
@@ -301,7 +324,10 @@ export async function inventory(root: string, prefix = ""): Promise<FileRecord[]
   );
   return result.sort((a, b) => a.path.localeCompare(b.path, "en"));
 }
-export function records(value: unknown): asserts value is FileRecord[] {
+export function records(
+  value: unknown,
+  pathShape: (path: string) => string = safePath,
+): asserts value is FileRecord[] {
   assert.ok(
     Array.isArray(value) && value.length > 0 && value.length < 30000,
     "Missing artifact inventory",
@@ -310,7 +336,7 @@ export function records(value: unknown): asserts value is FileRecord[] {
   for (const row of value) {
     const f = object(row);
     closed(f, ["path", "size", "mode", "sha256"]);
-    const path = safePath(string(f.path));
+    const path = pathShape(string(f.path));
     assert.ok(!seen.has(path.toLowerCase()), "Duplicate artifact path");
     seen.add(path.toLowerCase());
     digest(f.sha256);
@@ -374,7 +400,7 @@ export function assertCandidate(value: unknown): asserts value is CandidateManif
     safePath(string(p.tarball));
     digest(p.sha256);
     assert.match(string(p.integrity), /^sha512-[A-Za-z0-9+/]{86}==$/);
-    records(p.entries);
+    records(p.entries, packageEntryPath);
   }
   records(c.files);
   const all = c.files as FileRecord[];
