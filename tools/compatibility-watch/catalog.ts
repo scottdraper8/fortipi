@@ -183,6 +183,17 @@ export const sources: Source[] = [
     "Review upstream FUSE API/ABI, mount/unmount, security and kernel compatibility changes against the exact packaged Debian source and patches. Computer's vendored addon is separate. Verify canonical native pins match the final image; an upstream reference alone does not establish installed-version security.",
   ),
   release(
+    "meson",
+    "mesonbuild/meson",
+    [
+      pin("tools/unstale/platform-tools.json", "meson", "version"),
+      pin("tools/unstale/platform-tools.json", "meson", "source"),
+      pin("tools/unstale/platform-tools.json", "meson", "sourceArchiveSha256"),
+      pin("tools/unstale/platform-tools.json", "meson", "licenseSha256"),
+    ],
+    "Review Meson build-option/API and Python requirements against the pinned source/archive and COPYING. Validate private Python executable/prefix/import/library identity and actual FUSE shared-library/static-helper rebuild, replacement/relink and I/O before adoption. A release pointer does not establish build-host compatibility or security.",
+  ),
+  release(
     "workerd",
     "cloudflare/workerd",
     [pin(worker, "devDependencies", "@cloudflare/workers-types")],

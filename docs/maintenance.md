@@ -17,7 +17,7 @@ node --test tools/compatibility-watch/watch.test.ts
 ```
 
 `catalog.ts` limits the check to official Cloudflare policy/compatibility sources,
-Computer/computerd, upstream libfuse, Agents PiHarness/Lifecycle, the Pi package family, Wrangler,
+Computer/computerd, upstream libfuse and Meson, Agents PiHarness/Lifecycle, the Pi package family, Wrangler,
 workerd, Node, pnpm, TypeScript's original compiler release repository and node-pty. Policy watches include shared pricing
 partials and compatibility flag data. GitHub Contents identities include recursive
 directory tree hashes. Pi watches the used package family and shared runtime sources;
@@ -74,6 +74,16 @@ It tracks the existing canonical FUSE 3 pins in `tools/unstale/platform-tools.js
 Before an image release, verify those pins match its exact Debian freeze and review
 distro patches against relevant upstream fixes. The initial upstream reference
 does not establish security or compatibility of the packaged native library.
+
+Meson's release watch tracks the build tool's exact version, source commit, archive
+and COPYING hashes in `tools/unstale/platform-tools.json`. Its latest-release
+snapshot is a review pointer; it does not renew runtime or security acceptance.
+Review build-option/API changes and Python requirements before adoption, retaining
+the pinned entrypoint/license checks and private interpreter executable, prefix,
+import and mapped-library verification. Validate the actual FUSE shared-library
+and static-helper rebuild, replacement/relink and I/O through the existing process.
+Update only the reviewed Meson baseline entry; other reference records retain their
+original evidence and timestamps. Security-only Dependabot remains separate.
 
 Release tooling (thread 9) must run this check at preflight on the candidate SHA
 and inspect relevant unreviewed drift before deployment/publication. Attach the
