@@ -25,6 +25,14 @@ export interface CatalogModel {
   reasoning: boolean;
   input: readonly string[];
 }
+export interface ModelListing {
+  items: CatalogModel[];
+  workersAi: { providerId: string; catalog: string; auth: string };
+  deployed:
+    | { state: "not-configured" }
+    | { state: "unavailable" }
+    | { state: "observed"; items: Protocol["models"] };
+}
 export type CommandOperation =
   | "getProtocol"
   | "getAdminHealth"
@@ -72,6 +80,6 @@ export type CommandResult =
       assetManifestSha256: string;
       workerBytesVerified: true;
     }
-  | { items: CatalogModel[]; workersAi: { providerId: string; catalog: string; auth: string } }
+  | ModelListing
   | { exitCode: number }
   | { bytes: number; sha256: string };

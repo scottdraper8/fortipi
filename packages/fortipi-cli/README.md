@@ -37,6 +37,20 @@ issue. Noninteractive fresh setup fails when choices are missing. See the
 
 Infrastructure failures include curated resource, measurement kind, limits, supplied reset/retry times and operator action on stderr. Remote messages, free-text reasons and resource identifiers are omitted. Unknown measurements and absent resets stay unknown; storage errors do not imply a daily reset.
 
+`models list` keeps the pinned local catalog in `items`. With an existing selected
+application profile it also observes the deployed protocol's redacted model
+metadata in `deployed.items`. The provider filter applies to both catalogs.
+`deployed.state` distinguishes `observed`, `not-configured` and `unavailable`;
+unavailability does not erase the local catalog or imply provider readiness.
+
+`executors bind --input PATH` binds a separately registered local executor/root
+to a logical workspace using the original `WorkspaceBindingCreate` DTO. Adding
+`--id WORKSPACE_ID` uses the complete original `WorkspaceBindingPatch`, including
+CAS and acknowledged revision/manifest import. `config.kind` must be `local`;
+executor/root IDs belong in `config`, never `--id`. This is the local-only alias of
+`workspaces bind`, with the same authority/grant checks. It does not register an
+executor, bind a host path or change local consent.
+
 `runtime` follows the shipped `Configuration` schema. Workspace, execution, routing and models are independent selections. Free/unknown defaults use the contract's conservative bounds. Paid Loader/Containers require explicit canonical capability declarations; local validation does not prove Cloudflare account entitlement. The example requires a separately registered, authorized native executor and does not grant native shell permission.
 
 Management uses an exact-origin protected application profile, selected with `--profile NAME`. Inputs to mutations are non-secret canonical DTO files. Credential issuance reserves and syncs its protected output before contacting the authority; stdout contains metadata only. A lost response leaves its request ID for recovery. Never remint blindly. Revocation may return durable `pending` and must be queried until complete.

@@ -13,7 +13,7 @@ import type { CliInteraction } from "./interaction-types.js";
 import { installationId, loginAndIngest } from "./model-auth.js";
 import { localModels, selectModel } from "./models.js";
 import { loadProfile, profilePath, profileRoot, protectDirectory } from "./profiles.js";
-import type { CommandOperation, CommandResult } from "./results.js";
+import type { CommandOperation, CommandResult, ModelListing } from "./results.js";
 import { ensureModelAuthKey, guidedSetup } from "./setup.js";
 import { launchTui } from "./tui.js";
 import { type WranglerPort, wrangler } from "./wrangler.js";
@@ -29,6 +29,7 @@ export type {
   CommandResult,
   CredentialDelivery,
   DeploymentReceipt,
+  ModelListing,
 } from "./results.js";
 export type { SetupResult } from "./setup.js";
 export interface CommandContext {
@@ -163,13 +164,41 @@ export async function runCommand(input: string[], context: CommandContext): Prom
             context,
           ),
       });
-    case "models list":
-      return {
-        items: localModels(
-          typeof args.options.provider === "string" ? args.options.provider : undefined,
-        ),
+    case "models list": {
+      const provider =
+        typeof args.options.provider === "string" ? args.options.provider : undefined;
+      const local = {
+        items: localModels(provider),
         workersAi: { providerId: "cloudflare", catalog: "deployed-protocol", auth: "AI-binding" },
       };
+      let api: AdminClient;
+      try {
+        api = await client();
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        return { ...local, deployed: { state: "not-configured" } } satisfies ModelListing;
+      }
+      try {
+        const protocol = await api.call("getProtocol", { path: {}, query: {}, body: undefined });
+        return {
+          ...local,
+          deployed: {
+            state: "observed",
+            items: protocol.models
+              .filter((m) => !provider || m.providerId === provider)
+              .map((m) => ({
+                providerId: m.providerId,
+                modelId: m.modelId,
+                capabilities: [...m.capabilities],
+                available: m.available,
+              })),
+          },
+        } satisfies ModelListing;
+      } catch {
+        if (context.signal.aborted) throw new CliError("cancelled", 130);
+        return { ...local, deployed: { state: "unavailable" } } satisfies ModelListing;
+      }
+    }
     case "models select":
       await selectModel(
         resolve(get("config")),
@@ -303,8 +332,6 @@ export async function runCommand(input: string[], context: CommandContext): Prom
         integer(args, "max-bytes", 1, 1073741824),
       );
     }
-    case "executors bind":
-      throw new CliError("executor_binding_requires_explicit_workspace_binding_contract", 3);
     case "tui":
       return launchTui(
         [...(args.options.profile ? ["--profile", selected] : []), ...args.passthrough],
@@ -326,6 +353,7 @@ export async function runCommand(input: string[], context: CommandContext): Prom
     "agents configure": "configureAgent",
     "config apply": "patchConfiguration",
     "workspaces bind": args.options.id ? "rebindWorkspace" : "createWorkspace",
+    "executors bind": args.options.id ? "rebindWorkspace" : "createWorkspace",
     "credentials revoke": "revokeCredential",
     "executors revoke": "revokeExecutor",
     "export create": "createExport",
@@ -348,12 +376,19 @@ export async function runCommand(input: string[], context: CommandContext): Prom
     path = {
       [args.command === "agents configure"
         ? "agentId"
-        : args.command === "workspaces bind"
+        : args.command === "workspaces bind" || args.command === "executors bind"
           ? "workspaceId"
           : "id"]: get("id"),
     };
   check(operationId, "unknown_command");
   const body = writes[args.command] ? await readInput() : undefined;
+  if (args.command === "executors bind")
+    check(
+      body &&
+        typeof body === "object" &&
+        (body as { config?: { kind?: unknown } }).config?.kind === "local",
+      "local_workspace_binding_required",
+    );
   if (args.command === "config apply") {
     check(
       body &&

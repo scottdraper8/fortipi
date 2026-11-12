@@ -80,7 +80,22 @@ For external API keys, select a binding first, then use `models configure --conf
 
 `FORTIPI_MODEL_AUTH_KEY` is separate random key material. Login checks secret names, preserves an unknown existing server key, and persists a newly generated local key before stdin upload. It reuses that same key after an interrupted upload. Missing/mismatched keys require repair; prepare, status and dry-run never provision keys.
 
-Administration uses `--input NON_SECRET_DTO.json`, stable request IDs and explicit expected versions/generations. `config apply` requires both the canonical `ConfigurationPatch` input and matching `--expected-version`. `agents configure` takes `--id`; `workspaces bind` creates a binding or, with `--id`, uses canonical rebind. Executor registration/root bindings are explicit; the contract has no standalone executor-bind operation.
+Administration uses `--input NON_SECRET_DTO.json`, stable request IDs and explicit expected versions/generations. `config apply` requires both the canonical `ConfigurationPatch` input and matching `--expected-version`. `agents configure` takes `--id`; `workspaces bind` creates a binding or, with `--id`, uses canonical rebind.
+
+`executors bind` is the local-workspace-only alias of those same operations, not a
+standalone executor RPC. Without `--id`, supply the original
+`WorkspaceBindingCreate {requestId,config}`. With `--id WORKSPACE_ID`, supply the
+original `WorkspaceBindingPatch` with requestId, expectedVersion,
+newBindingVersion, local config and `import:{revision,manifest,acknowledgeExternalEffects:true}`.
+The executorId/rootBindingId are inside `config`; `--id` always identifies the
+logical workspace. Create has no invented expectedVersion. Rebind retains every
+CAS/import/grant requirement. Register the root separately with the local executor;
+this command does not change host paths, executor registration or local consent.
+
+`models list` includes the pinned local catalog and, when the selected application
+profile exists, redacted deployed protocol model metadata. `--provider` filters
+both. Missing profiles keep the operation local; remote failure is reported as
+unavailable without replacing local metadata or exposing server diagnostics.
 
 `credentials create|rotate --input PATH --output PROTECTED_PATH` writes one-time material directly to its reserved destination. Rotation also reports the old credential's pending/complete revocation. If delivery fails, use the saved request/credential metadata to query/revoke/replace; plaintext recovery is unavailable. No automatic mutation retry occurs. `credentials revoke` and `executors revoke` require canonical `RevocationInput`; `export status --id OPERATION_ID` observes durable operation state. App-admin grants do not imply conversation, workspace-read or shell authority.
 
