@@ -393,8 +393,18 @@ export async function packageWorkerAssets(options: {
       };
       const recipeHash = conveyed.get("source-kit-recipe/Dockerfile")?.sha256;
       assert.ok(recipeHash, "Image source-kit recipe missing");
+      const embeddedBytes = await readFile(resolve(workerRoot, "container/embedded-freeze.json"));
+      assert.equal(sha256(embeddedBytes), image.embeddedInventorySha256);
+      assert.equal(
+        conveyed.get("source-kit-recipe/embedded-freeze.json")?.sha256,
+        image.embeddedInventorySha256,
+        "Image source-kit daemon freeze differs",
+      );
+      const embedded = JSON.parse(embeddedBytes.toString()) as { binarySha256: string };
+      assert.match(embedded.binarySha256, /^[a-f0-9]{64}$/);
       const expectedContext = new Map<string, string>([
         ["Dockerfile", recipeHash],
+        ["computerd", embedded.binarySha256],
         ...freeze.packages.map((p): [string, string] => [`packages/${p.name}.deb`, p.sha256]),
         ...[...conveyed].flatMap(([path, entry]): [string, string][] =>
           path.startsWith("context/notices/") && entry.type === "File" && entry.sha256
