@@ -126,7 +126,7 @@ async function eligible() {
   inputGate("eligibility.platform");
   assert.equal(process.platform, "linux", "Proof requires actual Linux before any home lookup");
   inputGate("eligibility.node");
-  assert.equal(process.versions.node, "26.13.0");
+  assert.equal(process.versions.node, "26.13.1");
   inputGate("eligibility.actions");
   assert.equal(
     process.env.GITHUB_ACTIONS,

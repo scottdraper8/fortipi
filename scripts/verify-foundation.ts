@@ -28,7 +28,7 @@ export function createPtyProbeResponder(send: (input: string) => void): (output:
 }
 
 export async function nativeChecks(): Promise<void> {
-  assert.equal(process.versions.node, "26.13.0", "Use the exact reviewed Node runtime");
+  assert.equal(process.versions.node, "26.13.1", "Use the exact reviewed Node runtime");
   console.log("Native probe: pnpm identity");
   const pnpm = await verifyPnpmExecutable(await pnpmExecutable());
   console.log("Native probe: workerd binary");
@@ -213,7 +213,7 @@ async function metadata(root: string): Promise<void> {
     assert.equal(manifest.license, "SEE LICENSE IN LICENSE");
     assert.equal(manifest.repository.directory, path);
     assert.equal(manifest.publishConfig.access, "public");
-    assert.equal(manifest.engines?.node, ">=26.13.0");
+    assert.equal(manifest.engines?.node, ">=26.13.1");
     for (const value of Object.values(manifest.exports))
       if (typeof value === "object" && value !== null) {
         const entry = value as { types: string; import: string };

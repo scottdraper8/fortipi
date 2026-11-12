@@ -183,16 +183,16 @@
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
       "snapshot": {
-        "commit": "18b32a3b1552e199a01f1a8d9fd64aa756d3b75b",
-        "version": "v26.13.0",
-        "sha256": "081c4e4a94121658b630033a9d85fabdb2398bf446694f5b5f60ee5896f226e6",
+        "commit": "e9c277643b0249c50f6e6de5413be8a88ea11b6a",
+        "version": "v26.13.1",
+        "sha256": "84d91b281316e78e5dc988526d4545e46c431dd6544107003a86a08dcbd27e5f",
         "paths": {}
       },
       "pins": {
-        "package.json#fortipi/toolchain/node": "26.13.0"
+        "package.json#fortipi/toolchain/node": "26.13.1"
       },
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed official v26.13.0 release and resolved tag: Node 26 LTS transition, Linux libatomic prerequisite. Matches toolchain pin. This reference does not replace fresh prepublication Node security review or native ABI/build checks."
+      "reviewedAt": "2026-11-12T09:46:34.863Z",
+      "reviewNote": "Reviewed official 2026-11-11 Node 26.13.1 security release/advisory and exact release tag. Replaces host/product-minimum 26.13.0 for high/medium HTTP2/TLS/HTTPS and other fixes; official archive signed SHA256 verified with active Node release key. Bundled npm observed 11.20.0 unchanged; local native/type/license/installed-consumer evidence in phase3/thread-1/node-security-patch.md. Historical Linux/image/embedded Node identities remain separate, not newly certified. No other watch entry accepted."
     },
     "pnpm": {
       "catalogSha256": "e58410592c8f99f5a020cb7c675a8fb1adcab60b7954df4ee66f045f48f14708",

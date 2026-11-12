@@ -1,7 +1,7 @@
 # FortiPi CLI
 
 Management CLI with a build-time producer for the genuine Worker bundle, contracts,
-templates, image-source context and original notices. Node 26.13.0 is required.
+templates, image-source context and original notices. Node 26.13.1 is required.
 Missing producer inputs fail packaging; modified or incomplete installed assets
 fail before preparation/deployment. Cloud deployment, actual native Windows ACLs
 and independent installed offline qualification remain separate release gates.
