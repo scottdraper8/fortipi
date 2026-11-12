@@ -1685,6 +1685,23 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261110.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workers-types@5.20261112.1": {
+      "name": "@cloudflare/workers-types",
+      "version": "5.20261112.1",
+      "integrity": "sha512-FhkAlCQ+J/pV89nhehVaarhlvZFz+ybUsePmIDN1yfI7PMmpjwdxV663e9qu+G+oQSw9oM8u5sVmheNBFn4tnw==",
+      "published": "2026-11-12T01:00:52.446Z",
+      "reviewedAt": "2026-11-12T12:45:14.384Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "91e157eb6a2396931c2fcc3fd582a86d2077253a7f610cd8664f31216c2c1b9f",
+      "manifestSha256": "14eb704f337594c16c0f3ecc9039162be8759afdea1af1e9b89a97fde8f88e26",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261112.1; Sigstore transparency verification required at release"
+    },
     "@cspotcode/source-map-support@0.8.1": {
       "name": "@cspotcode/source-map-support",
       "version": "0.8.1",
@@ -8081,10 +8098,15 @@
       "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
       "expires": "2026-11-12T14:37:43.184Z",
       "integrity": "sha512-CO8T1DO3/JFxEWvJ7yaHiPx5Ph/5FhRzYKve6cM8O2frHmY7yWudV5p8FU11bfGRAerChGpuK+l0HoxOCw2nFw=="
+    },
+    "@cloudflare/workers-types@5.20261112.1": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-13T01:00:52.446Z",
+      "integrity": "sha512-FhkAlCQ+J/pV89nhehVaarhlvZFz+ybUsePmIDN1yfI7PMmpjwdxV663e9qu+G+oQSw9oM8u5sVmheNBFn4tnw=="
     }
   },
   "advisory": {
-    "checkedAt": "2026-11-12T12:14:58.217Z",
+    "checkedAt": "2026-11-12T12:46:20.971Z",
     "identities": 381,
     "findings": []
   }

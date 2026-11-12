@@ -960,6 +960,17 @@
       "inheritedFrom": "@aws-sdk/core@3.981.0",
       "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
       "files": []
+    },
+    "@cloudflare/workers-types@5.20261112.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/e0240debf4d6a5042a02a45311b51c61d13bd0fb",
+      "evidence": "Exact npm gitHead and generated declarations matched published workerd release; archive omits legal text. Full source LICENSE preserved; registry signature/SRI verified separately, Sigstore transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/e0240debf4d6a5042a02a45311b51c61d13bd0fb/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/e0240debf4d6a5042a02a45311b51c61d13bd0fb/LICENSE"
+        }
+      ]
     }
   },
   "externalToolChain": ["wrangler@4.160.1", "miniflare@5.20261110.1-beta", "sharp@0.35.5"]
