@@ -100,6 +100,24 @@ try {
   assert.equal(body.sync, "complete");
   assert.equal(body.skipped, 0);
   if (process.argv.includes("--require-fuse")) assert.equal(body.fuse, true);
+  const groupResponse = await harness.fetch("/run?backend=linux&process-group=true");
+  assert.equal(
+    groupResponse.status,
+    200,
+    "Actual patched daemon process-group cancellation failed",
+  );
+  const group = (await groupResponse.json()) as {
+    cancelled: string;
+    observer: string;
+    stdout: string;
+    sync: string;
+    skipped: number;
+  };
+  assert.equal(group.cancelled, "cancelled");
+  assert.equal(group.observer, "completed");
+  assert.ok(group.stdout.includes("process-group-stopped"));
+  assert.equal(group.sync, "complete");
+  assert.equal(group.skipped, 0);
   checkLoadedImage();
   assert.equal(await verifyRecipientFixture(), metadata.imageId);
   process.stdout.write(
