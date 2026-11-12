@@ -5,7 +5,6 @@ saveExact: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
-  - "@cloudflare/computer@0.11.1"
   - wrangler@4.161.0
   - miniflare@5.20261110.2-beta
   - "@cloudflare/workers-types@5.20261112.1"
