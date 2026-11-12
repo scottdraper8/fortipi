@@ -213,6 +213,7 @@ export async function main(command: string | undefined): Promise<void> {
         ...packagePaths.map((p) => `${p}/test`),
         "apps/worker/test",
         "scripts/test/release",
+        "tests/clients",
       ]);
       return;
     case "test:executor":

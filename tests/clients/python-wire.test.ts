@@ -6,6 +6,15 @@ import { test } from "node:test";
 import { type Fault, primary, pythonPeer, secondary } from "./fixtures/python-wire-peer.ts";
 
 const root = resolve(import.meta.dirname, "../..");
+function pythonEnvironment(token?: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH ?? "", LANG: "C.UTF-8" };
+  if (process.platform === "win32") {
+    assert.ok(process.env.SystemRoot, "Python requires the Windows system context");
+    env.SystemRoot = process.env.SystemRoot;
+  }
+  if (token !== undefined) env.FORTIPI_CLIENT_TOKEN = token;
+  return env;
+}
 function child(endpoint: string, token = primary, allowHttp = true) {
   const process = spawn(
     "python3",
@@ -22,11 +31,7 @@ function child(endpoint: string, token = primary, allowHttp = true) {
     {
       cwd: root,
       // Only this role's synthetic credential. No ambient auth/proxy/Python configuration.
-      env: {
-        PATH: globalThis.process.env.PATH ?? "",
-        LANG: "C.UTF-8",
-        FORTIPI_CLIENT_TOKEN: token,
-      },
+      env: pythonEnvironment(token),
       stdio: ["pipe", "pipe", "pipe"],
     },
   );
@@ -292,7 +297,7 @@ test("HTTP is opt-in exact loopback and importing the example neither reads cred
       "import importlib.util,sys; assert sys.version_info[:3]==(3,15,2); spec=importlib.util.spec_from_file_location('fortipi_example',sys.argv[1]); module=importlib.util.module_from_spec(spec); sys.modules[spec.name]=module; spec.loader.exec_module(module); print('import-safe')",
       resolve(root, "examples/python-client/client.py"),
     ],
-    { env: { PATH: process.env.PATH ?? "", LANG: "C.UTF-8" }, stdio: ["ignore", "pipe", "pipe"] },
+    { env: pythonEnvironment(), stdio: ["ignore", "pipe", "pipe"] },
   );
   let output = "",
     error = "";
