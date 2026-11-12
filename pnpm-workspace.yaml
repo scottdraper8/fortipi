@@ -29,3 +29,4 @@ allowBuilds:
   protobufjs@7.6.6: false
 patchedDependencies:
   "@earendil-works/pi-durable@1.5.2": patches/@earendil-works__pi-durable@1.5.2.patch
+  agents@0.33.0: patches/agents@0.33.0.patch

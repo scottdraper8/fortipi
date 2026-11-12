@@ -58,7 +58,7 @@ test("patched Pi delayed publication rejects its caller without a process-level 
     }
   }
 });
-test("characterize unsafe pinned Lifecycle same-ID replacement losing its wake", async () => {
+test("repaired Lifecycle same-ID replacement preserves its newer wake", async () => {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-lifecycle-race-"));
   const configPath = join(directory, "wrangler.json");
   await writeFile(
@@ -80,12 +80,17 @@ test("characterize unsafe pinned Lifecycle same-ID replacement losing its wake",
   await server.listen();
   const env = await server.getWorker<{ PROBE: DurableObjectNamespace<RaceProbe> }>().getEnv();
   const probe = env.PROBE.getByName("race");
+  const drives: Promise<void>[] = [];
   try {
     await probe.arm();
     const old = probe.drive();
+    drives.push(old);
+    void old.catch(() => {});
     await until(async () => (await probe.state()).oldCalls === 1);
     await probe.replace();
     const newer = probe.drive();
+    drives.push(newer);
+    void newer.catch(() => {});
     await until(async () => (await probe.state()).newCalls === 1);
     await old;
     // A platform alarm may have won the first drive. Keep the replacement held
@@ -95,16 +100,22 @@ test("characterize unsafe pinned Lifecycle same-ID replacement losing its wake",
     console.log(JSON.stringify({ lifecycleRace: state }));
     // Revalidation prevented old effects, but a wake owned by the newer invocation must still exist.
     assert.equal(state.effects, 0, "Stale callback must not execute an effect");
-    assert.equal(state.oldCalls, 2, "Pinned upstream retries superseded work");
-    assert.equal(
-      state.exists,
-      false,
-      "Unsafe same-ID primitive must remain excluded from production integration",
-    );
+    assert.equal(state.oldCalls, 1, "Superseded callbacks must not retry");
+    assert.equal(state.exists, true, "The old outcome must preserve the in-flight replacement");
+    assert.equal(state.fn, "new");
+    assert.equal(state.newCalls, 1);
+    assert.equal(state.queued, 1);
     await probe.release();
     await newer;
+    await until(async () => !(await probe.state()).exists);
+    const completed = await probe.state();
+    assert.equal(completed.oldCalls, 1);
+    assert.equal(completed.newCalls, 1);
+    assert.equal(completed.effects, 0);
+    assert.equal(completed.queued, 0, "The released replacement completes normally");
   } finally {
     await probe.release();
+    for (const result of await Promise.allSettled(drives)) assert.equal(result.status, "fulfilled");
     await probe.close();
     await server.close();
     await rm(directory, { recursive: true, force: true });

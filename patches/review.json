@@ -14,5 +14,17 @@
         "patchedSha256": "9ed4d82141254dbfceab5757659e480979cb1a5a2dcd24cbbf0fb6a63f4a67d8"
       }
     }
+  },
+  "agents@0.33.0": {
+    "path": "patches/agents@0.33.0.patch",
+    "sha256": "be9cf2adb5bb78fb438c17555aeaf048e9b6f07f9760f1edf61af47c9ad50528",
+    "source": "https://github.com/cloudflare/agents/commit/5071d3cda939972fb532c93e9b46942b36d8f5d7",
+    "reason": "fence Lifecycle retries and outcomes after supersession; modified chunk source map disabled",
+    "files": {
+      "dist/lifecycle-v1rKHV2C.js": {
+        "originalSha256": "0af41bb3bea705431fd67fc944e364433a8e8e64c27c4a4d4aa291840776ecd7",
+        "patchedSha256": "08b96dcd4929f8a766d94a0504e5e6f6319a80ee496137857a8e535fd7b21e6e"
+      }
+    }
   }
 }
