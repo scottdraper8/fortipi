@@ -12,13 +12,7 @@ import {
 } from "../../../../tools/unstale/verify-app-network.ts";
 import { proveLibraryReplacement } from "../../container/library-replacement.ts";
 import { sourceRevision, verifyRecipientFixture } from "../../container/recipient.ts";
-import {
-  bindLocalImage,
-  type NativeImageObservation,
-  type PhysicalImageIdentity,
-  type PhysicalImageObservation,
-  verifyPhysicalImage,
-} from "./local-image-binding.ts";
+import { prepareLocalImageHarness } from "./local-image-harness.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const directory = resolve(root, "apps/worker/dist/container");
@@ -86,94 +80,20 @@ const harness = createTestHarness({
 });
 try {
   await harness.listen();
-  const prepared = await harness.fetch("/prepared-image");
-  assert.equal(prepared.status, 200);
-  const selected: unknown = await prepared.json();
-  assert.ok(typeof selected === "string");
-  assert.match(selected, /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,511}$/);
-  assert.equal(
-    execFileSync("docker", ["image", "inspect", selected, "--format", "{{.Id}}"], {
-      encoding: "utf8",
-    }).trim(),
-    metadata.imageId,
-    "Wrangler's actual prepared runtime image differs from the verified image",
-  );
-  const binding = bindLocalImage(
-    {
-      preparedReference: selected,
-      imageId: metadata.imageId,
-      manifestDigest: imageMetadata.builtManifestDigest,
-    },
-    metadata.imageId,
-    imageMetadata.builtManifestDigest,
-    selected,
-  );
-  const packet = JSON.stringify({
-    preparedReference: binding.preparedReference,
-    imageId: binding.imageId,
-    manifestDigest: binding.manifestDigest,
-  });
-  assert.equal(
-    (
-      await harness.fetch("/bind-local-image", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "content-length": String(Buffer.byteLength(packet)),
-        },
-        body: packet,
-      })
-    ).status,
-    200,
-  );
-  assert.equal(
-    (await harness.fetch("/prepare-linux?backend=linux")).status,
-    200,
-    "Actual native connection must precede physical-image proof and tool execution",
-  );
-  const inspectPhysical = async (prior?: PhysicalImageIdentity) => {
-    checkLoadedImage();
-    assert.equal(
-      execFileSync("docker", ["image", "inspect", selected, "--format", "{{.Id}}"], {
+  const { binding, inspectPhysical } = await prepareLocalImageHarness(
+    harness,
+    { imageId: metadata.imageId, manifestDigest: imageMetadata.builtManifestDigest },
+    (args) =>
+      execFileSync("docker", args, {
         encoding: "utf8",
         timeout: 10000,
-        maxBuffer: 8192,
-      }).trim(),
-      metadata.imageId,
-      "Wrangler prepared tag changed its verified config binding",
-    );
-    assert.equal(await verifyRecipientFixture(), metadata.imageId);
-    const observation = await harness.fetch("/native-image");
-    assert.equal(observation.status, 200);
-    const native = (await observation.json()) as NativeImageObservation;
-    const ids = execFileSync("docker", ["ps", "--quiet", "--no-trunc"], {
-      encoding: "utf8",
-      timeout: 10000,
-      maxBuffer: 8192,
-    })
-      .trim()
-      .split("\n");
-    assert.ok(ids.length > 0 && ids.length <= 8 && ids.every((id) => /^[a-f0-9]{64}$/.test(id)));
-    const format =
-      '{"id":{{json .Id}},"imageId":{{json .Image}},"reference":{{json .Config.Image}},"running":{{json .State.Running}},"startedAt":{{json .State.StartedAt}}}';
-    const containers = execFileSync("docker", ["inspect", "--format", format, ...ids], {
-      encoding: "utf8",
-      timeout: 10000,
-      maxBuffer: 16384,
-    })
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line) as PhysicalImageObservation);
-    const matching = containers.filter((row) => row.reference === selected);
-    assert.equal(
-      matching.length,
-      1,
-      "Exactly one actual selected application container is required",
-    );
-    const actual = matching[0];
-    assert.ok(actual);
-    return verifyPhysicalImage(binding, native, actual, prior);
-  };
+        maxBuffer: args[0] === "inspect" ? 16384 : 8192,
+      }),
+    async () => {
+      checkLoadedImage();
+      assert.equal(await verifyRecipientFixture(), metadata.imageId);
+    },
+  );
   const physical = await inspectPhysical();
   const response = await harness.fetch("/run?backend=linux");
   assert.equal(response.status, 200, "Actual computerd execution failed");
