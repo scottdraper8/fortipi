@@ -53,6 +53,19 @@ test("final image must retain kit-bound Node notice even when producer inventory
       await mkdir(dirname(target), { recursive: true });
       await copyFile(resolve(native, name), target);
     }
+    // This is an artifact oracle, not a runtime image. Include the actual fixed
+    // zlib payload from normal preparation so the new byte-level receiver gate runs.
+    const zlib =
+      process.env.FORTIPI_ZLIB_PACKAGE ?? resolve(native, "../context/packages/zlib1g.deb");
+    const zlibPin = kit.freeze.packages.find((p) => p.name === "zlib1g");
+    assert.ok(zlibPin);
+    assert.equal(await hashFile(zlib), zlibPin.sha256);
+    const zlibData = resolve(temporary, "zlib-data.tar.xz");
+    await writeFile(zlibData, await run("ar", ["-p", zlib, "data.tar.xz"]));
+    await writeFile(
+      resolve(filesystem, "usr/lib/x86_64-linux-gnu/libz.so.1.3.1"),
+      await run("tar", ["-xOf", zlibData, "./usr/lib/x86_64-linux-gnu/libz.so.1.3.1"]),
+    );
     const noticeDirectory = resolve(filesystem, "usr/share/doc/fortipi-computerd");
     await cp(resolve(kit.directory, "context/notices"), noticeDirectory, { recursive: true });
     const nodeNotice = resolve(noticeDirectory, "Node-LICENSE");

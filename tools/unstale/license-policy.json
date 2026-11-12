@@ -1008,6 +1008,17 @@
           "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-APACHE"
         }
       ]
+    },
+    "@cloudflare/computer@0.11.1": {
+      "source": "https://github.com/cloudflare/computer/tree/812bce58d2ea3735c12e6f6181c269c4010293df",
+      "evidence": "Exact npm gitHead/source archive and reviewed published source maps; MIT source license unchanged. remote-exec-only capnp-es0.0.16/picomatch4.0.7 notice scope reviewed separately; no new API enabled.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/computer/812bce58d2ea3735c12e6f6181c269c4010293df/LICENSE",
+          "sha256": "df3e141c129d1804bea95fe087b157b156241b3bb1a4664808630aa85f2cd8fc",
+          "url": "https://raw.githubusercontent.com/cloudflare/computer/812bce58d2ea3735c12e6f6181c269c4010293df/LICENSE"
+        }
+      ]
     }
   },
   "externalToolChain": ["wrangler@4.161.0", "miniflare@5.20261110.2-beta", "sharp@0.35.5"]

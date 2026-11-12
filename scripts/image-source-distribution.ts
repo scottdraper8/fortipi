@@ -1,6 +1,7 @@
 // Artifact checks only. Delivery/retention and Linux execution are separate claims.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { createHash, X509Certificate } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,6 +24,8 @@ import {
 } from "../apps/worker/container/image-prune.ts";
 import { imageInputs } from "../apps/worker/container/inputs.ts";
 import { type FsEntry, rootPath, scanRootfs } from "../apps/worker/container/rootfs.ts";
+import { archiveEntries } from "../tools/unstale/review-supply-chain.ts";
+import type { Review } from "./check-pins.ts";
 
 const repository = resolve(import.meta.dirname, "..");
 const hex = /^[a-f0-9]{64}$/;
@@ -51,6 +54,7 @@ interface Package {
   staticBuiltUsing: { name: string; version: string }[];
 }
 interface Freeze {
+  packages: (Package & { filename: string; sha256: string })[];
   installed: Package[];
   pruning: PrunePolicy;
   sources: { name: string; version: string; files: { sha256: string; size: number }[] }[];
@@ -60,14 +64,19 @@ interface Freeze {
   fuseReleaseSha256: string;
   fusePackagesIndexSha256: string;
   fuseSourcesIndexSha256: string;
+  securityReleaseSha256: string;
+  securityPackagesIndexSha256: string;
+  securitySourcesIndexSha256: string;
 }
 interface Embedded {
   binarySha256: string;
+  bootstrapSha256: string;
   assets: Record<string, { sha256: string; size: number }>;
   vendorSourceFiles: Record<string, string>;
   components: {
     name: string;
     version: string;
+    lockPath: string;
     sha256: string;
     integrity: string;
     notices: Record<string, string>;
@@ -85,6 +94,7 @@ export interface VerifiedKit {
   sourceKitSha256: string;
   freeze: Freeze;
   embedded: Embedded;
+  seaBlobSha256: string;
   notices: Record<string, string>;
   sourceCount: number;
   payloadCount: number;
@@ -160,7 +170,10 @@ export function verifyKitInventory(
       );
   }
 }
-export function verifySourceClosure(freeze: Freeze, sources: NamedSource[]): void {
+export function verifySourceClosure(
+  freeze: Pick<Freeze, "installed" | "sources">,
+  sources: NamedSource[],
+): void {
   const needed = new Set(
     freeze.installed.flatMap((p) => [
       `${p.source}=${p.sourceVersion}`,
@@ -197,6 +210,579 @@ export function verifySourceClosure(freeze: Freeze, sources: NamedSource[]): voi
       "Missing source descriptor",
     );
   }
+}
+
+// Independent receiver pins: authenticated public inputs reviewed for the atomic upgrade.
+// Never derive expected identities by executing a kit-carried recipe or trusting its receipt.
+const securityPins = {
+  node: "22.23.5",
+  runtime: "cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8",
+  nodeSource: "6cce7c58bf058700c643944903d60a325e8c9ceede1f5c2c088b435f2ada091a",
+  executable: "2f822d544601dfff107f57d945b649d15c5bf6302595735a6bd9cdc7ee9669bd",
+  nodePublic: "067260a186848e8e35937eb8b1a3d5649d204f0153274b5f844b762dc5cea77a",
+  nodeSigner: "5BE8A3F6C8A5C01D106C0AD820B1A390B168D356",
+  securityRelease: "7f4c748c903c3c12e1aded639dd8869f72433b7f396effef764cefdead539e76",
+  securityPackages: "393192f8a6ca82969d08b7fd31e1b8c012396f0d787096525506bf528147717c",
+  securitySources: "b9362916f8380bdfcc7c0b4d33bbf2e9efc3895545129fbb4a5b654c457349ac",
+  zlib: "1:1.3.dfsg+really1.3.1-1+deb13u1",
+  zlibBinary: "8c27c342230503b73dfde629642c3b352e87b554e06d60cf58772f236a305ceb",
+  // Actual data.tar.xz member of that authenticated .deb, independently extracted.
+  zlibLibrary: "6c13931760210e8b391b63a337dfe4071346c4ad6e3827694edb7b6989bb16dd",
+} as const;
+
+/** Component authentication only; it cannot accept a complete kit or a Linux runtime. */
+export async function verifyNodeInputs(directory: string): Promise<string> {
+  const daemon = resolve(directory, "daemon-build");
+  const publicFile = resolve(daemon, "node-release-key.pgp");
+  assert.equal(await hashFile(publicFile), securityPins.nodePublic, "Node public signer drift");
+  const home = await mkdtemp(resolve(tmpdir(), "fortipi-node-signature-"));
+  let status: string;
+  try {
+    status = (
+      await run("gpgv", [
+        "--homedir",
+        home,
+        "--keyring",
+        publicFile,
+        "--status-fd",
+        "1",
+        resolve(daemon, "SHASUMS256.txt.sig"),
+        resolve(daemon, "SHASUMS256.txt"),
+      ])
+    ).toString();
+    assert.ok(
+      status.split("\n").some((line) => {
+        const fields = line.split(" ");
+        return (
+          fields[1] === "VALIDSIG" &&
+          fields[2] === securityPins.nodeSigner &&
+          fields.at(-1) === securityPins.nodeSigner
+        );
+      }),
+      "Unexpected Node checksum signer",
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+  const sums = (await readFile(resolve(daemon, "SHASUMS256.txt"), "utf8")).split("\n");
+  for (const [member, filename, hash] of [
+    ["node-runtime.tar.xz", `node-v${securityPins.node}-linux-x64.tar.xz`, securityPins.runtime],
+    ["node-source.tar.xz", `node-v${securityPins.node}.tar.xz`, securityPins.nodeSource],
+  ]) {
+    assert.ok(member && filename && hash);
+    assert.ok(sums.includes(`${hash}  ${filename}`), "Node input absent from signed checksums");
+    assert.equal(await hashFile(resolve(directory, member)), hash, "Node archive identity differs");
+  }
+  const runtime = resolve(directory, "node-runtime.tar.xz");
+  const binary = await run("tar", [
+    "-xOf",
+    runtime,
+    `node-v${securityPins.node}-linux-x64/bin/node`,
+  ]);
+  assert.equal(sha256(binary), securityPins.executable, "Signed Node executable differs");
+  const roots = (
+    binary
+      .toString("latin1")
+      .match(/-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\r\n]+?-----END CERTIFICATE-----/g) ?? []
+  ).flatMap((pem) => {
+    try {
+      return [new X509Certificate(pem).subject.split("\n")];
+    } catch {
+      return [];
+    }
+  });
+  assert.ok(roots.length >= 100, "Node root store missing");
+  for (const subject of ["CN=emSign ECC Root CA - G3", "CN=AAA Certificate Services"])
+    assert.ok(!roots.some((names) => names.includes(subject)), "Distrusted Node root remains");
+  for (const [archive, top] of [
+    [runtime, `node-v${securityPins.node}-linux-x64`],
+    [resolve(directory, "node-source.tar.xz"), `node-v${securityPins.node}`],
+  ]) {
+    assert.ok(archive && top);
+    assert.equal(
+      sha256(await run("tar", ["-xOf", archive, `${top}/LICENSE`])),
+      imageInputs.embeddedNodeLicenseSha256,
+      "Signed Node aggregate legal terms differ",
+    );
+  }
+  const auth = await load<Record<string, unknown>>(
+    directory,
+    "daemon-build/node-authentication.json",
+  );
+  for (const [field, expected] of Object.entries({
+    version: securityPins.node,
+    signer: securityPins.nodeSigner,
+    roots: roots.length,
+    archiveSha256: securityPins.runtime,
+    sourceSha256: securityPins.nodeSource,
+    executableSha256: securityPins.executable,
+    licenseSha256: imageInputs.embeddedNodeLicenseSha256,
+  }))
+    assert.equal(auth[field], expected, `Node authentication receipt differs: ${field}`);
+  assert.ok(
+    typeof auth.signatureStatus === "string" &&
+      auth.signatureStatus.includes(`[GNUPG:] VALIDSIG ${securityPins.nodeSigner} `),
+    "Node authentication receipt lacks the verified signer",
+  );
+  return securityPins.executable;
+}
+
+/** Reauthenticate and reconstruct the security overlay, without running shipped build scripts. */
+export async function verifySecurityOverlay(directory: string, freeze: Freeze): Promise<void> {
+  assert.deepEqual(
+    [
+      freeze.securityReleaseSha256,
+      freeze.securityPackagesIndexSha256,
+      freeze.securitySourcesIndexSha256,
+    ],
+    [securityPins.securityRelease, securityPins.securityPackages, securityPins.securitySources],
+    "Security overlay authority differs",
+  );
+  const keyring = resolve(directory, "security/archive-keyring.pgp");
+  assert.equal(
+    await hashFile(keyring),
+    "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017",
+  );
+  const path = resolve(directory, "security/trixie-security.InRelease");
+  assert.equal(await hashFile(path), securityPins.securityRelease, "Security InRelease differs");
+  const home = await mkdtemp(resolve(tmpdir(), "fortipi-security-source-"));
+  try {
+    const release = paragraphs(
+      await verifySigned(
+        path,
+        keyring,
+        home,
+        "05AB90340C0C5E797F44A8C8254CF3B5AEC0A8F0",
+        "B0CAB9266E8C3929798B3EEEBDE6D2B9216EC7A8",
+      ),
+    )[0];
+    assert.equal(release?.get("Codename"), "trixie-security");
+    const indexes: ReturnType<typeof paragraphs>[] = [];
+    for (const [member, hash] of [
+      ["main/binary-amd64/Packages.xz", securityPins.securityPackages],
+      ["main/source/Sources.xz", securityPins.securitySources],
+    ]) {
+      assert.ok(member && hash);
+      const index = resolve(directory, `security/trixie-security-${member.replaceAll("/", "-")}`);
+      const bytes = await readFile(index);
+      assert.equal(sha256(bytes), hash, "Security index differs");
+      const row: string[] | undefined = (release?.get("SHA256") ?? "")
+        .split("\n")
+        .map((line) => line.trim().split(/\s+/))
+        .find((candidate) => candidate[2] === member);
+      assert.deepEqual(
+        row,
+        [hash, String(bytes.length), member],
+        "Security index not authenticated",
+      );
+      indexes.push(paragraphs((await run("xz", ["--decompress", "--stdout", index])).toString()));
+    }
+    const binaries = indexes[0]?.filter(
+      (p) =>
+        p.get("Package") === "zlib1g" &&
+        p.get("Version") === securityPins.zlib &&
+        p.get("Architecture") === "amd64",
+    );
+    const sources = indexes[1]?.filter(
+      (p) => p.get("Package") === "zlib" && p.get("Version") === securityPins.zlib,
+    );
+    assert.equal(binaries?.length, 1, "Exact fixed zlib binary absent or ambiguous");
+    assert.equal(sources?.length, 1, "Exact corresponding zlib source absent or ambiguous");
+    const binary = binaries?.[0],
+      source = sources?.[0];
+    assert.ok(binary && source);
+    assert.equal(binary.get("SHA256"), securityPins.zlibBinary);
+    binary.set("Filename", `https://security.debian.org/debian-security/${binary.get("Filename")}`);
+    source.set(
+      "Directory",
+      `https://security.debian.org/debian-security/${source.get("Directory")}`,
+    );
+    const installed = freeze.installed.find((p) => p.name === "zlib1g");
+    assert.ok(installed);
+    assert.deepEqual(
+      [installed.version, installed.source, installed.sourceVersion],
+      [securityPins.zlib, "zlib", securityPins.zlib],
+      "Installed zlib source identity differs",
+    );
+    const addition = freeze.packages.find((p) => p.name === "zlib1g");
+    assert.ok(addition);
+    assert.equal(addition.sha256, binary.get("SHA256"), "Offline zlib binary pin differs");
+    assert.equal(addition.filename, binary.get("Filename"));
+    assert.deepEqual(
+      await load(directory, "security/zlib-security-authentication.json"),
+      {
+        releaseSha256: securityPins.securityRelease,
+        signers: [
+          "B0CAB9266E8C3929798B3EEEBDE6D2B9216EC7A8",
+          "89C87ACEA5DD6B8E6A7068808E9F831205B4BA95",
+        ],
+        version: securityPins.zlib,
+        binary: Object.fromEntries(binary),
+        source: Object.fromEntries(source),
+      },
+      "Zlib authentication receipt differs from signed indexes",
+    );
+    const frozen = freeze.sources.find((p) => p.name === "zlib" && p.version === securityPins.zlib);
+    assert.ok(frozen);
+    const payloads = [];
+    for (const line of (source.get("Checksums-Sha256") ?? "").trim().split("\n")) {
+      const [hash, size, name] = line.trim().split(/\s+/);
+      assert.ok(hash && name);
+      safeName(name);
+      const bytes = await readFile(resolve(directory, "sources", name));
+      assert.equal(sha256(bytes), hash, "Authenticated zlib source payload differs");
+      assert.equal(bytes.length, Number(size));
+      payloads.push({
+        filename: `${source.get("Directory")}/${name}`,
+        sha256: hash,
+        size: Number(size),
+      });
+    }
+    assert.deepEqual(
+      frozen.files,
+      payloads,
+      "Zlib source freeze differs from authenticated siblings",
+    );
+    const effective = resolve(home, "effective");
+    await mkdir(effective);
+    await run("tar", [
+      "-xf",
+      resolve(directory, "sources/zlib_1.3.dfsg+really1.3.1.orig.tar.gz"),
+      "--strip-components=1",
+      "-C",
+      effective,
+    ]);
+    await run("tar", [
+      "-xf",
+      resolve(directory, "sources/zlib_1.3.dfsg+really1.3.1-1+deb13u1.debian.tar.xz"),
+      "-C",
+      effective,
+    ]);
+    await run("git", ["-c", "init.templateDir=", "init", "--quiet", effective]);
+    const patches = [];
+    for (const name of (await readFile(resolve(effective, "debian/patches/series"), "utf8"))
+      .split("\n")
+      .map((line) => line.replace(/\s*#.*$/, "").trim())
+      .filter(Boolean)) {
+      assert.match(name, /^[A-Za-z0-9._-]+\.patch$/);
+      const patch = resolve(effective, "debian/patches", name);
+      await run("git", ["-C", effective, "apply", "--check", patch]);
+      await run("git", ["-C", effective, "apply", patch]);
+      patches.push({ name, sha256: await hashFile(patch) });
+    }
+    const patchedSources = Object.fromEntries(
+      await Promise.all(
+        ["crc32.c", "gzwrite.c"].map(async (name) => [
+          name,
+          await hashFile(resolve(effective, name)),
+        ]),
+      ),
+    );
+    const descriptor = payloads.find((p) => p.filename.endsWith(".dsc"));
+    assert.ok(descriptor);
+    assert.deepEqual(
+      await load(directory, "zlib-effective.json"),
+      {
+        version: securityPins.zlib,
+        descriptorSha256: descriptor.sha256,
+        patches,
+        patchedSources,
+        copyrightSha256: await hashFile(resolve(effective, "debian/copyright")),
+      },
+      "Effective zlib source/patch evidence differs",
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
+/** Reject a status/metadata-only zlib upgrade in the actual conveyed filesystem. */
+export function verifySecurityRuntime(filesystem: Map<string, FsEntry>): void {
+  assert.equal(
+    file(filesystem, "usr/lib/x86_64-linux-gnu/libz.so.1.3.1").sha256,
+    securityPins.zlibLibrary,
+    "Conveyed zlib library is not the authenticated fixed binary",
+  );
+}
+
+interface DaemonInputs {
+  schemaVersion: number;
+  producerSha256: string;
+  computerSource: string;
+  computerSourceArchiveSha256: string;
+  nodeVersion: string;
+  nodeArchiveSha256: string;
+  esbuild: string;
+  tools: { id: string; integrity: string; archiveSha256: string }[];
+  workspaceAdapters: { name: string; originalSha256: string; adaptedSha256: string }[];
+  addonSha256: string;
+  bootstrapSha256: string;
+  bundleSha256: string;
+  upstreamBundleRecipeSha256: string;
+  adaptedBundleRecipeSha256: string;
+  patches: [string, string][];
+}
+/** Component verification, not acceptance of a complete kit, image or runtime. */
+export async function verifyDaemonInputs(
+  directory: string,
+  embedded: Embedded,
+  ownSource: Map<string, FsEntry>,
+): Promise<string> {
+  assert.ok(
+    typeof embedded.binarySha256 === "string" && hex.test(embedded.binarySha256),
+    "Actual Linux SEA freeze required",
+  );
+  assert.deepEqual(Object.keys(embedded.assets).sort(), ["bundle.mjs", "fuse.node"]);
+  const executable = await verifyNodeInputs(directory);
+  const inputs = await verifyDaemonSourceInputs(directory, embedded, ownSource);
+  const built = await load<
+    DaemonInputs & {
+      binarySha256: string;
+      blobSha256: string;
+      nodeExecutableSha256: string;
+      generatorVersion: string;
+    }
+  >(directory, "computerd-build.json");
+  for (const [key, value] of Object.entries(inputs))
+    assert.deepEqual(built[key as keyof typeof built], value, `SEA receipt/input differs: ${key}`);
+  assert.equal(built.generatorVersion, securityPins.node);
+  assert.equal(built.nodeExecutableSha256, executable);
+  assert.equal(built.binarySha256, embedded.binarySha256, "SEA receipt/frozen binary differs");
+  assert.match(built.blobSha256, hex, "Missing actual Linux SEA blob identity");
+  assert.equal(inputs.bootstrapSha256, embedded.bootstrapSha256);
+  assert.equal(inputs.addonSha256, embedded.assets["fuse.node"]?.sha256);
+  assert.equal(inputs.bundleSha256, embedded.assets["bundle.mjs"]?.sha256);
+  const metadata = await load<{ outputs: Record<string, { bytes: number }> }>(
+    directory,
+    "daemon-build/metafile.json",
+  );
+  assert.equal(
+    metadata.outputs[".fortipi-sea/bundle.mjs"]?.bytes,
+    embedded.assets["bundle.mjs"]?.size,
+  );
+  return built.blobSha256;
+}
+
+/** Source/tool component checks only; no executable or complete-kit acceptance. */
+export async function verifyDaemonSourceInputs(
+  directory: string,
+  embedded: Pick<Embedded, "components">,
+  ownSource: Map<string, FsEntry>,
+): Promise<DaemonInputs> {
+  const inputs = await load<DaemonInputs>(directory, "daemon-build/build-inputs.json");
+  assert.equal(inputs.schemaVersion, 1);
+  assert.equal(
+    inputs.producerSha256,
+    file(ownSource, "apps/worker/container/computerd-build.ts").sha256,
+  );
+  assert.equal(inputs.computerSource, imageInputs.source);
+  assert.equal(inputs.computerSourceArchiveSha256, imageInputs.sourceArchiveSha256);
+  assert.equal(
+    await hashFile(resolve(directory, "computer-source.tgz")),
+    imageInputs.sourceArchiveSha256,
+  );
+  assert.equal(inputs.nodeVersion, securityPins.node);
+  assert.equal(inputs.nodeArchiveSha256, securityPins.runtime);
+  assert.equal(inputs.esbuild, "0.28.2");
+  const supplyBytes = file(ownSource, "tools/unstale/supply-chain.json").data;
+  assert.ok(supplyBytes);
+  const supply = json<{ packages: Record<string, Review> }>(supplyBytes);
+  assert.deepEqual(
+    inputs.tools.map((p) => p.id),
+    ["postject@1.0.0-alpha.6", "commander@9.5.0"],
+  );
+  for (const tool of inputs.tools) {
+    const pin = supply.packages[tool.id];
+    assert.ok(pin);
+    assert.equal(pin.license, "MIT");
+    assert.deepEqual(pin.lifecycle, {});
+    assert.match(pin.signature, /^verified SHA256:/);
+    assert.deepEqual(tool, {
+      id: tool.id,
+      integrity: pin.integrity,
+      archiveSha256: pin.archiveSha256,
+    });
+    const bytes = await readFile(resolve(directory, `daemon-build/${pin.name}.tgz`));
+    assert.equal(sha256(bytes), pin.archiveSha256, "Injector archive differs");
+    assert.equal(`sha512-${createHash("sha512").update(bytes).digest("base64")}`, pin.integrity);
+    const members = archiveEntries(bytes);
+    const manifest = members.get("package/package.json");
+    assert.ok(manifest);
+    assert.equal(sha256(manifest), pin.manifestSha256);
+    const packageJson = json<{
+      name: string;
+      version: string;
+      dependencies?: Record<string, string>;
+    }>(manifest);
+    assert.equal(`${packageJson.name}@${packageJson.version}`, tool.id);
+    assert.deepEqual(
+      packageJson.dependencies ?? {},
+      pin.name === "postject" ? { commander: "^9.4.0" } : {},
+    );
+    assert.ok(Object.keys(pin.licenses).length, "Injector has no reviewed legal terms");
+    for (const [path, hash] of Object.entries(pin.licenses)) {
+      const text = members.get(path);
+      assert.ok(text);
+      assert.equal(sha256(text), hash, "Injector aggregate legal terms differ");
+    }
+  }
+  const metafile = await load<{
+    inputs: Record<string, { bytes: number }>;
+    outputs: Record<string, { bytes: number; entryPoint: string }>;
+  }>(directory, "daemon-build/metafile.json");
+  const top = `computer-${imageInputs.source}/`;
+  const capture = new Set([
+    `${top}package-lock.json`,
+    `${top}packages/computerd/scripts/sea/bootstrap.cjs`,
+    `${top}packages/computerd/scripts/sea/bundle.mjs`,
+    `${top}packages/dofs/package.json`,
+    `${top}packages/rpc/package.json`,
+  ]);
+  for (const path of Object.keys(metafile.inputs)) {
+    assert.ok(
+      path.startsWith("packages/") ||
+        path.startsWith("node_modules/") ||
+        path === "computerd-shim:node-gyp-build",
+      "SEA metafile escaped pinned source graph",
+    );
+    if (path.startsWith("packages/")) capture.add(`${top}${rootPath(path)}`);
+  }
+  const computer = await scanRootfs(
+    createReadStream(resolve(directory, "computer-source.tgz")).pipe(createGunzip()),
+    undefined,
+    capture,
+  );
+  const raw = (path: string) => {
+    const bytes = file(computer, `${top}${path}`).data;
+    assert.ok(bytes);
+    return bytes;
+  };
+  assert.equal(sha256(raw("packages/computerd/scripts/sea/bootstrap.cjs")), inputs.bootstrapSha256);
+  const original = raw("packages/computerd/scripts/sea/bundle.mjs").toString();
+  assert.equal(sha256(original), inputs.upstreamBundleRecipeSha256);
+  const patches: [string, string][] = [
+    [
+      'resolve(computerdRoot, "dist/cli/computerd.js")',
+      'resolve(computerdRoot, "src/cli/computerd.ts")',
+    ],
+    ["await build({", "return await build({"],
+    ['platform: "node",', 'absWorkingDir: repoRoot, metafile: true, platform: "node",'],
+  ];
+  assert.deepEqual(inputs.patches, patches, "Unreviewed upstream recipe edit");
+  let adapted = original;
+  for (const [from, to] of patches) {
+    assert.equal(adapted.split(from).length, 2);
+    adapted = adapted.replace(from, to);
+  }
+  assert.equal(sha256(adapted), inputs.adaptedBundleRecipeSha256);
+  const adapters = [];
+  const adaptedManifests = new Map<string, Buffer>();
+  for (const [name, path] of [
+    ["dofs", "dofs"],
+    ["computer-rpc", "rpc"],
+  ]) {
+    assert.ok(name && path);
+    const filename = `packages/${path}/package.json`,
+      bytes = raw(filename);
+    const manifest = json<{ exports: Record<string, { default: string }> }>(bytes);
+    for (const entry of Object.values(manifest.exports))
+      entry.default = entry.default.replace("./dist/", "./src/").replace(/\.js$/, ".ts");
+    const adaptedBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+    adapters.push({ name, originalSha256: sha256(bytes), adaptedSha256: sha256(adaptedBytes) });
+    adaptedManifests.set(filename, adaptedBytes);
+  }
+  assert.deepEqual(inputs.workspaceAdapters, adapters);
+  const lock = json<{ packages: Record<string, { version: string; integrity: string }> }>(
+    raw("package-lock.json"),
+  );
+  const dependencies = new Map<string, Map<string, Buffer>>();
+  for (const pin of embedded.components.filter((p) => p.name !== "fuse-napi")) {
+    assert.equal(
+      lock.packages[pin.lockPath]?.version,
+      pin.version,
+      "Embedded source-lock context differs",
+    );
+    assert.equal(lock.packages[pin.lockPath]?.integrity, pin.integrity);
+    const archive = await readFile(
+      resolve(directory, `embedded-${pin.name.replaceAll("/", "_")}-${pin.version}.tgz`),
+    );
+    assert.equal(sha256(archive), pin.sha256, "Embedded source archive differs");
+    assert.equal(`sha512-${createHash("sha512").update(archive).digest("base64")}`, pin.integrity);
+    dependencies.set(pin.name, archiveEntries(archive));
+  }
+  for (const [path, input] of Object.entries(metafile.inputs)) {
+    if (path === "computerd-shim:node-gyp-build") {
+      assert.ok(input.bytes > 0);
+      continue;
+    }
+    let bytes: Buffer | undefined;
+    if (path.startsWith("packages/")) bytes = adaptedManifests.get(path) ?? raw(path);
+    else {
+      const match = /^node_modules\/((?:@[^/]+\/)?[^/]+)\/(.+)$/.exec(path);
+      assert.ok(match?.[1] && match[2]);
+      bytes = dependencies.get(match[1])?.get(`package/${match[2]}`);
+    }
+    assert.ok(bytes, `SEA input absent from authenticated source: ${path}`);
+    assert.equal(input.bytes, bytes.length, `SEA metafile input differs: ${path}`);
+  }
+  assert.ok(
+    metafile.inputs["packages/computerd/src/exec/runner.ts"],
+    "New process-group runner not compiled",
+  );
+  assert.deepEqual(Object.keys(metafile.outputs), [".fortipi-sea/bundle.mjs"]);
+  const output = metafile.outputs[".fortipi-sea/bundle.mjs"];
+  assert.equal(output?.entryPoint, "packages/computerd/src/cli/computerd.ts");
+  assert.ok(output && output.bytes > 0);
+  return inputs;
+}
+
+function verifySeaBinary(binary: Buffer, embedded: Embedded, blobSha256: string): void {
+  assert.equal(sha256(binary), embedded.binarySha256, "Conveyed SEA binary differs");
+  // Read Node22's serialization independently of the producer; execute no conveyed ELF.
+  let offset = -1;
+  for (;;) {
+    offset = binary.indexOf(Buffer.from([0x20, 0xda, 0x43, 0x01]), offset + 1);
+    if (offset < 0) break;
+    try {
+      const flags = binary.readUInt32LE(offset + 4);
+      let cursor = offset + 9;
+      const field = () => {
+        const length = Number(binary.readBigUInt64LE(cursor));
+        cursor += 8;
+        assert.ok(Number.isSafeInteger(length) && length >= 0 && length <= binary.length - cursor);
+        const value = binary.subarray(cursor, cursor + length);
+        cursor += length;
+        return value;
+      };
+      const path = field().toString();
+      if (path !== "packages/computerd/scripts/sea/bootstrap.cjs") continue;
+      assert.equal(flags, 9, "Unexpected SEA flags, snapshot, code cache or exec arguments");
+      assert.equal(sha256(field()), embedded.bootstrapSha256);
+      const count = Number(binary.readBigUInt64LE(cursor));
+      cursor += 8;
+      assert.equal(count, 2);
+      const names = new Set<string>();
+      for (let i = 0; i < count; i++) {
+        const name = field().toString(),
+          bytes = field(),
+          pin = embedded.assets[name];
+        assert.ok(pin && !names.has(name));
+        names.add(name);
+        assert.equal(bytes.length, pin.size);
+        assert.equal(sha256(bytes), pin.sha256);
+      }
+      assert.deepEqual([...names].sort(), ["bundle.mjs", "fuse.node"]);
+      assert.equal(
+        sha256(binary.subarray(offset, cursor)),
+        blobSha256,
+        "Conveyed SEA blob differs from Linux build receipt",
+      );
+      return;
+    } catch {
+      /* A magic prefix in ordinary executable bytes is not a SEA resource. */
+    }
+  }
+  throw new Error("Conveyed SEA bootstrap/assets do not match the new frozen build");
 }
 export async function verifyKitSignatures(directory: string, freeze: Freeze): Promise<void> {
   const home = await mkdtemp(resolve(directory, "gpgv-"));
@@ -262,6 +848,7 @@ export async function verifyKitSignatures(directory: string, freeze: Freeze): Pr
       await readFile(resolve(directory, "sources/fuse3_3.18.3.orig.tar.gz.asc"), "utf8"),
       key.toString("utf8"),
     );
+    await verifySecurityOverlay(directory, freeze);
   } finally {
     await rm(home, { recursive: true, force: true });
   }
@@ -317,7 +904,13 @@ export async function verifySourceKit(
   const ownSource = await scanRootfs(
     createReadStream(resolve(directory, "fortipi-source.tar")),
     undefined,
-    new Set(["package.json", "pnpm-lock.yaml", "tools/unstale/platform-tools.json"]),
+    new Set([
+      "package.json",
+      "pnpm-lock.yaml",
+      "tools/unstale/platform-tools.json",
+      "tools/unstale/supply-chain.json",
+      "apps/worker/container/computerd-build.ts",
+    ]),
   );
   for (const [path, digest] of [
     ["package.json", revision.packageJsonSha256],
@@ -327,7 +920,14 @@ export async function verifySourceKit(
     assert.ok(path && digest);
     assert.equal(file(ownSource, path).sha256, digest, "Source revision metadata differs");
   }
-  assert.deepEqual([revision.node, revision.pnpm, revision.tar], ["26.13.0", "12.18.0", "7.5.22"]);
+  assert.deepEqual([revision.node, revision.pnpm, revision.tar], ["26.13.1", "12.18.0", "7.5.22"]);
+  for (const name of ["computerd-build.ts", "security-update.ts", "trixie-security.InRelease"])
+    file(entries, `source-kit-recipe/${name}`);
+  assert.equal(
+    file(entries, "source-kit-recipe/trixie-security.InRelease").sha256,
+    file(entries, "security/trixie-security.InRelease").sha256,
+    "Security recipe authority differs",
+  );
   for (const [path, entry] of entries)
     if (path.startsWith("source-kit-recipe/") && entry.type === "File") {
       const name = posix.basename(path);
@@ -456,6 +1056,7 @@ export async function verifySourceKit(
     file(entries, "context/notices/Computer-LICENSE").sha256,
     sha256(await run("tar", ["-xOf", computer, `computer-${imageInputs.source}/LICENSE`])),
   );
+  const seaBlobSha256 = await verifyDaemonInputs(directory, embedded, ownSource);
   await verifyKitSignatures(directory, freeze);
   assert.equal(await hashFile(options.kit), options.kitSha256, "Kit changed during verification");
   const notices: Record<string, string> = {};
@@ -471,6 +1072,7 @@ export async function verifySourceKit(
     sourceKitSha256: options.kitSha256,
     freeze,
     embedded,
+    seaBlobSha256,
     notices,
     sourceCount: sources.length,
     payloadCount: payloads.size,
@@ -525,6 +1127,7 @@ export async function verifyImageSourceDistribution(
     pruning: kit.freeze.pruning,
   });
   assertRuntimeConfig(inspected.configuration);
+  verifySecurityRuntime(inspected.filesystem);
   assert.deepEqual(inspected.saved, metadata.savedImage);
   assert.equal(inspected.saved.manifest.digest, metadata.builtManifestDigest);
   assert.equal(sha256(JSON.stringify(inspected.configuration)), metadata.runtimeImageConfigSha256);
@@ -553,6 +1156,7 @@ export async function verifyImageSourceDistribution(
   // Re-read status/notices from the actual conveyed layers, independently of docker cp records.
   const capture = new Set(["var/lib/dpkg/status"]);
   const actual = new Map<string, FsEntry>();
+  let seaVerified = false;
   for (const layer of inspected.saved.layers) {
     const bytes = await run("tar", [
       "-xOf",
@@ -564,7 +1168,25 @@ export async function verifyImageSourceDistribution(
       : Readable.from([bytes]);
     const entries = await scanRootfs(stream, undefined, capture);
     for (const [name, entry] of entries) if (capture.has(name)) actual.set(name, entry);
+    if (entries.get("usr/local/bin/computerd")?.sha256 === kit.embedded.binarySha256) {
+      const compressed = layer.mediaType.endsWith("+gzip");
+      const options = { input: bytes, timeout: 120_000, maxBuffer: 256 * 1024 * 1024 };
+      const members = execFileSync("tar", [compressed ? "-tzf" : "-tf", "-"], options)
+        .toString()
+        .split("\n");
+      const member = members.find(
+        (name) => name.replace(/^\.\//, "") === "usr/local/bin/computerd",
+      );
+      assert.ok(member);
+      verifySeaBinary(
+        execFileSync("tar", [compressed ? "-xzOf" : "-xOf", "-", member], options),
+        kit.embedded,
+        kit.seaBlobSha256,
+      );
+      seaVerified = true;
+    }
   }
+  assert.equal(seaVerified, true, "Actual final SEA resource was not independently inspected");
   const status = file(actual, "var/lib/dpkg/status").data;
   assert.ok(status);
   assert.equal(

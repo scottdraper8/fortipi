@@ -1,5 +1,5 @@
 {
-  "binarySha256": "7c4c7ef6c6b5bd6434c4cd706de522807e544a866d2f1488ce4226d3ca61e3d1",
+  "binarySha256": "f06ec2d4f579de1039a78b04570749c18f3ca98136e584afd38e80001cd63a75",
   "bootstrapSha256": "8d30ca8e6d27bc8d959aa1f5fc3736fe73da526d731f10b080f3b71753a453e6",
   "assets": {
     "fuse.node": {
@@ -7,8 +7,8 @@
       "sha256": "a5fd00b6405de13b6a9da07f390d507865ffe2c9dd4081e2c61024032437d9ef"
     },
     "bundle.mjs": {
-      "size": 764021,
-      "sha256": "dde78972b703f99b8376994ba8b41639975184099c903c6b9e5cd28a4727d575"
+      "size": 789965,
+      "sha256": "a22147739284b2dda98da5407e4efa6d66df4cc11836b9bf6c89887b37b7f16b"
     }
   },
   "components": [
