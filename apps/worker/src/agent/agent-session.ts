@@ -557,12 +557,34 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         };
       }
       if (request.operationId === "getConversation") {
+        const existing = await this.store.get<ConversationRow>("conversation", request.path.id);
+        check(existing?.published, "not_found", "Conversation unavailable");
         await this.projection.drain({ maxItems: 8, deadline: Date.now() + 5000 });
-        return { status: 200, body: await this.store.snapshot(request.path.id) };
+        const body = await this.store.snapshot(request.path.id);
+        await this.authority.current(
+          ctx,
+          scope({
+            agentIds: [this.agentId],
+            conversationIds: [request.path.id],
+            actions: [route.action],
+          }),
+        );
+        return { status: 200, body };
       }
       if (request.operationId === "replayEvents") {
+        const existing = await this.store.get<ConversationRow>("conversation", request.path.id);
+        check(existing?.published, "not_found", "Conversation unavailable");
         await this.projection.drain({ maxItems: 8, deadline: Date.now() + 5000 });
-        return { status: 200, body: await this.store.replay(request.path.id, request.query) };
+        const body = await this.store.replay(request.path.id, request.query);
+        await this.authority.current(
+          ctx,
+          scope({
+            agentIds: [this.agentId],
+            conversationIds: [request.path.id],
+            actions: [route.action],
+          }),
+        );
+        return { status: 200, body };
       }
       if (request.operationId === "describeJob")
         return {

@@ -9,14 +9,19 @@ import { build } from "esbuild";
 
 const directory = await mkdtemp(join(tmpdir(), "fortipi-fork-fault-"));
 try {
-  for (const fault of ["small-reservation", "creation-poll"] as const) {
+  const faults = ["small-reservation", "creation-poll", "busy-repair"] as const;
+  const requested = process.argv[2];
+  assert.ok(!requested || faults.some((fault) => fault === requested));
+  for (const fault of faults) {
+    if (requested && fault !== requested) continue;
     const small = fault === "small-reservation";
+    const repair = fault === "busy-repair";
     const outfile = join(directory, `${fault}.mjs`);
     let changes = 0;
     await build({
       entryPoints: [
         resolve(
-          small
+          small || repair
             ? "apps/worker/test/agent/fork-growth-worker.ts"
             : "apps/worker/test/agent/admission-backoff-worker.ts",
         ),
@@ -36,7 +41,7 @@ try {
           name: "owned-fork-budget-fault",
           setup(builder) {
             builder.onLoad(
-              { filter: /src\/agent\/(conversations|projection)\.ts$/ },
+              { filter: /src\/(agent\/(conversations|projection)|api\/common)\.ts$/ },
               async (args) => {
                 const source = await readFile(args.path, "utf8");
                 if (small && args.path.endsWith("/conversations.ts")) {
@@ -45,7 +50,7 @@ try {
                   changes++;
                   return { loader: "ts", contents: source.replace(needle, "bytes: 4096,") };
                 }
-                if (!small && args.path.endsWith("/conversations.ts")) {
+                if (!small && !repair && args.path.endsWith("/conversations.ts")) {
                   const needle = "const retryAt = repairRetryAt(error);";
                   assert.equal(source.split(needle).length, 2);
                   changes++;
@@ -56,6 +61,12 @@ try {
                       needle.replace("repairRetryAt(error)", "Date.now() + 30000"),
                     ),
                   };
+                }
+                if (repair && args.path.endsWith("/common.ts")) {
+                  const needle = "return this.tails.has(key);";
+                  assert.equal(source.split(needle).length, 2);
+                  changes++;
+                  return { loader: "ts", contents: source.replace(needle, "return false;") };
                 }
               },
             );
@@ -70,12 +81,14 @@ try {
         "--test",
         small
           ? "apps/worker/test/agent/fork-growth.test.ts"
-          : "apps/worker/test/agent/creation-backoff.test.ts",
+          : repair
+            ? "apps/worker/test/agent/fork-copy-recovery.test.ts"
+            : "apps/worker/test/agent/creation-backoff.test.ts",
       ],
       {
         env: {
           PATH: process.env.PATH,
-          ...(small
+          ...(small || repair
             ? { FORTIPI_FORK_GROWTH_FAULT_WORKER: outfile }
             : { FORTIPI_CREATION_RETRY_FAULT_WORKER: outfile }),
         },
@@ -98,7 +111,9 @@ try {
       output,
       small
         ? /Fork growth must account for copied public Pi history/
-        : /Direct creation failure must persist its hard hold before returning/,
+        : repair
+          ? /Known\/publication reads must return while creation remains held/
+          : /Direct creation failure must persist its hard hold before returning/,
       output,
     );
     assert.doesNotMatch(output, /test timed out|Transform failed|ERR_MODULE_NOT_FOUND/, output);

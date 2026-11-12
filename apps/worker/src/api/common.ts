@@ -169,6 +169,9 @@ export function permits(grants: readonly D.Grant[], resources: D.ResourceScope):
 /** A per-key lane outside both Pi's commit line and the shared SQL queue. */
 export class Lanes {
   private readonly tails = new Map<string, Promise<unknown>>();
+  busy(key: string): boolean {
+    return this.tails.has(key);
+  }
   async run<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const old = this.tails.get(key) ?? Promise.resolve();
     const next = old.catch(() => {}).then(fn);

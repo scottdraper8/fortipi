@@ -47,6 +47,21 @@ export class ControlPlane extends BaseControlPlane {
 export class TestAgentSession extends BaseAgent {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    const project = this.conversations.projectEntry.bind(this.conversations);
+    this.conversations.projectEntry = async (row, entry) => {
+      await project(row, entry);
+      if (
+        !row.published &&
+        entry.kind === "pi.assistant" &&
+        (await this.store.get("fixture", "fault")) === "fork-after-prefix-copy"
+      ) {
+        await this.store.transaction(async (tx) => {
+          await this.store.remove("fixture", "fault", tx);
+          await this.store.put("fixture", "barrier", "fork-after-prefix-copy", tx);
+        });
+        await new Promise<void>((accept) => setTimeout(accept, 300000));
+      }
+    };
     const select = this.conversations.host.selectModel;
     this.conversations.host.selectModel = async (...args) => {
       if (args[1] === "conversations.create" || args[1] === "conversations.fork") {
@@ -91,6 +106,21 @@ export class TestAgentSession extends BaseAgent {
         (tx) => tx.scanConversations({ order: "ascending" }, 100),
         BACKGROUND_CONTEXT,
       );
+      const projections =
+        await this.store.page<import("../../src/agent/store.js").ConversationRow>("conversation");
+      const copied = [];
+      for (const { value } of projections) {
+        const messages = await this.store.db.all<{ id: string; characters: number }>(
+          "SELECT id,length(json_extract(data,'$.content')) characters FROM fp_messages_v1 WHERE conversation=? ORDER BY position LIMIT 100",
+          value.conversation.conversationId,
+        );
+        copied.push({
+          conversationId: value.conversation.conversationId,
+          published: value.published,
+          bookmark: value.bookmark ?? null,
+          messages,
+        });
+      }
       return Response.json({
         barrier: (await this.store.get("fixture", "barrier")) ?? null,
         creations: creations.map(({ value }) => ({
@@ -101,6 +131,7 @@ export class TestAgentSession extends BaseAgent {
           state: value.state,
         })),
         piIds: sessions.items.filter((row) => !row.owner).map((row) => String(row.id)),
+        copied,
         growth: await this.growthReport(),
       });
     }

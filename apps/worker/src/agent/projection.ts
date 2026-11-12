@@ -180,6 +180,10 @@ export class Projection {
         remaining = true;
         break;
       }
+      if (this.conversations.lanes.busy(row.value.conversationId)) {
+        remaining = true;
+        continue;
+      }
       try {
         await this.conversations.lanes.run(row.value.conversationId, async () => {
           const current = await store.db.get<{ data: string }>(
@@ -214,6 +218,10 @@ export class Projection {
         remaining = true;
         break;
       }
+      if (this.conversations.lanes.busy("creation")) {
+        remaining = true;
+        continue;
+      }
       try {
         await this.conversations.lanes.run("creation", async () => {
           const current = await store.db.get<{ data: string }>(
@@ -239,6 +247,10 @@ export class Projection {
       if (processed >= cap || Date.now() >= budget.deadline) {
         remaining = true;
         break;
+      }
+      if (this.conversations.lanes.busy(row.value.conversationId)) {
+        remaining = true;
+        continue;
       }
       try {
         remaining =

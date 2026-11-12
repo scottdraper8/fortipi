@@ -591,3 +591,50 @@ for (const phase of ["captured replay", "queued delivery"] as const)
       await h.close();
     }
   });
+
+test("HTTP replay cannot disclose a captured page after its actual scoped grant expires", {
+  timeout: 20000,
+}, async () => {
+  const h = await harness({ main, traffic: "free" });
+  let cleanup: Probe | undefined;
+  try {
+    const { agent, conversation } = await setup(h);
+    const cid = conversation.conversationId;
+    const probe = h.env.AGENT_SESSIONS.getByName(agent.agentId) as Probe;
+    cleanup = probe;
+    await probe.appendStreamEvents(cid, 1);
+    const expiresAt = Date.now() + 5000;
+    const minted = await h.api<D.CredentialReceipt>("/v1/admin/credentials", {
+      requestId: crypto.randomUUID(),
+      role: "client",
+      expiresAt: Date.now() + 60000,
+      grants: [
+        {
+          grantId: "http-replay-expiry",
+          version: 1,
+          expiresAt,
+          resources: scope(agent.agentId, [cid]),
+        },
+      ],
+    });
+    assert.equal(minted.status, 201);
+    if (minted.body.state !== "issued") assert.fail("Actual scoped synthetic credential required");
+    await probe.holdReplay(cid);
+    const pending = h.api<D.ErrorBody>(
+      `/v1/conversations/${cid}/events?after=0`,
+      undefined,
+      "GET",
+      minted.body.token,
+    );
+    await eventually(() => probe.replayHeld(), Boolean);
+    await pause(Math.max(0, expiresAt - Date.now() + 25));
+    await probe.releaseReplay();
+    const response = await pending;
+    assert.equal(response.status, 403, "Expiry must be rechecked after loading the HTTP replay");
+    assert.equal(response.body.error.code, "unauthorized");
+    assert.equal("events" in response.body, false);
+  } finally {
+    await cleanup?.releaseReplay();
+    await h.close();
+  }
+});
