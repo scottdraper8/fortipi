@@ -22,7 +22,7 @@ import {
   type PrunePolicy,
 } from "../apps/worker/container/image-prune.ts";
 import { imageInputs } from "../apps/worker/container/inputs.ts";
-import { type FsEntry, scanRootfs } from "../apps/worker/container/rootfs.ts";
+import { type FsEntry, rootPath, scanRootfs } from "../apps/worker/container/rootfs.ts";
 
 const repository = resolve(import.meta.dirname, "..");
 const hex = /^[a-f0-9]{64}$/;
@@ -85,6 +85,7 @@ export interface VerifiedKit {
   sourceKitSha256: string;
   freeze: Freeze;
   embedded: Embedded;
+  notices: Record<string, string>;
   sourceCount: number;
   payloadCount: number;
 }
@@ -457,12 +458,20 @@ export async function verifySourceKit(
   );
   await verifyKitSignatures(directory, freeze);
   assert.equal(await hashFile(options.kit), options.kitSha256, "Kit changed during verification");
+  const notices: Record<string, string> = {};
+  for (const [path, entry] of entries) {
+    if (path.startsWith("context/notices/") && entry.type === "File") {
+      assert.ok(entry.sha256);
+      notices[path.slice("context/notices/".length)] = entry.sha256;
+    }
+  }
   return {
     directory,
     sourceCommit: options.commit,
     sourceKitSha256: options.kitSha256,
     freeze,
     embedded,
+    notices,
     sourceCount: sources.length,
     payloadCount: payloads.size,
   };
@@ -616,11 +625,20 @@ export async function verifyImageSourceDistribution(
     assert.ok(!seen.has(path), "Hardlink cycle in final notices");
     seen.add(path);
     const entry = inspected.filesystem.get(path);
-    assert.ok(entry);
-    if (entry.type === "Link") return regularHash(entry.link.replace(/^\//, ""), seen);
+    assert.ok(entry, `Missing final notice: ${path}`);
+    if (entry.type === "Link") return regularHash(rootPath(entry.link), seen);
+    assert.equal(entry.type, "File", `Final notice is not a regular file: ${path}`);
     assert.ok(entry.sha256);
     return entry.sha256;
   };
+  // The committed Dockerfile copies this exact kit directory. Producer metadata
+  // and its own inventory cannot waive or redefine any of these required bytes.
+  for (const [path, expected] of Object.entries(kit.notices))
+    assert.equal(
+      regularHash(`usr/share/doc/fortipi-computerd/${path}`),
+      expected,
+      `Kit notice changed in final image: ${path}`,
+    );
   for (const [path, entry] of inspected.filesystem) {
     const name = path.startsWith("usr/share/doc/")
       ? path.slice("usr/share/doc/".length)
@@ -637,14 +655,13 @@ export async function verifyImageSourceDistribution(
     "Final notice inventory is incomplete or changed",
   );
   for (const [path, expected] of Object.entries(licenses)) {
-    const entry = inspected.filesystem.get(
-      path.startsWith("common/")
-        ? `usr/share/common-licenses/${path.slice(7)}`
-        : `usr/share/doc/${path}`,
-    );
+    const imagePath = path.startsWith("common/")
+      ? `usr/share/common-licenses/${path.slice(7)}`
+      : `usr/share/doc/${path}`;
+    const entry = inspected.filesystem.get(imagePath);
     assert.ok(entry, `Missing image license: ${path}`);
     assert.equal(
-      entry.type === "SymbolicLink" ? `symlink:${entry.link}` : entry.sha256,
+      entry.type === "SymbolicLink" ? `symlink:${entry.link}` : regularHash(imagePath),
       expected,
       `Image license differs: ${path}`,
     );
