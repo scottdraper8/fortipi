@@ -1,0 +1,112 @@
+name: Installed CLI offline proof
+on:
+  push:
+    branches: ["ci/fortipi-cli-proof-*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: cli-proof-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CI: "true"
+  SOURCE_SHA: ${{ github.sha }}
+  WRANGLER_SEND_METRICS: "false"
+  CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"
+  npm_config_build_from_source: "true"
+  npm_config_node_gyp: ${{ github.workspace }}/node_modules/node-gyp/bin/node-gyp.js
+  FORTIPI_CLI_PROOF_PNPM: /tmp/fortipi-cli-proof-pnpm
+jobs:
+  installed-offline:
+    if: startsWith(github.ref, 'refs/heads/ci/fortipi-cli-proof-') && !github.event.repository.fork
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            codeload.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            www.python.org:443
+            downloads.python.org:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            api.osv.dev:443
+            auth.docker.io:443
+            registry-1.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            snapshot.debian.org:443
+            keyring.debian.org:443
+            api.stepsecurity.io:443
+            agent.api.stepsecurity.io:443
+      - name: Require actual Linux hardener service
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+        run: /usr/bin/systemctl is-active --quiet agent.service
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.13.0"
+          check-latest: false
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: "12.18.0"
+          dest: ${{ env.FORTIPI_CLI_PROOF_PNPM }}
+          run_install: false
+          cache: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15.2"
+          check-latest: false
+      - name: Require frozen owner ports
+        run: node scripts/cli-proof.ts inputs
+      - run: node scripts/install-dependencies.ts
+      - run: pnpm --dir tools/unstale install --frozen-lockfile
+      - run: node scripts/verify-foundation.ts --egress
+      - run: node tools/unstale/review-supply-chain.ts --locks --check
+      - run: node scripts/check-licenses.ts --foundation
+      - name: Retrieve exact qualified image metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/cli-proof.ts image
+      - name: Recreate the exact image source context without Docker
+        run: node scripts/cli-proof.ts context
+      - run: pnpm run build
+      - run: node scripts/generate-notices.ts
+      - run: pnpm run typecheck
+      - run: pnpm run schema:check
+      - run: pnpm run check:licenses
+      - name: Pack and install the real consumer through the reviewed registry
+        run: node scripts/cli-proof.ts install
+      - name: Run the installed CLI with an empty OS home and no external network
+        run: node scripts/cli-proof.ts offline
+      - name: Require hardener still active
+        if: always()
+        timeout-minutes: 1
+        run: /usr/bin/systemctl is-active --quiet agent.service
+      - name: Retain only the redacted proof
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cli-proof-${{ env.SOURCE_SHA }}
+          path: dist/cli-proof/evidence.json
+          if-no-files-found: error
+          retention-days: 7
