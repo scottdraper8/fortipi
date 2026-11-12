@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import type {
   ErrorBody,
   ExecutorFrame,
+  JobCommitted,
   LocalReadRequest,
   TransferDescriptor,
 } from "fortipi-contract/executor";
@@ -17,7 +18,7 @@ import { adapter, loadProfile, privateWrite } from "../dist/config.js";
 import { ExecutorRuntime } from "../dist/daemon.js";
 import { Guard, Ledger } from "../dist/ledger.js";
 import { Output } from "../dist/output.js";
-import { hash } from "../dist/policy.js";
+import { approvalKey, hash } from "../dist/policy.js";
 import {
   frame,
   HttpFailure,
@@ -41,7 +42,7 @@ import {
   receiptScope,
   resources,
 } from "./fixtures/daemon.ts";
-import { relayFixture, sessionFixture } from "./fixtures/transport.ts";
+import { connectExecutor, relayFixture, sessionFixture } from "./fixtures/transport.ts";
 
 for (const mode of ["protocol", "binary", "registration", "heartbeat"] as const)
   test(`native WebSocket closes ${mode} failure without escaping cleanup and reconnects`, {
@@ -880,6 +881,240 @@ test("persisted output retransmits identical frames; wrong ack fails, result rec
     await f.cleanup();
   }
 });
+/** Real approved native process and local journal; only the remote authority is synthetic. */
+async function terminalSession() {
+  const f = await fixture();
+  const peer = await sessionFixture(f.profile, { register: true, acknowledge: true });
+  let runtime: ExecutorRuntime | undefined;
+  let connection: ReturnType<typeof connectExecutor> | undefined;
+  const connect = async (ledger = f.ledger) => {
+    const http = new HttpTransport(f.profile, fetch, true);
+    runtime = new ExecutorRuntime({
+      profile: f.profile,
+      ledger,
+      directory: f.directory,
+      roots: new Map([["root", f.root]]),
+      http,
+    });
+    await runtime.initialize();
+    connection = connectExecutor(http, runtime);
+    await eventually(
+      () => connection?.session.registered === true,
+      "terminal test registration missing",
+    );
+    return runtime;
+  };
+  const disconnect = async () => {
+    connection?.controller.abort();
+    await connection?.connected;
+  };
+  try {
+    f.profile.origin = peer.origin;
+    const current = await connect();
+    for (const local of current.locals.values()) await importRoot(local);
+    const marker = join(f.path, "terminal-process-starts");
+    const a = await assignment(nodeCommand(fixtureChild, "append", marker));
+    await current.locals.get("root")?.request(prepare(a, f.initial.manifestHash));
+    await current.assignOnce(a);
+    current.approvals.decide(
+      a.identity.jobId,
+      approvalKey(a, f.profile.policy, f.root.key),
+      "allow",
+    );
+    await current.tick();
+    await eventually(
+      () => !!f.ledger.get(a.identity.jobId)?.result && current.children.size === 0,
+      "actual terminal result missing",
+    );
+    const result = f.ledger.get(a.identity.jobId)?.result;
+    assert.equal(result?.state, "succeeded");
+    assert.equal(result.manifestHash, f.initial.manifestHash);
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+    const proof: JobCommitted = {
+      identity: a.identity,
+      terminalVersion: 1,
+      eventSeq: 1,
+      evidence: {
+        kind: "verified-unchanged",
+        executionId: a.identity.executionId,
+        workspaceId: a.workspaceId,
+        baseRevision: a.identity.baseRevision,
+        manifestHash: result.manifestHash,
+        observedAt: Date.now(),
+      },
+    };
+    const packet: Extract<ExecutorFrame, { type: "job.committed" }> = {
+      type: "job.committed",
+      requestId: randomUUID(),
+      payload: proof,
+    };
+    const reopen = () => Ledger.open(f.directory, f.profile.ledgerId, f.ledger.limits);
+    const acks = () => peer.received.filter((value) => value.type === "job.committed_ack");
+    return {
+      f,
+      peer,
+      current,
+      marker,
+      a,
+      proof,
+      packet,
+      acks,
+      reopen,
+      connect,
+      disconnect,
+      async close(extra?: Ledger) {
+        await disconnect();
+        if (runtime?.ledger.db.isOpen) await runtime.shutdown();
+        if (extra?.db.isOpen) extra.close();
+        if (runtime?.ledger !== f.ledger && runtime?.ledger.db.isOpen) runtime.ledger.close();
+        await peer.close();
+        if (f.ledger.db.isOpen) await f.cleanup();
+        else await rm(f.path, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    await disconnect();
+    await runtime?.shutdown();
+    await peer.close();
+    await f.cleanup();
+    throw error;
+  }
+}
+
+test("terminal applied ACK follows protected ledger commit and reACKs identical packets after native reopen/reconnect without another start", async () => {
+  const t = await terminalSession();
+  const enter = Promise.withResolvers<void>(),
+    before = Promise.withResolvers<void>(),
+    persisted = Promise.withResolvers<void>(),
+    after = Promise.withResolvers<void>();
+  const committed = t.current.committed.bind(t.current);
+  let reopened: Ledger | undefined;
+  try {
+    t.current.committed = async (proof) => {
+      enter.resolve();
+      await before.promise;
+      await committed(proof);
+      persisted.resolve();
+      await after.promise;
+    };
+    t.peer.send(t.packet);
+    await enter.promise;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(t.acks().length, 0, "No applied ACK before the real commit");
+    reopened = await t.reopen();
+    assert.equal(reopened.get(t.a.identity.jobId)?.committed, undefined);
+    reopened.close();
+    reopened = undefined;
+    before.resolve();
+    await persisted.promise;
+    reopened = await t.reopen();
+    assert.deepEqual(reopened.get(t.a.identity.jobId)?.committed, t.proof);
+    assert.equal(reopened.get(t.a.identity.jobId)?.state, "closed");
+    reopened.close();
+    reopened = undefined;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(t.acks().length, 0, "Applied ACK must await committed(payload) completion");
+    after.resolve();
+    await eventually(() => t.acks().length === 1, "durably applied terminal ACK missing");
+    const expected: Extract<ExecutorFrame, { type: "job.committed_ack" }> = {
+      type: "job.committed_ack",
+      requestId: t.packet.requestId,
+      payload: t.proof,
+    };
+    assert.deepEqual(t.acks()[0], expected);
+    t.peer.send(t.packet);
+    await eventually(() => t.acks().length === 2, "identical terminal packet was not reACKed");
+    assert.deepEqual(t.acks()[1], expected);
+
+    // Treat the first ACKs as lost by the remote peer. It retains and resends
+    // the exact command after a fresh native ledger/runtime and WebSocket.
+    await t.disconnect();
+    await t.current.shutdown();
+    t.f.ledger.close();
+    reopened = await t.reopen();
+    reopened.recover();
+    const recovered = await t.connect(reopened);
+    assert.deepEqual(reopened.get(t.a.identity.jobId)?.committed, t.proof);
+    assert.equal(t.acks().length, 2, "No unsolicited ACK outbox on reconnect");
+    t.peer.send(t.packet);
+    await eventually(
+      () => t.acks().length === 3,
+      "retained terminal command was not reACKed after reopen",
+    );
+    assert.deepEqual(t.acks()[2], expected);
+    assert.equal(recovered.session?.deliveries.has(t.packet.requestId), false);
+    assert.equal(
+      recovered.reconnectFrames().some((value) => value.type === "job.committed_ack"),
+      false,
+    );
+    await recovered.assignOnce(t.a);
+    await recovered.tick();
+    assert.equal(recovered.children.size, 0);
+    assert.equal(await readFile(t.marker, "utf8"), "effect\n");
+    assert.deepEqual(reopened.get(t.a.identity.jobId)?.committed, t.proof);
+    const closes = t.peer.closes.length;
+    t.peer.send(frame(expected));
+    await eventually(
+      () => t.peer.closes.length === closes + 1,
+      "inbound applied ACK was not rejected",
+    );
+    assert.equal(t.peer.closes.at(-1)?.code, 4007);
+    assert.equal(t.acks().length, 3, "No ACK of an applied ACK");
+  } finally {
+    before.resolve();
+    after.resolve();
+    await t.close(reopened);
+  }
+});
+
+test("terminal proof mismatch and an actual SQLite write lock close the real socket without an applied ACK", async () => {
+  const t = await terminalSession();
+  let independent: Ledger | undefined;
+  try {
+    if (t.proof.evidence.kind !== "verified-unchanged")
+      throw new Error("native unchanged proof missing");
+    t.peer.send({
+      ...t.packet,
+      payload: { ...t.proof, evidence: { ...t.proof.evidence, manifestHash: "0".repeat(64) } },
+    });
+    await eventually(
+      () => t.peer.closes.length === 1,
+      "mismatched terminal proof did not close socket",
+    );
+    await t.disconnect();
+    assert.equal(t.peer.closes[0]?.code, 4007);
+    assert.equal(t.acks().length, 0);
+    independent = await t.reopen();
+    assert.equal(independent.get(t.a.identity.jobId)?.committed, undefined);
+    independent.close();
+    independent = undefined;
+    await t.current.shutdown();
+    await t.connect();
+    independent = await t.reopen();
+    // Real independent SQLite writer exclusion, without changing any row.
+    independent.db.exec("BEGIN IMMEDIATE");
+    t.peer.send(t.packet);
+    await eventually(
+      () => t.peer.closes.length === 2,
+      "unwritable terminal commit did not close socket",
+    );
+    await t.disconnect();
+    assert.equal(t.peer.closes[1]?.code, 4007);
+    assert.equal(t.acks().length, 0, "Failed durable commit must never be ACKed");
+    independent.db.exec("ROLLBACK");
+    assert.equal(independent.get(t.a.identity.jobId)?.committed, undefined);
+    independent.close();
+    independent = await t.reopen();
+    assert.equal(independent.get(t.a.identity.jobId)?.committed, undefined);
+    assert.ok(independent.get(t.a.identity.jobId)?.result);
+    assert.equal(await readFile(t.marker, "utf8"), "effect\n");
+  } finally {
+    if (independent?.db.isTransaction) independent.db.exec("ROLLBACK");
+    independent?.close();
+    await t.close();
+  }
+});
+
 test("ticket metadata authenticates the executor transport role and credential expiry separately from ticket TTL", async () => {
   const f = await fixture(),
     server = await relayFixture(Buffer.alloc(0));

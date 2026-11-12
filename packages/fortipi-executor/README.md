@@ -77,6 +77,10 @@ persisted acknowledgments. Local output artifacts have explicit owner references
 and remain unavailable when that owner is offline. Process exit, chunk delivery,
 result receipt, workspace receipt acknowledgment and terminal committed outcome
 are different events. No transport acknowledgment reports committed success.
+After durably applying `job.committed`, the executor echoes its exact proof and
+request ID in `job.committed_ack`. Identical terminal commands are acknowledged
+again, including after reconnect. A lost acknowledgment is recovered by the
+server resending its retained command; the executor creates no ACK outbox.
 Capacity exhaustion preserves dedup/receipt history and refuses new work.
 
 POSIX uses an explicit `/bin/sh`, `shell:false` and a process group, with bounded
