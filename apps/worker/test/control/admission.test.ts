@@ -87,7 +87,12 @@ async function registered(
       resources: scope,
     }),
   );
-  return { ...auth, registrationId: registration.registrationId };
+  const context = { ...auth, registrationId: registration.registrationId };
+  await h.env.AGENT_SESSIONS.getByName(scope.agentIds[0] ?? "missing").reportStorage(
+    context,
+    "agent",
+  );
+  return context;
 }
 const reservationInput = (ownerId: string, admissionSlots = 0) => ({
   ownerId,
@@ -264,13 +269,13 @@ test("registered completion survives new-admission pressure but each retry consu
       ); // +6 = 8
     const actors: D.AuthContext[] = [];
     for (const credential of issued)
-      actors.push(await registered(h, await h.auth(credential.token), create)); // +6 = 14
+      actors.push(await registered(h, await h.auth(credential.token), create)); // +9 = 17, including actual samples
     const owner = actors[0];
     assert.ok(owner);
-    const reserved = value(await h.cp.reserveCapacity(owner, reservationInput(target))); // 15
-    const counts = [8, 3, 2, 2];
+    const reserved = value(await h.cp.reserveCapacity(owner, reservationInput(target))); // 18
+    const counts = [8, 4, 3, 3];
     const all = [admin, ...actors];
-    let admitted = 15;
+    let admitted = 18;
     const appLimit = Math.floor(
       config.infrastructure.bounds.requestsPerInstallMinute *
         (1 - config.infrastructure.bounds.headroomFraction),

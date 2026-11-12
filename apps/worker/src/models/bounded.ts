@@ -2,7 +2,7 @@ import type { Api, AssistantMessage, AssistantMessageEvent, Model } from "@earen
 import type { MutableModels, Provider } from "@earendil-works/pi-ai/models";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { wireLimits } from "fortipi-contract";
-import { check } from "../api/common.js";
+import { check } from "../api/common.ts";
 
 /** Per-stream infrastructure envelopes; no provider-usage policy or turn limit. */
 export const modelStorageLimits = Object.freeze({

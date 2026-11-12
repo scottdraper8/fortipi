@@ -99,6 +99,7 @@ test("public non-job leases bind the literal preimage, recover lost acks and nev
     );
     assert.equal(changed.ok, false);
     const scoped = { ...writer, registrationId: reservation.registrationIds.workspace };
+    await authority.reportStorage(scoped, "workspace");
     assert.equal(
       (
         await h.cp.reserveCapacity(writer, {
