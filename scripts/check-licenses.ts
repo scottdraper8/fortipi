@@ -11,6 +11,7 @@ import {
 import { packagePaths, repository } from "./build-workspaces.ts";
 import type { Lock, Manifest, SupplyChain } from "./check-pins.ts";
 import { json, rootArgument, yaml } from "./check-pins.ts";
+import { dependencyPatches, patchStatus } from "./dependency-patches.ts";
 
 const allowed = new Set([
   "MIT",
@@ -90,6 +91,7 @@ async function attribution(
 
 /** License expressions remain exact; do not accept arbitrary OR/AND expressions. */
 export async function checkLicenses(root = repository, foundation = false): Promise<void> {
+  const patches = await dependencyPatches(root);
   const review = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
   const policy = await json<LicensePolicy>(root, "tools/unstale/license-policy.json");
   const lock = await yaml<Lock>(root, "pnpm-lock.yaml");
@@ -150,6 +152,26 @@ export async function checkLicenses(root = repository, foundation = false): Prom
     const raw = await archive(record.name, record.version, record.integrity, root);
     assert.equal(hash(raw), record.archiveSha256);
     const entries = archiveEntries(raw);
+    const patch = patches[id];
+    if (patch) {
+      for (const [path, identities] of Object.entries(patch.files)) {
+        const original = entries.get(`package/${path}`);
+        assert.ok(original, `Patched file absent from authenticated archive: ${id}/${path}`);
+        assert.equal(
+          hash(original),
+          identities.originalSha256,
+          `Patch base changed: ${id}/${path}`,
+        );
+      }
+      const target = resolve(
+        root,
+        "dist/supply-chain/licenses",
+        id.replaceAll("/", "__"),
+        patch.path,
+      );
+      await mkdir(dirname(target), { recursive: true });
+      await copyFile(resolve(root, patch.path), target);
+    }
     const manifestBytes = [...entries].find(([path]) => /^[^/]+\/package.json$/.test(path))?.[1];
     assert.ok(manifestBytes, `Missing archive manifest ${id}`);
     assert.equal(hash(manifestBytes), record.manifestSha256, `Archive manifest changed ${id}`);
@@ -204,7 +226,7 @@ export async function checkLicenses(root = repository, foundation = false): Prom
         contributors: upstream.contributors ?? null,
         repository: upstream.repository ?? null,
         homepage: upstream.homepage ?? null,
-        changeStatus: "unmodified upstream archive",
+        changeStatus: patchStatus(patch),
       },
       componentInventory,
       licenses,

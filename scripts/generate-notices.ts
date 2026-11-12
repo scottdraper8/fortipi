@@ -8,6 +8,7 @@ import { archiveEntries, hash, licenseEntries } from "../tools/unstale/review-su
 import { packagePaths, repository } from "./build-workspaces.ts";
 import type { Lock, Manifest, Review, SupplyChain } from "./check-pins.ts";
 import { json, yaml } from "./check-pins.ts";
+import { dependencyPatches, patchStatus } from "./dependency-patches.ts";
 
 interface InventoryPackage {
   id: string;
@@ -90,6 +91,7 @@ const text = (bytes: Buffer, path: string) => {
  */
 export async function generateNotices(root = repository): Promise<NoticeReceipt[]> {
   root = await realpath(resolve(root));
+  const patches = await dependencyPatches(root);
   const lock = await yaml<Lock>(root, "pnpm-lock.yaml");
   const supply = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
   const policy = await json<LicensePolicy>(root, "tools/unstale/license-policy.json");
@@ -177,7 +179,7 @@ export async function generateNotices(root = repository): Promise<NoticeReceipt[
         contributors: upstream.contributors ?? null,
         repository: upstream.repository ?? null,
         homepage: upstream.homepage ?? null,
-        changeStatus: "unmodified upstream archive",
+        changeStatus: patchStatus(patches[id]),
       },
       `Archive attribution changed: ${id}`,
     );
@@ -187,6 +189,13 @@ export async function generateNotices(root = repository): Promise<NoticeReceipt[
       `Original license inventory changed: ${id}`,
     );
     const texts: Text[] = [];
+    const patch = patches[id];
+    if (patch)
+      texts.push({
+        path: patch.path,
+        source: patch.source,
+        bytes: text(await file(root, patch.path), patch.path),
+      });
     for (const [path, digest] of Object.entries(review.licenses).sort()) {
       const bytes = text(
         await file(root, `dist/supply-chain/licenses/${id.replaceAll("/", "__")}/${safe(path)}`),
@@ -197,7 +206,10 @@ export async function generateNotices(root = repository): Promise<NoticeReceipt[
       texts.push({ path: `archive/${path}`, source: `${id}/${path}`, bytes });
     }
     const attribution = policy.attributions[id];
-    if (!texts.length || fact.distribution.includes("native conveyance prohibited")) {
+    if (
+      Object.keys(review.licenses).length === 0 ||
+      fact.distribution.includes("native conveyance prohibited")
+    ) {
       assert.ok(
         attribution?.source && attribution.evidence,
         `Missing reviewed license attribution: ${id}`,

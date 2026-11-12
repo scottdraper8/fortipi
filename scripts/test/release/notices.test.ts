@@ -7,9 +7,10 @@ import { dirname, join, resolve } from "node:path";
 import test, { after, before } from "node:test";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { parseAllDocuments, stringify } from "yaml";
 import { archiveEntries, hash } from "../../../tools/unstale/review-supply-chain.ts";
 import { packagePaths, repository } from "../../build-workspaces.ts";
-import type { SupplyChain } from "../../check-pins.ts";
+import type { Lock, Manifest, SupplyChain } from "../../check-pins.ts";
 import { generateNotices, type NoticeReceipt } from "../../generate-notices.ts";
 
 let root: string;
@@ -56,6 +57,8 @@ before(async () => {
     "LICENSE",
     "package.json",
     "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "patches",
     "tools/unstale/supply-chain.json",
     "tools/unstale/license-policy.json",
     "tools/unstale/licenses",
@@ -151,8 +154,8 @@ test("portable notice CLI preserves actual SRI/source texts, runtime scope and a
   const cli = await readFile(resolve(root, "packages/fortipi-cli/THIRD_PARTY_NOTICES.md"), "utf8");
   assert.ok(cli.includes("worker-assets/licenses/THIRD_PARTY_NOTICES.md"));
   assert.ok(cli.includes("wrangler@4.160.1"));
-  assert.ok(cli.includes("@aws-sdk/credential-provider-http@3.972.85"));
-  assert.ok(cli.includes('"inheritedFrom": "@aws-sdk/core@3.980.2"'));
+  assert.ok(cli.includes("@aws-sdk/credential-provider-http@3.972.86"));
+  assert.ok(cli.includes('"inheritedFrom": "@aws-sdk/core@3.981.0"'));
   assert.ok(cli.includes("AWS SDK for JavaScript Team"));
   assert.ok(cli.includes("Apache-2.0 AND LGPL-3.0-or-later AND MIT"));
   assert.ok(cli.includes("not permission for native redistribution"));
@@ -207,7 +210,7 @@ test("missing original and inherited license facts fail closed instead of using 
   const before = await outputs();
   for (const path of [
     "dist/supply-chain/licenses/ajv@8.20.0/package/LICENSE",
-    "dist/supply-chain/licenses/@aws-sdk__core@3.980.2/package/LICENSE",
+    "dist/supply-chain/licenses/@aws-sdk__core@3.981.0/package/LICENSE",
   ]) {
     const absolute = resolve(root, path);
     const original = await readFile(absolute);
@@ -218,5 +221,51 @@ test("missing original and inherited license facts fail closed instead of using 
     } finally {
       await writeFile(absolute, original);
     }
+  }
+});
+
+test("a real modified component retains its original source MIT text alongside the patch", async () => {
+  // Select the already-locked private Worker component in a disposable public
+  // notice closure; actual public manifests and dependencies remain untouched.
+  const name = "@earendil-works/pi-durable";
+  const id = `${name}@1.5.2`;
+  const manifestPath = resolve(root, "packages/fortipi-cli/package.json");
+  const lockPath = resolve(root, "pnpm-lock.yaml");
+  const manifestBytes = await readFile(manifestPath);
+  const lockBytes = await readFile(lockPath);
+  try {
+    const manifest = JSON.parse(manifestBytes.toString()) as Manifest;
+    manifest.dependencies ??= {};
+    manifest.dependencies[name] = "1.5.2";
+    const documents = parseAllDocuments(lockBytes.toString()).map(
+      (document) => document.toJSON() as Lock,
+    );
+    const lock = documents[1];
+    assert.ok(lock);
+    const importer = lock.importers["packages/fortipi-cli"];
+    const existing = lock.importers["apps/worker"]?.dependencies?.[name];
+    assert.ok(importer && existing);
+    importer.dependencies ??= {};
+    importer.dependencies[name] = existing;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await writeFile(lockPath, documents.map((document) => stringify(document)).join("---\n"));
+    const receipts = await generateNotices(root);
+    assert.ok(
+      receipts.find((receipt) => receipt.package === "fortipi-cli")?.components.includes(id),
+    );
+    const directory = resolve(root, "packages/fortipi-cli/licenses", encodeURIComponent(id));
+    const names = await files(directory);
+    assert.ok(names.includes("patches/@earendil-works__pi-durable@1.5.2.patch"));
+    const hashes = await Promise.all(
+      names.map(async (name) => hash(await readFile(resolve(directory, name)))),
+    );
+    assert.ok(
+      hashes.includes("0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"),
+      "Modification text cannot replace the independently authenticated original MIT text",
+    );
+  } finally {
+    await writeFile(manifestPath, manifestBytes);
+    await writeFile(lockPath, lockBytes);
+    assert.deepEqual(await generateNotices(root), baseline);
   }
 });

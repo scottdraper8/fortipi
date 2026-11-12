@@ -1,0 +1,245 @@
+name: Deploy and independently verify
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options:
+          - deploy
+          - verify
+        required: true
+      version:
+        type: string
+        required: true
+      commit_sha:
+        type: string
+        required: true
+      scope:
+        type: string
+        required: true
+      expected_tag:
+        type: string
+        required: true
+      candidate:
+        description: Exact candidate ArtifactReference JSON
+        type: string
+        required: true
+      evidence:
+        description: Prerequisite producer descriptors; verify also requires the original live producer
+        type: string
+        required: true
+      target:
+        description: Validated nonsecret TargetDescriptor JSON; Free defaults and no upgrades
+        type: string
+        required: true
+      previous:
+        description: For verify, path of actual CLI receipt inside a retained live artifact
+        type: string
+        default: "{}"
+      confirm:
+        description: operation vVERSION FULL_SHA SCOPE
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: fortipi-release-targets
+  cancel-in-progress: false
+env:
+  CI: "true"
+  WRANGLER_SEND_METRICS: "false"
+  OPERATION: ${{ inputs.operation }}
+  RELEASE_VERSION: ${{ inputs.version }}
+  RELEASE_SCOPE: ${{ inputs.scope }}
+  EXPECTED_TAG: ${{ inputs.expected_tag }}
+  SOURCE_SHA: ${{ inputs.commit_sha }}
+  CONFIRM: ${{ inputs.confirm }}
+  FORTIPI_EVIDENCE_FIXTURE: ${{ vars.FORTIPI_EVIDENCE_FIXTURE }}
+jobs:
+  proofs:
+    if:
+      (inputs.operation == 'deploy' || inputs.operation == 'verify') && github.ref == 'refs/heads/main' &&
+      github.repository == 'scottdraper8/fortipi'
+    strategy:
+      fail-fast: false
+      matrix:
+        proof: ${{ fromJSON(inputs.evidence) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+        with:
+          egress-policy: block
+          allowed-endpoints:
+            api.github.com:443 github.com:443 release-assets.githubusercontent.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.stepsecurity.io:443 registry.npmjs.org:443
+            nodejs.org:443
+      - run: /usr/bin/systemctl is-active --quiet agent.service
+        name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.13.1
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 12.18.0
+          run_install: false
+          cache: false
+      - run: node scripts/install-dependencies.ts
+      - run: node node_modules/typescript/bin/tsc -p packages/fortipi-contract/tsconfig.json
+      - run: node scripts/verify-release-gates.ts dispatch
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(inputs.candidate).runId }}
+          artifact-ids: ${{ fromJSON(inputs.candidate).artifactId }}
+          path: ${{ runner.temp }}/candidate
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ matrix.proof.artifact.runId }}
+          artifact-ids: ${{ matrix.proof.artifact.artifactId }}
+          path: ${{ runner.temp }}/transfer/payload
+      - name: Authenticate original producer and payload
+        env:
+          PROOF_REFERENCE: ${{ toJSON(matrix.proof) }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run:
+          node scripts/verify-release-gates.ts transfer --candidate "$RUNNER_TEMP/candidate/candidate.json" --directory
+          "$RUNNER_TEMP/transfer/payload" --out "$RUNNER_TEMP/transfer/reference.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name:
+            proof-${{ matrix.proof.kind }}-${{ matrix.proof.artifact.artifactId }}-${{ inputs.commit_sha }}-${{ inputs.scope
+            }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/transfer
+          if-no-files-found: error
+          retention-days: 30
+  operate:
+    needs: proofs
+    runs-on: ubuntu-24.04
+    environment: ${{ fromJSON(inputs.target).slot == 'paid-validation' && 'paid-validation' || 'production' }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+        with:
+          egress-policy: block
+          allowed-endpoints:
+            api.github.com:443 github.com:443 release-assets.githubusercontent.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.stepsecurity.io:443 registry.npmjs.org:443
+            nodejs.org:443 api.cloudflare.com:443 *.workers.dev:443 download.docker.com:443 auth.docker.io:443
+            registry-1.docker.io:443 production.cloudflare.docker.com:443 ghcr.io:443
+            pkg-containers.githubusercontent.com:443 *.cloudflare.com:443
+      - run: /usr/bin/systemctl is-active --quiet agent.service
+        name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.13.1
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 12.18.0
+          run_install: false
+          cache: false
+      - run: node scripts/install-dependencies.ts
+      - run: node node_modules/typescript/bin/tsc -p packages/fortipi-contract/tsconfig.json
+      - run: node node_modules/typescript/bin/tsc -p packages/fortipi-cli/tsconfig.json
+      - run: node scripts/verify-release-gates.ts dispatch
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(inputs.candidate).runId }}
+          artifact-ids: ${{ fromJSON(inputs.candidate).artifactId }}
+          path: ${{ runner.temp }}/candidate
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: proof-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/proofs
+      - name: Assemble original proof references
+        env:
+          CANDIDATE_REFERENCE: ${{ inputs.candidate }}
+        run: node scripts/verify-release-gates.ts assemble --root "$RUNNER_TEMP/proofs" --out "$RUNNER_TEMP/proofs.json"
+      - name: Save bounded target data
+        env:
+          TARGET_REFERENCE: ${{ inputs.target }}
+        run: node scripts/prepare-release.ts descriptor --out "$RUNNER_TEMP/target.json" --kind target
+      - name: Install real candidate before deployment credentials enter any process
+        run:
+          node scripts/deploy-smoke.ts install --candidate "$RUNNER_TEMP/candidate/candidate.json" --target
+          "$RUNNER_TEMP/target.json" --directory "$RUNNER_TEMP/installed" --out "$RUNNER_TEMP/installation.json"
+      - name: Resolve prior retained CLI receipt for verification
+        if: inputs.operation == 'verify'
+        env:
+          PREVIOUS_REFERENCE: ${{ inputs.previous }}
+        run: node scripts/deploy-smoke.ts previous --proofs "$RUNNER_TEMP/proofs.json"
+      - name: Provision pinned Docker only for selected Linux deployment
+        if: inputs.operation == 'deploy' && fromJSON(inputs.target).backend == 'linux'
+        run: |-
+          pnpm --dir tools/unstale install --frozen-lockfile
+          node tools/unstale/provision-docker.ts
+      - name: Deploy installed bytes or independently observe the existing deployment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+        run:
+          node scripts/deploy-smoke.ts operate --installation "$RUNNER_TEMP/installation.json" --out
+          "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json" --confirm "$CONFIRM"
+      - name: Actual owner10 live verification with application role only
+        env:
+          FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+        run:
+          node scripts/deploy-smoke.ts evidence --candidate "$RUNNER_TEMP/candidate/candidate.json" --fixture
+          "$FORTIPI_EVIDENCE_FIXTURE" --out "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json"
+      - name: Retain observed identity and actual claim results
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run:
+          node scripts/deploy-smoke.ts observe-installed --installation "$RUNNER_TEMP/installation.json" --cli
+          "$RUNNER_TEMP/deployment.json.cli.json" --out "$RUNNER_TEMP/deployment.json"
+      - name: Bind exact results without refreshing behavioral evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run:
+          node scripts/deploy-smoke.ts retain-operation --candidate "$RUNNER_TEMP/candidate/candidate.json" --claims
+          "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json" --out "$RUNNER_TEMP/live" --readiness
+          "$RUNNER_TEMP/readiness"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name:
+            ${{ inputs.operation == 'deploy' && 'live' || 'independent' }}-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{
+            github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/live
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: readiness-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/readiness
+          if-no-files-found: error
+          retention-days: 30

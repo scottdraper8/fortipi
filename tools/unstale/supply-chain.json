@@ -86,6 +86,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/core@3.981.0": {
+      "name": "@aws-sdk/core",
+      "version": "3.981.0",
+      "integrity": "sha512-Mnu7gaDrC5UCdyH8uLxLfB2eWbjE/HbjKX1U1J2VQxG3TTATUDObW2wU3I8iH3e9YH5NN2CY6w1mlAIe2XJ3jg==",
+      "published": "2026-11-10T19:40:34.393Z",
+      "reviewedAt": "2026-11-12T12:14:56.215Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "f8ee54a7caed44032988fc757c0f1df42d755117ac0ba9467cfd8d2e2d5da4b1",
+      "manifestSha256": "920876e6431c6f1f256366ba9460bc2c4f7e29372265454e9f2ad54457bcd891",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "edea91454b811f127fbdea3d86f378f6719bd372ed440abf82b232f6fca06c3d"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/credential-provider-env@3.972.83": {
       "name": "@aws-sdk/credential-provider-env",
       "version": "3.972.83",
@@ -95,6 +116,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "8dd818c0ba3fbcf6ffd2806f78cbd0de9b7d390d30b73d575672c4abc7148e87",
       "manifestSha256": "3a2f465fab61019f167eb4e8678a9499585114114b7306be7ffe1bb7698a9f24",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-env@3.972.84": {
+      "name": "@aws-sdk/credential-provider-env",
+      "version": "3.972.84",
+      "integrity": "sha512-akZJetiMVeLRHsKzYh3LamDCo74ZUCeo0XoyRKMEMZT5qP7ReM6LhpioBCyuqKP5Vav5gEOeCmaQV0VVQr1Meg==",
+      "published": "2026-11-10T19:40:12.819Z",
+      "reviewedAt": "2026-11-12T12:14:56.273Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "f058b161ec86746f43cd12b27d17d2274fda52e2c7f6a400bb04a8213d9cd1f3",
+      "manifestSha256": "61c632c456ea826d84f950e21d87f6b21e923261885b8f5e9c0a1dc38d9e1e49",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -126,6 +168,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/credential-provider-http@3.972.86": {
+      "name": "@aws-sdk/credential-provider-http",
+      "version": "3.972.86",
+      "integrity": "sha512-U4mHaDRPWAn63yhl7FXIzbppNmW1F+4dSLeuiUpej2v3Xb6rGwvayEJ8SdlrdMV+/mZtd+GStTEP2HqurEzXtw==",
+      "published": "2026-11-10T19:41:10.983Z",
+      "reviewedAt": "2026-11-12T12:14:56.208Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "739a39264af7286bfb3ead359b5e0b6247886234ad8c143c59e5dcb2104808c2",
+      "manifestSha256": "eeb379f6d195b0b6a3f809b0801c4009b12ef5ece882f978e7a8856f83f59b9c",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/credential-provider-ini@3.973.28": {
       "name": "@aws-sdk/credential-provider-ini",
       "version": "3.973.28",
@@ -135,6 +196,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "c3f5f04fbda1a3a419ec3af5485ff2aecbf5cb21379734736104f0b72800862c",
       "manifestSha256": "925de754d1a2798bc1e77f51142e936c5e8b979e784b9fb4cf74224cd149ed41",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-ini@3.973.29": {
+      "name": "@aws-sdk/credential-provider-ini",
+      "version": "3.973.29",
+      "integrity": "sha512-/idO4bVjw34b1OiNxDqFNr3BsPg9dRm1iS6XM/rTqA33RfUgTuwBCFFCz/TwxNHkrQ45tp+RpKE8P609Ino8XQ==",
+      "published": "2026-11-10T19:40:20.108Z",
+      "reviewedAt": "2026-11-12T12:14:56.285Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "25f4b52878f03abd881927536158ed3c1742037c67e76030fb7db38d195fbb4b",
+      "manifestSha256": "603577b46cadef97e895a3d26df7537125a87dd78e98c7fe5167a5a050172016",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -166,6 +248,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/credential-provider-login@3.972.91": {
+      "name": "@aws-sdk/credential-provider-login",
+      "version": "3.972.91",
+      "integrity": "sha512-MujcVZc7mnodrsp85NX0QpnQrt7kY6zbVUl+TcvzJEZzgEQkRj4iopj0kNs3uXJUArpkA64Rxa0ga86qdx0gag==",
+      "published": "2026-11-10T19:40:19.784Z",
+      "reviewedAt": "2026-11-12T12:14:56.452Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "bc561506c3a19af0b4ed7c881d497655197cb15148a9ab907acd40f1f16d8f45",
+      "manifestSha256": "efb873629c190ad247989da7cb56b4e2795f9221ebb211f775198daa2ec1ba7a",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/credential-provider-node@3.972.95": {
       "name": "@aws-sdk/credential-provider-node",
       "version": "3.972.95",
@@ -175,6 +276,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "0a5f41c2228d1399f2646c71b6f7d429ee92b0781b8d1fab75a33066bf2c6cc2",
       "manifestSha256": "e9dcb3c54c55077c4deb2ee3583baab4c8195a04bae1f5cca1a25c5b1116ae8b",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-node@3.972.96": {
+      "name": "@aws-sdk/credential-provider-node",
+      "version": "3.972.96",
+      "integrity": "sha512-tBunyyRnxMvKsCn/pu1QrIxUYZ4Z25LkV8zGkFGpSE/YmI2W4m8SLQzloG/hZlelGP2vLRGtIQc5w1+DoXCK1A==",
+      "published": "2026-11-10T19:40:41.591Z",
+      "reviewedAt": "2026-11-12T12:14:56.450Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "15db328cf481e19f83229467f9948d04920a8e1044e87ebf82c18b5ec1d2621f",
+      "manifestSha256": "16347b08a81af040db3ec32f7dcc73c0a5fcec63345e0559002e897e6d316c14",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -208,6 +330,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/credential-provider-process@3.972.84": {
+      "name": "@aws-sdk/credential-provider-process",
+      "version": "3.972.84",
+      "integrity": "sha512-199C6OpNejd0nq9GFAkEFIKids1FL0R6LJtL9c1OTiDOXki7S1OduuPxW4+hE0LwndcYJ7YHOuYTlqScfpCocA==",
+      "published": "2026-11-10T19:40:20.188Z",
+      "reviewedAt": "2026-11-12T12:14:56.457Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "c817567a7cbfec490a2fa9b8cf9b97ddb83e1495d802409125d2edcfd6207cc3",
+      "manifestSha256": "baae9db22248e234d781a3ece0b665c2932b1911ba1a561c6cbf65d2ee908fff",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "2ef1e48ea743d9c82313e6887858f7c1feaddd636f5a3f43926aab0143e67ebd"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/credential-provider-sso@3.973.27": {
       "name": "@aws-sdk/credential-provider-sso",
       "version": "3.973.27",
@@ -217,6 +360,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "159b2d18b253577da2be4664d81f26981fcdf89163e6a15981b767d983783a2a",
       "manifestSha256": "90b6939afc2368526c85aa901a172892c8f13842ef4e8d9849c8b0d5de54fbde",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "2ef1e48ea743d9c82313e6887858f7c1feaddd636f5a3f43926aab0143e67ebd"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-sso@3.973.28": {
+      "name": "@aws-sdk/credential-provider-sso",
+      "version": "3.973.28",
+      "integrity": "sha512-bGg7wH8wVDJQIcJggO9lg1ZYbG7l+PbLwHuM3Bi/e1TlCZhU712JS1W3tdRpyptdJD1UGyhBNGO/YrhrQCHKbg==",
+      "published": "2026-11-10T19:41:11.838Z",
+      "reviewedAt": "2026-11-12T12:14:56.482Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "3197bdf9a4b80dadb74f4f49c9bee17ee111662ff5755ff27d92d87f35ecb343",
+      "manifestSha256": "563cd49025991c00538565dd8feca7cdf2eb4d5f5c98fdfe850c06b91be3a707",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -250,6 +414,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/credential-provider-web-identity@3.972.90": {
+      "name": "@aws-sdk/credential-provider-web-identity",
+      "version": "3.972.90",
+      "integrity": "sha512-duLeE3xlf0viHeH+1RM4z5duR3b32BCZTWVMu+MbxFPjQBxy7hmIGEqt5hekuFPRuXoyhMovjNl+PNNsb5oiGQ==",
+      "published": "2026-11-10T19:40:19.563Z",
+      "reviewedAt": "2026-11-12T12:14:56.771Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "9f99e9b5c876b9e0d80ae4dddbfeef2c936d9c0ef51aad4d705defcdc5b05554",
+      "manifestSha256": "5cb3d9780cd50ceece5d2b225d43745af556d77293df954401c68349925bbc0e",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "2ef1e48ea743d9c82313e6887858f7c1feaddd636f5a3f43926aab0143e67ebd"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/eventstream-handler-node@3.972.41": {
       "name": "@aws-sdk/eventstream-handler-node",
       "version": "3.972.41",
@@ -259,6 +444,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "a910f8baa0beb2b5f42fb6664891d698e8f014236e96ae0fe644f6360abdddd4",
       "manifestSha256": "ed8102c00ff74551ba44e4219f6edcc6774c1f08f75abd5b53016b7ee8251c2a",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "07364a5f7d0177a59a05a0002187431f8f899320983c0dc049d72df015e8064c"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/eventstream-handler-node@3.972.42": {
+      "name": "@aws-sdk/eventstream-handler-node",
+      "version": "3.972.42",
+      "integrity": "sha512-YVB1wrpE1WF8NvMpaRyhwm9XBYl3HTbPNEIgybi0b0XpmBrJ7Y3Y/drbxh9qAVMbR+0hcwM63GPWzhOVRuerfg==",
+      "published": "2026-11-10T19:40:31.542Z",
+      "reviewedAt": "2026-11-12T12:14:56.616Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "98e953df2672322d2dee5891123fdae269277bf163b86785a81ec3d984fdf0e3",
+      "manifestSha256": "76fba4af3d9526a8396498c1f30c310ba425378f0f34d74fa73238e55f3d1d67",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -292,6 +498,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/middleware-eventstream@3.972.38": {
+      "name": "@aws-sdk/middleware-eventstream",
+      "version": "3.972.38",
+      "integrity": "sha512-4K6FDz2BxH3rve8Hw/8uApWXKCuKKMeYKzY23PoiGqUBWaA23eAy+GzW9aoG3Cm7HqgYzqkljl3ECJRJCxGs7g==",
+      "published": "2026-11-10T19:40:58.126Z",
+      "reviewedAt": "2026-11-12T12:14:56.665Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "b54b7dfb2fe940cecc3f9e785da0a3d741070c26b06ec1b23204eb0df05906f8",
+      "manifestSha256": "c7a3f5db9134f88a536c8dac1bbb75e322aed0af03d8b64fb6f4d7fe8639136d",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/middleware-websocket@3.972.65": {
       "name": "@aws-sdk/middleware-websocket",
       "version": "3.972.65",
@@ -313,6 +540,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/middleware-websocket@3.972.66": {
+      "name": "@aws-sdk/middleware-websocket",
+      "version": "3.972.66",
+      "integrity": "sha512-feGNDB15ZgqX4DTsUykkgj7d8hzfzx03v80EIyRA1FTbsbAJQKxYB50kRbrrpE5WeFaWhgk+p5YHlsoyXrI2/g==",
+      "published": "2026-11-10T19:40:49.767Z",
+      "reviewedAt": "2026-11-12T12:14:56.642Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "09176843bf8dd0338ea9817f5ac51e4b571aa5251be5688b0f30a2167cef621d",
+      "manifestSha256": "57bdc0248dfdf2eaa61ed1582f66eaf246d18f652c7dcedf5beaba263fdf1432",
+      "engines": {
+        "node": ">= 14.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "07364a5f7d0177a59a05a0002187431f8f899320983c0dc049d72df015e8064c"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/nested-clients@3.998.2": {
       "name": "@aws-sdk/nested-clients",
       "version": "3.998.2",
@@ -322,6 +570,25 @@
       "license": "Apache-2.0",
       "archiveSha256": "50ea0041665f74f5866de26c85db431b794e661ac5eb284f7633d8a095d524d4",
       "manifestSha256": "e539d863be18b6e5a57ce41c637b418cf0151997b99999d56e003a9bb780ecb8",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/nested-clients@3.998.3": {
+      "name": "@aws-sdk/nested-clients",
+      "version": "3.998.3",
+      "integrity": "sha512-acHTTzMB13CU6dU4sxABYExMI3PQM2zStWH2MiUwJp/7QKTrLg2f7mbzSXoegW2kYOk2tdqQYagsZrWB8Xv7eA==",
+      "published": "2026-11-10T19:41:05.944Z",
+      "reviewedAt": "2026-11-12T12:14:56.779Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "30b5f1ff913a8b8ecabfbcd650beb4581d77cffe4fee3621d65949137ae1aad1",
+      "manifestSha256": "756480d422c005e6a3f22f5ba573c58d4f81579ae709767e9f8fccbdbad67d7c",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -383,6 +650,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "7b797a8dc28d8bcc1cc14f4cbd2bee0814ece2240afa384b3b77401be5e33c9e",
       "manifestSha256": "daa9ccc4e947a1b98d61546f0fb6ce3a3ce9a164a2ba8f2fafa0848901ac7b17",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/token-providers@3.1166.0": {
+      "name": "@aws-sdk/token-providers",
+      "version": "3.1166.0",
+      "integrity": "sha512-ngJ8mxXqtQ9mnp7QV6TWKJCxkpjVfPWxKQSc2FYhCyCfOVFIGdFv7P+/RqVffFrJAorwBPpktnv32gNlcEgF4g==",
+      "published": "2026-11-10T19:40:20.510Z",
+      "reviewedAt": "2026-11-12T12:14:56.903Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "408def505f451716c8f9ad064a77af3c56f8156e22b3f36e0f0cedb5ecbe69be",
+      "manifestSha256": "21351b0d3703188e8423d4a486ca6f37d214cd9d233303a9c55bdde4d4718ab7",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -1396,6 +1684,23 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261110.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workers-types@5.20261112.1": {
+      "name": "@cloudflare/workers-types",
+      "version": "5.20261112.1",
+      "integrity": "sha512-FhkAlCQ+J/pV89nhehVaarhlvZFz+ybUsePmIDN1yfI7PMmpjwdxV663e9qu+G+oQSw9oM8u5sVmheNBFn4tnw==",
+      "published": "2026-11-12T01:00:52.446Z",
+      "reviewedAt": "2026-11-12T12:45:14.384Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "91e157eb6a2396931c2fcc3fd582a86d2077253a7f610cd8664f31216c2c1b9f",
+      "manifestSha256": "14eb704f337594c16c0f3ecc9039162be8759afdea1af1e9b89a97fde8f88e26",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261112.1; Sigstore transparency verification required at release"
     },
     "@cspotcode/source-map-support@0.8.1": {
       "name": "@cspotcode/source-map-support",
@@ -3824,6 +4129,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@smithy%2fcore@3.39.0; Sigstore transparency verification required at release"
+    },
+    "@smithy/core@3.40.0": {
+      "name": "@smithy/core",
+      "version": "3.40.0",
+      "integrity": "sha512-DssGno52pzZ5m6RlDtyKuBIpZNPg9pqgs0CnNDKz9IatxCsmvNmJNn5Zn6rf77MthZo9wf89OvZFhTY/RwxhxQ==",
+      "published": "2026-11-10T13:09:17.854Z",
+      "reviewedAt": "2026-11-12T12:14:56.952Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "2ad837471a245ea5b7557467076800e573d661e8c85935e7e94507446acf2390",
+      "manifestSha256": "cebbdc3db20cb2fc9dbe780dd488014c193693dd1f9dd09dceb11ba39de4e26a",
+      "engines": {
+        "node": ">=18.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "07364a5f7d0177a59a05a0002187431f8f899320983c0dc049d72df015e8064c"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@smithy%2fcore@3.40.0; Sigstore transparency verification required at release"
     },
     "@smithy/credential-provider-imds@4.5.2": {
       "name": "@smithy/credential-provider-imds",
@@ -7772,10 +8098,15 @@
       "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
       "expires": "2026-11-12T14:37:43.184Z",
       "integrity": "sha512-CO8T1DO3/JFxEWvJ7yaHiPx5Ph/5FhRzYKve6cM8O2frHmY7yWudV5p8FU11bfGRAerChGpuK+l0HoxOCw2nFw=="
+    },
+    "@cloudflare/workers-types@5.20261112.1": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-13T01:00:52.446Z",
+      "integrity": "sha512-FhkAlCQ+J/pV89nhehVaarhlvZFz+ybUsePmIDN1yfI7PMmpjwdxV663e9qu+G+oQSw9oM8u5sVmheNBFn4tnw=="
     }
   },
   "advisory": {
-    "checkedAt": "2026-11-12T09:23:38.967Z",
+    "checkedAt": "2026-11-12T12:46:20.971Z",
     "identities": 381,
     "findings": []
   }

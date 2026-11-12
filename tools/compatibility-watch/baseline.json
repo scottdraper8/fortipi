@@ -169,16 +169,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "f93f331afd18b55b81d7e3b0e935ccab4a1b707f",
-        "version": "v1.20261111.1",
-        "sha256": "32c537eca732d796d5ced5fdcafd9489046e900bdfa592d4cc105cdbb1aa0f92",
+        "commit": "e0240debf4d6a5042a02a45311b51c61d13bd0fb",
+        "version": "v1.20261112.1",
+        "sha256": "1eedcff9d8a9bbd5c5361d178b35cc2b62a16639309f564fd2f006e6fdf11742",
         "paths": {}
       },
       "pins": {
-        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261110.1"
+        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261112.1"
       },
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed v1.20261111.1 release and actual tag commit. Newer than the locked 1.20261110.1 runtime; notes include queued WebSocket memory accounting, SQLite CTE regression backout and container stream changes. Retain current lock; upstream/platform relevance needs candidate runtime/recovery review, not a safety inference."
+      "reviewedAt": "2026-11-12T12:46:17.206Z",
+      "reviewNote": "Reviewed exact published workerd1.20261112.1/sourcee0240d and generated types5.20261112.1. Latest Wrangler4.160.1 and Miniflare5.20261110.1-beta both EXACT-pin workerd1.20261110.1: retain latest supported SDK runtime graph, no override/unpublished adoption. Upgrade only peer-compatible direct types: URL declarations move and parse/canParse accept URL values, other declarations unchanged. URL autogate, deferred cross-context actions and startup snapshot/binding clones reviewed for used URL/DO/Loader/abort boundaries; actual narrow local qualification and limits in phase3/thread-1/workerd-types-review.md. Compatibility date does not pin deployed runtime; final cloud lifecycle/abort/hibernation proof remains required. This is a reviewed reference, not deployed/new-runtime acceptance."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",

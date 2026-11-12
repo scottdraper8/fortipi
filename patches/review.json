@@ -1,0 +1,18 @@
+{
+  "@earendil-works/pi-durable@1.5.2": {
+    "path": "patches/@earendil-works__pi-durable@1.5.2.patch",
+    "sha256": "2e4a878a49ac70b158956b55e1131dd595b91a88fe86de2cacfae2f1c7abe536",
+    "source": "https://github.com/earendil-works/pi/blob/9b88b94e2c48086f38002d551dc8e0343923505e/packages/durable/src/harness/util.ts",
+    "reason": "observe waiter rejection before queued delivery while preserving cancellation",
+    "files": {
+      "dist/harness/util.js": {
+        "originalSha256": "5519388f097d51fbf8f5811edd11d04076523253a2a11ae8689082ae8e2df4d9",
+        "patchedSha256": "8f7cbbc462e18ec73a7fc8030b438626c7dc556a71de83003e4b3c477d166656"
+      },
+      "dist/harness/util.js.map": {
+        "originalSha256": "fba82e87b6ef5680e470ee7b5cda15f650f9b2255486403982c875395dc54461",
+        "patchedSha256": "9ed4d82141254dbfceab5757659e480979cb1a5a2dcd24cbbf0fb6a63f4a67d8"
+      }
+    }
+  }
+}

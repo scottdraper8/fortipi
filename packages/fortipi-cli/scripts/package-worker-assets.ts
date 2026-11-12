@@ -24,6 +24,7 @@ import { type Node, VISITOR_KEYS } from "@babel/types";
 import { canonicalJson } from "fortipi-contract";
 import { version as compilerVersion } from "typescript";
 import { scanRootfs } from "../../../apps/worker/container/rootfs.ts";
+import { dependencyPatches, patchStatus } from "../../../scripts/dependency-patches.ts";
 import { hashFile, verifyKitInventory } from "../../../scripts/image-source-distribution.ts";
 import type { AssetManifest } from "../src/asset-manifest.ts";
 import { assetPath } from "../src/asset-manifest.ts";
@@ -157,6 +158,7 @@ export async function packageWorkerAssets(options: {
   /** Private test output only; the stable CLI always emits the canonical package tree. */
   outputDirectory?: string;
 }): Promise<AssetManifest> {
+  const patches = await dependencyPatches(root, true);
   assert.equal(process.versions.node, "26.13.1", "Pinned Node required");
   assert.match(options.commit, /^[a-f0-9]{40}$/);
   assert.equal(await git("rev-parse", "HEAD"), options.commit, "Checkout commit differs");
@@ -171,6 +173,8 @@ export async function packageWorkerAssets(options: {
     "packages/fortipi-contract",
     "package.json",
     "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "patches",
   );
   const build = resolve(root, options.workerBuild);
   assert.equal(await realpath(build), build, "Worker build must be canonical");
@@ -449,7 +453,7 @@ export async function packageWorkerAssets(options: {
           "license",
         );
       notices.push(
-        `- ${id}: ${reviewed.license}; original archive SHA256 ${reviewed.archiveSha256}`,
+        `- ${id}: ${reviewed.license}; original archive SHA256 ${reviewed.archiveSha256}; ${patchStatus(patches[id])}`,
       );
     }
     await put("licenses/THIRD_PARTY_NOTICES.md", `${notices.join("\n")}\n`, "license");
