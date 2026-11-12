@@ -6,7 +6,14 @@ import { connected } from "./connection.ts";
 import type { CompletionControl } from "./fixtures/completion.ts";
 import { harness, request, scope, uuid, value } from "./harness.ts";
 
-async function setup(options: { grantMs?: number; leaseMs?: number; actions?: string[] } = {}) {
+async function setup(
+  options: {
+    grantMs?: number;
+    leaseMs?: number;
+    actions?: string[];
+    deferAssignment?: boolean;
+  } = {},
+) {
   const h = await harness<CompletionControl>({
     fixturePath: "apps/worker/test/control/fixtures/completion.ts",
   });
@@ -40,6 +47,7 @@ async function setup(options: { grantMs?: number; leaseMs?: number; actions?: st
         auth.grants[0]?.expiresAt ?? Number.MAX_SAFE_INTEGER,
       ),
       ...(options.actions ? { actions: options.actions } : {}),
+      ...(options.deferAssignment ? { deferAssignment: true } : {}),
     });
     const registration = value(
       await h.cp.registerAuthorityRecipient(auth, {
@@ -82,6 +90,47 @@ async function setup(options: { grantMs?: number; leaseMs?: number; actions?: st
     throw error;
   }
 }
+
+test("a registered unsent intent can be queried without borrowing attempted-work repair capacity", async () => {
+  const h = await setup({ deferAssignment: true });
+  try {
+    const actor = {
+      ...h.actor,
+      registrationId: h.job.reservation.registrationIds.agent,
+    };
+    const before = await h.cp.admissions();
+    const result = await h.cp.queryExecution(actor, h.job.identity);
+    assert.equal(
+      result.ok,
+      true,
+      "The exact registered dispatch owner must recover its retained pre-send intent",
+    );
+    assert.deepEqual(value(result), { identity: h.job.identity, state: "unknown" });
+    const after = await h.cp.admissions();
+    assert.equal(after.application, before.application + 1);
+    assert.equal(after.repair, before.repair, "Unsent work cannot borrow completion headroom");
+    for (const ctx of [
+      h.unregistered,
+      { ...actor, registrationId: "missing" },
+      { ...actor, registrationId: h.job.reservation.registrationIds.workspace },
+    ])
+      assert.equal((await h.cp.queryExecution(ctx, h.job.identity)).ok, false);
+    assert.equal(
+      (
+        await h.cp.queryExecution(actor, {
+          ...h.job.identity,
+          lease: { ...h.job.identity.lease, fence: "changed" },
+        })
+      ).ok,
+      false,
+    );
+    assert.equal(value(await h.cp.queryExecution(actor, h.job.identity)).state, "unknown");
+    assert.equal(h.channel.frames.filter((frame) => frame.type === "job.assign").length, 0);
+    assert.equal(h.channel.frames.filter((frame) => frame.type === "job.query").length, 0);
+  } finally {
+    await h.close();
+  }
+});
 
 test("registered execution recovery checks its retained owner and one current logical grant, including historical and read-only jobs", async () => {
   for (const actions of [["jobs.dispatch", "workspace.write"], ["jobs.dispatch"]]) {
