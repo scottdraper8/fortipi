@@ -57,11 +57,18 @@ export const sources: Source[] = [
   ),
   policy(
     "durable-objects-policy",
-    ["docs/durable-objects/platform", "partials/durable-objects"],
-    "Review SQLite request/row/storage limits, Free exhaustion/reset behavior, alarms and pricing; preserve durable holds and explicit recovery.",
+    [
+      "docs/durable-objects/platform",
+      "partials/durable-objects",
+      "docs/durable-objects/deployments/durable-objects-code-updates.mdx",
+      "docs/durable-objects/concepts/durable-object-lifecycle.mdx",
+    ],
+    "Review SQLite request/row/storage limits, Free exhaustion/reset behavior, alarms and pricing; review code-update strategy/API semantics (default deferred up to 300s, single-deployment immediate override), best-effort deferral, lifecycle restarts, storage interruption and WebSocket termination. Preserve durable holds and explicit recovery; never migrate configuration automatically.",
     [
       "https://developers.cloudflare.com/durable-objects/platform/limits/",
       "https://developers.cloudflare.com/durable-objects/platform/pricing/",
+      "https://developers.cloudflare.com/durable-objects/deployments/durable-objects-code-updates/",
+      "https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/",
     ],
   ),
   policy(
