@@ -81,21 +81,21 @@
     "computer-fuse": {
       "catalogSha256": "c4c8b17f74da3c8b3563522a2c0d5356d4805d624ce4de15cb25a3e8c34051cc",
       "snapshot": {
-        "commit": "de44ba6f3bf5cce67e9c9ecb6e561fdbc6f682ee",
-        "version": "0.11.1",
+        "commit": "904d2f584ff6f9247c12250a919739c7a5e3d3db",
+        "version": "0.11.2",
         "paths": {
-          "packages": "9e188792e4a332ffd24be4f51944069dfb1de9c1c5039aab921dc6bc0a3e460e",
-          "docs": "55666044ed613ac3f69857feca38ffbc6b28d3ef87e82fcf40218beb54221498",
-          "packages/computer/package.json": "9888d861577c6f0e7e96da0f2e06d6255c5a1860854f0dbf9aa47d15e5b0c202",
-          "packages/computerd/package.json": "744f8a44e477171537588812f84da9491a650998cd07d6a37f86d9e4cc53aeb9"
+          "packages": "af4cf01d2f6dd0c4bd477eee876d0fb4478210ca44af15a9cc14b975719e2b44",
+          "docs": "6a5c0550f0a1c92e357ed96feaa6c5190fcc4c918a57f09db0cae4b3c0f568f6",
+          "packages/computer/package.json": "c6ccd02d86da52672d3c866a5714b09c747296f008e086dec26709435c6952ea",
+          "packages/computerd/package.json": "563ea2a92e3d10783a3df2b376b31c7a7cb222a298b203d4e06706a9b6cf4493"
         },
-        "sha256": "a22383768a1f0c39719c873195f1054ebad49d8010f705af365b09e964611ca9"
+        "sha256": "240215283a0074b84095ac1dc36f2eccc6209e4fd1514ab1d415b22fbffbf541"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@cloudflare/computer": "0.11.1"
       },
-      "reviewedAt": "2026-11-12T18:07:03.606Z",
-      "reviewNote": "Reviewed immutable812bce58 to de44ba6f (PR323): optional Codemode scheme and browser specifier descriptions; codemode default and FortiPi modules:{} / onInterrupt:fail remain. Close/drain, SQL, journal/fingerprint2, container/RPC/auth, computerd/FUSE/native ABI and manifests/locks have no applicable change. Published0.11.1 remains source812b; installed SDK and accepted8ead image/source stay unchanged. Reference-only review, not adoption of unpublished code or new runtime/security/live proof. Scope: phase3/thread-8/candidate-computer-review.md."
+      "reviewedAt": "2026-11-12T19:19:37.897Z",
+      "reviewNote": "Reviewed de44ba6f to904d2f58 release0.11.2 (#324): version/changelog/docs/image-reference bookkeeping only; no runtime/native/RPC/FUSE/ABI/auth/SQL or export/dependency source change. Optional scheme feature is the already-reviewed de44 change. npm0.11.2 published2026-11-12T18:52:02.702Z, maturesNov13 same time; no new security cause/exemption. Retain eligible approved pin0.11.1/source812 and accepted8ead image/source; current0.11.1 exemption maturesNov12T20:08:41.359Z and needs routine removal then, not extension. Reference-only acknowledgement, no code adoption, image relabel or new runtime proof. Scope: phase3/thread-8/candidate-computer-0112-review.md."
     },
     "agents-lifecycle": {
       "catalogSha256": "6845cb5c33905cbac363710a051956451ab229dde00e4dbaf1cd5a9a7fbca352",
@@ -118,12 +118,12 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "2443c687e3fbc53af7b3a8ab8dc21a170cdf0d51",
+        "commit": "6249ca27d2230a93d2fd44c3ceb3a651bc2baaec",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
           "packages/ai": "91ed66697d7398fb0d507afeaa6b6b06f4ad4972aeae8117dbf3d8c297766235",
-          "packages/chord": "6cd48e22d7ff31d762141e9e41c5d16f8c74363f4556609086f4918f7af29a64",
+          "packages/chord": "8d858c33303e1f6c1c5ee27fab8f3a8a5b692c657c4cd71ddecffda62f962fc8",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "dc87d765abc06c7764d3569f4bfc5aacb424eec3573a9aabd4197c346d5ef2fa",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
@@ -133,7 +133,7 @@
           "packages/tui": "9b71a3439eb5858a0b46a15713ad41690e5ed5c6fef8d8fb38b259617530fd9f",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "46a12a829e55265f016cb328f07de3b4e17e89d6538d61d389d14b7f7255ff13"
+        "sha256": "54d099f8c8955360ea98d37f62ce90212574c8a553e74189a12f9a22c24d3b9c"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -145,8 +145,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-12T18:35:13.533Z",
-      "reviewNote": "Reviewed exact74dcca...2443 using full scoped tree/archive closure and uncapped incremental comparison. Existing waiter backport retained; unpublished durable namespace/Chord/web changes not adopted. Earned Anthropic nonstrict root additionalProperties loss repaired only by official aa47 declared PiAI1.5.2 patch966118ea; a360900 independently qualified original Request RED/patched GREEN, explicit/omitted/strict controls, archive/lock preservation and242 asset closure. Trusted AJV enforcement remains. Subsequent841dc changes only apps/p2 CSS/test; watched hashes unchanged. Retain installed versions and prior patches. Reference review resolves this defect, not live/provider/image/deployed/release approval. Evidence: thread-8/candidate-agents-pi-review.md and thread-5/pi-anthropic-schema-{repair,enforcer}.md."
+      "reviewedAt": "2026-11-12T19:21:44.963Z",
+      "reviewNote": "Reviewed immutable2443c687...6249ca27:5commits/41files,8watchedChord files. Changes add telemetry-ingest export and required admit(principal) for optional app/page telemetry; FortiPi uses its own HTTP/WS and does not instantiate this facet/app kit. Actual51a Worker has13 Chord inputs (context,SQLite,delta,JSON/watch/output); their upstream recursive tree/blob identities are unchanged, as are contracts/host/data/store/core telemetry. All other watched Pi paths and1.5.2 pins unchanged. Preserve accepted a360 Anthropic aa47 repair (schema HOLD resolved), Durable9b88 and Agents5071 declared patches; hashes verified. Future ingest/main adoption needs explicit admission migration. Reference acknowledgment only: no dependency/code/version adoption, budget/cap change or runtime/deployed blanket clearance. Evidence:phase3/thread-8/candidate-chord-incremental-review.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
