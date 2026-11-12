@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { constants } from "node:fs";
+import { copyFile, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { run, sha256 } from "../apps/worker/container/fuse-security.ts";
+import { imageInputs } from "../apps/worker/container/inputs.ts";
 import {
   assertDynamicFuse,
   assertWitnessCallPath,
@@ -14,14 +17,18 @@ import type { FsEntry } from "../apps/worker/container/rootfs.ts";
 import {
   commandOptions,
   hashFile,
+  verifyDaemonInputs,
   verifyKitInventory,
   verifyKitSignatures,
+  verifyNodeInputs,
   verifyReplacementRecord,
+  verifySecurityOverlay,
+  verifySecurityRuntime,
   verifySourceClosure,
   verifySourceKit,
 } from "./image-source-distribution.ts";
 
-function entry(bytes: string): FsEntry {
+function entry(bytes: string | Uint8Array): FsEntry {
   return {
     type: "File",
     mode: 0o644,
@@ -190,6 +197,209 @@ test("replacement record binds actual image and source identities and refuses so
     assert.throws(() => verifyReplacementRecord({ ...record, ...changed }, image, kit));
 });
 
+const securityInputs = () =>
+  process.env.FORTIPI_SECURITY_INPUTS ??
+  resolve(import.meta.dirname, "../apps/worker/dist/container");
+
+test("actual SEA source, injector archives and observed bootstrap receipt reject changed generator and metafile inputs", {
+  timeout: 120_000,
+}, async () => {
+  const source = securityInputs();
+  const observed = process.env.FORTIPI_SEA_METADATA;
+  const directory = await mkdtemp(resolve(tmpdir(), "fortipi-sea-receiver-test-"));
+  const embedded = JSON.parse(
+    await readFile(
+      observed
+        ? resolve(observed, "embedded-freeze.json")
+        : resolve(import.meta.dirname, "../apps/worker/container/embedded-freeze.json"),
+      "utf8",
+    ),
+  );
+  try {
+    const members = [
+      "computer-source.tgz",
+      "node-runtime.tar.xz",
+      "node-source.tar.xz",
+      "daemon-build/SHASUMS256.txt",
+      "daemon-build/SHASUMS256.txt.sig",
+      "daemon-build/node-release-key.pgp",
+      "daemon-build/postject.tgz",
+      "daemon-build/commander.tgz",
+    ];
+    for (const name of members) {
+      const target = resolve(directory, name);
+      await mkdir(dirname(target), { recursive: true });
+      await copyFile(
+        resolve(source, name),
+        target,
+        constants.COPYFILE_FICLONE | constants.COPYFILE_EXCL,
+      );
+    }
+    for (const name of [
+      "computerd-build.json",
+      "daemon-build/build-inputs.json",
+      "daemon-build/node-authentication.json",
+      "daemon-build/metafile.json",
+    ]) {
+      const target = resolve(directory, name);
+      await mkdir(dirname(target), { recursive: true });
+      await copyFile(
+        observed ? resolve(observed, name.split("/").at(-1) ?? "") : resolve(source, name),
+        target,
+        constants.COPYFILE_EXCL,
+      );
+    }
+    for (const pin of embedded.components as { name: string; version: string }[]) {
+      if (pin.name === "fuse-napi") continue;
+      const name = pin.name.replaceAll("/", "_");
+      await copyFile(
+        resolve(source, `daemon-build/${name}.tgz`),
+        resolve(directory, `embedded-${name}-${pin.version}.tgz`),
+        constants.COPYFILE_EXCL,
+      );
+    }
+    const ownSource = new Map<string, FsEntry>();
+    for (const name of [
+      "apps/worker/container/computerd-build.ts",
+      "tools/unstale/supply-chain.json",
+    ]) {
+      const data = await readFile(resolve(import.meta.dirname, "..", name));
+      ownSource.set(name, { ...entry(data), data });
+    }
+    await verifyDaemonInputs(directory, embedded, ownSource);
+    const buildPath = resolve(directory, "computerd-build.json"),
+      buildBytes = await readFile(buildPath);
+    const build = JSON.parse(buildBytes.toString());
+    build.generatorVersion = "22.23.4";
+    await writeFile(buildPath, JSON.stringify(build));
+    await assert.rejects(verifyDaemonInputs(directory, embedded, ownSource));
+    await writeFile(buildPath, buildBytes);
+    const metaPath = resolve(directory, "daemon-build/metafile.json");
+    const meta = JSON.parse(await readFile(metaPath, "utf8"));
+    meta.inputs["packages/computerd/src/exec/runner.ts"].bytes++;
+    await writeFile(metaPath, JSON.stringify(meta));
+    await assert.rejects(
+      verifyDaemonInputs(directory, embedded, ownSource),
+      /SEA metafile input differs/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("actual signed Node inputs reject altered checksums, archive bytes and a false authentication receipt", {
+  timeout: 120_000,
+}, async () => {
+  const source = securityInputs();
+  const directory = await mkdtemp(resolve(tmpdir(), "fortipi-node-receiver-test-"));
+  try {
+    for (const name of [
+      "node-runtime.tar.xz",
+      "node-source.tar.xz",
+      "daemon-build/node-release-key.pgp",
+      "daemon-build/SHASUMS256.txt",
+      "daemon-build/SHASUMS256.txt.sig",
+      "daemon-build/node-authentication.json",
+    ]) {
+      const target = resolve(directory, name);
+      await mkdir(dirname(target), { recursive: true });
+      await copyFile(
+        resolve(source, name),
+        target,
+        constants.COPYFILE_FICLONE | constants.COPYFILE_EXCL,
+      );
+    }
+    await verifyNodeInputs(directory);
+    const sumsPath = resolve(directory, "daemon-build/SHASUMS256.txt");
+    const sums = await readFile(sumsPath);
+    await writeFile(sumsPath, Buffer.concat([sums, Buffer.from("changed\n")]));
+    await assert.rejects(verifyNodeInputs(directory), /gpgv/);
+    await writeFile(sumsPath, sums);
+    const authPath = resolve(directory, "daemon-build/node-authentication.json");
+    const auth = JSON.parse(await readFile(authPath, "utf8"));
+    await writeFile(authPath, JSON.stringify({ ...auth, executableSha256: "a".repeat(64) }));
+    await assert.rejects(
+      verifyNodeInputs(directory),
+      /authentication receipt differs: executableSha256/,
+    );
+    await writeFile(authPath, JSON.stringify(auth));
+    const archive = await open(resolve(directory, "node-runtime.tar.xz"), "r+");
+    try {
+      await archive.write(Buffer.from([0]), 0, 1, 0);
+    } finally {
+      await archive.close();
+    }
+    await assert.rejects(verifyNodeInputs(directory), /Node archive identity differs/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("actual authenticated zlib overlay reconstructs effective source and rejects metadata-only or changed-byte upgrades", {
+  timeout: 120_000,
+}, async () => {
+  const source = securityInputs();
+  const directory = await mkdtemp(resolve(tmpdir(), "fortipi-zlib-receiver-test-"));
+  const freeze = JSON.parse(
+    await readFile(
+      resolve(import.meta.dirname, "../apps/worker/container/debian-freeze.json"),
+      "utf8",
+    ),
+  );
+  try {
+    for (const name of [
+      "security/archive-keyring.pgp",
+      "security/trixie-security.InRelease",
+      "security/trixie-security-main-binary-amd64-Packages.xz",
+      "security/trixie-security-main-source-Sources.xz",
+      "security/zlib-security-authentication.json",
+      "zlib-effective.json",
+      "sources/zlib_1.3.dfsg+really1.3.1-1+deb13u1.dsc",
+      "sources/zlib_1.3.dfsg+really1.3.1.orig.tar.gz",
+      "sources/zlib_1.3.dfsg+really1.3.1-1+deb13u1.debian.tar.xz",
+    ]) {
+      const target = resolve(directory, name);
+      await mkdir(dirname(target), { recursive: true });
+      await copyFile(resolve(source, name), target, constants.COPYFILE_EXCL);
+    }
+    await verifySecurityOverlay(directory, freeze);
+    const proofPath = resolve(directory, "zlib-effective.json"),
+      proofBytes = await readFile(proofPath);
+    const proof = JSON.parse(proofBytes.toString());
+    proof.patchedSources["gzwrite.c"] = "a".repeat(64);
+    await writeFile(proofPath, JSON.stringify(proof));
+    await assert.rejects(
+      verifySecurityOverlay(directory, freeze),
+      /Effective zlib source\/patch evidence differs/,
+    );
+    await writeFile(proofPath, proofBytes);
+    const authPath = resolve(directory, "security/zlib-security-authentication.json");
+    const auth = JSON.parse(await readFile(authPath, "utf8"));
+    auth.binary.Version = "1:1.3.dfsg+really1.3.1-1+b1";
+    await writeFile(authPath, JSON.stringify(auth));
+    await assert.rejects(
+      verifySecurityOverlay(directory, freeze),
+      /authentication receipt differs from signed indexes/,
+    );
+    const archive = resolve(source, "context/packages/zlib1g.deb");
+    const pin = freeze.packages.find((p: { name: string }) => p.name === "zlib1g");
+    assert.ok(pin);
+    assert.equal(await hashFile(archive), pin.sha256);
+    const data = resolve(directory, "zlib-data.tar.xz");
+    await writeFile(data, await run("ar", ["-p", archive, "data.tar.xz"]));
+    const library = await run("tar", ["-xOf", data, "./usr/lib/x86_64-linux-gnu/libz.so.1.3.1"]);
+    const path = "usr/lib/x86_64-linux-gnu/libz.so.1.3.1";
+    verifySecurityRuntime(new Map([[path, entry(library)]]));
+    library[1024] = (library[1024] ?? 0) ^ 1;
+    assert.throws(
+      () => verifySecurityRuntime(new Map([[path, entry(library)]])),
+      /Conveyed zlib library/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // Like fuse-security.test.ts, this requires real prepared inputs and fails if absent.
 // This is explicitly an artifact/static-ELF test, never a Linux execution claim.
 test("actual pinned source kit, signatures, addon ELF and automatic witness call path; changed signature is rejected", {
@@ -218,8 +428,7 @@ test("actual pinned source kit, signatures, addon ELF and automatic witness call
       directory,
     );
     const computer = resolve(directory, "computer-source.tgz");
-    const top =
-      "computer-bb0a5db4b7e8c8a79625d63e0e272602f909640e/packages/computerd/vendor/fuse-napi/";
+    const top = `computer-${imageInputs.source}/packages/computerd/vendor/fuse-napi/`;
     assertWitnessCallPath(
       (await run("tar", ["-xOf", computer, `${top}index.js`])).toString("utf8"),
       (await run("tar", ["-xOf", computer, `${top}fuse-native.c`])).toString("utf8"),
