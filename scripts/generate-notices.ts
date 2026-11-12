@@ -206,7 +206,10 @@ export async function generateNotices(root = repository): Promise<NoticeReceipt[
       texts.push({ path: `archive/${path}`, source: `${id}/${path}`, bytes });
     }
     const attribution = policy.attributions[id];
-    if (!texts.length || fact.distribution.includes("native conveyance prohibited")) {
+    if (
+      Object.keys(review.licenses).length === 0 ||
+      fact.distribution.includes("native conveyance prohibited")
+    ) {
       assert.ok(
         attribution?.source && attribution.evidence,
         `Missing reviewed license attribution: ${id}`,
