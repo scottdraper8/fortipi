@@ -60,11 +60,31 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     this.capacity = new Capacity(this.store, this.identities, this.directory);
     this.tickets = new Tickets(this.store, this.identities);
     this.bindings = new Bindings(this.store, this.identities, this.tickets, this.directory, env);
-    this.delivery = new Delivery(this.store, this.identities, this.directory, env, this.tickets);
-    this.executors = new Executors(ctx, this.store, this.identities, (auth, frame) =>
-      frame.frame.type === "transfer.status"
-        ? this.relay.receiveStatus(auth, frame)
-        : this.delivery.receive(auth, frame),
+    this.delivery = new Delivery(
+      this.store,
+      this.identities,
+      this.directory,
+      env,
+      this.tickets,
+      this.capacity,
+    );
+    this.executors = new Executors(
+      ctx,
+      this.store,
+      this.identities,
+      (auth, frame) =>
+        frame.frame.type === "transfer.status"
+          ? this.relay.receiveStatus(auth, frame)
+          : this.delivery.receive(auth, frame),
+      (auth, executorId, generation, epoch, registration) =>
+        this.delivery.recoverTerminal(
+          auth,
+          executorId,
+          generation,
+          epoch,
+          registration,
+          this.executors,
+        ),
     );
     this.dispatch = new Dispatch(
       this.store,

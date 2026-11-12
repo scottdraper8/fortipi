@@ -1387,6 +1387,11 @@ export type ExecutorFrame =
       payload: JobCommitted;
     }
   | {
+      type: "job.committed_ack";
+      requestId: Id;
+      payload: JobCommitted;
+    }
+  | {
       type: "local_policy.pending";
       requestId: Id;
       payload: {

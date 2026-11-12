@@ -4198,6 +4198,20 @@ export const executorMessagesSchema = {
         },
         {
           type: "object",
+          description:
+            "Executor-to-control-plane acknowledgment of the exact retained terminal proof after durable local application. It retires delivery recovery only and grants no execution or workspace authority.",
+          properties: {
+            type: { const: "job.committed_ack" },
+            requestId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            payload: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/JobCommitted",
+            },
+          },
+          required: ["type", "requestId", "payload"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
           properties: {
             type: { const: "local_policy.pending" },
             requestId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },

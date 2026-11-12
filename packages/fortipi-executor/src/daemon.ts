@@ -870,6 +870,11 @@ export class ExecutorRuntime implements FrameHandler {
     }
     if (value.type === "job.committed") {
       await this.committed(value.payload);
+      this.session?.send({
+        type: "job.committed_ack",
+        requestId: value.requestId,
+        payload: value.payload,
+      });
       return;
     }
     if (value.type === "local_policy.decision") {
