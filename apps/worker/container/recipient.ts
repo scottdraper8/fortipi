@@ -79,6 +79,45 @@ type Stage =
   | "recipient-empty"
   | "import"
   | "imported-identity";
+const fixtureStages = [
+  "receipt",
+  "source",
+  "source-match",
+  "binding",
+  "stability",
+  "distinct",
+  "fuse-flag",
+  "netns",
+  "userns",
+  "image-inspect",
+  "image-identity",
+  "image-match",
+] as const;
+const bindingSteps = [
+  "platform",
+  "socket-path",
+  "session-paths",
+  "session-permissions",
+  "daemon-pid",
+  "daemon-executable",
+  "tool-path",
+  "tool-permissions",
+  "tool-selection",
+  "publisher",
+  "tool-digests",
+  "daemon-arguments",
+  "daemon-config",
+  "socket-permissions",
+  "daemon-uid",
+  "daemon-start",
+  "daemon-info",
+  "data-root",
+  "network-namespace",
+  "private-backend",
+  "socket-identity",
+] as const;
+type FixtureStage = (typeof fixtureStages)[number];
+type BindingStep = (typeof bindingSteps)[number];
 
 // Public Config schema: Moby 29.9.3 api/types/container/config.go plus
 // DockerOCIImageConfig's embedded OCI fields. This is diagnostic-only.
@@ -176,6 +215,17 @@ export function recipientFailure(stage: Stage, error: unknown, fallback: Reason 
       ? { config: { field: config.field, side: config.side, shape: config.shape } }
       : {}),
     passed: false,
+  };
+}
+/** Only fixed labels cross the fixture's error boundary; never assertion payloads. */
+export function recipientFixtureFailure(stage: string, error: unknown, bindingStep?: string) {
+  return {
+    ...recipientFailure("docker-binding", error),
+    probe: "recipient-fixture",
+    stage: fixtureStages.find((known) => known === stage) ?? "unknown",
+    ...(stage === "binding"
+      ? { binding: bindingSteps.find((known) => known === bindingStep) ?? "unknown" }
+      : {}),
   };
 }
 const env = {
@@ -446,31 +496,38 @@ export function assertRecipientPostBinding(actual: Daemon, expected: Daemon): vo
   checked("postbinding", () => assert.deepEqual(actual, expected));
 }
 
-async function binding(): Promise<Daemon> {
+async function binding(observe?: (step: BindingStep) => void): Promise<Daemon> {
+  observe?.("platform");
   assert.equal(process.platform, "linux", "Recipient proof requires Linux");
+  observe?.("socket-path");
   assert.match(
     env.DOCKER_HOST ?? "",
     /^unix:\/\/\/tmp\/fortipi-docker-[A-Za-z0-9_-]+\/docker.sock$/,
   );
   const socket = (env.DOCKER_HOST ?? "").slice("unix://".length);
   const session = dirname(socket);
+  observe?.("session-paths");
   assert.equal(await realpath(session), session);
   assert.equal(env.DOCKER_CONFIG, resolve(session, "config"));
+  observe?.("session-permissions");
   for (const path of [session, env.DOCKER_CONFIG]) {
     const stat = await lstat(path);
     assert.ok(
       stat.isDirectory() && stat.uid === process.getuid?.() && (stat.mode & 0o777) === 0o700,
     );
   }
+  observe?.("daemon-pid");
   const pidText = (await readFile(resolve(session, "daemon.pid"), "utf8")).trim();
   assert.match(pidText, /^[1-9][0-9]*$/);
   const pid = Number(pidText);
   const args = (await readFile(`/proc/${pid}/cmdline`, "utf8")).split("\0").filter(Boolean);
   const rootless = args.includes("--rootless");
+  observe?.("daemon-executable");
   const executable = rootless
     ? await realpath(`/proc/${pid}/exe`)
     : await command("/usr/bin/sudo", ["-n", "/usr/bin/readlink", "-f", `/proc/${pid}/exe`]);
   const tool = dirname(executable);
+  observe?.("tool-path");
   assert.ok(
     tool.startsWith(
       resolve(repository, `dist/toolchain/docker-${rootless ? "rootless" : "rootful"}-`),
@@ -478,22 +535,26 @@ async function binding(): Promise<Daemon> {
   );
   assert.equal(executable, resolve(tool, "dockerd"));
   assert.equal(await realpath(tool), tool);
+  observe?.("tool-permissions");
   const tools = await lstat(tool);
   assert.ok(
     tools.isDirectory() && tools.uid === process.getuid?.() && (tools.mode & 0o777) === 0o700,
   );
+  observe?.("tool-selection");
   assert.equal(
     (env.PATH ?? "")
       .split(delimiter)
       .find((path) => path.startsWith(resolve(repository, "dist/toolchain/docker-"))),
     tool,
   );
+  observe?.("publisher");
   const policy = JSON.parse(
     await readFile(resolve(repository, "tools/unstale/platform-tools.json"), "utf8"),
   ) as { docker: { sha256: string; version: string } };
   const raw = await readFile(resolve(repository, "dist/toolchain/docker-29.9.3.tgz"));
   assert.equal(hash(raw), policy.docker.sha256);
   const publisher = archiveEntries(raw);
+  observe?.("tool-digests");
   for (const name of ["docker", "dockerd"]) {
     const bytes = publisher.get(`docker/${name}`);
     assert.ok(bytes);
@@ -518,12 +579,16 @@ async function binding(): Promise<Daemon> {
     "--pidfile",
     resolve(session, "daemon.pid"),
   ];
+  observe?.("daemon-arguments");
   assert.deepEqual(args, expected, "Recipient daemon private binding changed");
+  observe?.("daemon-config");
   assert.equal(await readFile(resolve(session, "config/daemon.json"), "utf8"), "{}\n");
+  observe?.("socket-permissions");
   const api = await lstat(socket);
   assert.ok(
     api.isSocket() && api.uid === (rootless ? process.getuid?.() : 0) && (api.mode & 7) === 0,
   );
+  observe?.("daemon-uid");
   const status = await readFile(`/proc/${pid}/status`, "utf8");
   const uid = rootless ? process.getuid?.() : 0;
   assert.ok(
@@ -532,9 +597,11 @@ async function binding(): Promise<Daemon> {
       ?.slice(1)
       .every((value) => Number(value) === uid),
   );
+  observe?.("daemon-start");
   const stat = await readFile(`/proc/${pid}/stat`, "utf8");
   const start = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
   assert.ok(start && /^[0-9]+$/.test(start));
+  observe?.("daemon-info");
   const info = JSON.parse(
     await docker([
       "info",
@@ -545,11 +612,13 @@ async function binding(): Promise<Daemon> {
   assert.match(info.id, /^[A-Za-z0-9:-]{1,128}$/);
   assert.equal(info.version, policy.docker.version);
   assert.equal(info.root, resolve(session, "data"));
+  observe?.("data-root");
   // Root-owned stores require sudo only for the canonical-path query, never a listing.
   const canonical = rootless
     ? await realpath(info.root)
     : await command("/usr/bin/sudo", ["-n", "/usr/bin/readlink", "-f", info.root]);
   assert.equal(canonical, info.root);
+  observe?.("network-namespace");
   const namespace = `/proc/${pid}/ns/net`;
   const networkNamespace = rootless
     ? await readlink(namespace)
@@ -557,12 +626,14 @@ async function binding(): Promise<Daemon> {
   assert.match(networkNamespace, /^net:\[[0-9]+\]$/);
   let backend: PrivateContainerd | undefined;
   if (!rootless) {
+    observe?.("private-backend");
     backend = await verifyPrivateContainerd(tool, session, env, raw);
     assertPrivateContainerdApi(
       JSON.parse(await docker(["info", "--format", "{{json .Containerd}}"])),
       backend,
     );
   }
+  observe?.("socket-identity");
   return {
     id: info.id,
     root: canonical,
@@ -642,26 +713,43 @@ async function loadArchive(expectedSha256: string): Promise<void> {
 
 /** The fixture must stay on the recipient daemon and its imported selected image. */
 export async function verifyRecipientFixture(): Promise<string> {
+  let stage: FixtureStage = "receipt";
+  let bindingStep: BindingStep | undefined;
   try {
     const receipt = await readReceipt();
     assert.equal(receipt.phase, "loaded", "Recipient import proof is required");
+    stage = "source";
     const source = await sourceProof();
+    stage = "source-match";
     matchSource(receipt, source);
-    const current = await binding();
+    stage = "binding";
+    const current = await binding((step) => {
+      bindingStep = step;
+    });
+    stage = "stability";
     assert.deepEqual(current, receipt.recipient, "Fixture daemon differs from imported recipient");
+    stage = "distinct";
     assertDistinctStores(receipt.builder, current);
     if (current.rootless) {
+      stage = "fuse-flag";
       assert.ok(process.argv.includes("--require-fuse"), "Rootless recipient requires real FUSE");
+      stage = "netns";
       assert.equal(await readlink("/proc/self/ns/net"), current.networkNamespace);
+      stage = "userns";
       assert.equal(
         await readlink("/proc/self/ns/user"),
         await readlink(`/proc/${current.pid}/ns/user`),
       );
     }
-    const imageId = assertImportedImage(await inspection(), source.graph);
+    stage = "image-inspect";
+    const actual = await inspection();
+    stage = "image-identity";
+    const imageId = assertImportedImage(actual, source.graph);
+    stage = "image-match";
     assert.equal(imageId, receipt.imageId, "Recipient fixture image changed");
     return imageId;
-  } catch {
+  } catch (error) {
+    console.error(JSON.stringify(recipientFixtureFailure(stage, error, bindingStep)));
     throw new Error("Recipient import fixture binding failed");
   }
 }

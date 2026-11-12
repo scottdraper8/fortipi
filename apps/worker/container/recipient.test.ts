@@ -23,6 +23,7 @@ import {
   assertRecipientPostBinding,
   assertRecipientTag,
   recipientFailure,
+  recipientFixtureFailure,
   singleImportedImage,
 } from "./recipient.ts";
 
@@ -284,6 +285,40 @@ test("unprotected recipient invocation fails before Docker and emits only a fini
 });
 
 const canary = "PRIVATE_CANARY_never_emit_91d7";
+test("fixture diagnostics retain only closed stage/binding labels and existing safe image reasons", () => {
+  const foreign = Object.assign(new Error(canary, { cause: { [canary]: canary } }), {
+    actual: canary,
+    expected: canary,
+    reason: canary,
+    config: { field: canary },
+  });
+  assert.deepEqual(recipientFixtureFailure("binding", foreign, "daemon-uid"), {
+    probe: "recipient-fixture",
+    stage: "binding",
+    reason: "unknown",
+    passed: false,
+    binding: "daemon-uid",
+  });
+  assert.deepEqual(recipientFixtureFailure(canary, foreign, canary), {
+    probe: "recipient-fixture",
+    stage: "unknown",
+    reason: "unknown",
+    passed: false,
+  });
+  assert.equal(recipientFixtureFailure("binding", foreign, canary).binding, "unknown");
+  assert.equal(
+    Object.hasOwn(recipientFixtureFailure("stability", foreign, "daemon-uid"), "binding"),
+    false,
+  );
+  const guarded = rejected("tag", () => assertRecipientTag(canary, image.Id));
+  assert.equal(recipientFixtureFailure("image-match", guarded).reason, "tag");
+  for (const value of [foreign, guarded]) {
+    assert.equal(
+      JSON.stringify(recipientFixtureFailure("binding", value, "daemon-uid")).includes(canary),
+      false,
+    );
+  }
+});
 function rejected(
   reason: string,
   action: () => void,
