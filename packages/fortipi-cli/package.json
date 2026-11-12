@@ -36,7 +36,7 @@
   "dependencies": {
     "@earendil-works/pi-ai": "1.5.2",
     "fortipi-contract": "workspace:*",
-    "wrangler": "4.160.1",
+    "wrangler": "4.161.0",
     "ajv": "8.20.0"
   }
 }
