@@ -131,7 +131,7 @@ jobs:
           pnpm exec tsc -p packages/fortipi-cli/tsconfig.json
           pnpm exec tsc -p apps/worker/tsconfig.json --noEmit
           pnpm exec tsc -p tsconfig.tools.json --noEmit
-          node --test tools/unstale/verify-container-egress.test.ts apps/worker/test/backends/image-archive.test.ts apps/worker/container/recipient.test.ts
+          node --test tools/unstale/verify-container-egress.test.ts tools/unstale/provision-meson.test.ts tools/unstale/private-python.test.ts apps/worker/test/backends/image-archive.test.ts apps/worker/container/recipient.test.ts
       - name: Verify existing signed-source and ELF tools
         run: |
           /usr/bin/timeout 5 /usr/bin/gpgv --version
@@ -149,7 +149,7 @@ jobs:
         if: matrix.mode == 'rootless'
         env:
           FORTIPI_BOOTSTRAP_PYTHON: ${{ steps.python.outputs.python-path }}
-        run: node tools/unstale/provision-meson.ts --python "$FORTIPI_BOOTSTRAP_PYTHON"
+        run: node tools/unstale/provision-meson.ts --python "$FORTIPI_BOOTSTRAP_PYTHON" --private-python
       - name: Provision reviewed Docker (${{ matrix.mode }})
         run: node tools/unstale/provision-docker.ts ${{ matrix.provision_args }}
       - name: Build the pinned image and collect its actual inventory

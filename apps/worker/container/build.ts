@@ -907,6 +907,7 @@ async function sourceKit(sources: NamedSource[], pruning: PrunePolicy): Promise<
     "scripts/image-source-distribution.ts",
     "scripts/check-image-compliance.ts",
     "tools/unstale/provision-meson.ts",
+    "tools/unstale/private-python.ts",
   ]) {
     if (
       digest(command("git", ["show", `${sourceCommit}:${name}`], { cwd: root })) !==

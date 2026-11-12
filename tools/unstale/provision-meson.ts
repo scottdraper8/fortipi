@@ -22,6 +22,12 @@ import { fileURLToPath, URL } from "node:url";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { Parser } from "tar";
+import {
+  copyPrivatePython,
+  type PrivatePython,
+  removePrivatePython,
+  verifyPrivatePython,
+} from "./private-python.ts";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const policy = JSON.parse(
@@ -69,6 +75,13 @@ class MesonToolError extends Error {
   }
 }
 const reasons = [
+  ["Private Python", "private-python-identity"],
+  ["Unsupported bootstrap Python", "private-python-layout"],
+  ["Unowned bootstrap Python", "private-python-owner"],
+  ["Bootstrap Python links", "private-python-link"],
+  ["Bootstrap Python changed", "private-python-source-changed"],
+  ["Python member bound", "private-python-bound"],
+  ["Python byte bound", "private-python-bound"],
   ["Unsafe Python executable", "python-permissions"],
   ["Pinned Python required", "python-version"],
   ["Python identity changed", "python-identity"],
@@ -101,6 +114,7 @@ async function command(
   args: string[],
   path: string,
   operation: ToolOperation,
+  runtime?: PrivatePython,
 ): Promise<string> {
   try {
     return (
@@ -112,6 +126,7 @@ async function command(
           LC_ALL: "C",
           PYTHONDONTWRITEBYTECODE: "1",
           PYTHONNOUSERSITE: "1",
+          ...(runtime ? { LD_LIBRARY_PATH: resolve(runtime.root, "lib") } : {}),
         },
         timeout: 15_000,
         killSignal: "SIGKILL",
@@ -208,13 +223,20 @@ interface PythonIdentity {
   path: string;
   sha256: string;
   version: string;
+  runtime?: PrivatePython;
 }
 
 /** Compare saved identity before executing Python; never search PATH for an alternative. */
 export async function pythonIdentity(
   path: string,
   expected?: PythonIdentity,
+  runtime = expected?.runtime,
 ): Promise<PythonIdentity> {
+  if (runtime) {
+    assert.match(runtime.treeSha256, /^[a-f0-9]{64}$/, "Private Python tree identity required");
+    await verifyPrivatePython(runtime);
+    assert.equal(path, resolve(runtime.root, "bin/python3.15"), "Private Python path changed");
+  }
   assert.ok(safePath(path), "Explicit absolute Python path required");
   const canonical = await realpath(path);
   assert.ok(safePath(canonical), "Unsafe canonical Python path");
@@ -244,10 +266,11 @@ export async function pythonIdentity(
     path: canonical,
     sha256: digest(await readFile(canonical)),
     version: policy.externalRuntimes.python.version,
+    ...(runtime ? { runtime } : {}),
   };
   if (expected) assert.deepEqual(identity, expected, "Python identity changed");
   assert.equal(
-    await command(canonical, ["-I", "-S", "--version"], "/usr/bin:/bin", "python"),
+    await command(canonical, ["-I", "-S", "--version"], "/usr/bin:/bin", "python", runtime),
     `Python ${identity.version}`,
     "Pinned Python required",
   );
@@ -332,7 +355,10 @@ function record(python: PythonIdentity) {
   };
 }
 
-export async function verifyMeson(directory: string, pythonPath: string): Promise<void> {
+export async function verifyMeson(
+  directory: string,
+  pythonPath: string,
+): Promise<{ pythonLibraryPath?: string }> {
   assert.ok(
     safePath(directory) && (await realpath(directory)) === directory,
     "Meson root must be canonical",
@@ -366,10 +392,12 @@ export async function verifyMeson(directory: string, pythonPath: string): Promis
       ["--version"],
       `${directory}/bin:/usr/bin:/bin`,
       "meson",
+      python.runtime,
     ),
     mesonPin.version,
     "Meson version changed",
   );
+  return python.runtime ? { pythonLibraryPath: resolve(python.runtime.root, "lib") } : {};
 }
 
 async function download(): Promise<Buffer> {
@@ -394,7 +422,11 @@ async function download(): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-export async function provisionMeson(pythonPath: string, raw: Buffer): Promise<string> {
+export async function provisionMeson(
+  pythonPath: string,
+  raw: Buffer,
+  isolatePython = false,
+): Promise<string> {
   assert.match(mesonPin.source, /^[a-f0-9]{40}$/);
   const files = await mesonFiles(raw);
   assert.equal(
@@ -402,9 +434,12 @@ export async function provisionMeson(pythonPath: string, raw: Buffer): Promise<s
     mesonPin.licenseSha256,
     "Vendored Meson license changed",
   );
-  const python = await pythonIdentity(pythonPath);
   const parent = resolve(repository, "dist/toolchain");
   await mkdir(parent, { recursive: true });
+  assert.ok(!isolatePython || process.platform === "linux", "Private bootstrap requires Linux");
+  const runtime = isolatePython ? await copyPrivatePython(pythonPath, parent) : undefined;
+  const selectedPython = runtime ? resolve(runtime.root, "bin/python3.15") : pythonPath;
+  const python = await pythonIdentity(selectedPython, undefined, runtime);
   const directory = await mkdtemp(resolve(await realpath(parent), "meson-"));
   await chmod(directory, 0o700);
   const directories = new Set<string>();
@@ -431,12 +466,13 @@ export async function provisionMeson(pythonPath: string, raw: Buffer): Promise<s
       flag: "wx",
       mode: 0o400,
     });
-    await verifyMeson(directory, pythonPath);
+    await verifyMeson(directory, selectedPython);
     return directory;
   } catch (error) {
     // Read-only source directories intentionally prevent Python bytecode additions.
     for (const path of directories) await chmod(path, 0o700).catch(() => {});
     await rm(directory, { recursive: true, force: true }).catch(() => {});
+    if (runtime) await removePrivatePython(runtime.root).catch(() => {});
     throw error;
   }
 }
@@ -461,6 +497,8 @@ async function exportPath(directory: string): Promise<void> {
 if (import.meta.main) {
   try {
     const args = process.argv.slice(2);
+    const isolated = args.at(-1) === "--private-python";
+    if (isolated) args.pop();
     assert.ok(args.length === 2 || args.length === 4, "Invalid arguments");
     assert.equal(args[0], "--python");
     const python = args[1];
@@ -476,6 +514,7 @@ if (import.meta.main) {
       directory = await provisionMeson(
         python,
         args[3] ? await readFile(args[3]) : await download(),
+        isolated,
       );
     }
     await exportPath(directory);

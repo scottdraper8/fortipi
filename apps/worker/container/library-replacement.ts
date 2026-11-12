@@ -138,7 +138,10 @@ export async function proveLibraryReplacement(
         path.startsWith(resolve(repository, "dist/toolchain/meson-")) && path.endsWith("/bin"),
     );
   assert.ok(mesonBin, "Pinned private Meson is required");
-  await verifyMeson(dirname(mesonBin), await realpath(resolve(mesonBin, "python3")));
+  const mesonRuntime = await verifyMeson(
+    dirname(mesonBin),
+    await realpath(resolve(mesonBin, "python3")),
+  );
   const { createTestHarness } = await import("wrangler");
   // Preserve only tool/private-daemon settings, never model/deployment credentials.
   await mkdir(options.out, { recursive: false });
@@ -154,6 +157,7 @@ export async function proveLibraryReplacement(
     WRANGLER_SEND_METRICS: "false",
     PYTHONDONTWRITEBYTECODE: "1",
     PYTHONNOUSERSITE: "1",
+    ...(mesonRuntime.pythonLibraryPath ? { LD_LIBRARY_PATH: mesonRuntime.pythonLibraryPath } : {}),
   };
   const command = async (program: string, args: string[], cwd = repository) => {
     const result = await execute(program, args, {
