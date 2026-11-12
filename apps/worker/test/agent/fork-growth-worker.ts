@@ -119,6 +119,10 @@ export class TestAgentSession extends BaseAgent {
           published: value.published,
           bookmark: value.bookmark ?? null,
           messages,
+          events: await this.store.db.all<{ seq: number; id: string }>(
+            "SELECT seq,json_extract(data,'$.eventId') id FROM fp_events_v1 WHERE conversation=? ORDER BY seq LIMIT 100",
+            value.conversation.conversationId,
+          ),
         });
       }
       return Response.json({

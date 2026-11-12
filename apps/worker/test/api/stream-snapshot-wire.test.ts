@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
+import process from "node:process";
 import test from "node:test";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { schemaRefs, schemaRegistry, wireLimits } from "fortipi-contract";
@@ -13,6 +14,7 @@ import type { TestAgentSession } from "./stream-boundaries-worker.js";
 const diagnosticAjv = new Ajv2020({ strict: true, allErrors: true, validateFormats: false });
 for (const schema of Object.values(schemaRegistry)) diagnosticAjv.addSchema(schema);
 const projectionShape = diagnosticAjv.compile({ $ref: schemaRefs.ConversationProjection });
+const messageShape = diagnosticAjv.compile<D.Message>({ $ref: schemaRefs.Message });
 
 test("a retained valid-message projection remains recoverable through the real public SDK JSON bound", async (t) => {
   const h = await harness({ main: resolve("apps/worker/test/api/stream-boundaries-worker.ts") });
@@ -81,7 +83,12 @@ test("a retained valid-message projection remains recoverable through the real p
 });
 
 test("a real public100KiB Pi answer remains readable by the strict unmodified SDK", async (t) => {
-  const h = await harness({ modelChunkBytes: 256 });
+  const h = await harness({
+    modelChunkBytes: 256,
+    ...(process.env.FORTIPI_MESSAGE_PROJECTION_WORKER
+      ? { main: process.env.FORTIPI_MESSAGE_PROJECTION_WORKER }
+      : {}),
+  });
   try {
     const { agent, conversation } = await setup(h);
     const { url } = await h.server.listen();
@@ -123,12 +130,51 @@ test("a real public100KiB Pi answer remains readable by the strict unmodified SD
       }),
     );
     const snapshot = await client.conversations.get(conversation.conversationId);
-    assert.ok(
-      snapshot.messages.some(
-        (message) => message.role === "assistant" && message.content.length === 102400,
-      ),
-      "Actual retained model text must not be truncated to satisfy the wire receiver",
+    const answer = snapshot.messages.filter((message) => message.role === "assistant");
+    assert.equal(
+      answer.map((message) => message.content).join(""),
+      "x".repeat(102400),
+      "Bounded public parts must reconstruct the exact original answer, without truncation/separators",
     );
+    const replay = await client.conversations.events(conversation.conversationId, {
+      after: 0,
+      through: snapshot.lastEventSeq,
+    });
+    const completed: D.Message[] = [];
+    for (const event of replay.events) {
+      if (event.type !== "message.completed") continue;
+      assert.ok(messageShape(event.payload));
+      completed.push(event.payload);
+    }
+    assert.deepEqual(completed, answer);
+    await probe.runRepair();
+    assert.deepEqual(
+      (await client.conversations.get(conversation.conversationId)).messages,
+      snapshot.messages,
+    );
+    const actual = JSON.parse(await probe.inspectionJson(conversation.conversationId)) as {
+      entries: { kind: string; text: string }[];
+    };
+    assert.deepEqual(
+      actual.entries.filter((entry) => entry.kind === "pi.assistant").map((entry) => entry.text),
+      ["x".repeat(102400)],
+      "Canonical Pi still has one complete original answer",
+    );
+    const firstPart = replay.events.find((event) => event.type === "message.completed");
+    assert.ok(firstPart);
+    const split = await h.api<D.ErrorBody>(
+      `/v1/conversations/${conversation.conversationId}/fork`,
+      {
+        requestId: crypto.randomUUID(),
+        through: firstPart.eventSeq,
+      },
+    );
+    assert.equal(
+      split.status,
+      409,
+      "A fork cannot include the unrequested remainder of a Pi entry",
+    );
+    assert.equal(split.body.error.details?.reason, "revision_unavailable");
   } finally {
     await h.close();
   }

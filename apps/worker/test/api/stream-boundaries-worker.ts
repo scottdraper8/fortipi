@@ -1,3 +1,4 @@
+import { messageParts } from "../../src/agent/message-projection.js";
 import type { Sql } from "../../src/agent/store.js";
 import { validate } from "../../src/api/validation.js";
 import type * as D from "../../src/boundary/dto.js";
@@ -14,6 +15,9 @@ export {
 } from "../agent/runtime-worker.js";
 
 export class TestAgentSession extends RuntimeAgent {
+  async messagePartsJson(message: D.Message) {
+    return JSON.stringify(await messageParts(message));
+  }
   private closeSamples: { code: number | undefined; attachment: unknown }[] = [];
   #deliveryHold: { entered: boolean; gate: PromiseWithResolvers<void> } | undefined;
   readonly #deliveryWrites = new WeakSet<Sql>();

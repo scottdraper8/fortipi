@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import process from "node:process";
 import test from "node:test";
+import { FortiPiClient } from "../../../../packages/fortipi-client/dist/node.js";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, pause } from "./harness.ts";
-import { processHarness } from "./process-harness.ts";
+import { processBootstrap, processHarness } from "./process-harness.ts";
 
 interface State {
   barrier: string | null;
@@ -15,6 +16,7 @@ interface State {
     published: boolean;
     bookmark: string | null;
     messages: { id: string; characters: number }[];
+    events: { seq: number; id: string }[];
   }[];
   growth: { claims: { operationId: string; bytes: number }[] };
 }
@@ -54,9 +56,10 @@ test("SIGKILL after the actual fork prefix copy recovers one private child and o
       parent = await h.api<D.ConversationProjection>(`/v1/conversations/${cid}`);
     }
     assert.ok(
-      parent.body.messages.some(
-        (message) => message.role === "assistant" && message.content.length === 102400,
-      ),
+      parent.body.messages
+        .filter((message) => message.role === "assistant")
+        .map((message) => message.content)
+        .join("") === "x".repeat(102400),
       JSON.stringify({
         taskState: parent.body.conversation.taskState,
         messages: parent.body.messages.map((message) => ({
@@ -92,7 +95,12 @@ test("SIGKILL after the actual fork prefix copy recovers one private child and o
     assert.ok(copied.bookmark);
     assert.deepEqual(
       copied.messages.map((row) => row.characters),
-      [12, 102400],
+      [12, 65536, 36864],
+    );
+    assert.deepEqual(
+      copied.messages.map((row) => row.id),
+      parent.body.messages.map((row) => row.messageId),
+      "A fork keeps the original source Message part identities",
     );
     assert.ok(held.growth.claims.some((row) => row.operationId === intent.operationId));
     assert.equal(held.piIds.length, before.piIds.length + 1);
@@ -147,19 +155,32 @@ test("SIGKILL after the actual fork prefix copy recovers one private child and o
       held.piIds,
       "Committed prefix recovery must not allocate/copy another Pi child",
     );
-    const actual = await h.api<D.ConversationProjection>(
-      `/v1/conversations/${intent.conversationId}`,
-    );
-    assert.equal(actual.status, 200);
+    const client = new FortiPiClient({
+      endpoint: h.origin,
+      allowLoopbackHttp: true,
+      credentials: async () => processBootstrap,
+    });
+    const actual = await client.conversations.get(intent.conversationId);
     assert.deepEqual(
-      actual.body.messages.map((row) => row.messageId),
+      actual.messages.map((row) => row.messageId),
       copied.messages.map((row) => row.id),
     );
     assert.deepEqual(
-      actual.body.messages.map((row) => ({ role: row.role, content: row.content })),
+      actual.messages.map((row) => ({ role: row.role, content: row.content })),
       parent.body.messages.map((row) => ({ role: row.role, content: row.content })),
     );
-    assert.equal(new Set(actual.body.messages.map((row) => row.messageId)).size, 2);
+    assert.equal(new Set(actual.messages.map((row) => row.messageId)).size, 3);
+    const replay = await client.conversations.events(intent.conversationId, {
+      after: 0,
+      through: actual.lastEventSeq,
+    });
+    assert.deepEqual(
+      replay.events
+        .slice(0, copied.events.length)
+        .map((event) => ({ seq: event.eventSeq, id: event.eventId })),
+      copied.events,
+      "Actual SDK replay retains every pre-crash event identity/envelope position",
+    );
     const history = await h.api<{ users: number; bytes: number }>(
       `/__fork-growth/history?agent=${agent.body.agentId}&cid=${intent.conversationId}`,
     );

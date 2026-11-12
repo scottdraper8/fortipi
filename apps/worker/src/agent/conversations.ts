@@ -20,6 +20,7 @@ import {
 } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Authority } from "./authority.js";
+import { type EntryMessages, entryMessages, messageParts } from "./message-projection.js";
 import { repairRetryAt } from "./repair-retry.js";
 import type { ConversationRow, GrowthClaim, Store } from "./store.js";
 
@@ -176,8 +177,16 @@ export class Conversations {
             fork.through,
             prefix.length + 1,
           );
-          const source = found ? (JSON.parse(found.data) as { entry: number }) : undefined;
+          const source = found
+            ? (JSON.parse(found.data) as { entry: number; end?: number })
+            : undefined;
           check(source, "conflict", "Fork cursor has no committed input prefix");
+          check(
+            fork.through >= (source.end ?? 0),
+            "conflict",
+            "Fork cursor splits one committed entry; select its completed projection cursor",
+            { reason: "revision_unavailable" },
+          );
           intent = {
             key,
             digest: fingerprint,
@@ -943,7 +952,7 @@ export class Conversations {
       "input-entry",
       `${row.piId}:${entry.id}`,
     );
-    const inherited = await this.host.store.get<D.Message>(
+    const inherited = await this.host.store.get<EntryMessages>(
       "entry-public",
       `${entry.conversationId}:${entry.id}`,
     );
@@ -955,27 +964,65 @@ export class Conversations {
           : m.content.filter((p) => p.type === "text").map((p) => p.text),
       )
       .join("\n");
+    const role: D.Message["role"] =
+      entry.kind === "pi.user" ? "user" : entry.kind === "pi.toolResult" ? "tool" : "assistant";
+    const projected =
+      (text || inherited) && !input
+        ? (
+            await Promise.all(
+              (inherited
+                ? entryMessages(inherited)
+                : [
+                    {
+                      messageId: `e${cid.slice(1, 70)}_${entry.id}`,
+                      role,
+                      content: text,
+                      timestamp: Date.now(),
+                    },
+                  ]
+              ).map(messageParts),
+            )
+          ).flat()
+        : [];
     await this.host.store.transaction(async (tx) => {
-      if ((text || inherited) && !input) {
-        const role: D.Message["role"] =
-          entry.kind === "pi.user" ? "user" : entry.kind === "pi.toolResult" ? "tool" : "assistant";
-        const message: D.Message = inherited ?? {
-          messageId: `e${cid.slice(1, 70)}_${entry.id}`,
-          role,
-          content: text,
-          timestamp: Date.now(),
-        };
-        const ack = await this.host.store.append(tx, `entry:${row.piId}:${entry.id}`, {
-          ...this.draft(cid),
-          deploymentId: row.deploymentId,
-          type: role === "assistant" ? "message.completed" : "message.committed",
-          payload: message,
-        });
-        await this.host.store.put("entry-event", `${cid}:${ack.eventSeq}`, { entry: entry.id }, tx);
+      if (projected.length) {
+        const latest = await this.host.store.get<EntryMessages>(
+          "entry-public",
+          `${entry.conversationId}:${entry.id}`,
+          tx,
+        );
+        check(
+          same(latest ? entryMessages(latest) : null, inherited ? entryMessages(inherited) : null),
+          "conflict",
+          "Entry projection changed; retry the retained source",
+        );
+        const acks: D.FactAck[] = [];
+        for (const [index, message] of projected.entries()) {
+          acks.push(
+            await this.host.store.append(
+              tx,
+              `entry:${row.piId}:${entry.id}${index ? `:part:${index}` : ""}`,
+              {
+                ...this.draft(cid),
+                deploymentId: row.deploymentId,
+                type: message.role === "assistant" ? "message.completed" : "message.committed",
+                payload: message,
+              },
+            ),
+          );
+        }
+        const end = acks.at(-1)?.eventSeq;
+        for (const ack of acks)
+          await this.host.store.put(
+            "entry-event",
+            `${cid}:${ack.eventSeq}`,
+            { entry: entry.id, end },
+            tx,
+          );
         await this.host.store.put(
           "entry-public",
           `${entry.conversationId}:${entry.id}`,
-          message,
+          projected,
           tx,
         );
       }

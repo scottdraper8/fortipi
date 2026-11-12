@@ -24,9 +24,11 @@ test("fork reserves real copied public history with durable identity and pending
     const completed = await eventually(
       () => h.api<D.ConversationProjection>(path),
       (value) =>
-        value.body.messages.some(
-          (row) => row.role === "assistant" && row.content.length === 102400,
-        ) && value.body.conversation.taskState.state === "completed",
+        value.body.messages
+          .filter((row) => row.role === "assistant")
+          .map((row) => row.content)
+          .join("") === "x".repeat(102400) &&
+        value.body.conversation.taskState.state === "completed",
     );
     const input: D.ForkInput = {
       requestId: crypto.randomUUID(),
