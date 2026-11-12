@@ -14,8 +14,10 @@ import {
   verifySourceKit,
 } from "../../../scripts/image-source-distribution.ts";
 import { mesonPin, verifyMeson } from "../../../tools/unstale/provision-meson.ts";
+import { prepareLocalImageHarness } from "../test/backends/local-image-harness.ts";
 import { assertResolved, dynamicSymbols } from "./elf-compatibility.ts";
 import { sha256 } from "./fuse-security.ts";
+import { verifyImageArchive } from "./image-archive.ts";
 import { imageInputs } from "./inputs.ts";
 import { verifyRecipientFixture } from "./recipient.ts";
 
@@ -346,7 +348,13 @@ export async function proveLibraryReplacement(
       image.imageId,
       "Local base tag differs from imported canonical image",
     );
-    const runFixture = async (id: string, tag: string, name: string, witness: boolean) => {
+    const runFixture = async (
+      id: string,
+      manifestDigest: string,
+      tag: string,
+      name: string,
+      witness: boolean,
+    ) => {
       assert.match(tag, /^fortipi-(?:computerd:verified|replacement:[a-f0-9]{24})$/);
       assert.equal(
         await command("docker", ["image", "inspect", tag, "--format", "{{.Id}}"]),
@@ -390,26 +398,36 @@ export async function proveLibraryReplacement(
                   },
                 },
               ],
-              vars: { REQUIRE_FUSE: "true" },
+              vars: {
+                REQUIRE_FUSE: "true",
+                LOCAL_PROBE_IMAGE_ID: id,
+                LOCAL_PROBE_MANIFEST: manifestDigest,
+              },
             },
           },
         ],
       });
       try {
         await harness.listen();
-        const prepared = await harness.fetch("/prepared-image");
-        assert.equal(prepared.status, 200);
-        const selected: unknown = await prepared.json();
-        assert.equal(typeof selected, "string");
-        assert.equal(
-          await command("docker", ["image", "inspect", String(selected), "--format", "{{.Id}}"]),
-          id,
-          "Harness changed the replacement image",
+        const { binding, inspectPhysical } = await prepareLocalImageHarness(
+          harness,
+          { imageId: id, manifestDigest },
+          (args) => command("docker", args),
+          async () => {
+            assert.equal(await verifyRecipientFixture(), image.imageId);
+            assert.equal(
+              await command("docker", ["image", "inspect", tag, "--format", "{{.Id}}"]),
+              id,
+              "Local fixture tag changed",
+            );
+          },
         );
+        const physical = await inspectPhysical();
         const response = await harness.fetch("/run?backend=linux");
         assert.equal(response.status, 200, "Computer native mount/execution failed");
         const io = (await response.json()) as RuntimeObservation;
         assertMountedIO(io);
+        await inspectPhysical(physical);
         const ids = (
           await command("docker", [
             "ps",
@@ -425,6 +443,11 @@ export async function proveLibraryReplacement(
         assert.equal(ids.length, 1, "Runtime container identity is ambiguous");
         const runtime = ids[0];
         assert.ok(runtime);
+        assert.equal(
+          runtime,
+          physical.id,
+          "Library witness must use the prepared native container",
+        );
         assert.equal(await command("docker", ["inspect", runtime, "--format", "{{.Image}}"]), id);
         // Observe the actual process's mappings and executable, not the launch environment.
         const maps = await command("docker", ["exec", runtime, "cat", "/proc/1/maps"]);
@@ -462,8 +485,13 @@ export async function proveLibraryReplacement(
             command("docker", ["exec", runtime, "cat", markerPath]),
             "Unmodified-library negative control produced a witness",
           );
+        await inspectPhysical(physical);
         return {
           ...io,
+          manifestDigest: binding.manifestDigest,
+          physicalContainerId: physical.id,
+          physicalImageVerifiedBeforeAfter: true,
+          localPreparedReferenceBound: true,
           imageId: id,
           computerdSha256: exe,
           modifiedImplementationCalled: witness,
@@ -475,7 +503,13 @@ export async function proveLibraryReplacement(
         await harness.close();
       }
     };
-    const baseline = await runFixture(image.imageId, baseTag, "baseline", false);
+    const baseline = await runFixture(
+      image.imageId,
+      image.builtManifestDigest,
+      baseTag,
+      "baseline",
+      false,
+    );
     assert.equal(
       await command("docker", [
         "run",
@@ -542,7 +576,20 @@ export async function proveLibraryReplacement(
       ]),
       `fusermount3 version: 3.18.3\n${nonce}`,
     );
-    const replacement = await runFixture(replacementId, replacementTag, "modified", true);
+    // This modified recipient image has its own actual config/layer graph. Never reuse
+    // the canonical manifest or manufacture a digest-qualified Docker reference.
+    // Keep its export private and temporary; only the canonical image is conveyed.
+    const replacementArchive = resolve(home, "replacement-image.tar");
+    await command("docker", ["save", "--output", replacementArchive, replacementTag]);
+    const replacementSaved = await verifyImageArchive(replacementArchive, replacementId);
+    assert.notEqual(replacementSaved.manifest.digest, image.builtManifestDigest);
+    const replacement = await runFixture(
+      replacementId,
+      replacementSaved.manifest.digest,
+      replacementTag,
+      "modified",
+      true,
+    );
     assert.equal(await verifyRecipientFixture(), image.imageId);
     assert.equal(await hashFile(options.image), image.imageArchiveSha256);
     const receipt = {
@@ -579,8 +626,11 @@ export async function proveLibraryReplacement(
       `${JSON.stringify({ imageId: image.imageId, sourceKitSha256: kit.sourceKitSha256, replacementVerified: true, realFuse: true, cloudVerified: false })}\n`,
     );
   } finally {
-    for (const id of ownImages) await command("docker", ["image", "rm", id]);
-    await rm(home, { recursive: true, force: true });
+    try {
+      for (const id of ownImages) await command("docker", ["image", "rm", id]);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   }
 }
 if (import.meta.main) {

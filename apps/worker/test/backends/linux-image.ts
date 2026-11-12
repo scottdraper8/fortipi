@@ -12,11 +12,17 @@ import {
 } from "../../../../tools/unstale/verify-app-network.ts";
 import { proveLibraryReplacement } from "../../container/library-replacement.ts";
 import { sourceRevision, verifyRecipientFixture } from "../../container/recipient.ts";
+import { prepareLocalImageHarness } from "./local-image-harness.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const directory = resolve(root, "apps/worker/dist/container");
 // No fallback to the builder's already-loaded image: import receipt is mandatory.
 const metadata = { imageId: await verifyRecipientFixture() };
+const imageMetadata = JSON.parse(
+  await readFile(resolve(directory, "image-metadata.json"), "utf8"),
+) as { imageId: string; builtManifestDigest: string };
+assert.equal(imageMetadata.imageId, metadata.imageId);
+assert.match(imageMetadata.builtManifestDigest, /^sha256:[a-f0-9]{64}$/);
 assert.match(metadata.imageId, /^sha256:[a-f0-9]{64}$/);
 function checkLoadedImage(): void {
   assert.equal(
@@ -63,25 +69,32 @@ const harness = createTestHarness({
             },
           },
         ],
-        vars: { REQUIRE_FUSE: process.argv.includes("--require-fuse") ? "true" : "false" },
+        vars: {
+          REQUIRE_FUSE: process.argv.includes("--require-fuse") ? "true" : "false",
+          LOCAL_PROBE_IMAGE_ID: metadata.imageId,
+          LOCAL_PROBE_MANIFEST: imageMetadata.builtManifestDigest,
+        },
       },
     },
   ],
 });
 try {
   await harness.listen();
-  const prepared = await harness.fetch("/prepared-image");
-  assert.equal(prepared.status, 200);
-  const selected: unknown = await prepared.json();
-  assert.ok(typeof selected === "string");
-  assert.match(selected, /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,511}$/);
-  assert.equal(
-    execFileSync("docker", ["image", "inspect", selected, "--format", "{{.Id}}"], {
-      encoding: "utf8",
-    }).trim(),
-    metadata.imageId,
-    "Wrangler's actual prepared runtime image differs from the verified image",
+  const { binding, inspectPhysical } = await prepareLocalImageHarness(
+    harness,
+    { imageId: metadata.imageId, manifestDigest: imageMetadata.builtManifestDigest },
+    (args) =>
+      execFileSync("docker", args, {
+        encoding: "utf8",
+        timeout: 10000,
+        maxBuffer: args[0] === "inspect" ? 16384 : 8192,
+      }),
+    async () => {
+      checkLoadedImage();
+      assert.equal(await verifyRecipientFixture(), metadata.imageId);
+    },
   );
+  const physical = await inspectPhysical();
   const response = await harness.fetch("/run?backend=linux");
   assert.equal(response.status, 200, "Actual computerd execution failed");
   const body = (await response.json()) as {
@@ -100,10 +113,30 @@ try {
   assert.equal(body.sync, "complete");
   assert.equal(body.skipped, 0);
   if (process.argv.includes("--require-fuse")) assert.equal(body.fuse, true);
+  await inspectPhysical(physical);
+  const groupResponse = await harness.fetch("/run?backend=linux&process-group=true");
+  assert.equal(
+    groupResponse.status,
+    200,
+    "Actual patched daemon process-group cancellation failed",
+  );
+  const group = (await groupResponse.json()) as {
+    cancelled: string;
+    observer: string;
+    stdout: string;
+    sync: string;
+    skipped: number;
+  };
+  assert.equal(group.cancelled, "cancelled");
+  assert.equal(group.observer, "completed");
+  assert.ok(group.stdout.includes("process-group-stopped"));
+  assert.equal(group.sync, "complete");
+  assert.equal(group.skipped, 0);
+  await inspectPhysical(physical);
   checkLoadedImage();
   assert.equal(await verifyRecipientFixture(), metadata.imageId);
   process.stdout.write(
-    `${JSON.stringify({ imageId: metadata.imageId, recipientImported: true, localExecution: true, realFuse: body.fuse, cloudVerified: false })}\n`,
+    `${JSON.stringify({ imageId: metadata.imageId, manifestDigest: binding.manifestDigest, physicalContainerId: physical.id, physicalImageVerifiedBeforeAfter: true, localPreparedReferenceBound: true, recipientImported: true, localExecution: true, realFuse: body.fuse, cloudVerified: false })}\n`,
   );
   const parentNamespace = await readlink("/proc/self/ns/net");
   const observation = observeHarnessFetch();
@@ -122,6 +155,7 @@ try {
     process.stdout.write(`${JSON.stringify({ ...trace, namespaceStable })}\n`);
   }
   verifyGatewayEgress(harness.getLogs(), network, trace && { ...trace, namespaceStable });
+  await inspectPhysical(physical);
   assert.ok(
     trace?.complete && namespaceStable,
     "Harness host-fetch observation is incomplete or unknown",

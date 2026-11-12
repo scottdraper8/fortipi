@@ -1510,21 +1510,21 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cfworker%2fjson-schema@4.1.6; Sigstore transparency verification required at release"
     },
-    "@cloudflare/computer@0.10.0": {
+    "@cloudflare/computer@0.11.1": {
       "name": "@cloudflare/computer",
-      "version": "0.10.0",
-      "integrity": "sha512-M0CdY44QrhQaKNh3GSapxykl9P9H3XV6ErdQbSonzwiZrPYlvhj6d2OCQKHPdOeGqvE61DIo4+RS1b2gRjRw2w==",
-      "published": "2026-11-05T10:25:31.949Z",
-      "reviewedAt": "2026-11-11T00:15:18.490Z",
+      "version": "0.11.1",
+      "integrity": "sha512-f+UFzVb1mjAX9yxr1b8o3T1bWpQ8SAhxv4H2Vv5TqpoLBCu0d24SsseUlOMeoYH/xHMKTyIoW/d/A/mdKiDX/Q==",
+      "published": "2026-11-11T20:08:41.359Z",
+      "reviewedAt": "2026-11-12T10:18:43.098Z",
       "license": "MIT",
-      "archiveSha256": "9775475a1ae19ca660ec3d30c9df63cf0978d80c2d643c774d8993e4b225ce9c",
-      "manifestSha256": "47c931cfd84185a307d33580818e75dd46eb973eff990b828549778ef384538a",
+      "archiveSha256": "fdcfad1b6f27b9133597c8355dca3ec3311207c5f51f9b7e3538c467ce4ed7cb",
+      "manifestSha256": "9e797728d4a887a1df82624fdf36dfb1650a2ed64d4f40137a5ca8d2233ce0ff",
       "engines": {},
       "peers": {
         "ai": "^6.0.196 || ^7.0.0",
-        "zod": "^4.4.3",
+        "zod": "^4.6.6",
         "vite": "^6.0.0 || ^7.0.0 || ^8.0.0",
-        "just-bash": "^3.0.1",
+        "just-bash": "^3.6.0",
         "@platformatic/vfs": "*",
         "@cloudflare/workers-types": "^4.20260616.1 || ^5.20260921.1"
       },
@@ -1532,7 +1532,7 @@
       "scriptFiles": {},
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fcomputer@0.10.0; Sigstore transparency verification required at release"
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fcomputer@0.11.1; Sigstore transparency verification required at release"
     },
     "@cloudflare/kv-asset-handler@0.5.0": {
       "name": "@cloudflare/kv-asset-handler",
@@ -5383,6 +5383,27 @@
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
     },
+    "commander@9.5.0": {
+      "name": "commander",
+      "version": "9.5.0",
+      "integrity": "sha512-KRs7WVDKg86PWiuAqhDrAQnTXZKraVcCc6vFdL14qrZ/DcWwuRo7VoiYXalXO7S5GKpqYiVEwCbgFDfxNHKJBQ==",
+      "published": "2023-01-07T07:04:45.771Z",
+      "reviewedAt": "2026-11-12T10:20:35.443Z",
+      "license": "MIT",
+      "archiveSha256": "b64948bf68db38c26002a1a4b63b8ecb9a80e497e308fdaccbb179cf05142f52",
+      "manifestSha256": "a1f1a163d7958e8b8cbb5fe56f7dbf90b084c301725a523fa0335d1296e469b7",
+      "engines": {
+        "node": "^12.20.0 || >=14"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "convert-source-map@2.0.0": {
       "name": "convert-source-map",
       "version": "2.0.0",
@@ -7313,6 +7334,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/postal-mime@2.7.6; Sigstore transparency verification required at release"
     },
+    "postject@1.0.0-alpha.6": {
+      "name": "postject",
+      "version": "1.0.0-alpha.6",
+      "integrity": "sha512-b9Eb8h2eVqNE8edvKdwqkrY6O7kAwmI8kcnBv1NScolYJbo59XUF0noFq+lxbC1yN20bmC0WBEbDC5H/7ASb0A==",
+      "published": "2023-05-19T06:25:32.487Z",
+      "reviewedAt": "2026-11-12T10:20:35.597Z",
+      "license": "MIT",
+      "archiveSha256": "d1447b53e87d49ddaf7fb3350c870afafa72760eca47f6d5cce4cefd537e7d92",
+      "manifestSha256": "3b98182548c0ddbd955d9a0b9fe21f6bf09106d261465ac1e1f6d842026f9d7f",
+      "engines": {
+        "node": ">=14.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "6546657539feb5b454f400db317e71fa39ff5cd048fa5d78ae0ada2df72f1ea7"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "prettier@3.9.10": {
       "name": "prettier",
       "version": "3.9.10",
@@ -8145,6 +8187,11 @@
       "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
       "expires": "2026-11-13T13:40:34.590Z",
       "integrity": "sha512-yOHZUYEq9AP7vutWmkCADzCKAH9ynfvZdoKJRIGTzkiailf9/L+jhT7WRb+9p6jRDtuBXVFtCzLo7kGAcGw+pA=="
+    },
+    "@cloudflare/computer@0.11.1": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-12T20:08:41.359Z",
+      "integrity": "sha512-f+UFzVb1mjAX9yxr1b8o3T1bWpQ8SAhxv4H2Vv5TqpoLBCu0d24SsseUlOMeoYH/xHMKTyIoW/d/A/mdKiDX/Q=="
     }
   },
   "advisory": {

@@ -6,6 +6,9 @@
   "fuseReleaseSha256": "d3b31f0c712c49f4c6d8d802bebaad394a1c3d1bb3244262f996494ddcfa3783",
   "fusePackagesIndexSha256": "a1619d267517462de0021ee365a2b9590c5cc2bf5b03b3ebd78406ed6b408e44",
   "fuseSourcesIndexSha256": "451461c80cea225e9aaf961318c03709d88763ce1a5440d184cfe7e207130d7f",
+  "securityReleaseSha256": "7f4c748c903c3c12e1aded639dd8869f72433b7f396effef764cefdead539e76",
+  "securityPackagesIndexSha256": "393192f8a6ca82969d08b7fd31e1b8c012396f0d787096525506bf528147717c",
+  "securitySourcesIndexSha256": "b9362916f8380bdfcc7c0b4d33bbf2e9efc3895545129fbb4a5b654c457349ac",
   "packages": [
     {
       "name": "fuse3",
@@ -34,6 +37,16 @@
       "sha256": "218f0fb446e2b36d7bd16c4324ce54a3755ac3ad564ab76c5fe9b6dc18718210",
       "source": "fuse3",
       "sourceVersion": "3.18.3-1",
+      "builtUsing": [],
+      "staticBuiltUsing": []
+    },
+    {
+      "name": "zlib1g",
+      "version": "1:1.3.dfsg+really1.3.1-1+deb13u1",
+      "filename": "https://security.debian.org/debian-security/pool/updates/main/z/zlib/zlib1g_1.3.dfsg+really1.3.1-1+deb13u1_amd64.deb",
+      "sha256": "8c27c342230503b73dfde629642c3b352e87b554e06d60cf58772f236a305ceb",
+      "source": "zlib",
+      "sourceVersion": "1:1.3.dfsg+really1.3.1-1+deb13u1",
       "builtUsing": [],
       "staticBuiltUsing": []
     }
@@ -2141,11 +2154,11 @@
     },
     {
       "name": "zlib1g",
-      "version": "1:1.3.dfsg+really1.3.1-1+b1",
-      "filename": "pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.1-1+b1_amd64.deb",
-      "sha256": "015be740d6236ad114582dea500c1d907f29e16d6db00566ca32fb68d71ac90d",
+      "version": "1:1.3.dfsg+really1.3.1-1+deb13u1",
+      "filename": "https://security.debian.org/debian-security/pool/updates/main/z/zlib/zlib1g_1.3.dfsg+really1.3.1-1+deb13u1_amd64.deb",
+      "sha256": "8c27c342230503b73dfde629642c3b352e87b554e06d60cf58772f236a305ceb",
       "source": "zlib",
-      "sourceVersion": "1:1.3.dfsg+really1.3.1-1",
+      "sourceVersion": "1:1.3.dfsg+really1.3.1-1+deb13u1",
       "builtUsing": [],
       "staticBuiltUsing": []
     }
@@ -3378,22 +3391,22 @@
     },
     {
       "name": "zlib",
-      "version": "1:1.3.dfsg+really1.3.1-1",
+      "version": "1:1.3.dfsg+really1.3.1-1+deb13u1",
       "files": [
         {
-          "filename": "pool/main/z/zlib/zlib_1.3.dfsg+really1.3.1-1.dsc",
-          "sha256": "ede2791e29c1d3b422f9208bdd7edf040c20445ea1e7453a72037576e64fa197",
-          "size": 2637
+          "filename": "https://security.debian.org/debian-security/pool/updates/main/z/zlib/zlib_1.3.dfsg+really1.3.1-1+deb13u1.dsc",
+          "sha256": "7954224611bd043d62c094abf81cefcf9d97276479fc495767fcbc92cc6552f2",
+          "size": 3271
         },
         {
-          "filename": "pool/main/z/zlib/zlib_1.3.dfsg+really1.3.1.orig.tar.gz",
+          "filename": "https://security.debian.org/debian-security/pool/updates/main/z/zlib/zlib_1.3.dfsg+really1.3.1.orig.tar.gz",
           "sha256": "60dd315c07f616887caa029408308a018ace66e3d142726a97db164b3b8f69fb",
           "size": 1325737
         },
         {
-          "filename": "pool/main/z/zlib/zlib_1.3.dfsg+really1.3.1-1.debian.tar.xz",
-          "sha256": "9ed525955ce9fb0c1b39be8ff98f73450dbfc6305a9a27e6149c8972d38a0a9e",
-          "size": 16576
+          "filename": "https://security.debian.org/debian-security/pool/updates/main/z/zlib/zlib_1.3.dfsg+really1.3.1-1+deb13u1.debian.tar.xz",
+          "sha256": "4e99de80447700cf16ecf8ed3e77fabb39f085a5fffc66713466ccf07397cc04",
+          "size": 17836
         }
       ]
     }
