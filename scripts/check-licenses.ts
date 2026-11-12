@@ -95,13 +95,13 @@ export async function checkLicenses(root = repository, foundation = false): Prom
   const lock = await yaml<Lock>(root, "pnpm-lock.yaml");
   assert.equal(policy.format, 1);
   assert.deepEqual(policy.externalToolChain, [
-    "wrangler@4.160.0",
-    "miniflare@5.20261110.0-beta",
+    "wrangler@4.160.1",
+    "miniflare@5.20261110.1-beta",
     "sharp@0.35.5",
   ]);
   for (const [from, name, version] of [
-    ["wrangler@4.160.0", "miniflare", "5.20261110.0-beta"],
-    ["miniflare@5.20261110.0-beta", "sharp", "0.35.5"],
+    ["wrangler@4.160.1", "miniflare", "5.20261110.1-beta"],
+    ["miniflare@5.20261110.1-beta", "sharp", "0.35.5"],
   ]) {
     assert.ok(from && name && version);
     const nodes = Object.entries(lock.snapshots ?? {}).filter(([id]) => id.split("(")[0] === from);
@@ -174,7 +174,7 @@ export async function checkLicenses(root = repository, foundation = false): Prom
       }
     if (
       externalNative.has(id) ||
-      ["wrangler@4.160.0", "miniflare@5.20261110.0-beta", "sharp@0.35.5"].includes(id)
+      ["wrangler@4.160.1", "miniflare@5.20261110.1-beta", "sharp@0.35.5"].includes(id)
     ) {
       for (const [path, bytes] of entries)
         if (

@@ -150,7 +150,7 @@ test("portable notice CLI preserves actual SRI/source texts, runtime scope and a
   );
   const cli = await readFile(resolve(root, "packages/fortipi-cli/THIRD_PARTY_NOTICES.md"), "utf8");
   assert.ok(cli.includes("worker-assets/licenses/THIRD_PARTY_NOTICES.md"));
-  assert.ok(cli.includes("wrangler@4.160.0"));
+  assert.ok(cli.includes("wrangler@4.160.1"));
   assert.ok(cli.includes("@aws-sdk/credential-provider-http@3.972.85"));
   assert.ok(cli.includes('"inheritedFrom": "@aws-sdk/core@3.980.2"'));
   assert.ok(cli.includes("AWS SDK for JavaScript Team"));
