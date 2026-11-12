@@ -183,7 +183,36 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.AuthorityRecipientRequest,
   ): Promise<D.Outcome<D.AuthorityRegistration>> {
-    return this.#call(ctx, () => this.tickets.register(ctx, input));
+    return this.#call(ctx, () => {
+      // Public workspace writes use the same target-bound registration as their
+      // lease reservation. Only the stored binding supplies the local target;
+      // Tickets still checks the credential and one grant covering that scope.
+      if (
+        input.recipient.kind === "workspace" &&
+        input.executor === undefined &&
+        same(input.resources, {
+          ...emptyScope(),
+          workspaceIds: [input.recipient.id],
+          actions: ["workspace.write"],
+        })
+      ) {
+        const binding = this.bindings.current(input.recipient.id);
+        if (binding?.config.kind === "local") {
+          const executor = this.store.get<ExecutorState>("executor", binding.config.executorId);
+          check(
+            executor && executor.status !== "revoked",
+            "unavailable_executor",
+            "Workspace executor unavailable",
+          );
+          input = {
+            ...input,
+            resources: { ...input.resources, executorIds: [binding.config.executorId] },
+            executor: { executorId: binding.config.executorId, generation: executor.generation },
+          };
+        }
+      }
+      return this.tickets.register(ctx, input);
+    });
   }
   async resolveExecutorGeneration(
     ctx: D.AuthContext,

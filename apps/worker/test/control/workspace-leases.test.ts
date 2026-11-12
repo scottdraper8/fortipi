@@ -2,7 +2,87 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import type { ControlPlaneRpc } from "../../src/boundary/control-plane.js";
+import { connected, localBinding } from "./connection.ts";
 import { harness, request, scope, uuid, value } from "./harness.ts";
+
+test("public local write registration retains its lease target and requires the covering credential grant", async () => {
+  const h = await harness();
+  let socket: WebSocket | undefined;
+  try {
+    const channel = await connected(h);
+    socket = channel.socket;
+    const binding = await localBinding(h, channel, { version: 1, entries: [] }, "local_base");
+    socket = binding.channel.socket;
+    const resources = {
+      ...scope(["workspace.write"]),
+      agentIds: [],
+      conversationIds: [],
+      workspaceIds: [binding.workspaceId],
+      backendIds: [],
+      tools: [],
+    };
+    const issued = await h.mint({
+      requestId: uuid(),
+      role: "client",
+      grants: [{ grantId: "local-writer", version: 1, resources }],
+    });
+    const writer = await h.auth(issued.token);
+    const acquired = value(
+      await h.cp.acquireWorkspaceLease(
+        writer,
+        request(
+          "acquireWorkspaceLease",
+          {
+            requestId: uuid(),
+            operationId: uuid(),
+            bindingVersion: 2,
+            baseRevision: binding.revision,
+            deadline: Date.now() + 60000,
+          },
+          { workspaceId: binding.workspaceId },
+        ),
+      ),
+    );
+    if (acquired.status !== 201) assert.fail("No local lease");
+    const input = {
+      credential: issued.credential,
+      recipient: { kind: "workspace" as const, id: binding.workspaceId },
+      resources: { ...resources, executorIds: [] },
+    };
+    const registration = value(await h.cp.registerAuthorityRecipient(writer, input));
+    assert.equal(registration.registrationId, acquired.body.registrationId);
+    assert.deepEqual(registration.executor, { executorId: "executor", generation: 1 });
+    assert.deepEqual(registration.resources.executorIds, ["executor"]);
+    assert.equal(
+      (
+        await h.cp.registerAuthorityRecipient(writer, {
+          ...input,
+          credential: { ...issued.credential, grantVersion: issued.credential.grantVersion + 1 },
+        })
+      ).ok,
+      false,
+      "Canonical routing cannot replace a mismatched credential reference",
+    );
+    const workspaceOnly = await h.mint({
+      requestId: uuid(),
+      role: "client",
+      grants: [{ grantId: "workspace-only", version: 1, resources: input.resources }],
+    });
+    assert.equal(
+      (
+        await h.cp.registerAuthorityRecipient(await h.auth(workspaceOnly.token), {
+          ...input,
+          credential: workspaceOnly.credential,
+        })
+      ).ok,
+      false,
+      "The current local target must remain inside the original covering grant",
+    );
+  } finally {
+    socket?.close();
+    await h.close();
+  }
+});
 
 test("public non-job leases bind the literal preimage, recover lost acks and never revive closing authority", async () => {
   const h = await harness();
