@@ -115,6 +115,7 @@ async function command(
   path: string,
   operation: ToolOperation,
   runtime?: PrivatePython,
+  maxBuffer = 4096,
 ): Promise<string> {
   try {
     return (
@@ -130,7 +131,7 @@ async function command(
         },
         timeout: 15_000,
         killSignal: "SIGKILL",
-        maxBuffer: 4096,
+        maxBuffer,
       })
     ).stdout.trim();
   } catch (error) {
@@ -274,6 +275,58 @@ export async function pythonIdentity(
     `Python ${identity.version}`,
     "Pinned Python required",
   );
+  if (runtime) {
+    // Native CPython introspection only; the maintained verifier is TypeScript.
+    const expression =
+      "import sys,os,json,sysconfig,subprocess,hashlib,encodings; print(json.dumps(dict(executable=os.path.realpath(sys.executable),prefixes=[sys.prefix,sys.exec_prefix,sys.base_prefix,sys.base_exec_prefix],paths=sys.path,origins=[os.path.realpath(m.__file__) for m in list(sys.modules.values()) if getattr(m,'__file__',None)],libraries=sorted(set(line.split(None,5)[5].strip() for line in open('/proc/self/maps') if 'libpython3.15' in line)))))";
+    const facts: unknown = JSON.parse(
+      await command(
+        canonical,
+        ["-I", "-S", "-B", "-c", expression],
+        "/usr/bin:/bin",
+        "python",
+        runtime,
+        128 * 1024,
+      ),
+    );
+    assert.ok(
+      facts && typeof facts === "object" && !Array.isArray(facts),
+      "Private Python runtime identity changed",
+    );
+    const value = facts as Record<string, unknown>;
+    assert.equal(value.executable, canonical, "Private Python executable changed");
+    assert.deepEqual(
+      value.prefixes,
+      Array(4).fill(runtime.root),
+      "Private Python prefixes changed",
+    );
+    for (const key of ["paths", "origins"] as const) {
+      const entries = value[key];
+      assert.ok(
+        Array.isArray(entries) && entries.length > 0 && entries.length <= 512,
+        "Private Python imports changed",
+      );
+      for (const path of entries)
+        assert.ok(
+          typeof path === "string" && path.startsWith(`${runtime.root}/`),
+          "Private Python imports escaped",
+        );
+    }
+    assert.deepEqual(
+      value.libraries,
+      [resolve(runtime.root, "lib/libpython3.15.so.1.0")],
+      "Private Python mapped library changed",
+    );
+    console.log(
+      JSON.stringify({
+        probe: "private-python-runtime",
+        passed: true,
+        prefixesPrivate: true,
+        importsPrivate: true,
+        mappedLibraryPrivate: true,
+      }),
+    );
+  }
   assert.equal(
     digest(await readFile(canonical)),
     identity.sha256,
@@ -439,11 +492,12 @@ export async function provisionMeson(
   assert.ok(!isolatePython || process.platform === "linux", "Private bootstrap requires Linux");
   const runtime = isolatePython ? await copyPrivatePython(pythonPath, parent) : undefined;
   const selectedPython = runtime ? resolve(runtime.root, "bin/python3.15") : pythonPath;
-  const python = await pythonIdentity(selectedPython, undefined, runtime);
-  const directory = await mkdtemp(resolve(await realpath(parent), "meson-"));
-  await chmod(directory, 0o700);
+  let directory: string | undefined;
   const directories = new Set<string>();
   try {
+    directory = await mkdtemp(resolve(await realpath(parent), "meson-"));
+    await chmod(directory, 0o700);
+    const python = await pythonIdentity(selectedPython, undefined, runtime);
     const source = resolve(directory, "source");
     await mkdir(source, { mode: 0o700 });
     directories.add(source);
@@ -471,7 +525,7 @@ export async function provisionMeson(
   } catch (error) {
     // Read-only source directories intentionally prevent Python bytecode additions.
     for (const path of directories) await chmod(path, 0o700).catch(() => {});
-    await rm(directory, { recursive: true, force: true }).catch(() => {});
+    if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
     if (runtime) await removePrivatePython(runtime.root).catch(() => {});
     throw error;
   }
