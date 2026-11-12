@@ -77,7 +77,7 @@ export async function localBrowser(installed: Installed) {
   try {
     const description = resolve(tls.directory, "tls.json");
     await writeFile(description, JSON.stringify(tls), { flag: "wx", mode: 0o600 });
-    // Preserve the pinned Playwright browser cache while isolating HOME. This
+    // Select the pinned public Playwright cache explicitly. This
     // names public tool bytes, never a user's Chromium profile or auth state.
     let revision = chromium.executablePath();
     while (!/^chromium-\d+$/.test(basename(revision))) {
@@ -94,8 +94,6 @@ export async function localBrowser(installed: Installed) {
       ],
       tls.directory,
       childEnvironment({
-        HOME: tls.directory,
-        USERPROFILE: tls.directory,
         XDG_CONFIG_HOME: resolve(tls.directory, "config"),
         XDG_CACHE_HOME: resolve(tls.directory, "cache"),
         LOCALAPPDATA: resolve(tls.directory, "local"),

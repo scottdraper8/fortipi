@@ -7,6 +7,10 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import {
+  offlineWranglerEnvironment,
+  verifyOfflineWranglerAuth,
+} from "../../../../tests/clients/offline-wrangler.ts";
 import { killRuntime } from "./runtime-child.ts";
 
 const repository = resolve(import.meta.dirname, "../../../..");
@@ -139,20 +143,7 @@ export async function start(options: RuntimeOptions = {}) {
         detached: process.platform !== "win32",
         stdio: ["ignore", "pipe", "pipe"],
         env: {
-          PATH: process.env.PATH,
-          ...(process.platform === "win32"
-            ? {
-                SystemRoot: process.env.SystemRoot,
-                USERPROFILE: join(directory, "home"),
-                LOCALAPPDATA: join(directory, "local"),
-                APPDATA: join(directory, "roaming"),
-              }
-            : {}),
-          HOME: join(directory, "home"),
-          XDG_CONFIG_HOME: join(directory, "config"),
-          XDG_CACHE_HOME: join(directory, "cache"),
-          WRANGLER_SEND_METRICS: "false",
-          CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false",
+          ...offlineWranglerEnvironment(directory),
           ...(options.tls ? { NODE_EXTRA_CA_CERTS: options.tls.ca } : {}),
         },
       },
@@ -213,9 +204,11 @@ export async function start(options: RuntimeOptions = {}) {
     return { status: response.status, body: (await response.json()) as T };
   };
   try {
+    await verifyOfflineWranglerAuth(wrangler);
     await launch();
   } catch (error) {
     await stop(false);
+    if (options.directory === undefined) await rm(directory, { recursive: true, force: true });
     throw error;
   }
   return {

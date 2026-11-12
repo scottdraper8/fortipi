@@ -56,8 +56,6 @@ export async function runNativeDaemon(installed: Installed): Promise<ScenarioEvi
   const environment: NodeJS.ProcessEnv = {
     PATH: process.env.PATH,
     LANG: "C.UTF-8",
-    HOME: home,
-    USERPROFILE: home,
     XDG_STATE_HOME: resolve(home, "state"),
     LOCALAPPDATA: resolve(home, "local"),
     APPDATA: resolve(home, "roaming"),

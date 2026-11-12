@@ -776,6 +776,21 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
       );
       if (live) {
         const context = live;
+        const workspaceLimits: string[] = [],
+          workspaceSensitivity: string[] = [];
+        await measure(
+          "workspace-atomicity",
+          ["runLiveWorkspace", "installed-node-export", "public-Computer", "seed1010"],
+          "Actual public Computer publication, original receipt retry, independent canonical byte hashes, stale-base and changed-digest rejection, and writer/read-only boundaries preserve the same committed bytes",
+          async () => {
+            const evidence = await context.workspace();
+            workspaceLimits.push(...evidence.limitations);
+            workspaceSensitivity.push(...evidence.sensitivity);
+            return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
+          },
+          workspaceLimits,
+          workspaceSensitivity,
+        );
         let access: Record<string, unknown> | undefined;
         await measure(
           "ticket-grants-revoke",

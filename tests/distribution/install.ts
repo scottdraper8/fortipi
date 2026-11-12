@@ -18,8 +18,6 @@ export async function install(path: string) {
   const home = resolve(directory, "home");
   await mkdir(home, { mode: 0o700 });
   const environment = childEnvironment({
-    HOME: home,
-    USERPROFILE: home,
     APPDATA: resolve(home, "roaming"),
     LOCALAPPDATA: resolve(home, "local"),
     XDG_CONFIG_HOME: resolve(home, "config"),

@@ -13,6 +13,7 @@ import {
 } from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
 import { publicAccess } from "./live-access.ts";
+import { runLiveWorkspace } from "./live-workspace.ts";
 import { publicFlow } from "./public-flow.ts";
 import type { RoleContext } from "./roles.ts";
 
@@ -246,6 +247,36 @@ export async function liveContext(
     },
     clientForRole: (token: string) =>
       new module.FortiPiClient({ endpoint: roles.endpoint, credentials: async () => token }),
+    async workspace() {
+      const connection = client();
+      const protocol = await connection.negotiate();
+      assert.deepEqual(protocol.infrastructure, configuration.infrastructure);
+      const ticket = await connection.tickets.mint(agent.agentId, conversations[0]!.conversationId);
+      assert.equal(ticket.identity.deploymentId, protocol.deploymentId);
+      assert.equal(ticket.identity.credential.credentialId, role.credential.credentialId);
+      // The qualified helper consumes a three-field PUBLIC observation view,
+      // as in its independent local qualification. Never replace the real
+      // provider DeploymentIdentity with this logical application identity.
+      const evidence = await runLiveWorkspace({
+        installed,
+        roles,
+        deployment: {
+          origin: roles.endpoint,
+          deploymentId: protocol.deploymentId,
+          publicConfigurationVersion: configuration.version,
+        },
+      });
+      return {
+        ...evidence,
+        observation: {
+          ...evidence.observation,
+          providerDeploymentId: deployment.deploymentId,
+          logicalApplicationId: protocol.deploymentId,
+          authenticatedRuntimeConfigSha256: deployment.runtimeConfigSha256,
+          helperIdentityView: "public-protocol",
+        },
+      };
+    },
     async authorizeConversation(id: string) {
       const created = await roles.call({
         operationId: "getConversation",

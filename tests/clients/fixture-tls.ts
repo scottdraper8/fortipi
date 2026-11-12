@@ -24,10 +24,16 @@ export async function fixtureTLS(): Promise<FixtureTLS> {
     key = resolve(directory, "leaf.key"),
     cert = resolve(directory, "leaf.pem");
   const execute = promisify(execFile);
+  const configuration = resolve(directory, "openssl.cnf");
+  await writeFile(configuration, "openssl_conf = initialization\n[initialization]\n", {
+    flag: "wx",
+    mode: 0o600,
+  });
   const env = {
     PATH: process.env.PATH,
     LANG: "C",
-    HOME: directory,
+    OPENSSL_CONF: configuration,
+    RANDFILE: resolve(directory, "random-state"),
     ...(process.platform === "win32" ? { SystemRoot: process.env.SystemRoot } : {}),
   };
   const tool = async (...args: string[]) =>
@@ -49,6 +55,10 @@ export async function fixtureTLS(): Promise<FixtureTLS> {
       "-sha256",
       "-days",
       "1",
+      "-addext",
+      "basicConstraints=critical,CA:TRUE",
+      "-addext",
+      "keyUsage=critical,keyCertSign,cRLSign",
       "-subj",
       "/CN=FortiPi disposable fixture CA",
       "-keyout",

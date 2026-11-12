@@ -144,14 +144,12 @@ async function browserGraph(
       const env: Record<string, string> = {
         PATH: process.env.PATH ?? "",
         LANG: "C.UTF-8",
-        HOME: home,
         XDG_CONFIG_HOME: resolve(home, "config"),
         XDG_CACHE_HOME: resolve(home, "cache"),
       };
       if (process.platform === "win32") {
         assert.ok(process.env.SystemRoot);
         env.SystemRoot = process.env.SystemRoot;
-        env.USERPROFILE = home;
         env.APPDATA = resolve(home, "roaming");
         env.LOCALAPPDATA = resolve(home, "local");
       }

@@ -23,18 +23,21 @@ async function until(read: () => Promise<boolean>, timeout = 20000) {
 }
 /** Public normal-profile flow only; own protected temporary application role. */
 export async function tuiProfile(installed: Installed, role: PublicRole) {
+  assert.notEqual(
+    process.platform,
+    "darwin",
+    "Actual isolated OS user or a product-owned private profile-path port is required: the Darwin TUI fixes its profile path under the OS home; this fixture must not read/write the user's profile or override HOME",
+  );
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "fortipi-evidence-tui-")));
   try {
     const env: NodeJS.ProcessEnv = {
       PATH: process.env.PATH,
       LANG: "C.UTF-8",
       TERM: "xterm-256color",
-      HOME: home,
       LOCALAPPDATA: resolve(home, "local"),
       ...(process.platform === "win32"
         ? {
             SystemRoot: process.env.SystemRoot,
-            USERPROFILE: home,
             APPDATA: resolve(home, "roaming"),
           }
         : {}),
@@ -65,7 +68,7 @@ export async function tuiProfile(installed: Installed, role: PublicRole) {
     const profilePath = discovery.stdout.trim();
     assert.ok(
       isAbsolute(profilePath) && profilePath.startsWith(`${home}${sep}`),
-      "Product profile must stay in the fresh isolated home",
+      "The supported product config path must stay in this fixture's private directory",
     );
     const privateDirectory = resolve(home, "roles");
     await mkdir(privateDirectory, { mode: 0o700 });
