@@ -19,19 +19,21 @@
       "reviewNote": "Reviewed primary limits/pricing: Free 100000 daily requests, 10ms CPU and 128MB isolate memory; paid plan is distinct from zone plans. Retain conservative bounds; no account-wide headroom or deployed-fit claim."
     },
     "durable-objects-policy": {
-      "catalogSha256": "5cd8d1e065a2ed7926a4a6003a88ce78cea067a5dde560d9cca913ae5ebde8eb",
+      "catalogSha256": "e52b1c5413be096047c376cb5ace58a42ad00fd5fdcdbd6e67e812921b23c586",
       "snapshot": {
         "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
         "version": null,
         "paths": {
           "src/content/docs/durable-objects/platform": "7215c4c012c036406fa3be35249d42067abddac481a1e3acd10437dcd5ba1912",
-          "src/content/partials/durable-objects": "3620e4f9c29ad6c846400340d294214758d06c97b305673c48933c3f8470f2a4"
+          "src/content/partials/durable-objects": "3620e4f9c29ad6c846400340d294214758d06c97b305673c48933c3f8470f2a4",
+          "src/content/docs/durable-objects/deployments/durable-objects-code-updates.mdx": "41ed62a336bf4421e146934d0e341fe4f5b95d9e769f109cdc092b06e0e3c726",
+          "src/content/docs/durable-objects/concepts/durable-object-lifecycle.mdx": "c023ab316f92ccf6e8a9e225d963289e53ba9395784975e462365713d64c7247"
         },
-        "sha256": "5fa701e3b0912e5d13d2aa40865e5caf7a6c0b7cab64dd1408d4e364700766fc"
+        "sha256": "1c7c0b38a5d96280181a129b87165b590c16311102701b8526bf8921fc5b8b2b"
       },
       "pins": {},
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed SQLite/SQL limits and shared pricing partials: Free storage is 5GB per account, operations over a Free allowance fail, daily allowances reset at 00:00 UTC. Retain durable exhaustion holds and explicit recovery; no account quota guarantee."
+      "reviewedAt": "2026-11-12T21:07:58.766Z",
+      "reviewNote": "Reviewed SQLite/SQL limits and shared pricing partials: Free storage is 5GB per account, operations over a Free allowance fail, daily allowances reset at 00:00 UTC. Retain durable exhaustion holds and explicit recovery; no account quota guarantee. Added authenticated code-update/lifecycle MDX review at the retained commit, unchanged at 0728ae0669f85d5c5d7cc8e365e78513f3038f76: default deferred max_delay 300s, immediate override for one deployment; deployment completes immediately, active objects may serve old code until hibernation/delay. Deferral is best effort; runtime restarts remain possible, storage access during shutdown errors and WebSockets terminate. Preserve incremental persistence and explicit recovery; no product configuration change or runtime guarantee."
     },
     "containers-policy": {
       "catalogSha256": "5efd8e57a15eefe48dc59f02503378485bd81a151367e1aadb31aa0b324a2979",
