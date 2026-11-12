@@ -1,0 +1,420 @@
+diff --git a/dist/lifecycle-v1rKHV2C.js b/dist/lifecycle-v1rKHV2C.js
+index e5f9d561159e8516aa2c3422a125add0f6726fad..3bcd1c17e3a421651f246431f71f49c3c02193ab 100644
+--- a/dist/lifecycle-v1rKHV2C.js
++++ b/dist/lifecycle-v1rKHV2C.js
+@@ -228,10 +228,14 @@ var JobQueue = class {
+ 		_classPrivateFieldSet2(_storage, this, storage);
+ 	}
+ 	push(capability, options) {
+-		if (!Number.isFinite(options.time) || options.time < 0) throw new Error(`Invalid job time: ${String(options.time)}`);
+-		if (typeof options.fn !== "string" || options.fn.trim() === "") throw new Error("Jobs require a non-empty fn");
+-		const id = options.id ?? nanoid(9);
+-		_assertClassBrand(_JobQueue_brand, this, _sql).call(this, `INSERT INTO cf_agents_jobs
++    if (!Number.isFinite(options.time) || options.time < 0) {
++      throw new Error(`Invalid job time: ${String(options.time)}`);
++    }
++    if (typeof options.fn !== "string" || options.fn.trim() === "") {
++      throw new Error("Jobs require a non-empty fn");
++    }
++    const id = options.id ?? nanoid(9);
++    _assertClassBrand(_JobQueue_brand, this, _sql).call(this, `INSERT INTO cf_agents_jobs
+         (id, capability, fn, time, payload, retry_options, singleflight,
+          hung_timeout_seconds, exclusive, recovery_loop, running,
+          execution_started_at)
+@@ -248,26 +252,35 @@ var JobQueue = class {
+          running = 0,
+          execution_started_at = NULL
+        WHERE cf_agents_jobs.capability = excluded.capability`, id, capability, options.fn, Math.floor(options.time), options.payload === void 0 ? null : JSON.stringify(options.payload), options.retry ? JSON.stringify(options.retry) : null, options.singleflight ? 1 : 0, options.hungTimeoutSeconds ?? null, options.exclusive ? 1 : 0, options.recoveryLoop ? 1 : 0);
+-		const job = this.get(capability, id);
+-		if (!job) {
+-			const owner = _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT capability FROM cf_agents_jobs WHERE id = ?", id)[0]?.capability;
+-			throw new Error(owner !== void 0 ? `Job id ${JSON.stringify(id)} already belongs to ${JSON.stringify(owner)}; job ids are scoped to their owner` : `Failed to persist job ${id}`);
+-		}
+-		return job;
+-	}
++    const job = this.get(capability, id);
++    if (job) this.#revise(id);
++    if (!job) {
++      const owner = _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT capability FROM cf_agents_jobs WHERE id = ?", id)[0]?.capability;
++      throw new Error(
++        owner !== void 0 ? `Job id ${JSON.stringify(id)} already belongs to ${JSON.stringify(owner)}; job ids are scoped to their owner` : `Failed to persist job ${id}`
++      );
++    }
++    return job;
++  }
+ 	cancel(capability, id) {
+-		if (_assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT id FROM cf_agents_jobs WHERE id = ? AND capability = ?", id, capability).length === 0) return false;
+-		_assertClassBrand(_JobQueue_brand, this, _sql).call(this, "DELETE FROM cf_agents_jobs WHERE id = ? AND capability = ?", id, capability);
+-		return true;
+-	}
++    const existing = _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT id FROM cf_agents_jobs WHERE id = ? AND capability = ?", id, capability);
++    if (existing.length === 0) return false;
++    this.#revise(id);
++    _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "DELETE FROM cf_agents_jobs WHERE id = ? AND capability = ?", id, capability);
++    return true;
++  }
+ 	reschedule(capability, id, time) {
+-		if (!Number.isFinite(time) || time < 0) throw new Error(`Invalid job time: ${String(time)}`);
+-		if (_assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT id FROM cf_agents_jobs WHERE id = ? AND capability = ?", id, capability).length === 0) return false;
+-		_assertClassBrand(_JobQueue_brand, this, _sql).call(this, `UPDATE cf_agents_jobs
++    if (!Number.isFinite(time) || time < 0) {
++      throw new Error(`Invalid job time: ${String(time)}`);
++    }
++    const existing = _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT id FROM cf_agents_jobs WHERE id = ? AND capability = ?", id, capability);
++    if (existing.length === 0) return false;
++    this.#revise(id);
++    _assertClassBrand(_JobQueue_brand, this, _sql).call(this, `UPDATE cf_agents_jobs
+        SET time = ?, running = 0, execution_started_at = NULL
+        WHERE id = ? AND capability = ?`, Math.floor(time), id, capability);
+-		return true;
+-	}
++    return true;
++  }
+ 	get(capability, id) {
+ 		const rows = _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT * FROM cf_agents_jobs WHERE id = ? AND capability = ?", id, capability);
+ 		return rows[0] ? jobFromRow(rows[0]) : void 0;
+@@ -294,8 +307,9 @@ var JobQueue = class {
+        WHERE id = ?`, id);
+ 	}
+ 	delete(id) {
+-		_assertClassBrand(_JobQueue_brand, this, _sql).call(this, "DELETE FROM cf_agents_jobs WHERE id = ?", id);
+-	}
++    this.#revise(id);
++    _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "DELETE FROM cf_agents_jobs WHERE id = ?", id);
++  }
+ 	/**
+ 	* Unguarded retime for the alarm memory-limit breaker's backoff: the
+ 	* platform-failure path clears the dispatch marker before the breaker
+@@ -303,10 +317,11 @@ var JobQueue = class {
+ 	* breaker's backoff must land regardless, it is protecting the object.
+ 	*/
+ 	retime(id, time) {
+-		_assertClassBrand(_JobQueue_brand, this, _sql).call(this, `UPDATE cf_agents_jobs
++    this.#revise(id);
++    _assertClassBrand(_JobQueue_brand, this, _sql).call(this, `UPDATE cf_agents_jobs
+        SET time = ?, running = 0, execution_started_at = NULL
+        WHERE id = ?`, Math.floor(time), id);
+-	}
++  }
+ 	/**
+ 	* Back off every pending recovery-loop job that would fire before the
+ 	* breaker's backoff time (#1825), so a doomed loop's sibling rows cannot
+@@ -314,10 +329,13 @@ var JobQueue = class {
+ 	* breaker's backoff must land regardless of dispatch markers.
+ 	*/
+ 	delayRecoveryLoopJobs(time) {
+-		_assertClassBrand(_JobQueue_brand, this, _sql).call(this, `UPDATE cf_agents_jobs
++    for (const { id } of _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT id FROM cf_agents_jobs WHERE recovery_loop = 1 AND time <= ?", Math.floor(time))) {
++      this.#revise(id);
++    }
++    _assertClassBrand(_JobQueue_brand, this, _sql).call(this, `UPDATE cf_agents_jobs
+        SET time = ?, running = 0, execution_started_at = NULL
+        WHERE recovery_loop = 1 AND time <= ?`, Math.floor(time), Math.floor(time));
+-	}
++  }
+ 	/**
+ 	* Read every recovery-loop job before breaker sealing. The memory-limit
+ 	* policy phase uses this snapshot after the rows are purged so routed owners
+@@ -331,8 +349,11 @@ var JobQueue = class {
+ 	* budget (#1825). Unrelated jobs are untouched.
+ 	*/
+ 	purgeRecoveryLoopJobs() {
+-		_assertClassBrand(_JobQueue_brand, this, _sql).call(this, "DELETE FROM cf_agents_jobs WHERE recovery_loop = 1");
+-	}
++    for (const { id } of _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT id FROM cf_agents_jobs WHERE recovery_loop = 1")) {
++      this.#revise(id);
++    }
++    _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "DELETE FROM cf_agents_jobs WHERE recovery_loop = 1");
++  }
+ 	/**
+ 	* Apply one drive result, guarded on the dispatch marker: every driven
+ 	* job carries `running = 1` for the duration of its dispatch, and a
+@@ -340,23 +361,25 @@ var JobQueue = class {
+ 	* marker means newer durable intent exists, so the outcome quietly
+ 	* defers to it instead of deleting or retiming the fresher job.
+ 	*/
+-	applyOutcome(id, outcome) {
+-		if (outcome === void 0) {
+-			_assertClassBrand(_JobQueue_brand, this, _sql).call(this, "DELETE FROM cf_agents_jobs WHERE id = ? AND running = 1", id);
+-			return;
+-		}
+-		if (outcome === "yield") {
+-			this.clearRunning(id);
+-			return;
+-		}
+-		if (typeof outcome === "object" && Number.isFinite(outcome.rescheduleAt) && outcome.rescheduleAt >= 0) {
+-			_assertClassBrand(_JobQueue_brand, this, _sql).call(this, `UPDATE cf_agents_jobs
++	applyOutcome(claim, outcome) {
++    if (!this.isCurrent(claim)) return;
++    const { id } = claim;
++    if (outcome === void 0) {
++      _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "DELETE FROM cf_agents_jobs WHERE id = ?", id);
++      return;
++    }
++    if (outcome === "yield") {
++      this.clearRunning(id);
++      return;
++    }
++    if (typeof outcome === "object" && Number.isFinite(outcome.rescheduleAt) && outcome.rescheduleAt >= 0) {
++      _assertClassBrand(_JobQueue_brand, this, _sql).call(this, `UPDATE cf_agents_jobs
+          SET time = ?, running = 0, execution_started_at = NULL
+-         WHERE id = ? AND running = 1`, Math.floor(outcome.rescheduleAt), id);
+-			return;
+-		}
+-		throw new Error(`Invalid job outcome for ${id}`);
+-	}
++         WHERE id = ?`, Math.floor(outcome.rescheduleAt), id);
++      return;
++    }
++    throw new Error(`Invalid job outcome for ${id}`);
++  }
+ 	/**
+ 	* The next physical alarm time derived from queue state, or `null` when
+ 	* the queue holds nothing to wake for.
+@@ -384,6 +407,37 @@ var JobQueue = class {
+ 		if (recheck !== null && recheck !== void 0) candidate = candidate === null ? recheck : Math.min(candidate, recheck);
+ 		return candidate;
+ 	}
++
++isCurrent(claim) {
++    return this.#inFlight.get(claim.id) === claim.entry && claim.entry.revision === claim.revision && _assertClassBrand(_JobQueue_brand, this, _sql).call(this, "SELECT id FROM cf_agents_jobs WHERE id = ?", claim.id).length > 0;
++  }
++
++release(claim) {
++    claim.entry.dispatches -= 1;
++    if (claim.entry.dispatches === 0 && this.#inFlight.get(claim.id) === claim.entry) {
++      this.#inFlight.delete(claim.id);
++    }
++  }
++
++claim(id, nowMs, takeover = false) {
++    let entry = this.#inFlight.get(id);
++    if (!entry) {
++      entry = { revision: 0, dispatches: 0 };
++      this.#inFlight.set(id, entry);
++    } else if (takeover) {
++      entry.revision += 1;
++    }
++    entry.dispatches += 1;
++    this.markRunning(id, nowMs);
++    return { id, entry, revision: entry.revision };
++  }
++
++#revise(id) {
++    const entry = this.#inFlight.get(id);
++    if (entry) entry.revision += 1;
++  }
++
++#inFlight = /* @__PURE__ */ new Map();
+ };
+ function _sql(query, ...params) {
+ 	_assertClassBrand(_JobQueue_brand, this, _ensureTable).call(this);
+@@ -451,6 +505,7 @@ const DEADMAN_ALARM_DELAY_MS = 3e4;
+ * concurrently, and a field would let a later dispatch overwrite the row an
+ * earlier one is still unwinding for.
+ */
++const SUPERSEDED = /* @__PURE__ */ Symbol("superseded");
+ var AttributedPlatformFailure = class {
+ 	constructor(row, cause) {
+ 		this.row = row;
+@@ -587,82 +642,118 @@ async function _clearMemoryLimitStrikesWhenQuiescent() {
+ }
+ /** Drive every due job once, in due-time order. */
+ async function _driveDueJobs() {
+-	const nowMs = Date.now();
+-	const due = _classPrivateFieldGet2(_options, this).queue.due(nowMs);
+-	if (due.length === 0) return;
+-	_assertClassBrand(_JobDriver_brand, this, _warnBacklog).call(this, due);
+-	if (!_classPrivateFieldGet2(_options, this).disabled()) await _classPrivateFieldGet2(_options, this).storage.setAlarm(nowMs + DEADMAN_ALARM_DELAY_MS);
+-	for (const stale of due) {
+-		if (_classPrivateFieldGet2(_options, this).disabled()) return;
+-		const row = _classPrivateFieldGet2(_options, this).queue.dueRow(stale.id, nowMs);
+-		if (!row) continue;
+-		if (row.singleflight === 1 && row.running === 1) {
+-			if (!isHungRow(row, nowMs)) {
+-				console.warn(`Skipping job ${row.id}: previous execution still running`);
+-				continue;
+-			}
+-			console.warn(`Forcing reset of hung job ${row.id} (started ${Math.round((nowMs - (row.execution_started_at ?? 0)) / 1e3)}s ago)`);
+-		}
+-		_classPrivateFieldGet2(_options, this).queue.markRunning(row.id, nowMs);
+-		await _assertClassBrand(_JobDriver_brand, this, _driveJob).call(this, row);
+-	}
+-}
++    const nowMs = Date.now();
++    const due = _classPrivateFieldGet2(_options, this).queue.due(nowMs);
++    if (due.length === 0) return;
++    _assertClassBrand(_JobDriver_brand, this, _warnBacklog).call(this, due);
++    if (!_classPrivateFieldGet2(_options, this).disabled()) {
++      await _classPrivateFieldGet2(_options, this).storage.setAlarm(nowMs + DEADMAN_ALARM_DELAY_MS);
++    }
++    for (const stale of due) {
++      if (_classPrivateFieldGet2(_options, this).disabled()) return;
++      const row = _classPrivateFieldGet2(_options, this).queue.dueRow(stale.id, nowMs);
++      if (!row) continue;
++      let takeover = false;
++      if (row.singleflight === 1 && row.running === 1) {
++        if (!isHungRow(row, nowMs)) {
++          console.warn(
++            `Skipping job ${row.id}: previous execution still running`
++          );
++          continue;
++        }
++        console.warn(
++          `Forcing reset of hung job ${row.id} (started ${Math.round(
++            (nowMs - (row.execution_started_at ?? 0)) / 1e3
++          )}s ago)`
++        );
++        takeover = true;
++      }
++      const claim = _classPrivateFieldGet2(_options, this).queue.claim(row.id, nowMs, takeover);
++      try {
++        await _assertClassBrand(_JobDriver_brand, this, _driveJob).call(this, row, claim);
++      } finally {
++        _classPrivateFieldGet2(_options, this).queue.release(claim);
++      }
++    }
++  }
+ /** Dispatch one due row to its owner with retry and failure policy. */
+-async function _driveJob(row) {
+-	const { queue, resolveDispatch, disabled } = _classPrivateFieldGet2(_options, this);
+-	const job = jobFromRow(row);
+-	const dispatch = await resolveDispatch(row.capability);
+-	if (!dispatch) {
+-		console.error(`No installed capability or host handler for job ${row.id} (owner ${JSON.stringify(row.capability)}); dropping it`);
+-		queue.delete(row.id);
+-		return;
+-	}
+-	const maxAttempts = job.retry?.maxAttempts ?? DEFAULT_JOB_RETRY.maxAttempts;
+-	const slowWatchdog = setTimeout(() => {
+-		const seconds = Math.round(hungTimeoutMs(row) / 1e3);
+-		console.warn(`Job ${row.id} (${row.capability}/${row.fn}) has been dispatching for over ${seconds}s. Long dispatches starve every other job on this object; onJob must detach unbounded work and return.`);
+-		try {
+-			_classPrivateFieldGet2(_options, this).emit("job:slow_dispatch", {
+-				capability: row.capability,
+-				fn: row.fn,
+-				id: row.id,
+-				thresholdMs: hungTimeoutMs(row)
+-			});
+-		} catch {}
+-	}, hungTimeoutMs(row));
+-	let outcome;
+-	try {
+-		outcome = await _classPrivateFieldGet2(_alarmScope, this).run({ executing: row }, () => tryN(maxAttempts, (attempt) => dispatch.onJob({
+-			job,
+-			attempt
+-		}), {
+-			baseDelayMs: job.retry?.baseDelayMs ?? DEFAULT_JOB_RETRY.baseDelayMs,
+-			maxDelayMs: job.retry?.maxDelayMs ?? DEFAULT_JOB_RETRY.maxDelayMs,
+-			shouldRetry: (error) => !isDurableObjectCodeUpdateReset(error) && !isDurableObjectMemoryLimitReset(error)
+-		}));
+-	} catch (error) {
+-		if (disabled()) return;
+-		if (isPlatformFailure(error)) {
+-			try {
+-				queue.clearRunning(row.id);
+-			} catch {}
+-			console.warn(`Deferring job ${row.id} to a fresh invocation after a platform failure; the job is preserved.`);
+-			throw new AttributedPlatformFailure(row, error);
+-		}
+-		try {
+-			outcome = await dispatch.onJobError?.({
+-				job,
+-				attempt: maxAttempts
+-			}, error);
+-		} catch (hookError) {
+-			console.error(`Job failure hook threw for ${row.id}`, hookError);
+-		}
+-	} finally {
+-		clearTimeout(slowWatchdog);
+-	}
+-	if (disabled()) return;
+-	queue.applyOutcome(row.id, outcome ?? void 0);
+-}
++async function _driveJob(row, claim) {
++    const { queue, resolveDispatch, disabled } = _classPrivateFieldGet2(_options, this);
++    const owned = () => queue.isCurrent(claim);
++    const job = jobFromRow(row);
++    const dispatch = await resolveDispatch(row.capability);
++    if (!dispatch) {
++      console.error(
++        `No installed capability or host handler for job ${row.id} (owner ${JSON.stringify(row.capability)}); dropping it`
++      );
++      queue.delete(row.id);
++      return;
++    }
++    const maxAttempts = job.retry?.maxAttempts ?? DEFAULT_JOB_RETRY.maxAttempts;
++    const slowWatchdog = setTimeout(() => {
++      const seconds = Math.round(hungTimeoutMs(row) / 1e3);
++      console.warn(
++        `Job ${row.id} (${row.capability}/${row.fn}) has been dispatching for over ${seconds}s. Long dispatches starve every other job on this object; onJob must detach unbounded work and return.`
++      );
++      try {
++        _classPrivateFieldGet2(_options, this).emit("job:slow_dispatch", {
++          capability: row.capability,
++          fn: row.fn,
++          id: row.id,
++          thresholdMs: hungTimeoutMs(row)
++        });
++      } catch {
++      }
++    }, hungTimeoutMs(row));
++    let outcome;
++    try {
++      outcome = await _classPrivateFieldGet2(_alarmScope, this).run(
++        { executing: row },
++        () => tryN(
++          maxAttempts,
++          async (attempt) => {
++            if (attempt > 1 && !owned()) return SUPERSEDED;
++            return dispatch.onJob({ job, attempt });
++          },
++          {
++            baseDelayMs: job.retry?.baseDelayMs ?? DEFAULT_JOB_RETRY.baseDelayMs,
++            maxDelayMs: job.retry?.maxDelayMs ?? DEFAULT_JOB_RETRY.maxDelayMs,
++            // In-process retries are futile on a superseded isolate (code
++            // never reloads mid-invocation) and on a memory-limit reset (the
++            // isolate is condemned, and a retry can read half-claimed state
++            // as "nothing to do", converting the reset into a silent success
++            // that the breaker never sees). Defer both to the alarm boundary.
++            shouldRetry: (error) => !isDurableObjectCodeUpdateReset(error) && !isDurableObjectMemoryLimitReset(error)
++          }
++        )
++      );
++    } catch (error) {
++      if (disabled()) return;
++      if (isPlatformFailure(error)) {
++        try {
++          if (owned()) queue.clearRunning(row.id);
++        } catch {
++        }
++        console.warn(
++          `Deferring job ${row.id} to a fresh invocation after a platform failure; the job is preserved.`
++        );
++        throw new AttributedPlatformFailure(row, error);
++      }
++      try {
++        outcome = await dispatch.onJobError?.(
++          { job, attempt: maxAttempts },
++          error
++        );
++      } catch (hookError) {
++        console.error(`Job failure hook threw for ${row.id}`, hookError);
++      }
++    } finally {
++      clearTimeout(slowWatchdog);
++    }
++    if (disabled()) return;
++    if (outcome === SUPERSEDED) return;
++    queue.applyOutcome(claim, outcome ?? void 0);
++  }
+ function _warnBacklog(due) {
+ 	const counts = /* @__PURE__ */ new Map();
+ 	for (const row of due) counts.set(row.capability, (counts.get(row.capability) ?? 0) + 1);
+@@ -1386,4 +1477,4 @@ async function _resolveJobDispatch(owner) {
+ //#endregion
+ export { abortWithoutAlarmRetry as a, setLifecycleRouteTransport as i, setLifecycleEventSink as n, setLifecycleHostInvoker as r, Lifecycle as t };
+ 
+-//# sourceMappingURL=lifecycle-v1rKHV2C.js.map
+\ No newline at end of file
++// FortiPi: source map disabled after official Lifecycle 5071d3c repair; original map retained as authenticated upstream source.
