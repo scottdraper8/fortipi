@@ -1012,7 +1012,7 @@ export class Conversations {
               {
                 ...this.draft(cid),
                 deploymentId: row.deploymentId,
-                type: message.role === "assistant" ? "message.completed" : "message.committed",
+                type: "message.committed",
                 payload: message,
               },
             ),

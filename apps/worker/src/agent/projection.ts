@@ -3,6 +3,7 @@ import type { ConversationId, EntryId } from "@earendil-works/pi-durable";
 import { check, ServiceError, same } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Admission, AdmissionIntent, Conversations, CreationIntent } from "./conversations.js";
+import { type EntryMessages, entryMessages } from "./message-projection.js";
 import { repairRetryAt } from "./repair-retry.js";
 import type { ConversationRow } from "./store.js";
 
@@ -109,6 +110,38 @@ export class Projection {
     await store.transaction(async (tx) => {
       const current = await store.get<D.Task>("task", admission.taskId, tx);
       check(current, "interrupted", "Task projection missing");
+      if (record.status === "done" && "answer" in record) {
+        // Pi's committed settlement identifies this admission's actual answer.
+        // A shared answer may complete several inputs; each gets its own fact,
+        // retaining the same message IDs and immutable projection bytes.
+        const answer = await store.get<EntryMessages>(
+          "entry-public",
+          `${row.piId}:${record.answer}`,
+          tx,
+        );
+        if (!answer && more) status = current.status;
+        const acks: D.FactAck[] = [];
+        for (const [index, message] of (answer ? entryMessages(answer) : []).entries()) {
+          if (message.role !== "assistant") continue;
+          acks.push(
+            await store.append(tx, `answer:${admission.taskId}:${record.answer}:${index}`, {
+              ...this.conversations.draft(admission.conversationId),
+              deploymentId: admission.auth.deploymentId,
+              type: "message.completed",
+              payload: message,
+              taskId: admission.taskId,
+            }),
+          );
+        }
+        const end = acks.at(-1)?.eventSeq;
+        for (const ack of acks)
+          await store.put(
+            "entry-event",
+            `${admission.conversationId}:${ack.eventSeq}`,
+            { entry: record.answer, end },
+            tx,
+          );
+      }
       if (!same(status, current.status)) {
         const task: D.Task = { ...current, status, version: current.version + 1 };
         await store.put("task", task.taskId, task, tx);
