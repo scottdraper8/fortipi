@@ -506,27 +506,43 @@ export class TestAgentSession extends AgentSession {
       ),
     );
   }
-  async queueNearLimitRounds() {
+  async queueNearLimitRounds(input?: string) {
     await this.lifecycle.start();
     await this.pi.pi();
     if (!this.faux) throw new Error("Faux provider unavailable");
     this.faux.setResponses(
-      Array.from({ length: 4 }, () => async () => {
+      Array.from({ length: input ? 1 : 4 }, () => async () => {
         await this.completion.promise;
+        const argumentsValue: Record<string, D.JsonValue> = input
+          ? JSON.parse(input)
+          : { padding: "a".repeat(65000) };
         const message = fauxAssistantMessage(
-          [
-            { type: "text", text: "" },
-            fauxToolCall("fortipi_dispatch", { padding: "a".repeat(65000) }),
-          ],
+          [{ type: "text", text: "" }, fauxToolCall("fortipi_dispatch", argumentsValue)],
           { stopReason: "toolUse" },
         );
         const text = message.content[0];
         if (text?.type !== "text") throw new Error("Expected synthetic text block");
         // toolcall_end includes both the partial message and authoritative
         // arguments. Keep that complete EVENT within the approved256KiB bound.
-        text.text = "x".repeat(
-          262144 - 65000 - 1024 - new TextEncoder().encode(JSON.stringify(message)).byteLength,
-        );
+        let textBytes =
+          262144 -
+          (input ? new TextEncoder().encode(JSON.stringify(argumentsValue)).length : 65000) -
+          1024 -
+          new TextEncoder().encode(JSON.stringify(message)).byteLength;
+        if (input) {
+          // Pinned faux text_end carries the complete text twice, before the
+          // tool block starts. It can dominate toolcall_end for smaller args.
+          const textEndBase = new TextEncoder().encode(
+            JSON.stringify({
+              type: "text_end",
+              contentIndex: 0,
+              content: "",
+              partial: { ...message, stopReason: "pending", content: [{ type: "text", text: "" }] },
+            }),
+          ).length;
+          textBytes = Math.min(textBytes, Math.floor((262144 - 1024 - textEndBase) / 2));
+        }
+        text.text = "x".repeat(textBytes);
         return message;
       }),
     );

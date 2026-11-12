@@ -35,7 +35,7 @@ interface View {
 }
 
 /** Real service/process recovery; safe annotation remains in the disposable build. */
-export async function nativeProcessRecovery(mode: "running" | "seed" = "running") {
+export async function nativeProcessRecovery(mode: "running" | "seed" | "attached" = "running") {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-native-service-kill-")),
     main = join(directory, "worker.js"),
     f = await fixture(),
@@ -68,7 +68,24 @@ export async function nativeProcessRecovery(mode: "running" | "seed" = "running"
                 needle = 'replay: "unsafe"';
               assert.equal(source.split(needle).length, 2);
               candidates++;
-              return { loader: "ts", contents: source.replace(needle, 'replay: "safe"') };
+              let contents = source.replace(needle, 'replay: "safe"');
+              if (mode === "attached") {
+                const attached = "context.abortSignal?.throwIfAborted();";
+                assert.equal(contents.split(attached).length, 2);
+                contents = contents.replace(
+                  attached,
+                  `
+                  if (await jobs.store.get("fixture", "fault") === "after-attach") {
+                    await jobs.store.transaction(async tx => {
+                      await jobs.store.remove("fixture", "fault", tx);
+                      await jobs.store.put("fixture", "barrier", "after-attach", tx);
+                    });
+                    await new Promise(resolve => setTimeout(resolve, 300000));
+                  }
+                  ${attached}`,
+                );
+              }
+              return { loader: "ts", contents };
             });
           },
         },
@@ -256,6 +273,7 @@ export async function nativeProcessRecovery(mode: "running" | "seed" = "running"
     const canary = { nonce: crypto.randomUUID() };
     await service.api(`${probe}/canary`, canary, "PUT");
     if (mode === "seed") await service.api(`${probe}/fault`, "after-seed");
+    if (mode === "attached") await service.api(`${probe}/fault`, "after-attach");
     await service.api(`${probe}/tool`, {
       tool: "shell",
       arguments: { command },
@@ -278,14 +296,23 @@ export async function nativeProcessRecovery(mode: "running" | "seed" = "running"
     assert.equal(sent.status, 202);
     const view = async () => (await service.api<View>(`${probe}/tool-state?cid=${cid}`)).body;
     let seeded: View["jobs"][number] | undefined;
-    if (mode === "seed") {
+    if (mode === "seed" || mode === "attached") {
+      const point = mode === "seed" ? "after-seed" : "after-attach";
       await eventually(
         async () => (await service.api<{ barrier: string | null }>(`${probe}/state`)).body,
-        (value) => value.barrier === "after-seed",
+        (value) => value.barrier === point,
       );
       const before = await view();
       assert.equal(before.jobs.length, 1);
-      assert.equal(before.tasks.filter((task) => task.kind === "fortipi.dispatch").length, 0);
+      const beforeChildren = before.tasks
+        .filter((task) => task.kind === "fortipi.dispatch")
+        .map((task) => task.id);
+      assert.equal(beforeChildren.length, mode === "seed" ? 0 : 1);
+      assert.equal(
+        await readFile(marker, "utf8").catch(() => ""),
+        "",
+        "No execution before approval",
+      );
       seeded = before.jobs[0];
       assert.ok(seeded);
       await service.crash();
@@ -294,6 +321,12 @@ export async function nativeProcessRecovery(mode: "running" | "seed" = "running"
       assert.deepEqual((await service.api(`${probe}/canary`)).body, canary);
       await connect();
       const recovered = await view();
+      if (mode === "attached")
+        assert.deepEqual(
+          recovered.tasks.filter((task) => task.kind === "fortipi.dispatch").map((task) => task.id),
+          beforeChildren,
+          "Atomic child reference survives death before wrapper wait, with no second child",
+        );
       const actual = recovered.jobs[0];
       assert.ok(actual);
       assert.equal(actual.jobId, seeded.jobId);
@@ -399,6 +432,7 @@ export async function nativeProcessRecovery(mode: "running" | "seed" = "running"
         changedCommitAndNativeAck: true,
         candidateSafeOnly: true,
         killedAfterSeed: mode === "seed",
+        killedAfterAtomicAttachment: mode === "attached",
       }),
     );
   } finally {

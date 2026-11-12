@@ -27,6 +27,7 @@ export async function nativeService(
     computerFiles?: number;
     localConsent?: boolean;
     approve?: boolean;
+    maximumToolModel?: boolean;
     observeHttp?: (value: {
       path: string;
       method: string;
@@ -38,7 +39,10 @@ export async function nativeService(
     }) => void;
   } = {},
 ) {
-  const h = await harness(options.free ? { traffic: "free" } : {}),
+  const h = await harness({
+      ...(options.free ? { traffic: "free" as const } : {}),
+      ...(options.maximumToolModel ? { modelChunkBytes: 256 as const } : {}),
+    }),
     f = await fixture(),
     stop = new AbortController();
   let runtime: ExecutorRuntime | undefined, connection: Promise<void> | undefined;
@@ -162,6 +166,10 @@ export async function nativeService(
       ? `import{appendFileSync,writeFileSync}from'node:fs';appendFileSync(${JSON.stringify(marker)},'start\\n');writeFileSync('native-result.txt','actual native change');process.stdout.write('changed');`
       : `import{appendFileSync,existsSync}from'node:fs';appendFileSync(${JSON.stringify(marker)},'start\\n');const timer=setInterval(()=>{if(existsSync(${JSON.stringify(gate)})){clearInterval(timer);process.stdout.write('done');}},50);`;
     const command = nodeCommand("--input-type=module", "-e", script);
+    const operationArguments = {
+      command,
+      ...(options.maximumToolModel ? { padding: "a".repeat(62000) } : {}),
+    };
     f.profile.policy.rules =
       options.localConsent === false
         ? []
@@ -170,7 +178,7 @@ export async function nativeService(
               workspaceId,
               rootBindingId: "root",
               tool: "shell",
-              argumentDigest: hash(canonicalJson({ command })),
+              argumentDigest: hash(canonicalJson(operationArguments)),
             },
           ];
     runtime = new ExecutorRuntime({
@@ -269,6 +277,7 @@ export async function nativeService(
         "workspace.write",
         "approvals.read",
         "approvals.decide",
+        ...(options.maximumToolModel ? ["tasks.cancel"] : []),
       ],
     });
     const probe = h.env.AGENT_SESSIONS.getByName(agent.agentId);
@@ -276,23 +285,26 @@ export async function nativeService(
       await probe.holdNativeCommit();
       releaseCommit = () => probe.releaseNativeCommit();
     }
-    await probe.queueTool(
-      JSON.stringify({
-        tool: "shell",
-        arguments: { command },
-        workspaceId,
-        baseRevision: binding.revision,
-        target: { kind: "executor", executorId, generation: f.profile.executorGeneration },
-        capabilities: ["shell"],
-      }),
-    );
+    const toolInput = JSON.stringify({
+      tool: "shell",
+      arguments: operationArguments,
+      workspaceId,
+      baseRevision: binding.revision,
+      target: { kind: "executor", executorId, generation: f.profile.executorGeneration },
+      capabilities: ["shell"],
+    });
+    if (options.maximumToolModel) {
+      await probe.queueNearLimitRounds(toolInput);
+      await probe.releaseCompletion();
+    } else await probe.queueTool(toolInput);
+    const input: D.MessageSubmit = {
+      clientRequestId: crypto.randomUUID(),
+      content: "run actual native process",
+      busyBehavior: "followUp",
+    };
     const sent = await h.api<D.AdmissionReceipt>(
       `/v1/conversations/${conversation.conversationId}/messages`,
-      {
-        clientRequestId: crypto.randomUUID(),
-        content: "run actual native process",
-        busyBehavior: "followUp",
-      },
+      input,
       "POST",
       actor.token,
     );
@@ -301,8 +313,35 @@ export async function nativeService(
       JSON.parse(await probe.toolStateJson(conversation.conversationId)) as Awaited<
         ReturnType<TestAgentSession["toolState"]>
       >;
-    const waiting = await eventually(state, (value) => value.jobs[0]?.approvalId != null),
-      job = waiting.jobs[0];
+    let waiting: Awaited<ReturnType<typeof state>>;
+    try {
+      waiting = await eventually(state, (value) => value.jobs[0]?.approvalId != null);
+    } catch (error) {
+      if (options.maximumToolModel) {
+        const inspection = JSON.parse(
+          await probe.inspectionJson(conversation.conversationId),
+        ) as Awaited<ReturnType<TestAgentSession["inspectConversation"]>>;
+        console.log(
+          JSON.stringify({
+            maximumModelBeforeApproval: {
+              jobs: (await state()).jobs.map((job) => ({
+                state: job.state,
+                approvalId: job.approvalId,
+              })),
+              entries: inspection.entries.map((entry) => ({
+                kind: entry.kind,
+                assistantBytes: entry.assistantBytes,
+                toolArgumentBytes: entry.toolArgumentBytes,
+                boundedModelFailure: entry.boundedModelFailure,
+              })),
+              run: JSON.parse(await probe.runPolicy(conversation.conversationId)),
+            },
+          }),
+        );
+      }
+      throw error;
+    }
+    const job = waiting.jobs[0];
     assert.ok(job?.approvalId);
     const approval = await h.api<D.Approval>(
       `/v1/approvals/${job.approvalId}`,
@@ -335,6 +374,7 @@ export async function nativeService(
       workspaceId,
       actor,
       sent,
+      input,
       job,
       state,
       marker,
