@@ -4,11 +4,18 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { repository } from "../../build-workspaces.ts";
-import { execute, loadCandidate } from "../../prepare-release.ts";
+import {
+  assertEvidenceReceipt,
+  evidenceProducer,
+  execute,
+  loadCandidate,
+  verifyRetainedCandidate,
+} from "../../prepare-release.ts";
 import {
   type ArtifactReference,
   assertDeployment,
   assertGate,
+  assertSyntheticLocalGate,
   canonicalJson,
   type DeploymentIdentity,
   freshness,
@@ -22,6 +29,7 @@ import {
   REPOSITORY,
   REPOSITORY_ID,
   readJson,
+  SYNTHETIC_SCOPE,
   saveJson,
   sha256,
   trustedMain,
@@ -42,6 +50,219 @@ import {
   temporary,
   workflow,
 } from "./fixtures.ts";
+
+test("evidence origin binds the actual workflow/job and synthetic observations cannot authorize a privileged gate", async () => {
+  const keys = [
+    "GITHUB_ACTIONS",
+    "GITHUB_REPOSITORY",
+    "GITHUB_REPOSITORY_ID",
+    "GITHUB_SHA",
+    "GITHUB_REF",
+    "GITHUB_WORKFLOW_REF",
+    "GITHUB_JOB",
+    "GITHUB_EVENT_NAME",
+    "GITHUB_RUN_ID",
+    "GITHUB_RUN_ATTEMPT",
+  ];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const c = candidate();
+  const hash = sha256("retained candidate fixture");
+  const record = fact("claims/result.json");
+  const receipt = (
+    producer: GateReceipt["producer"],
+    kind: GateKind = "integrated",
+  ): GateReceipt => ({
+    schemaVersion: 1,
+    kind,
+    candidateSha256: hash,
+    sourceCommit: c.sourceCommit,
+    scope: c.scope,
+    producer,
+    checkedAt: new Date().toISOString(),
+    claims: [{ id: "boundary", outcome: "pass", result: record }],
+    platforms: [],
+    deployments: [],
+    files: [record],
+  });
+  const server = await httpFixture((request, response) => {
+    assert.equal(request.headers.authorization, undefined);
+    const name = request.url?.split("/").at(-1);
+    assert.ok(["ci.yml", "release.yml", "deploy.yml"].includes(name ?? ""));
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ id: 44, path: `.github/workflows/${name}`, state: "active" }));
+  });
+  try {
+    for (const [workflowName, job, mode] of [
+      ["ci", "policy-and-integration", "local"],
+      ["release", "native", "native"],
+      ["release", "publish", "local"],
+      ["deploy", "operate", "live"],
+    ] as const) {
+      Object.assign(process.env, {
+        GITHUB_ACTIONS: "true",
+        GITHUB_REPOSITORY: REPOSITORY,
+        GITHUB_REPOSITORY_ID: String(REPOSITORY_ID),
+        GITHUB_SHA: c.sourceCommit,
+        GITHUB_REF: "refs/heads/main",
+        GITHUB_JOB: job,
+        GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/${workflowName}.yml@refs/heads/main`,
+        GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_RUN_ID: "20",
+        GITHUB_RUN_ATTEMPT: "3",
+      });
+      const producer = await evidenceProducer(
+        repository,
+        c,
+        mode,
+        githubRequest(undefined, server.transport),
+      );
+      assert.equal(producer.workflowPath, `.github/workflows/${workflowName}.yml`);
+      assert.equal(
+        producer.workflowSha256,
+        sha256(await readFile(resolve(repository, producer.workflowPath))),
+      );
+      assert.equal(producer.workflowId, 44);
+      assert.equal(producer.runId, 20);
+      const gate = receipt(producer, mode === "local" ? "integrated" : mode);
+      assertEvidenceReceipt(gate, { candidate: c, hash }, producer, mode);
+      assert.throws(
+        () =>
+          assertEvidenceReceipt(
+            { ...gate, producer: c.producer },
+            { candidate: c, hash },
+            producer,
+            mode,
+          ),
+        /producer differs/,
+      );
+      assert.throws(() =>
+        assertEvidenceReceipt(
+          { ...gate, candidateSha256: sha256("other candidate") },
+          { candidate: c, hash },
+          producer,
+          mode,
+        ),
+      );
+      process.env.GITHUB_SHA = "b".repeat(40);
+      await assert.rejects(
+        evidenceProducer(repository, c, mode, githubRequest(undefined, server.transport)),
+      );
+      process.env.GITHUB_SHA = c.sourceCommit;
+      process.env.GITHUB_JOB = "candidate";
+      await assert.rejects(
+        evidenceProducer(repository, c, mode, githubRequest(undefined, server.transport)),
+      );
+    }
+    c.publishable = false;
+    c.scope = SYNTHETIC_SCOPE;
+    c.packages = c.packages.map((p) => ({
+      ...p,
+      name: p.name.replace("@release-fixture/", `@${SYNTHETIC_SCOPE}/`),
+    }));
+    for (const event of ["push", "pull_request"] as const) {
+      const ref = event === "push" ? "refs/heads/main" : "refs/pull/7/merge";
+      Object.assign(process.env, {
+        GITHUB_EVENT_NAME: event,
+        GITHUB_JOB: "policy-and-integration",
+        GITHUB_REF: ref,
+        GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/ci.yml@${ref}`,
+      });
+      assert.equal(
+        (await evidenceProducer(repository, c, "local", githubRequest(undefined, server.transport)))
+          .workflowId,
+        44,
+      );
+    }
+    delete process.env.GITHUB_ACTIONS;
+    const local = await evidenceProducer(repository, c, "local");
+    const gate = receipt(local);
+    assertSyntheticLocalGate(gate, c, "local");
+    assertEvidenceReceipt(gate, { candidate: c, hash }, local, "local");
+    assert.throws(() => assertGate(gate));
+    assert.throws(() => assertSyntheticLocalGate(gate, c, "native"));
+    assert.throws(() =>
+      assertSyntheticLocalGate({ ...gate, producer: { ...local, runId: 1 } }, c, "local"),
+    );
+    assert.throws(() =>
+      assertSyntheticLocalGate(
+        { ...gate, claims: [{ ...gate.claims[0], outcome: "fail" }] },
+        c,
+        "local",
+      ),
+    );
+    assert.throws(
+      () => assertSyntheticLocalGate({ ...gate, files: [] }, c, "local"),
+      /Missing artifact inventory/,
+    );
+    assert.throws(
+      () =>
+        assertSyntheticLocalGate(
+          { ...gate, files: [{ ...record, sha256: sha256("changed") }] },
+          c,
+          "local",
+        ),
+      /Uninventoried/,
+    );
+    assert.throws(() => assertSyntheticLocalGate(gate, { ...c, publishable: true }, "local"));
+    await assert.rejects(
+      verifyProducer(
+        c,
+        "integrated",
+        local,
+        {
+          runId: 0,
+          runAttempt: 0,
+          artifactId: 1,
+          artifactName: "local",
+          artifactDigest: `sha256:${hash}`,
+          candidateSha256: hash,
+        },
+        githubRequest(undefined, server.transport),
+      ),
+    );
+  } finally {
+    for (const [key, value] of Object.entries(saved))
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    await server.close();
+  }
+});
+
+test("actual evidence child environment carries producer metadata and only the live coordinator receives admin", async () => {
+  const producer = candidate().producer;
+  const code = `
+    const {evidenceEnvironment,execute}=await import(${JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href)});
+    for(const mode of ['local','live']) {
+      const result=await execute(process.execPath,['--input-type=module','-e',
+        "console.log(JSON.stringify({producer:JSON.parse(process.env.FORTIPI_EVIDENCE_PRODUCER),admin:!!process.env.FORTIPI_ADMIN_TOKEN,github:!!process.env.GITHUB_TOKEN,cf:!!process.env.CLOUDFLARE_API_TOKEN,npm:!!process.env.NPM_TOKEN,model:!!process.env.OPENAI_API_KEY}))"],
+        ${JSON.stringify(repository)},evidenceEnvironment(${JSON.stringify(producer)},mode));
+      if(result.code!==0)throw Error('child failed');process.stdout.write(result.stdout);
+    }`;
+  const result = await execute(process.execPath, ["--input-type=module", "-e", code], repository, {
+    PATH: process.env.PATH,
+    GITHUB_TOKEN: "synthetic-gh",
+    CLOUDFLARE_API_TOKEN: "synthetic-cf",
+    NPM_TOKEN: "synthetic-npm",
+    OPENAI_API_KEY: "synthetic-model",
+    FORTIPI_ADMIN_TOKEN: "synthetic-admin",
+  });
+  assert.equal(result.code, 0);
+  const rows = result.stdout
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.deepEqual(
+    rows,
+    [false, true].map((admin) => ({
+      producer,
+      admin,
+      github: false,
+      cf: false,
+      npm: false,
+      model: false,
+    })),
+  );
+});
 
 test("real HTTP GitHub verification binds current attempt, paginated jobs, workflow bytes and independent archive digest", async () => {
   const c = candidate();
@@ -157,6 +378,11 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
     const api = githubRequest("synthetic-github-role", server.transport);
     await trustedMain(c, api);
     await verifyProducer(c, "candidate", c.producer, ref, api, now);
+    await verifyRetainedCandidate(c, packet.metadataSha256, ref, api);
+    await assert.rejects(
+      verifyRetainedCandidate(c, sha256("different retained candidate"), ref, api),
+      /Retained candidate hash mismatch/,
+    );
     assert.ok(calls.some((p) => p.endsWith("page=2")));
     assert.equal(leaked, false, "GitHub role must not reach signed storage origin");
     for (const [fault, reason] of [

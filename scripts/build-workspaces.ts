@@ -163,6 +163,11 @@ export async function main(command: string | undefined): Promise<void> {
       await compile("packages/fortipi-contract");
       await compile("packages/fortipi-executor");
       return;
+    case "build:evidence":
+      // Retained-candidate evidence needs source-side TS ports, never a new Worker/image/pack.
+      await run(process.execPath, ["packages/fortipi-contract/scripts/generate.ts"]);
+      for (const path of packagePaths) await compile(path);
+      return;
     case "build": {
       await run(process.execPath, ["packages/fortipi-contract/scripts/generate.ts"]);
       for (const path of packagePaths.filter((p) => !p.endsWith("-cli"))) await compile(path);
@@ -238,14 +243,16 @@ export async function main(command: string | undefined): Promise<void> {
         }
         await run(
           process.execPath,
-          ["tests/clients/run-evidence.ts", "local", ...extra],
+          ["scripts/prepare-release.ts", "evidence", "--mode", "local", ...extra],
           repository,
           900_000,
         );
       }
       return;
     default:
-      throw new Error("Expected build, typecheck, test, test:executor, test:browser or test:pty");
+      throw new Error(
+        "Expected build, build:evidence, typecheck, test, test:executor, test:browser or test:pty",
+      );
   }
 }
 
