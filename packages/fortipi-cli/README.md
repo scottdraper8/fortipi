@@ -1,6 +1,10 @@
 # FortiPi CLI
 
-Contract preparation for the management CLI. Node 26.13.0 is required. Worker assets and installed/deployed qualification await the completed durable service; `prepare` fails explicitly when genuine assets are absent. No substitute Worker is included.
+Management CLI with a build-time producer for the genuine Worker bundle, contracts,
+templates, image-source context and original notices. Node 26.13.0 is required.
+Missing producer inputs fail packaging; modified or incomplete installed assets
+fail before preparation/deployment. Cloud deployment, actual native Windows ACLs
+and independent installed offline qualification remain separate release gates.
 
 After compiling the repository, `node packages/fortipi-cli/dist/bin.js --help` lists the current interface. Every command has `--help`; errors go to stderr with codes 1 (failure/uncertainty), 2 (input), 3 (setup prerequisite), 4 (version conflict), or 130 (cancelled). Results are bounded JSON. Credentials are never command arguments or JSON results.
 
@@ -19,4 +23,36 @@ Management uses an exact-origin protected application profile, selected with `--
 
 Pi OAuth uses only the public supported OpenAI, Anthropic and separate OpenAI Codex factories, in memory. Browser/copy/device instructions require an attached interactive terminal. OAuth output is write-only to the application authority; provider credentials are never saved locally. API keys are entered through pinned Wrangler, using its prompt or inherited protected stdin. Unknown existing model-auth encryption keys are preserved.
 
-The original asset, installed distribution, complete guided setup, Windows ACL, actual Cloudflare and live-provider gates remain open. [Operator details](../../docs/operator-guide.md).
+`fortipi prepare --config operator.json --directory NEW_DIRECTORY --json` creates
+a fresh verified directory. When replacing a prepared installation, add
+`--previous-directory PRIOR_PREPARED_DIRECTORY`; its bound deployment identity,
+configuration and declaration history must verify. Removing an existing paid
+capability or changing/removing its migration history requires explicit repair.
+That local receipt does not attest the migrations actually applied in Cloudflare.
+
+Free defaults contain neither Loader nor Containers. Local capability declarations
+cannot establish account entitlement. Dry-run uploads no secrets and returns a
+build result only after actual emitted Worker bytes match the prepared manifest;
+it is not a rollout receipt. Complete guided setup, Windows ACL, actual Cloudflare
+and live-provider gates remain open. [Operator details](../../docs/operator-guide.md).
+
+Build and installed verification (maintainers):
+
+```sh
+pnpm run build
+node --test packages/fortipi-cli/test/*.test.ts
+node packages/fortipi-cli/test/install-harness.ts /absolute/fresh-distribution-directory
+```
+
+The harness uses actual CLI/contract packs and a bounded localhost registry serving
+only reviewed cached public archives, with no upstream fallback or workspace links.
+It runs a strict installed consumer, makes node_modules read-only, and invokes the
+installed prepare command. It records absent outer publication notices truthfully;
+release tooling owns their generation. It never treats local preparation as an
+offline Wrangler proof.
+
+The copied `consumer/offline-consumer.ts` must run separately with its
+`distribution.json` under a different nonroot Linux UID, genuinely empty OS home,
+inaccessible checkout and an offline network namespace. It refuses before home or
+application inspection when the identity is unsuitable. No HOME override, patched
+Wrangler or authentication file inspection is an isolation boundary.

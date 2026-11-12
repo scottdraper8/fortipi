@@ -155,6 +155,7 @@ export interface MigrationHistory {
   assetManifestSha256: string;
   migrations: WranglerConfig["migrations"];
   containers: boolean;
+  loaders: boolean;
 }
 export async function composeDeployment(
   config: OperatorConfig,
@@ -245,7 +246,10 @@ export async function composeDeployment(
         Array.isArray(history.migrations) &&
         history.migrations.length > 0 &&
         history.migrations.length <= 32 &&
+        typeof history.containers === "boolean" &&
+        typeof history.loaders === "boolean" &&
         (!history.containers || config.runtime.execution.kind === "linux") &&
+        (!history.loaders || config.runtime.execution.kind === "cloud-js") &&
         history.migrations.length <= base.migrations.length &&
         canonicalJson(base.migrations.slice(0, history.migrations.length)) ===
           canonicalJson(history.migrations),
@@ -313,6 +317,7 @@ export async function prepare(
       assetManifestSha256: prior.manifestSha256,
       migrations: priorConfig.migrations,
       containers: receipt.operator.runtime.execution.kind === "linux",
+      loaders: receipt.operator.runtime.execution.kind === "cloud-js",
     };
   }
   const wrangler = await composeDeployment(config, source, manifest, history);
