@@ -71,7 +71,16 @@ async function tests(roots: string[]): Promise<void> {
     if (found.length === 0) throw new Error(`Required test suite has no tests: ${root}`);
     paths.push(...found);
   }
-  await run(process.execPath, ["--test", ...paths], repository, 900_000);
+  // This fixture mutates the canonical AD context and replaces shared CLI assets.
+  // Finish readers from every selected root before running it in its own process.
+  const provenance = join(
+    repository,
+    "packages/fortipi-cli/test/enforcer-context-provenance.test.ts",
+  );
+  const parallel = paths.filter((path) => path !== provenance);
+  if (parallel.length) await run(process.execPath, ["--test", ...parallel], repository, 900_000);
+  if (paths.includes(provenance))
+    await run(process.execPath, ["--test", provenance], repository, 900_000);
 }
 
 async function compile(path: string): Promise<void> {
