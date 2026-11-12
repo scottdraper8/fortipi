@@ -6,7 +6,11 @@ import type {
   DurableEvent,
   ResourceScope,
 } from "../../packages/fortipi-contract/dist/index.js";
-import type { DeploymentIdentity } from "../../scripts/verify-release-gates.ts";
+import {
+  canonicalJson,
+  type DeploymentIdentity,
+  sha256,
+} from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
 import { publicAccess } from "./live-access.ts";
 import { publicFlow } from "./public-flow.ts";
@@ -36,6 +40,7 @@ export async function liveContext(
     body: undefined,
   });
   assert.equal(configuration.version, deployment.publicConfigurationVersion);
+  assert.equal(sha256(canonicalJson(configuration)), deployment.runtimeConfigSha256);
   let models = await roles.call({
     operationId: "listModels",
     path: {},
@@ -151,7 +156,7 @@ export async function liveContext(
             version: 1,
             resources: {
               ...clientResources,
-              conversationIds: [...clientResources.conversationIds, id],
+              conversationIds: [conversations[2]!.conversationId, id],
             },
           },
         ],
@@ -165,9 +170,18 @@ export async function liveContext(
     },
     async infrastructure() {
       const observed = await client().negotiate();
-      assert.equal(observed.deploymentId, deployment.deploymentId);
+      // The public logical application identity is its ControlPlane object ID.
+      // DeploymentIdentity.deploymentId is the provider rollout ID. Bind the
+      // public identity through an actual scoped ticket, never equate the two.
+      const ticket = await client().tickets.mint(agent.agentId, conversations[0]!.conversationId);
+      assert.equal(observed.deploymentId, ticket.identity.deploymentId);
+      assert.equal(ticket.identity.credential.credentialId, role.credential.credentialId);
       assert.deepEqual(observed.infrastructure, configuration.infrastructure);
-      assert.equal(observed.infrastructure.accountPlan, deployment.capabilities.plan);
+      assert.ok(
+        observed.infrastructure.accountPlan === "unknown" ||
+          observed.infrastructure.accountPlan === deployment.capabilities.plan,
+        "A known policy plan must agree with the authenticated actual deployment; conservative unknown is not an entitlement claim",
+      );
       if (deployment.backend === "free") {
         assert.equal(deployment.capabilities.loaders, false);
         assert.equal(deployment.capabilities.containers, false);
@@ -180,24 +194,83 @@ export async function liveContext(
         }
       }
       return {
-        actualDeploymentId: observed.deploymentId,
+        providerDeploymentId: deployment.deploymentId,
+        logicalApplicationId: observed.deploymentId,
+        authenticatedRuntimeConfigSha256: deployment.runtimeConfigSha256,
         exactConfigurationVersion: configuration.version,
         protocolAndConfigurationPolicyAgree: true,
         declaredPlan: observed.infrastructure.accountPlan,
+        authenticatedDeploymentPlan: deployment.capabilities.plan,
         backends: observed.backends,
         noUnavailableBackendInvocation: deployment.backend === "free",
         limitation:
           "Discovery/configuration prerequisite only; bounded ordinary live activity and account-wide/platform refusal proofs are separate",
       };
     },
-    publicRole: (index: number) => {
+    publicRole: async (index: number, usage: "python" | "tui" | "browser") => {
       const conversation = conversations[index];
       assert.ok(conversation);
+      const actions = [
+        "conversations.read",
+        "messages.submit",
+        "events.read",
+        "tasks.read",
+        "tickets.mint",
+      ];
+      if (usage !== "browser")
+        actions.push("agents.list", "agents.read", "conversations.list", "conversations.create");
+      if (usage === "tui") actions.push("tasks.cancel");
+      const issued = await roles.issue({
+        requestId: randomUUID(),
+        role: "client",
+        expiresAt: Date.now() + 900000,
+        grants: [
+          {
+            grantId: randomUUID(),
+            version: 1,
+            resources: {
+              ...clientResources,
+              conversationIds: [conversation.conversationId],
+              actions,
+            },
+          },
+        ],
+      });
       return {
         endpoint: roles.endpoint,
-        token: role.token,
+        token: issued.token,
+        credential: issued.credential,
         agentId: agent.agentId,
         conversationId: conversation.conversationId,
+      };
+    },
+    clientForRole: (token: string) =>
+      new module.FortiPiClient({ endpoint: roles.endpoint, credentials: async () => token }),
+    async authorizeConversation(id: string) {
+      const created = await roles.call({
+        operationId: "getConversation",
+        path: { id },
+        query: {},
+        body: undefined,
+      });
+      assert.equal(created.conversation.agentId, agent.agentId);
+      const issued = await roles.issue({
+        requestId: randomUUID(),
+        role: "client",
+        expiresAt: Date.now() + 900000,
+        grants: [
+          {
+            grantId: randomUUID(),
+            version: 1,
+            resources: { ...clientResources, conversationIds: [id] },
+          },
+        ],
+      });
+      return {
+        endpoint: roles.endpoint,
+        token: issued.token,
+        agentId: agent.agentId,
+        conversationId: id,
       };
     },
     async workersAi() {

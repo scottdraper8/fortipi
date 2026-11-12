@@ -110,12 +110,15 @@ export async function localBrowser(installed: Installed) {
       outcome: string;
       stage: string;
       errorClass?: string;
+      errorCode?: string;
+      cleanupComplete?: boolean;
+      diagnostic?: Record<string, unknown>;
       observation?: Record<string, unknown>;
     };
     assert.equal(
       result.code,
       0,
-      `Local HTTPS browser phase failed: ${observed.stage}/${observed.errorClass}`,
+      `Local HTTPS browser phase failed: ${observed.stage}/${observed.errorClass}/${observed.errorCode ?? "unclassified"}; cleanupComplete=${observed.cleanupComplete ?? true}; diagnostic=${JSON.stringify(observed.diagnostic ?? null)}`,
     );
     assert.equal(observed.outcome, "pass");
     assert.ok(observed.observation);

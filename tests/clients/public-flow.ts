@@ -18,11 +18,14 @@ async function until(read: () => Promise<boolean>, timeout = 20000) {
 export async function publicFlow(
   client: FortiPiClient,
   second: FortiPiClient,
-  input: { agentId: string; conversationId: string; seed: 1010 },
+  input: { agentId: string; conversationId: string; seed: 1010; observe?: (phase: string) => void },
 ) {
   const { agentId, conversationId } = input;
+  const observe = (phase: string) => input.observe?.(phase);
+  observe("negotiate");
   const protocol = await client.negotiate();
   requireFact(protocol.protocolVersion === "1.0", "Actual discovery negotiation required");
+  observe("original-snapshot");
   const original = await client.conversations.get(conversationId);
   const seen: DurableEvent[] = [];
   let appliedSequence = original.lastEventSeq;
@@ -39,6 +42,7 @@ export async function publicFlow(
     appliedSequence = event.eventSeq;
     seen.push(structuredClone(event));
   };
+  observe("first-subscribe");
   let subscription = client.conversations.subscribe(conversationId, {
     agentId,
     maxReconnects: 0,
@@ -47,13 +51,16 @@ export async function publicFlow(
     },
     onEvent: accept,
   });
+  let offlineObserver: ReturnType<typeof second.conversations.subscribe> | undefined;
   try {
     await subscription.ready;
     const intent = client.messageIntent(conversationId, "seed1010-public-first", "followUp");
+    observe("first-send");
     const first = await intent.send();
     await until(async () =>
       seen.some((e) => e.type === "task.completed" && "taskId" in e && e.taskId === first.taskId),
     );
+    observe("first-task-observe");
     requireFact(
       (await client.tasks.get(first.taskId)).status.state === "completed",
       "Real terminal task required",
@@ -72,6 +79,7 @@ export async function publicFlow(
           })),
       )}`,
     );
+    observe("first-receipt-retry");
     requireFact(
       JSON.stringify(await intent.send()) === JSON.stringify(first),
       "Explicit idempotent send must retain actual receipt",
@@ -81,13 +89,35 @@ export async function publicFlow(
     requireFact(scope, "Applied cursor must retain its ticket identity scope");
     subscription.close();
     await subscription.done;
+    const offlineCompletions = new Set<string>();
+    observe("second-client-subscribe");
+    offlineObserver = second.conversations.subscribe(conversationId, {
+      agentId,
+      maxReconnects: 0,
+      onSnapshot() {},
+      onEvent(event) {
+        if (event.durability === "durable" && event.type === "task.completed" && event.taskId)
+          offlineCompletions.add(event.taskId);
+      },
+    });
+    await offlineObserver.ready;
+    observe("offline-send");
     const offline = await second.conversations.send(conversationId, {
       clientRequestId: crypto.randomUUID(),
       content: "seed1010-public-offline",
       busyBehavior: "followUp",
     });
-    await until(async () => (await second.tasks.get(offline.taskId)).status.state === "completed");
+    await until(async () => offlineCompletions.has(offline.taskId));
+    observe("offline-task-observe");
+    requireFact(
+      (await second.tasks.get(offline.taskId)).status.state === "completed",
+      "The second client's actual committed completion must agree with public task state",
+    );
+    offlineObserver.close();
+    await offlineObserver.done;
+    offlineObserver = undefined;
     requireFact(subscription.cursor === saved, "Disconnected projection cursor cannot advance");
+    observe("offline-stored-replay");
     const page = await second.conversations.events(conversationId, { after: saved });
     requireFact(
       page.events.length > 0 &&
@@ -98,6 +128,7 @@ export async function publicFlow(
     );
     const stored = page.events.map((e) => JSON.stringify(e));
     const start = seen.length;
+    observe("original-client-resume");
     subscription = client.conversations.subscribe(conversationId, {
       agentId,
       after: saved,
@@ -117,6 +148,7 @@ export async function publicFlow(
       stored.every((e, i) => resumed[i] === e),
       "Stored original event envelopes must equal applied offline replay",
     );
+    observe("final-snapshot");
     const projection = await client.conversations.get(conversationId);
     requireFact(
       projection.lastEventSeq >= subscription.cursor &&
@@ -139,6 +171,8 @@ export async function publicFlow(
       volatileEventsObserved: volatile,
     };
   } finally {
+    offlineObserver?.close();
+    await offlineObserver?.done.catch(() => {});
     subscription.close();
     await subscription.done.catch(() => {});
   }

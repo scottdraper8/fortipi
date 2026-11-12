@@ -208,11 +208,24 @@ async function browserGraph(
         await page.goto(origin);
         await page.waitForFunction(() => "fortipiEvidence" in globalThis);
         observe("public-flow");
-        const observation = await page.evaluate(async (value) => {
-          const runner = (globalThis as unknown as { fortipiEvidence: BrowserPort })
-            .fortipiEvidence;
-          return runner.run(value);
-        }, input);
+        let observation: Record<string, unknown>;
+        try {
+          observation = await page.evaluate(async (value) => {
+            const runner = (globalThis as unknown as { fortipiEvidence: BrowserPort })
+              .fortipiEvidence;
+            return runner.run(value);
+          }, input);
+        } catch (error) {
+          const diagnostic = await page.evaluate(() =>
+            (
+              globalThis as unknown as { fortipiEvidence: BrowserPort }
+            ).fortipiEvidence.diagnostic(),
+          );
+          throw Object.assign(new Error("Browser public flow failed"), {
+            name: error instanceof Error ? error.name : "UnknownFailure",
+            diagnostic,
+          });
+        }
         observe("actual-preflight");
         assert.ok(
           acceptedPreflights.length > 0 &&

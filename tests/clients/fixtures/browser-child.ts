@@ -17,7 +17,15 @@ export async function browserChild(argv: string[]) {
     web: Awaited<ReturnType<typeof browser>> | undefined;
   let roles: RoleContext | undefined;
   let observation: Record<string, unknown> | undefined,
-    failure: { stage: string; errorClass: string } | undefined;
+    failure:
+      | {
+          stage: string;
+          errorClass: string;
+          errorCode?: string;
+          cleanupComplete?: boolean;
+          diagnostic?: Record<string, unknown>;
+        }
+      | undefined;
   let closing: Promise<Awaited<ReturnType<RoleContext["cleanup"]>> | undefined> | undefined;
   const close = () => {
     closing ??= (async () => {
@@ -57,7 +65,12 @@ export async function browserChild(argv: string[]) {
     stage = "serve-https-origins";
     web = await browser({ ...ports, consumer, candidate: loaded.candidate }, { tls });
     stage = "start-real-wrangler-https";
-    runtime = await start({ allowedOrigin: web.origin, wranglerBin: ports.wranglerBin, tls });
+    runtime = await start({
+      allowedOrigin: web.origin,
+      wranglerBin: ports.wranglerBin,
+      tls,
+      traffic: "free",
+    });
     roles = new RoleContext(runtime.endpoint, runtime.admin);
     stage = "public-provision";
     const state = await provision(runtime, (input) => roles!.issue(input));
@@ -79,6 +92,19 @@ export async function browserChild(argv: string[]) {
       },
     );
     roles.assertSanitized(observation);
+    const protocol = await runtime.api<{
+      infrastructure: {
+        bounds: { requestsPerPrincipalMinute: number; requestsPerInstallMinute: number };
+      };
+    }>("/v1/protocol");
+    assert.equal(protocol.body.infrastructure.bounds.requestsPerPrincipalMinute, 30);
+    assert.equal(protocol.body.infrastructure.bounds.requestsPerInstallMinute, 120);
+    observation.traffic = {
+      defaultConfiguredFreeIngress: true,
+      requestsPerPrincipalMinute: protocol.body.infrastructure.bounds.requestsPerPrincipalMinute,
+      requestsPerInstallMinute: protocol.body.infrastructure.bounds.requestsPerInstallMinute,
+      actualFreeAccountProof: false,
+    };
     for (const pkg of loaded.candidate.packages)
       for (const file of pkg.entries)
         assert.equal(
@@ -87,12 +113,26 @@ export async function browserChild(argv: string[]) {
         );
     assert.equal((await loadCandidate(manifest)).hash, loaded.hash);
   } catch (error) {
-    failure = { stage, errorClass: error instanceof Error ? error.name : "UnknownFailure" };
+    const known =
+      error instanceof Error
+        ? error.message.match(
+            /\b(?:quota_exceeded|quota_paused|rate_limited|unauthorized|unauthenticated|handshake_failed|smoke_deadline)\b/,
+          )?.[0]
+        : undefined;
+    const diagnostic = (error as { diagnostic?: Record<string, unknown> })?.diagnostic;
+    failure = {
+      stage,
+      errorClass: error instanceof Error ? error.name : "UnknownFailure",
+      ...(known ? { errorCode: known } : {}),
+      ...(diagnostic ? { diagnostic } : {}),
+    };
   } finally {
     const cleanup = await close();
     process.off("SIGTERM", stop);
-    if (cleanup?.some((role) => role.state !== "complete"))
-      failure = { stage: "public-role-cleanup", errorClass: "IncompleteRevocation" };
+    if (cleanup?.some((role) => role.state !== "complete")) {
+      failure ??= { stage: "public-role-cleanup", errorClass: "IncompleteRevocation" };
+      failure.cleanupComplete = false;
+    }
     if (observation) observation.cleanup = cleanup;
   }
   return failure

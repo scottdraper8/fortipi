@@ -18,17 +18,64 @@ export interface BrowserPort {
   arm(input: BrowserInput): Promise<void>;
   revoked(): Promise<Record<string, unknown>>;
   denied(input: BrowserInput): Promise<Record<string, unknown>>;
+  diagnostic(): Record<string, unknown> | undefined;
 }
 const client = (input: BrowserInput) =>
   new FortiPiClient({ endpoint: input.endpoint, credentials: async () => input.token });
+let diagnostic: Record<string, unknown> | undefined;
 let active:
   | { client: FortiPiClient; input: BrowserInput; subscription: Subscription; closed: boolean }
   | undefined;
 const port: BrowserPort = {
   async run(input: BrowserInput) {
     // Native default fetch/WebSocket and browser Origin; no injected headers or transport.
-    return publicFlow(client(input), client(input), input);
+    let phase = "start";
+    diagnostic = undefined;
+    try {
+      return await publicFlow(client(input), client(input), {
+        ...input,
+        observe(value) {
+          phase = value;
+        },
+      });
+    } catch (error) {
+      diagnostic = {
+        phase,
+        errorClass:
+          error instanceof FortiPiError
+            ? "FortiPiError"
+            : error instanceof Error
+              ? "Error"
+              : "unknown",
+        completionDeadline:
+          error instanceof Error &&
+          error.message === "Public committed completion/replay deadline exceeded",
+      };
+      if (error instanceof FortiPiError) {
+        const pressure = error.details?.pressure;
+        diagnostic = {
+          ...diagnostic,
+          code: error.code,
+          status: error.status,
+          retryAfterMs: error.retryAfterMs,
+          ...(pressure
+            ? {
+                pressure: {
+                  resource: pressure.resource,
+                  scopeKind: pressure.scope.kind,
+                  limit: pressure.limit,
+                  remaining: pressure.remaining,
+                  action: pressure.action,
+                  retryAt: pressure.retryAt ?? null,
+                },
+              }
+            : {}),
+        };
+      }
+      throw error;
+    }
   },
+  diagnostic: () => diagnostic,
   async arm(input) {
     if (active) throw new Error("Previous browser access observer remains active");
     const connection = client(input);

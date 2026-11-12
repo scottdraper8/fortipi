@@ -182,3 +182,37 @@ export async function python(role: PublicRole) {
     });
   }
 }
+
+/** The independent client creates the ID. The coordinator then authorizes that
+ * exact new conversation before independent fresh clients reopen and use it. */
+export async function pythonCreation(
+  role: PublicRole,
+  authorize: (id: string) => Promise<PublicRole>,
+) {
+  const creator = pythonClient(role);
+  let id: string;
+  try {
+    await creator.command({ op: "discover" });
+    const created = await creator.command({
+      op: "create",
+      agentId: role.agentId,
+      requestId: crypto.randomUUID(),
+      title: "seed1010-python-created",
+    });
+    assert.equal(created.agentId, role.agentId);
+    assert.equal(typeof created.conversationId, "string");
+    id = created.conversationId as string;
+    assert.notEqual(id, role.conversationId);
+  } finally {
+    await creator.close();
+  }
+  const next = await authorize(id);
+  assert.equal(next.agentId, role.agentId);
+  assert.equal(next.endpoint, role.endpoint);
+  assert.equal(next.conversationId, id);
+  return {
+    ...(await python(next)),
+    independentCreatedConversationId: id,
+    exactNewConversationRoleIssuedBeforeReopen: true,
+  };
+}

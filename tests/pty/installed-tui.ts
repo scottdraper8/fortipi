@@ -343,21 +343,9 @@ export async function keyboardConversationTui(
     const cursorBefore = before.lastEventSeq;
     pty.write("seed1010-pty-keys\r");
     try {
-      await until(async () => {
-        const projection = await client.conversations.get(role.conversationId);
-        if (
-          projection.messages.some(
-            (message) => message.role === "user" && message.content === "seed1010-pty-keys",
-          )
-        )
-          assert.ok(
-            !["failed", "interrupted"].includes(projection.conversation.taskState.state),
-            "The actual keyboard task failed before committed completion",
-          );
-        return events.some(
-          (event) => event.eventSeq > cursorBefore && event.type === "task.completed",
-        );
-      });
+      await until(async () =>
+        events.some((event) => event.eventSeq > cursorBefore && event.type === "task.completed"),
+      );
     } catch {
       const projection = await client.conversations.get(role.conversationId),
         screen = await pty.currentScreen();

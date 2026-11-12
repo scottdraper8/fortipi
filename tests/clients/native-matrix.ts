@@ -54,6 +54,37 @@ export async function nativePlatformPort(
         .digest("hex"),
       createHash("sha256").update(data).digest("hex"),
     );
+    await a.write("Case-Probe", Buffer.from("first native spelling"), 420);
+    const alias = await a.read("case-probe", 1024).catch(() => undefined);
+    const caseManifest = {
+      version: 1 as const,
+      entries: ["Case-Probe", "case-probe"].map((path) => ({
+        path,
+        type: "file" as const,
+        mode: 420 as const,
+        size: data.length,
+        sha256: createHash("sha256").update(data).digest("hex"),
+      })),
+    };
+    if (a.identity.caseBehavior === "insensitive") {
+      assert.equal(Buffer.from(alias ?? []).toString(), "first native spelling");
+      assert.throws(
+        () => module.checkManifest(caseManifest, module.defaults, a.identity.caseBehavior),
+        "A manifest must reject two names that alias on this actual native filesystem",
+      );
+    } else {
+      assert.equal(alias, undefined);
+      module.checkManifest(caseManifest, module.defaults, a.identity.caseBehavior);
+      await a.write("case-probe", Buffer.from("second native spelling"), 420);
+      assert.equal(
+        Buffer.from(await a.read("Case-Probe", 1024)).toString(),
+        "first native spelling",
+      );
+      assert.equal(
+        Buffer.from(await a.read("case-probe", 1024)).toString(),
+        "second native spelling",
+      );
+    }
     await assert.rejects(b.read("binary.bin", 1024), "Fresh B cannot inherit A's disk");
     for (const path of ["../escape", ".ssh/id_rsa", "CON", "aux.txt", "file:stream"])
       assert.throws(() => a.native(path), "Reserved/escaping paths must reject before I/O");
@@ -140,6 +171,7 @@ export async function nativePlatformPort(
       kernel: release(),
       filesystemType: filesystem.type,
       actualCaseBehavior: a.identity.caseBehavior,
+      manifestCasePolicyMatchedActualFilesystem: true,
       permissionOrDaclVerified: true,
       distinctRoots: true,
       independentBinaryHash: true,

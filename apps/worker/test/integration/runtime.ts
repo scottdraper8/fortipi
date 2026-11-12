@@ -41,6 +41,7 @@ export interface RuntimeOptions {
   events?: number;
   tls?: { key: string; cert: string; ca: string };
   testBounds?: Partial<typeof freeInfrastructurePolicy.bounds>;
+  traffic?: "free";
 }
 /** Real TCP/workerd/SQLite, one immutable config and storage directory across kills. */
 export async function start(options: RuntimeOptions = {}) {
@@ -65,8 +66,10 @@ export async function start(options: RuntimeOptions = {}) {
     }
   // Isolate durable semantics from request cadence. This is explicitly NOT a
   // test of actual Free account ceilings or configured Free traffic defaults.
-  policy.bounds.requestsPerPrincipalMinute = 10000;
-  policy.bounds.requestsPerInstallMinute = 10000;
+  if (options.traffic !== "free") {
+    policy.bounds.requestsPerPrincipalMinute = 10000;
+    policy.bounds.requestsPerInstallMinute = 10000;
+  }
   if (options.events !== undefined) {
     assert.ok(
       Number.isSafeInteger(options.events) &&

@@ -51,7 +51,7 @@ import { liveContext } from "./live.ts";
 import { runNativeDaemon } from "./native-daemon.ts";
 import { nativePlatform } from "./native-matrix.ts";
 import { publicFlow } from "./public-flow.ts";
-import { python } from "./python.ts";
+import { pythonCreation } from "./python.ts";
 import { type CleanupObservation, RoleContext } from "./roles.ts";
 
 export type { ClaimResult, EvidenceInput } from "./evidence.ts";
@@ -661,12 +661,33 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
           const roles = new RoleContext(runtime.endpoint, runtime.admin);
           try {
             const state = await provision(runtime, (body) => roles.issue(body));
-            const observation = await python({
-              endpoint: runtime.endpoint,
-              token: state.client.token,
-              agentId: state.agent.agentId,
-              conversationId: state.conversations[1]!.conversationId,
-            });
+            const observation = await pythonCreation(
+              {
+                endpoint: runtime.endpoint,
+                token: state.client.token,
+                agentId: state.agent.agentId,
+                conversationId: state.conversations[1]!.conversationId,
+              },
+              async (id) => {
+                const role = await roles.issue({
+                  requestId: crypto.randomUUID(),
+                  role: "client",
+                  grants: [
+                    {
+                      grantId: crypto.randomUUID(),
+                      version: 1,
+                      resources: { ...state.clientResources, conversationIds: [id] },
+                    },
+                  ],
+                });
+                return {
+                  endpoint: runtime.endpoint,
+                  token: role.token,
+                  agentId: state.agent.agentId,
+                  conversationId: id,
+                };
+              },
+            );
             roles.assertSanitized(observation);
             return observation;
           } finally {
@@ -793,14 +814,15 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
           "independent-python",
           ["python3", "-I", "-B", "examples/python-client/client.py"],
           "Independent stdlib client preserves TLS, actual tickets, committed tasks and durable replay on the same deployed contract",
-          () => python(context.publicRole(2)),
+          async () =>
+            pythonCreation(await context.publicRole(2, "python"), context.authorizeConversation),
           ["External-provider and paid backend success are separate claims"],
         );
         await measure(
           "installed-tui-smoke",
           ["smokeTui", "installed-bin", "seed1010"],
           "Actual installed TUI controller performs committed send, read controls and offline replay against the unchanged deployed service",
-          () => smokeTui(installed!, context.publicRole(2)),
+          async () => smokeTui(installed!, await context.publicRole(2, "tui")),
           [
             "Live keyboard/job decision companion remains required; no PTY claim from controller smoke",
           ],
@@ -809,13 +831,15 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
           "live-installed-tui-keyboard",
           ["keyboardConversationTui", "installed-bin", "seed1010"],
           "Actual installed TUI keys create with exact role issuance, select/send and display correlated committed tasks plus offline replay on the unchanged deployed service",
-          () =>
-            keyboardConversationTui(
+          async () => {
+            const role = await context.publicRole(2, "tui");
+            return keyboardConversationTui(
               installed!,
-              context.publicRole(2),
-              context.client(),
+              role,
+              context.clientForRole(role.token),
               context.authorizeCreated,
-            ),
+            );
+          },
           [
             "Live native/cloud job decision and recovery companions remain separately required; no external OAuth or paid backend inference",
           ],
@@ -836,14 +860,24 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
           async () => {
             const web = await browser(installed!, { port: liveBrowserPort });
             try {
-              return await web.run({ ...context.publicRole(1), seed: 1010 }, async () => {
-                const receipt = await roles.revokeAndWait(context.role.credential.credentialId);
-                assert.equal(
-                  receipt.state,
-                  "complete",
-                  "Live browser revocation remains pending; repeat in a fresh evidence run",
-                );
-              });
+              const role = await context.publicRole(1, "browser");
+              return await web.run(
+                {
+                  endpoint: role.endpoint,
+                  token: role.token,
+                  agentId: role.agentId,
+                  conversationId: role.conversationId,
+                  seed: 1010,
+                },
+                async () => {
+                  const receipt = await roles.revokeAndWait(role.credential.credentialId);
+                  assert.equal(
+                    receipt.state,
+                    "complete",
+                    "Live browser revocation remains pending; repeat in a fresh evidence run",
+                  );
+                },
+              );
             } finally {
               await web.close();
             }
