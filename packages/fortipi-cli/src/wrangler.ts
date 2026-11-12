@@ -83,7 +83,7 @@ export const wrangler: WranglerPort = {
           windowsHide: true,
           env: wranglerEnvironment(request),
           stdio: request.terminal
-            ? "inherit"
+            ? ["inherit", process.stderr, process.stderr]
             : [request.inheritInput ? "inherit" : "pipe", "pipe", "pipe"],
         });
         let output = "";

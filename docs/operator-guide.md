@@ -2,7 +2,7 @@
 
 The CLI validates the public contract, protects local application identities and
 packages genuine Worker assets with their contracts, templates and original
-notices. Complete guided setup, actual installed offline dry-build, native Windows
+notices. Actual installed offline dry-build, native Windows
 protection and deployed verification remain acceptance gates; local artifact checks
 do not establish those outcomes.
 
@@ -33,6 +33,39 @@ actual reviewed image manifest digest and context; its config ID is not a pullab
 registry identity. Preparing a paid variant does not purchase or prove entitlement.
 
 Customer bootstrap is persisted in `~/.fortipi/PROFILE.json` before upload. Named CLI profiles are exact-origin application credentials, protected outside Git checkouts: POSIX directories 0700/files 0600, or restrictive current-user Windows ACLs. Link, hardlink, ownership, overwrite and parent checks fail closed. Never copy deployment credentials into an application profile. Lost setup replies reuse the protected identity; revocation remains authoritative.
+
+`fortipi init --config operator.json` asks independently about model/provider
+authentication, workspace storage, execution and routing, then confirms the
+validated configuration before exclusive creation. `--from` copies an existing
+canonical config and supports `--non-interactive`. Native execution keeps the
+conservative Free policy. Selecting a paid backend requires your existing explicit
+policy and backend config; initialization does not verify entitlement or upgrade
+an account.
+
+`fortipi setup --config operator.json --directory prepared --profile production`
+initializes a missing config, confirms your first workspace/agent and exact grant
+scope, then composes login, prepare, local-bootstrap deployment, provider readiness
+and resource/credential creation. API-key values go through Wrangler's own input;
+OAuth uses the existing Pi flow. Existing unknown binding secrets and model-auth
+keys are preserved. The recipient profile is separate from the administrator.
+Neither a client role nor a native target choice silently grants shell access.
+
+Setup saves its non-secret plan, stable request IDs and observed receipts under
+`~/.fortipi/DEPLOYMENT/setup-PROFILE.json`, alongside protected per-operation input
+files. Tokens remain only in their protected identity/profile files. Repeat the
+same command to continue acknowledged steps or check fresh readiness. A missing
+device/root binding or model reports `setup-pending`; a lost mutation reply reports
+`setup-uncertain` and its saved request ID. It never replays an unresolved effect.
+Use `status`, the saved input with the corresponding public management command,
+and authority receipts to reconcile first. Credential delivery failure requires
+receipt/revoke/replace recovery, never another blind mint. The contract has no
+plaintext-token or arbitrary request-ID lookup endpoint. After a killed process,
+the setup lock remains: verify no setup process is running before removing only
+that deployment/profile's `.lock` file. Keep its journal, inputs and identity.
+Changing a bound config, asset version or output directory requires explicit
+repair rather than a silent new setup. Fresh noninteractive setup needs prior
+confirmed choices; missing choices fail before account effects. Setup completion
+is an observation, not final rollout, model-call or live durability evidence.
 
 Trusted CI retains the exact interface:
 

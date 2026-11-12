@@ -15,6 +15,26 @@ fortipi init --from operator-source.json --config operator.json --non-interactiv
 fortipi config validate --config operator.json --json
 ```
 
+For guided configuration and setup from an attached terminal:
+
+```sh
+fortipi init --config operator.json
+fortipi setup --config operator.json --directory prepared --profile production --json
+```
+
+`setup` also offers initialization when the config is missing. It confirms the
+initial workspace, agent and exact credential grants before account changes, then
+uses the same Wrangler login, prepare, deploy and provider-auth commands. The new
+credential goes directly to a separate protected profile. It never starts model
+work, installs an executor or enables paid services implicitly. A disconnected
+selected device or unavailable model remains pending.
+
+Re-run the same setup command to observe readiness or continue acknowledged
+steps. Stable operation IDs and the confirmed plan are saved before effects;
+unknown outcomes stop with `setup-uncertain`, without another deployment or token
+issue. Noninteractive fresh setup fails when choices are missing. See the
+[recovery details](../../docs/operator-guide.md).
+
 Infrastructure failures include curated resource, measurement kind, limits, supplied reset/retry times and operator action on stderr. Remote messages, free-text reasons and resource identifiers are omitted. Unknown measurements and absent resets stay unknown; storage errors do not imply a daily reset.
 
 `runtime` follows the shipped `Configuration` schema. Workspace, execution, routing and models are independent selections. Free/unknown defaults use the contract's conservative bounds. Paid Loader/Containers require explicit canonical capability declarations; local validation does not prove Cloudflare account entitlement. The example requires a separately registered, authorized native executor and does not grant native shell permission.
@@ -33,7 +53,7 @@ That local receipt does not attest the migrations actually applied in Cloudflare
 Free defaults contain neither Loader nor Containers. Local capability declarations
 cannot establish account entitlement. Dry-run uploads no secrets and returns a
 build result only after actual emitted Worker bytes match the prepared manifest;
-it is not a rollout receipt. Complete guided setup, Windows ACL, actual Cloudflare
+it is not a rollout receipt. Native Windows ACL, actual Cloudflare
 and live-provider gates remain open. [Operator details](../../docs/operator-guide.md).
 
 Build and installed verification (maintainers):
