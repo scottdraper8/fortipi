@@ -78,6 +78,18 @@ export class TestAgentSession extends BaseAgent {
   }
   override async onRequest(request: Request) {
     const url = new URL(request.url);
+    if (url.pathname === "/__fork-growth/fill") {
+      await this.lifecycle.start();
+      const admission = Math.floor(
+          this.store.policy.bounds.objectBytes * (1 - this.store.policy.bounds.headroomFraction),
+        ),
+        target = admission / 2 + (url.searchParams.get("side") === "above" ? 4 : -4) * 1048576;
+      for (let i = 0; i < 8 && this.store.physicalBytes() < target; i++)
+        await this.store.put("fixture-fork-fill", crypto.randomUUID(), {
+          padding: "x".repeat(1048576),
+        });
+      return Response.json({ bytes: this.store.physicalBytes(), target, admission });
+    }
     if (url.pathname === "/__fork-growth/proof") {
       const operationId = url.searchParams.get("operation") ?? "";
       const creations = await this.store.db.all<{ data: string }>(
@@ -165,7 +177,11 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/__fork-growth/proofs")
       return env.CONTROL_PLANE.getByName("control").fetch(request);
-    if (url.pathname === "/__fork-growth/history" || url.pathname === "/__fork-growth/status")
+    if (
+      ["/__fork-growth/history", "/__fork-growth/status", "/__fork-growth/fill"].includes(
+        url.pathname,
+      )
+    )
       return env.AGENT_SESSIONS.getByName(url.searchParams.get("agent") ?? "").fetch(request);
     return base.fetch(request, env);
   },

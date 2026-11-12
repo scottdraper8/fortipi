@@ -665,12 +665,13 @@ export class Dispatch {
       if (
         state.assignment &&
         state.reservation &&
-        (
-          (await this.jobs.store.get<D.Lease>("lease-observation", state.job.jobId)) ??
-          state.assignment.identity.lease
-        ).expiresAt -
-          Date.now() <=
-          15000 &&
+        (state.renewal ||
+          (
+            (await this.jobs.store.get<D.Lease>("lease-observation", state.job.jobId)) ??
+            state.assignment.identity.lease
+          ).expiresAt -
+            Date.now() <=
+            15000) &&
         !isTerminal(state.job)
       ) {
         const lease =
@@ -684,7 +685,13 @@ export class Dispatch {
         };
         await this.save(state);
         const renewed = unwrap(await this.workspace(state).renewLease(wsAuth, state.renewal));
-        check(renewed.leaseVersion > lease.leaseVersion, "conflict", "Renewal failed");
+        // A prior ACK can already be retained while its delivery reply is lost.
+        // Compare with the stable request, never with the newer observation.
+        check(
+          renewed.leaseVersion > state.renewal.expectedLeaseVersion,
+          "conflict",
+          "Renewal failed",
+        );
         await this.jobs.retainLease(auth, state.job.jobId, renewed);
         // Renewal is an observation, never a rewrite of the original assignment/digest.
         if (identity.target.kind === "executor")

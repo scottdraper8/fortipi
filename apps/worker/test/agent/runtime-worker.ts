@@ -77,8 +77,63 @@ export class ControlPlane extends RealControlPlane {
     this.count("settleCapacity");
     return super.settleCapacity(ctx, input);
   }
-  override fetch(request: Request) {
+  override async queryExecution(ctx: D.AuthContext, input: D.ExecutionIdentity) {
+    const result = await super.queryExecution(ctx, input);
+    if (!this.store.get("fixture", "trace-dispatch")) return result;
+    const record = this.store.get<{ attempted: boolean; intent: D.DispatchIntent }>(
+        "dispatch",
+        input.executionId,
+      ),
+      registration = this.store.get<D.AuthorityRegistration>("recipient", ctx.registrationId ?? "");
+    this.store.put("fixture-query", input.jobId, {
+      ...(result.ok
+        ? { ok: true, state: result.value.state }
+        : { ok: false, code: result.code, message: result.message }),
+      attempted: record?.attempted ?? null,
+      reservedAgentRegistration:
+        ctx.registrationId === record?.intent.reservation.registrationIds.agent,
+      registrationTools: registration?.resources.tools ?? null,
+      grantActions: ctx.grants.map((grant) => grant.resources.actions),
+      grantTools: ctx.grants.map((grant) => grant.resources.tools),
+    });
+    return result;
+  }
+  override async deliverExecutorFrame(ctx: D.AuthContext, input: D.ExecutorDelivery) {
+    const result = await super.deliverExecutorFrame(ctx, input);
+    if (!this.store.get("fixture", "trace-dispatch")) return result;
+    const identity =
+        input.frame.type === "job.committed" ? input.frame.payload.identity : undefined,
+      command =
+        identity &&
+        this.store.get<{ delivery: { connectionEpoch: number } }>(
+          "command",
+          `${identity.executionId}:job.committed:${input.frame.type === "job.committed" ? input.frame.payload.terminalVersion : 0}`,
+        ),
+      executor = this.store.get<{ epoch: number; status: string }>("executor", input.executorId);
+    this.store.put("fixture-delivery", input.frame.type, {
+      ...(result.ok ? { ok: true } : { ok: false, code: result.code, message: result.message }),
+      executorId: input.executorId,
+      commandEpoch: command?.delivery.connectionEpoch ?? null,
+      executorEpochAtAck: executor?.epoch ?? null,
+      executorStatusAtAck: executor?.status ?? null,
+    });
+    return result;
+  }
+  override async fetch(request: Request) {
     const path = new URL(request.url).pathname;
+    if (path === "/__test/dispatch-trace") {
+      if (request.method === "PUT") this.store.put("fixture", "trace-dispatch", true);
+      const jobId = new URL(request.url).searchParams.get("job") ?? "";
+      const terminal = this.store.get<{ executorId: string }>("fixture-delivery", "job.committed");
+      const executor = terminal
+        ? this.store.get<{ epoch: number; status: string }>("executor", terminal.executorId)
+        : undefined;
+      return Response.json({
+        query: this.store.get("fixture-query", jobId) ?? null,
+        terminal: terminal ?? null,
+        executor: executor ? { epoch: executor.epoch, status: executor.status } : null,
+      });
+    }
     if (path.match(/^\/internal\/agents\/[^/]+\/model$/)) this.count("configuredModel.fetch");
     if (path.startsWith("/v1/executor/jobs/")) {
       this.count("executorJob.fetch");
@@ -403,6 +458,10 @@ export class TestAgentSession extends AgentSession {
       }
       if (action === "tool-state")
         return Response.json(await this.toolState(url.searchParams.get("cid") ?? ""));
+      if (action === "job-diagnostics")
+        return new Response(await this.jobDiagnosticsJson(url.searchParams.get("job") ?? ""), {
+          headers: { "Content-Type": "application/json" },
+        });
       if (action === "growth") return Response.json(await this.growthReport());
       return new Response(null, { status: 404 });
     }
@@ -589,6 +648,12 @@ export class TestAgentSession extends AgentSession {
     );
     const jobs = await this.store.page<import("../../src/execution/jobs.js").JobState>("job", 100);
     return {
+      pressures: (
+        await this.store.page<{ phase: D.JobState; code: string; message: string }>(
+          "job-pressure",
+          100,
+        )
+      ).map((row) => row.value),
       tasks: tasks.items.map((task) => ({
         id: task.id,
         kind: task.kind,
@@ -730,6 +795,60 @@ export class TestAgentSession extends AgentSession {
       rejected,
     };
   }
+  async retainRenewalBeforeDeliveryAck(jobId: string) {
+    const state = await this.jobs.state(jobId);
+    if (
+      !state.assignment ||
+      !state.reservation ||
+      state.assignment.identity.target.kind !== "executor"
+    )
+      throw new Error("Real native assignment required");
+    const auth = this.dispatch.auth(state),
+      lease =
+        (await this.store.get<D.Lease>("lease-observation", jobId)) ??
+        state.assignment.identity.lease;
+    state.renewal = {
+      requestId: `lost_renewal_${lease.leaseId}_${lease.leaseVersion}`,
+      lease,
+      expectedLeaseVersion: lease.leaseVersion,
+      expiresAt: Math.min(state.deadline, Date.now() + 30000),
+    };
+    await this.dispatch.save(state);
+    const renewed = unwrap(
+      await this.env.WORKSPACES.getByName(state.job.workspaceId).renewLease(
+        { ...auth, registrationId: state.reservation.registrationIds.workspace },
+        state.renewal,
+      ),
+    );
+    await this.jobs.retainLease(auth, jobId, renewed);
+    unwrap(
+      await this.authority.control.deliverExecutorFrame(auth, {
+        executorId: state.assignment.identity.target.executorId,
+        generation: state.assignment.identity.target.generation,
+        frame: {
+          type: "job.lease_update",
+          requestId: state.renewal.requestId,
+          payload: {
+            identity: state.assignment.identity,
+            leaseVersion: renewed.leaseVersion,
+            expiresAt: renewed.expiresAt,
+          },
+        },
+      }),
+    );
+    // This fixture cut leaves the app's pre-ACK intent, after both real owners
+    // committed. It does not simulate process death or refund any authority.
+    return JSON.stringify({ retained: true });
+  }
+  async replayRenewalReceipt(jobId: string) {
+    await this.dispatch.tick(jobId);
+    const state = await this.jobs.state(jobId);
+    return JSON.stringify({
+      pending: !!state.renewal,
+      original: state.assignment!.identity.lease.leaseVersion,
+      observed: (await this.store.get<D.Lease>("lease-observation", jobId))?.leaseVersion,
+    });
+  }
   async jobDiagnosticsJson(jobId: string) {
     const state = await this.jobs.state(jobId);
     return JSON.stringify({
@@ -750,6 +869,13 @@ export class TestAgentSession extends AgentSession {
         )
       )?.postManifest,
       pressure: (await this.store.get("job-pressure", jobId)) ?? null,
+      repairPressure:
+        (await this.store.get("repair-pressure", `terminal-notification:${jobId}`)) ?? null,
+      terminalNotificationPending: !!(await this.store.get("terminal-notification", jobId)),
+      now: Date.now(),
+      originalLease: state.assignment?.identity.lease ?? null,
+      observedLease: (await this.store.get("lease-observation", jobId)) ?? null,
+      renewal: state.renewal ?? null,
     });
   }
   async nativeObservationRequest(jobId: string) {
@@ -1227,8 +1353,10 @@ export default {
   fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/__test/ping") return new Response("ready");
+    if (url.pathname === "/__test/dispatch-trace")
+      return env.CONTROL_PLANE.getByName("control").fetch(request);
     const match =
-      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|inspect|tool|tool-state|growth)$/.exec(
+      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|inspect|tool|tool-state|job-diagnostics|growth)$/.exec(
         url.pathname,
       );
     if (match) {
