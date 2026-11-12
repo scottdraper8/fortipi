@@ -28,6 +28,14 @@ it neither claims a running child nor permits replay after a crash. An uncertain
 claim still reports unknown. Cloud adapters reject both native preparation and
 local-consent observations.
 
+An executor sends `job.committed_ack` only after it has durably applied the
+matching `job.committed` proof to its ledger. The acknowledgment echoes the full
+`JobCommitted` payload; duplicate delivery is acknowledged again. ControlPlane
+checks the current executor identity and connection epoch and the exact retained
+proof before retiring delivery recovery. The original command and transport
+receipt remain retained. This acknowledgment grants no execution or workspace
+authority and performs no new side effect.
+
 Generate with `node packages/fortipi-contract/scripts/generate.ts`, then run the
 same command with `--check`. Generation resolves only local allowlisted schema
 IDs, bundles them before invoking the pinned schema compiler, and emits four

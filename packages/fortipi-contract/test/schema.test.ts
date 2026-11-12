@@ -35,6 +35,26 @@ import {
 } from "./fixtures/wire.ts";
 
 const { get } = validators();
+test("terminal application acknowledgment echoes the complete proof rather than a transport receipt", () => {
+  const frame: Extract<Executor.ExecutorFrame, { type: "job.committed_ack" }> = {
+    type: "job.committed_ack",
+    requestId: "terminal_ack_1",
+    payload: {
+      identity,
+      terminalVersion: 2,
+      eventSeq: 37,
+      evidence: { kind: "committed", receipt },
+    },
+  };
+  accepted("ExecutorFrame", frame);
+  rejected("ExecutorFrame", {
+    ...frame,
+    payload: { deliveryId: "delivery_1", sequence: 2, persisted: true },
+  });
+  rejected("ExecutorFrame", { ...frame, payload: { ...frame.payload, eventSeq: undefined } });
+  rejected("ExecutorFrame", { ...frame, payload: { ...frame.payload, terminalVersion: -1 } });
+  rejected("ExecutorFrame", { ...frame, payload: { ...frame.payload, applied: true } });
+});
 test("admin artifacts retain agent or workspace provenance without inventing workspace identity", () => {
   const agent = {
     artifactId: "export_part",
