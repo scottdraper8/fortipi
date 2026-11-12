@@ -47,7 +47,9 @@ test("candidate immutable Lifecycle generation ID preserves newer wake and bound
     await pause(1100);
     const held = await probe.state();
     assert.equal(held.effects, 0, "App CAS must suppress old effects");
-    assert.equal(held.oldCalls, 2, "The pinned stale retry must actually execute");
+    // replace(true) cancels the predecessor; its queued retry must be fenced:
+    // https://github.com/cloudflare/agents/commit/5071d3cda939972fb532c93e9b46942b36d8f5d7
+    assert.equal(held.oldCalls, 1, "A cancelled Lifecycle dispatch must not retry");
     assert.equal(held.exists, true, "Old outcome must not erase the distinct new row");
     assert.equal(held.fn, "new");
     assert.ok(held.queued <= 2, "Generation strategy must not accumulate queued rows");
