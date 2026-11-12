@@ -36,17 +36,17 @@
     "containers-policy": {
       "catalogSha256": "5efd8e57a15eefe48dc59f02503378485bd81a151367e1aadb31aa0b324a2979",
       "snapshot": {
-        "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
+        "commit": "ecde2c87beaaa8d26e4925d959d7192d07fe1218",
         "version": null,
         "paths": {
-          "src/content/docs/containers/platform": "b4a6b47d56b17b53a9d5482759e90852d52de7c671acb410a0d0ce73b95bc5b4",
+          "src/content/docs/containers/platform": "6dd9b0e2e407766395a4f0101d1a5dc0f73e2213f13a667095fc85a1b764bb7d",
           "src/content/partials/containers/instance-types.mdx": "7e09d9fe486ca468c253bcf5ec953f9cc820bd1b2e88613d1100847076600974"
         },
-        "sha256": "ecf37695106b48775d6cac2b1a86d3ef41a81c5e33ecce04d181384aa4b8488e"
+        "sha256": "e4ed0ec0415bf28995e98388ce5de6fab2619f322abf9c8dfb525ac6240dcf54"
       },
       "pins": {},
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed platform limits/pricing and shared instance types. Containers require paid capability and bill provisioned memory/disk, active CPU and outbound transfer. Retain paid gate and conservative limits; no paid/FUSE deployment proof."
+      "reviewedAt": "2026-11-12T12:24:11.387Z",
+      "reviewNote": "Reviewed primary cd05cefb...ecde2c87 diff: only default account concurrent memory/vCPU/disk rise 6->60TiB,1500->15000,30->300TB; instance sizes, image storage, paid-only availability and billing unchanged. Retain FortiPi conservative Free bounds, explicit paid gates and zero capability/cap increases. Account defaults are not available headroom or deployment proof. Evidence: phase3/thread-8/release-compatibility-review.md."
     },
     "dynamic-workers-policy": {
       "catalogSha256": "8ea79c98cb02f0ca69e9b025f886f3b99c5d5da2bbb95fb07b31d37f9da980cc",
@@ -151,20 +151,20 @@
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "cc238b23844081895df4145172512bb34e9be87a",
+        "commit": "575d1366aa4c3a83cca69253bc5247e7fa1ab002",
         "version": "4.160.1",
         "paths": {
-          "packages/wrangler": "56b93255366f8210019006e8fe6fdce0a45d13f370c31ff32e93ecd73cf616fb",
-          "packages/wrangler/package.json": "a5d571f425f799f30a91dd2bcbc7fbf564740b56f82cd6ef22ad5111aaaa88b4"
+          "packages/wrangler": "34f440a2c35b2cef12a0add5265423c4b8f7c61d44bc591e47e63c510f858bad",
+          "packages/wrangler/package.json": "c4215ec7ed42619941fc4ecad6ddf3c5c08210348bcd8dad951d346ca92403f2"
         },
-        "sha256": "1d72db083efd712f5af7949f8a7d763f2e4489a870cd8ac05417aa1908e1c056"
+        "sha256": "fb1259d1c7f747a97a0654b18d3a8f166e4d667da61091f3aaefbcd8441c3fa9"
       },
       "pins": {
         "apps/worker/package.json#devDependencies/wrangler": "4.160.1",
         "packages/fortipi-cli/package.json#dependencies/wrangler": "4.160.1"
       },
-      "reviewedAt": "2026-11-12T09:25:50.977Z",
-      "reviewNote": "Reviewed exact official 4.160.1 release/source cc238b2 and Miniflare 5.20261110.1-beta patch (877b249,69e650c): experimental streaming-tail/workflow config changes; FortiPi uses wrangler.jsonc compatibility path, no affected API use. Exact archives/graph/licenses and genuine schema/dry-build/installed CLI qualification recorded in phase3/thread-1/wrangler-patch.md. Baseline anchored to this release commit; later upstream main changes remain unacknowledged. No other watch entry accepted."
+      "reviewedAt": "2026-11-12T12:24:11.388Z",
+      "reviewNote": "Reviewed primary cc238b23...575d1366 source diff against exact published4.160.1 archive55ac7568...f3fd90d (SRI/manifest verified). Main retains version but changes Netlify build-info, remote-binding auth/profile APIs and E2E helpers; these changes are unpublished and not adopted. FortiPi uses readConfig, ordinary CLI login/secret/deploy and local-only dev; no remote-session API or CLOUDFLARE_CF_AUTH. Retain pinned published graph/credential separation; no installed/deployed compatibility claim. Evidence: phase3/thread-8/release-compatibility-review.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
