@@ -373,3 +373,59 @@ test("actual retained attachment enforces ticket scope, replay floor and expirin
     await h.close();
   }
 });
+
+test("expiry during a captured replay cannot publish its receipt or stored events", {
+  timeout: 20000,
+}, async () => {
+  const h = await harness({ main, traffic: "free" });
+  let socket: WebSocket | undefined;
+  let probe: Probe | undefined;
+  try {
+    const { agent, conversation } = await setup(h);
+    const cid = conversation.conversationId;
+    probe = h.env.AGENT_SESSIONS.getByName(agent.agentId) as Probe;
+    await probe.appendStreamEvents(cid, 1);
+    const expiresAt = Date.now() + 5000;
+    const resources = scope(agent.agentId, [cid]);
+    const minted = await h.api<D.CredentialReceipt>("/v1/admin/credentials", {
+      requestId: crypto.randomUUID(),
+      role: "client",
+      expiresAt: Date.now() + 60000,
+      grants: [
+        {
+          grantId: "replay-expiry",
+          version: 1,
+          expiresAt,
+          resources: { ...resources, actions: ["events.read", "tickets.mint"] },
+        },
+      ],
+    });
+    assert.equal(minted.status, 201);
+    if (minted.body.state !== "issued") assert.fail("Scoped synthetic credential required");
+    const client = await connect(h, resources, minted.body.token);
+    socket = client.socket;
+    await probe.holdReplay(cid);
+    const pending = client.response(subscribe(cid, 0));
+    await eventually(() => probe!.replayHeld(), Boolean);
+    await pause(Math.max(0, expiresAt - Date.now() + 25));
+    await probe.releaseReplay();
+    const result = await pending;
+    assert.equal(
+      result.type,
+      "error",
+      "Authority expiring during replay must be checked before publication",
+    );
+    assert.ok(
+      ["unauthorized", "unauthenticated"].includes((result.error as { code: string }).code),
+    );
+    assert.ok(
+      !client.frames.some((frame) => frame.receipt || frame.eventSeq !== undefined),
+      "No captured private replay data may follow expiry",
+    );
+    assert.equal((await client.closed())?.code, 1008);
+  } finally {
+    await probe?.releaseReplay();
+    socket?.close();
+    await h.close();
+  }
+});

@@ -920,17 +920,16 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
           : command.input;
       const resource = await this.#resource(input);
       const route = routeCatalog.find((r) => r.operationId === input.operationId)!;
-      const auth = await this.#socketContext(
-        connection,
-        scope({
-          agentIds: [this.agentId],
-          conversationIds: resource.conversationId ? [resource.conversationId] : [],
-          actions: [route.action],
-        }),
-      );
+      const resources = scope({
+        agentIds: [this.agentId],
+        conversationIds: resource.conversationId ? [resource.conversationId] : [],
+        actions: [route.action],
+      });
+      const auth = await this.#socketContext(connection, resources);
       if (command.type === "conversation.subscribe") {
         await this.#socketLanes.run(command.input.path.id, async () => {
           const page = await this.store.replay(command.input.path.id, command.input.query);
+          await this.authority.current(auth, resources);
           const state = connection.state;
           check(state, "unauthenticated", "Missing attachment");
           check(
@@ -961,6 +960,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
         return;
       }
       const response = unwrap(await this.handleApi(auth, input));
+      await this.authority.current(auth, resources);
       this.#send(connection, {
         type: "ack",
         requestId,
@@ -985,11 +985,14 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
     const state = connection.state;
     const after = state?.subscriptions[cid];
     if (after === undefined) return;
-    await this.#socketContext(
-      connection,
-      scope({ agentIds: [this.agentId], conversationIds: [cid], actions: ["events.read"] }),
-    );
+    const resources = scope({
+      agentIds: [this.agentId],
+      conversationIds: [cid],
+      actions: ["events.read"],
+    });
+    const auth = await this.#socketContext(connection, resources);
     const page = await this.store.replay(cid, { after, limit: 100 });
+    await this.authority.current(auth, resources);
     for (const event of page.events) this.#send(connection, event);
     if (page.hasMore) {
       this.#send(connection, {

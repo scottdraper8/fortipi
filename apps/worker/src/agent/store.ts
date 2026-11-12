@@ -1,9 +1,41 @@
 import type { SqliteExecutor } from "@earendil-works/chord/sqlite";
 import { DurableObjectSqliteDatabase } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
+import { wireLimits } from "fortipi-contract";
 import { check, id, pressure, same } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 
 export type Sql = Pick<SqliteExecutor, "get" | "all" | "run" | "runCounted">;
+const encodedBytes = (value: unknown): number =>
+  new TextEncoder().encode(JSON.stringify(value)).length;
+// Existing Id and sequence maxima, with complete HTTP DTOs also fitting their
+// existing WebSocket acknowledgement wrapper and one terminal resync frame.
+const requestId = "x".repeat(128);
+const maximumSequence = Number.MAX_SAFE_INTEGER;
+const resyncBytes = encodedBytes({
+  type: "resync_required",
+  requestId,
+  reason: "cursor.expired",
+  retainedFloor: maximumSequence,
+});
+const ackBytes = (operationId: string) =>
+  encodedBytes({ type: "ack", requestId, operationId, receipt: null }) - 4;
+const replayPayloadBytes =
+  Math.min(wireLimits.jsonBytes, wireLimits.socketBytes) -
+  resyncBytes -
+  encodedBytes({
+    type: "ack",
+    requestId,
+    operationId: "replayEvents",
+    receipt: {
+      events: [],
+      after: maximumSequence,
+      through: maximumSequence,
+      lastEventSeq: maximumSequence,
+      nextAfter: maximumSequence,
+      hasMore: false,
+      retainedFloor: maximumSequence,
+    },
+  });
 export interface ConversationRow {
   conversation: D.Conversation;
   deploymentId: string;
@@ -226,6 +258,11 @@ export class Store {
     } satisfies D.KnownDurableEvent;
     const data = JSON.stringify(event);
     const bytes = new TextEncoder().encode(data).byteLength;
+    check(
+      bytes <= replayPayloadBytes,
+      "payload_too_large",
+      "Durable event exceeds the JSON envelope bound",
+    );
     await tx.run(
       "INSERT INTO fp_events_v1 VALUES(?,?,?,?,?)",
       cid,
@@ -264,17 +301,44 @@ export class Store {
     return this.transaction(async (tx) => {
       const row = await this.get<ConversationRow>("conversation", cid, tx);
       check(row?.published, "not_found", "Conversation unavailable");
-      const messages = await tx.all<{ data: string }>(
-        "SELECT data FROM (SELECT position,data FROM fp_messages_v1 WHERE conversation=? ORDER BY position DESC LIMIT 100) ORDER BY position",
+      const metadata = await tx.all<{ position: number; bytes: number }>(
+        "SELECT position,length(CAST(data AS BLOB)) bytes FROM fp_messages_v1 WHERE conversation=? ORDER BY position DESC LIMIT 100",
         cid,
       );
-      return {
+      const snapshot: D.ConversationProjection = {
         conversation: row.conversation,
-        messages: messages.map((m) => JSON.parse(m.data) as D.Message),
+        messages: [],
         projectionRevision: row.conversation.revision,
         lastEventSeq: row.last,
         retainedFloor: row.floor,
       };
+      const available =
+        Math.min(wireLimits.jsonBytes, wireLimits.socketBytes) -
+        resyncBytes -
+        ackBytes("getConversation") -
+        encodedBytes(snapshot);
+      let bytes = 0,
+        count = 0,
+        oldest: number | undefined;
+      for (const item of metadata) {
+        const next = bytes + item.bytes + (count ? 1 : 0);
+        if (next > available) {
+          check(count > 0, "payload_too_large", "Latest message exceeds the JSON projection bound");
+          break;
+        }
+        bytes = next;
+        count++;
+        oldest = item.position;
+      }
+      if (oldest !== undefined) {
+        const messages = await tx.all<{ data: string }>(
+          "SELECT data FROM fp_messages_v1 WHERE conversation=? AND position>=? ORDER BY position LIMIT 100",
+          cid,
+          oldest,
+        );
+        snapshot.messages = messages.map((item) => JSON.parse(item.data) as D.Message);
+      }
+      return snapshot;
     });
   }
   async replay(cid: string, query: D.ReplayQuery): Promise<D.ReplayPage> {
@@ -288,12 +352,31 @@ export class Store {
         "Cursor is ahead of committed history",
       );
       check(query.after >= row.floor, "cursor.expired", "Replay window expired; load a snapshot");
-      const rows = await tx.all<{ data: string }>(
-        "SELECT data FROM fp_events_v1 WHERE conversation=? AND seq>? AND seq<=? ORDER BY seq LIMIT ?",
+      const metadata = await tx.all<{ seq: number; bytes: number }>(
+        "SELECT seq,bytes FROM fp_events_v1 WHERE conversation=? AND seq>? AND seq<=? ORDER BY seq LIMIT ?",
         cid,
         query.after,
         through,
         Math.min(100, query.limit ?? 100),
+      );
+      let bytes = 0,
+        count = 0,
+        last = query.after;
+      for (const item of metadata) {
+        const next = bytes + item.bytes + (count ? 1 : 0);
+        if (next > replayPayloadBytes) {
+          check(count > 0, "payload_too_large", "Durable event exceeds the JSON replay bound");
+          break;
+        }
+        bytes = next;
+        count++;
+        last = item.seq;
+      }
+      const rows = await tx.all<{ data: string }>(
+        "SELECT data FROM fp_events_v1 WHERE conversation=? AND seq>? AND seq<=? ORDER BY seq LIMIT 100",
+        cid,
+        query.after,
+        last,
       );
       const events = rows.map((r) => JSON.parse(r.data) as D.KnownDurableEvent);
       const nextAfter = events.at(-1)?.eventSeq ?? query.after;

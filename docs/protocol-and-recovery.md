@@ -46,6 +46,8 @@ The wrapper remains `replay: unsafe` in the current source. Disposable candidate
 
 Resource calls require a current registered authority, exact scope and local revocation floors. Owner checks repeat after external awaits. A stream ticket is atomically consumed and registered by ControlPlane; the Agent receives canonical `X-Fortipi-Context` and `X-Fortipi-Socket` headers on a query-free internal request. Each command intersects the ticket scope with current grants. Hibernating attachments contain bounded IDs, generations and cursors; full nonsecret registered authority remains in application storage. Original authentication time and credential expiry are preserved.
 
+Snapshots include the most recent complete messages that fit the JSON response bound, up to100 messages. Canonical message content remains retained. Replay pages also stop at the encoded byte bound and preserve a contiguous event prefix, so clients can continue from `nextAfter` without truncating individual records. Socket authority is checked again after loading a replay page and before publishing it.
+
 The Agent reads its full persisted model selection after readiness through the private ControlPlane fetch. It validates the existing ModelConfig schema and configures the actual Pi session. Startup reads only local persisted selection and installs supported provider factories. The ControlPlane remains the OAuth refresh and credential persistence authority. Provider credentials are excluded from application events and exports.
 
 ## Infrastructure pressure and qualification

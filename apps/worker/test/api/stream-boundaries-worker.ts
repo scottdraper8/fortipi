@@ -1,3 +1,4 @@
+import { validate } from "../../src/api/validation.js";
 import type * as D from "../../src/boundary/dto.js";
 import { TestAgentSession as RuntimeAgent } from "../agent/runtime-worker.js";
 
@@ -60,6 +61,43 @@ export class TestAgentSession extends RuntimeAgent {
     // A single supported bounded retention pass suffices for the small fixture.
     await this.store.retain(cid);
     return this.store.snapshot(cid);
+  }
+  async appendStreamMessages(cid: string, count: number, bytes: number) {
+    if (
+      !Number.isInteger(count) ||
+      count < 1 ||
+      count > 20 ||
+      !Number.isInteger(bytes) ||
+      bytes < 1 ||
+      bytes > 65536
+    )
+      throw new Error("Bounded valid message producer");
+    const first = await this.store.exactEvent(cid, 1);
+    if (first?.type !== "conversation.created") throw new Error("Creation required");
+    const acks: D.FactAck[] = [];
+    for (let index = 0; index < count; index++) {
+      const payload: D.Message = {
+        messageId: crypto.randomUUID(),
+        role: "assistant",
+        content: "x".repeat(bytes),
+        timestamp: Date.now(),
+      };
+      validate<D.Message>("Message", payload);
+      acks.push(
+        await this.store.transaction((tx) =>
+          this.store.append(tx, crypto.randomUUID(), {
+            protocolVersion: "1.0",
+            schemaVersion: "1.0.0",
+            deploymentId: first.deploymentId,
+            conversationId: cid,
+            durability: "durable",
+            type: "message.completed",
+            payload,
+          }),
+        ),
+      );
+    }
+    return acks;
   }
   async streamSnapshot(cid: string): Promise<D.ConversationProjection> {
     return this.store.snapshot(cid);
