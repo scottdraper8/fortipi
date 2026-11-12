@@ -4,7 +4,9 @@ packages:
 saveExact: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
-minimumReleaseAgeExclude: []
+minimumReleaseAgeExclude:
+  - wrangler@4.160.1
+  - miniflare@5.20261110.1-beta
 trustPolicy: no-downgrade
 trustLockfile: false
 verifyDepsBeforeRun: error

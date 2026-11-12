@@ -6343,15 +6343,15 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
-    "miniflare@5.20261110.0-beta": {
+    "miniflare@5.20261110.1-beta": {
       "name": "miniflare",
-      "version": "5.20261110.0-beta",
-      "integrity": "sha512-UiJRL6D4pNkHxgZ3QXDCaz/N27FFuuHRRgOmD/SucEZIwDOfWwX7s/n8ZrFemFlURRfnQpBfAdWy8ixsW0yJWA==",
-      "published": "2026-11-10T10:58:00.738Z",
-      "reviewedAt": "2026-11-11T00:18:25.003Z",
+      "version": "5.20261110.1-beta",
+      "integrity": "sha512-CO8T1DO3/JFxEWvJ7yaHiPx5Ph/5FhRzYKve6cM8O2frHmY7yWudV5p8FU11bfGRAerChGpuK+l0HoxOCw2nFw==",
+      "published": "2026-11-11T14:37:43.184Z",
+      "reviewedAt": "2026-11-12T09:22:30.201Z",
       "license": "MIT",
-      "archiveSha256": "5471b28120d1dad3168d850d7f4a3380e5b0eacffb5fb2ed9eb5637b028bb513",
-      "manifestSha256": "7e9ccbd31863ab92149e91aabee9e8bb80a9f0a69f304e237ac26ab4fec303dd",
+      "archiveSha256": "4b9c60deebe05a096054e0ebe0e31b8516274e168afe243564eb05ecca807301",
+      "manifestSha256": "47c970f0a9110cfdffbae91eef79deda486958a647014a8bd853d49eb74942cb",
       "engines": {
         "node": ">=22.12.0"
       },
@@ -6362,7 +6362,7 @@
       "scriptFiles": {},
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261110.0-beta; Sigstore transparency verification required at release"
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261110.1-beta; Sigstore transparency verification required at release"
     },
     "minimist@1.2.8": {
       "name": "minimist",
@@ -7593,15 +7593,15 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/workerd@1.20261110.1; Sigstore transparency verification required at release"
     },
-    "wrangler@4.160.0": {
+    "wrangler@4.160.1": {
       "name": "wrangler",
-      "version": "4.160.0",
-      "integrity": "sha512-nwzmpu7Hd5Csax02twpCNRAloC+kduXKw9rjfq+oEuo8RnjWRaahSV+qk+p0w88EgafMcDE0XnZRSfOM3lKEKg==",
-      "published": "2026-11-10T11:03:23.517Z",
-      "reviewedAt": "2026-11-11T00:18:29.840Z",
+      "version": "4.160.1",
+      "integrity": "sha512-gM8daj5geYTEw+038dV5OQAmrSIo/9e97FoJuNf+r9PllWR0ZnqMI2LXZZDSHpGsMez3mKKFYH5o/hBsf1ZTHg==",
+      "published": "2026-11-11T14:45:38.079Z",
+      "reviewedAt": "2026-11-12T09:22:12.409Z",
       "license": "MIT OR Apache-2.0",
-      "archiveSha256": "380377ff348ae45b1ee13b26db6a79c3f91a667ac38b10820ffc54a1fd996554",
-      "manifestSha256": "bdb9204c2477ef9005ea62e5c75cec71b4886d28781c89bbd50ab291bda2edf2",
+      "archiveSha256": "55ac7568281e4c7f54250dfdf9cd9de431856b713071a021240e7df32f3fd90d",
+      "manifestSha256": "16f13ef7e432e6fcdc5410349a33d5516b8218a3e5ea377540d7b96923ba900d",
       "engines": {
         "node": ">=22.12.0"
       },
@@ -7612,7 +7612,7 @@
       "scriptFiles": {},
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.160.0; Sigstore transparency verification required at release"
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.160.1; Sigstore transparency verification required at release"
     },
     "ws@8.21.0": {
       "name": "ws",
@@ -7762,9 +7762,20 @@
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/zod@4.6.7; Sigstore transparency verification required at release"
     }
   },
-  "exemptions": {},
+  "exemptions": {
+    "wrangler@4.160.1": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-12T14:45:38.079Z",
+      "integrity": "sha512-gM8daj5geYTEw+038dV5OQAmrSIo/9e97FoJuNf+r9PllWR0ZnqMI2LXZZDSHpGsMez3mKKFYH5o/hBsf1ZTHg=="
+    },
+    "miniflare@5.20261110.1-beta": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-12T14:37:43.184Z",
+      "integrity": "sha512-CO8T1DO3/JFxEWvJ7yaHiPx5Ph/5FhRzYKve6cM8O2frHmY7yWudV5p8FU11bfGRAerChGpuK+l0HoxOCw2nFw=="
+    }
+  },
   "advisory": {
-    "checkedAt": "2026-11-11T01:19:13.255Z",
+    "checkedAt": "2026-11-12T09:23:38.967Z",
     "identities": 381,
     "findings": []
   }

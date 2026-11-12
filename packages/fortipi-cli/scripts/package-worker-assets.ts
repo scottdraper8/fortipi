@@ -186,7 +186,7 @@ export async function packageWorkerAssets(options: {
   );
   assert.equal(options.version, manifest.version);
   assert.equal(options.version, cli.version);
-  assert.equal(wranglerPackage.version, "4.160.0");
+  assert.equal(wranglerPackage.version, "4.160.1");
   assert.equal(compilerVersion, manifest.devDependencies.typescript);
   const { verifyPnpmExecutable, pnpmExecutable } = await import(
     "../../../scripts/pnpm-executable.ts"

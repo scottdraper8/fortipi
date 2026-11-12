@@ -151,20 +151,20 @@
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "d434f33d2f7d85c07ac6381822461267891a8ef8",
-        "version": "4.160.0",
+        "commit": "cc238b23844081895df4145172512bb34e9be87a",
+        "version": "4.160.1",
         "paths": {
-          "packages/wrangler": "d0e5559b0c7b11c02a2400d8ce62e3006d9cc99c138b3c41a0f1d66e84b36303",
-          "packages/wrangler/package.json": "6072fef5cb634caf9daee4d5a6bcefd70f18ba0d14c7a911668274c3ce399dd1"
+          "packages/wrangler": "56b93255366f8210019006e8fe6fdce0a45d13f370c31ff32e93ecd73cf616fb",
+          "packages/wrangler/package.json": "a5d571f425f799f30a91dd2bcbc7fbf564740b56f82cd6ef22ad5111aaaa88b4"
         },
-        "sha256": "5ff8cf4d2d21429d0bed6251f8af34e17def356a41c9f9ab1b44144623570bb8"
+        "sha256": "1d72db083efd712f5af7949f8a7d763f2e4489a870cd8ac05417aa1908e1c056"
       },
       "pins": {
-        "apps/worker/package.json#devDependencies/wrangler": "4.160.0",
-        "packages/fortipi-cli/package.json#dependencies/wrangler": "4.160.0"
+        "apps/worker/package.json#devDependencies/wrangler": "4.160.1",
+        "packages/fortipi-cli/package.json#dependencies/wrangler": "4.160.1"
       },
-      "reviewedAt": "2026-11-11T12:05:00.000Z",
-      "reviewNote": "Reviewed exact upstream test-concurrency-only change877b249→d434f33: packages/wrangler/e2e/unenv-preset/preset.test.ts changes describe.each to concurrent; no production/config/deploy/image/auth API or manifest change. Retain locked4.160.0; no CLI7 contract change or main-source adoption. Independent scope/source review phase3/compatibility-watch.md."
+      "reviewedAt": "2026-11-12T09:25:50.977Z",
+      "reviewNote": "Reviewed exact official 4.160.1 release/source cc238b2 and Miniflare 5.20261110.1-beta patch (877b249,69e650c): experimental streaming-tail/workflow config changes; FortiPi uses wrangler.jsonc compatibility path, no affected API use. Exact archives/graph/licenses and genuine schema/dry-build/installed CLI qualification recorded in phase3/thread-1/wrangler-patch.md. Baseline anchored to this release commit; later upstream main changes remain unacknowledged. No other watch entry accepted."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
