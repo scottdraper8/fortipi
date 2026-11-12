@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
 import { constants } from "node:fs";
-import { copyFile, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
+import { Header } from "tar";
 import { run, sha256 } from "../apps/worker/container/fuse-security.ts";
 import { imageInputs } from "../apps/worker/container/inputs.ts";
 import {
@@ -17,6 +27,8 @@ import type { FsEntry } from "../apps/worker/container/rootfs.ts";
 import {
   commandOptions,
   hashFile,
+  materializeSourceKitInventory,
+  readSourceKitInventory,
   verifyDaemonInputs,
   verifyKitInventory,
   verifyKitSignatures,
@@ -42,6 +54,111 @@ function entry(bytes: string | Uint8Array): FsEntry {
     minor: 0,
   };
 }
+test("actual authenticated kit materializes exact raw inventory bytes without a loose producer file or overwrite", async () => {
+  const repository = resolve(import.meta.dirname, "..");
+  const kit =
+    process.env.FORTIPI_SOURCE_KIT ??
+    resolve(repository, "apps/worker/dist/container/sources-and-notices.tar");
+  const kitSha256 =
+    process.env.FORTIPI_SOURCE_KIT_SHA256 ??
+    JSON.parse(
+      await readFile(resolve(repository, "apps/worker/dist/container/image-metadata.json"), "utf8"),
+    ).sourceKitSha256;
+  const options = { kit, kitSha256 };
+  const directory = await mkdtemp(resolve(await realpath(tmpdir()), "fortipi-inventory-handoff-"));
+  try {
+    const expected = await run("tar", ["-xOf", kit, "source-kit-inventory.json"]);
+    const { inventoryBytes } = await readSourceKitInventory(options);
+    assert.deepEqual(inventoryBytes, expected, "Raw producer inventory must not be reserialized");
+    const output = resolve(directory, "image/source-kit-inventory.json");
+    await mkdir(dirname(output));
+    await materializeSourceKitInventory(options, output);
+    assert.deepEqual(await readFile(output), expected);
+    await writeFile(output, "existing output must survive");
+    await assert.rejects(materializeSourceKitInventory(options, output), { code: "EEXIST" });
+    assert.equal(await readFile(output, "utf8"), "existing output must survive");
+    const untrusted = resolve(directory, "untrusted.json");
+    await assert.rejects(
+      materializeSourceKitInventory({ kit, kitSha256: "0".repeat(64) }, untrusted),
+      /Source-kit transport digest differs/,
+    );
+    await assert.rejects(readFile(untrusted), { code: "ENOENT" });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("inventory handoff rejects altered, missing, linked and duplicate members before creating output", async () => {
+  // Synthetic parser faults only; positive/legal acceptance uses the actual authenticated kit above.
+  const directory = await mkdtemp(resolve(await realpath(tmpdir()), "fortipi-inventory-fault-"));
+  function member(path: string, bytes: Buffer, type: "File" | "SymbolicLink" = "File") {
+    const header = new Header({
+      path,
+      type,
+      mode: 0o644,
+      size: bytes.length,
+      uid: 0,
+      gid: 0,
+      ...(type === "SymbolicLink" ? { linkpath: "payload" } : {}),
+    });
+    header.encode();
+    assert.ok(header.block);
+    return Buffer.concat([header.block, bytes, Buffer.alloc((512 - (bytes.length % 512)) % 512)]);
+  }
+  const payload = Buffer.from("parser source fixture"),
+    notice = Buffer.from("parser notice fixture");
+  const inventory = Buffer.from(
+    JSON.stringify({
+      payload: sha256(payload),
+      "context/notices": sha256(JSON.stringify({ NOTICE: sha256(notice) })),
+    }),
+  );
+  const content = [member("payload", payload), member("context/notices/NOTICE", notice)];
+  const inventoryMember = member("source-kit-inventory.json", inventory);
+  const faults = [
+    { name: "missing", members: content, error: /Missing regular file/ },
+    {
+      name: "altered",
+      members: [
+        ...content,
+        member(
+          "source-kit-inventory.json",
+          Buffer.from(
+            JSON.stringify({
+              payload: "0".repeat(64),
+              "context/notices": sha256(JSON.stringify({ NOTICE: sha256(notice) })),
+            }),
+          ),
+        ),
+      ],
+      error: /Kit payload changed/,
+    },
+    {
+      name: "linked",
+      members: [...content, member("source-kit-inventory.json", Buffer.alloc(0), "SymbolicLink")],
+      error: /Missing regular file/,
+    },
+    {
+      name: "duplicate",
+      members: [...content, inventoryMember, inventoryMember],
+      error: /Duplicate/,
+    },
+  ];
+  try {
+    for (const fault of faults) {
+      const kit = resolve(directory, `${fault.name}.tar`),
+        output = resolve(directory, `${fault.name}.json`);
+      await writeFile(kit, Buffer.concat([...fault.members, Buffer.alloc(1024)]));
+      await assert.rejects(
+        materializeSourceKitInventory({ kit, kitSha256: await hashFile(kit) }, output),
+        fault.error,
+      );
+      await assert.rejects(readFile(output), { code: "ENOENT" });
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 test("kit membership, payload and notices are independently bound, including negative controls", () => {
   const payload = entry("source bytes");
   const notice = entry("copyright and LGPL text");

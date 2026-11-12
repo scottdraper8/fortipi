@@ -22,6 +22,7 @@ import { t as listTar } from "tar";
 import { parse as parseYaml } from "yaml";
 import { packagePaths, repository } from "./build-workspaces.ts";
 import { generateNotices, type NoticeReceipt } from "./generate-notices.ts";
+import { materializeSourceKitInventory } from "./image-source-distribution.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
 import { rewritePublishNames } from "./rewrite-publish-names.ts";
 import {
@@ -820,16 +821,18 @@ export async function prepareCandidate(
           `${notice.directory}/${file}`,
           resolve(destination, "legal", notice.package, file),
         );
-    for (const file of [
-      "image-metadata.json",
-      "source-kit-inventory.json",
-      "source-revision.json",
-      "sources-and-notices.tar",
-    ])
+    for (const file of ["image-metadata.json", "source-revision.json", "sources-and-notices.tar"])
       await copy(root, `apps/worker/dist/container/${file}`, resolve(destination, "image", file));
     for (const file of ["inventory.json", "advisory-review.json"])
       await copy(root, `dist/supply-chain/${file}`, resolve(destination, "supply-chain", file));
     const image = object(await readJson(resolve(destination, "image/image-metadata.json")));
+    await materializeSourceKitInventory(
+      {
+        kit: resolve(destination, "image/sources-and-notices.tar"),
+        kitSha256: string(image.sourceKitSha256),
+      },
+      resolve(destination, "image/source-kit-inventory.json"),
+    );
     const candidate: CandidateManifest = {
       schemaVersion: 1,
       repository: REPOSITORY,
@@ -2076,17 +2079,16 @@ export async function prepareImage(descriptorPath: string, downloaded: string): 
     const output = resolve(repository, "apps/worker/dist/container");
     await mkdir(output, { recursive: true });
     await writeFile(resolve(output, "image-metadata.json"), metadata, { flag: "wx" });
-    for (const file of [
-      "context",
-      "source-kit-inventory.json",
-      "source-revision.json",
-      "sources-and-notices.tar",
-    ])
+    for (const file of ["context", "source-revision.json", "sources-and-notices.tar"])
       await cp(resolve(generated, file), resolve(output, file), {
         recursive: true,
         errorOnExist: true,
         force: false,
       });
+    await materializeSourceKitInventory(
+      { kit: resolve(output, "sources-and-notices.tar"), kitSha256: string(image.sourceKitSha256) },
+      resolve(output, "source-kit-inventory.json"),
+    );
   } finally {
     await git("worktree", "remove", "--force", checkout);
     await rm(temporary, { recursive: true, force: true });
