@@ -3,7 +3,7 @@ import test from "node:test";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { schemaRefs, schemaRegistry, wireLimits } from "fortipi-contract";
 import type * as D from "../../src/boundary/dto.js";
-import { harness, setup } from "./harness.ts";
+import { eventually, harness, setup } from "./harness.ts";
 
 // Oracle: the published schema and negotiated JSON byte limit determine valid
 // input. A lower private forwarding limit must not reject an allowed message.
@@ -49,6 +49,18 @@ test("schema-valid maximum escaped input fits the advertised HTTP envelope", asy
       first.status,
       202,
       "Schema-valid MessageSubmit below the advertised JSON limit hits an unadvertised lower Agent forwarding limit",
+    );
+    assert.deepEqual(repeated.body, first.body, "Accepted retries preserve the original receipt");
+    const accepted = await eventually(
+      async () =>
+        JSON.parse(await stub.inspectionJson(conversation.conversationId)) as typeof inspect,
+      (value) => value.entries.some((entry) => entry.kind === "pi.user"),
+    );
+    assert.equal(accepted.inputSubmissions, 1, "Accepted retries cannot duplicate Pi input");
+    assert.deepEqual(
+      accepted.entries.filter((entry) => entry.kind === "pi.user").map((entry) => entry.text),
+      [body.content],
+      "The sole canonical Pi input must preserve all 65536 NUL codepoints exactly",
     );
   } finally {
     await h.close();
