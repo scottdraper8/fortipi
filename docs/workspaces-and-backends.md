@@ -255,6 +255,10 @@ With the reviewed Node/pnpm toolchain first on `PATH`:
 ```sh
 node packages/fortipi-contract/scripts/generate.ts --check
 pnpm exec tsc -p packages/fortipi-contract/tsconfig.json
+node apps/worker/container/build.ts --prepare-inputs
+# On trusted Linux x64, for a new reviewed source/runtime identity:
+node apps/worker/container/build.ts --freeze-embedded
+# Review and commit the actual generated freeze before the final build.
 node apps/worker/container/build.ts --prepare
 node apps/worker/container/build.ts --verify
 node apps/worker/test/backends/linux-image.ts --require-fuse
@@ -264,10 +268,17 @@ The build requires reviewed Docker 29.9.3, Buildx 0.38.2 and embedded BuildKit
 0.34.2 using the default driver. The parent owns their installation and isolated
 Docker configuration. No local VM is installed by this tranche.
 
-The exact computerd 0.10.0 and Debian image manifests/configs/layers are verified
-against foundation metadata. Debian packages use the dated
+Computer **0.11.1** is paired with its exact source. Its daemon bundle is compiled
+from that source using the upstream esbuild/SEA bootstrap and addon shim. The
+actual SEA blob is generated and injected with signed official **Node22.23.5** on
+Linux x64; build-only postject1.0.0-alpha.6 and commander9.5.0 remain isolated.
+The historical computerd image supplies only the unchanged, source-checked FUSE
+addon, never its old SEA. Missing new output digests block complete preparation.
+Debian packages retain the dated
 `20261110T000000Z` snapshot, with exact base versions resolved through immutable
-snapshot content addresses where necessary. The freeze includes `Built-Using`
+snapshot content addresses where necessary, plus one authenticated trixie-security
+zlib1g/source overlay at `1:1.3.dfsg+really1.3.1-1+deb13u1`. All other installed
+versions and the 79-package boundary remain frozen. The freeze includes `Built-Using`
 and `Static-Built-Using` source identities, matching archives and source license
 hashes. Installation is offline. Raw content-addressed cache entries are rehashed
 before reuse; independent archive downloads have bounded concurrency.
@@ -276,7 +287,15 @@ before reuse; independent archive downloads have bounded concurrency.
 JavaScript assets, their exact source-lock dependencies, native header source and
 complete upstream license texts. The modified vendored addon has a separate
 source-file inventory. Computer's matching source archive and embedded Node
-22.23.4 license are pinned. These observations establish provenance inputs;
+22.23.5 aggregate license are pinned. The signed runtime/source archives, bounded
+build adapter, actual build receipt and effective zlib quilt patch inventory are
+included in the source kit. Historical AD image/runtime results apply only to AD.
+Computer's three new pending-sync tables are included in actual databaseSize
+observations; policy bounds are unchanged. Its replay fingerprint changes to2;
+FortiPi retains `onInterrupt:fail` and `modules:{}`, with no old-journal replay or
+new grant enabled. The real Loader close/reconnect and complete-sync tests cover
+the used lifecycle; native process-group cancellation requires the new Linux image.
+These observations establish provenance inputs;
 reproducible build/relink rights, vulnerability review and license compliance of
 the final distribution remain independent release gates.
 
@@ -303,8 +322,9 @@ access to that kit alongside the image. See
 
 Required public build egress: `ghcr.io`, its public layer CDN,
 `registry-1.docker.io`, `auth.docker.io`, Docker's public layer CDN,
-`snapshot.debian.org`, `codeload.github.com`, `raw.githubusercontent.com` and
-`registry.npmjs.org`. The Docker build itself has no network access.
+`snapshot.debian.org`, `security.debian.org`, `nodejs.org`, `codeload.github.com`,
+`raw.githubusercontent.com` and `registry.npmjs.org`. The Docker build itself has no
+network access.
 
 ## Evidence boundaries
 

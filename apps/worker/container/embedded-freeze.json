@@ -1,16 +1,7 @@
 {
-  "binarySha256": "7c4c7ef6c6b5bd6434c4cd706de522807e544a866d2f1488ce4226d3ca61e3d1",
+  "binarySha256": null,
   "bootstrapSha256": "8d30ca8e6d27bc8d959aa1f5fc3736fe73da526d731f10b080f3b71753a453e6",
-  "assets": {
-    "fuse.node": {
-      "size": 184136,
-      "sha256": "a5fd00b6405de13b6a9da07f390d507865ffe2c9dd4081e2c61024032437d9ef"
-    },
-    "bundle.mjs": {
-      "size": 764021,
-      "sha256": "dde78972b703f99b8376994ba8b41639975184099c903c6b9e5cd28a4727d575"
-    }
-  },
+  "assets": {},
   "components": [
     {
       "name": "fuse-napi",

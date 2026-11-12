@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { c as createTar, x as extractTar } from "tar";
 import { paragraphs, requiredPackages } from "./debian.ts";
 import { verifyNativeCompatibility } from "./elf-compatibility.ts";
-import { freezeEmbedded, prepareEmbedded } from "./embedded.ts";
+import { freezeEmbedded, prepareEmbedded, prepareEmbeddedInputs } from "./embedded.ts";
 import { authenticateIndexes } from "./fuse-security.ts";
 import {
   canonicalizeImageArchive,
@@ -29,6 +29,11 @@ import {
 import { filePolicy, type PrunePolicy, pruningPolicy } from "./image-prune.ts";
 import { imageInputs } from "./inputs.ts";
 import { compareRootfs, scanRootfs } from "./rootfs.ts";
+import {
+  authenticateSecurityUpdate,
+  reconstructZlibSource,
+  securityUpdate,
+} from "./security-update.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const output = resolve(root, "apps/worker/dist/container");
@@ -63,6 +68,9 @@ interface Freeze {
   fuseReleaseSha256: string;
   fusePackagesIndexSha256: string;
   fuseSourcesIndexSha256: string;
+  securityReleaseSha256: string;
+  securityPackagesIndexSha256: string;
+  securitySourcesIndexSha256: string;
   packages: PackagePin[];
   inputInstalled: PackagePin[];
   pruning: PrunePolicy;
@@ -228,6 +236,7 @@ async function freeze(): Promise<Freeze> {
   );
   const layers = await verifyOCI();
   const authenticated = await authenticateIndexes(download, output);
+  const security = await authenticateSecurityUpdate(download, output);
   check(
     authenticated.releaseSha256 === previous.releaseSha256 &&
       authenticated.packagesIndexSha256 === previous.packagesIndexSha256 &&
@@ -304,6 +313,7 @@ async function freeze(): Promise<Freeze> {
     check(pin, `Snapshot missing ${name}=${version}`);
     return pin;
   });
+  roots.push(security.binary);
   const additions = requiredPackages(baseFields, roots, packageFields).map(toPin);
   // The immutable-index closure is checked independently by the image's offline dpkg install.
   const all = [
@@ -316,7 +326,7 @@ async function freeze(): Promise<Freeze> {
     installed.length === 78 && all.length === 79,
     "Unexpected exact input/final package inventory",
   );
-  const sourceFields = [...authenticated.sources, authenticated.fuseSource];
+  const sourceFields = [...authenticated.sources, authenticated.fuseSource, security.source];
   const sourcePins: SourcePin[] = [];
   const identities = [
     ...new Map(
@@ -381,6 +391,9 @@ async function freeze(): Promise<Freeze> {
     fuseReleaseSha256: authenticated.fuseReleaseSha256,
     fusePackagesIndexSha256: authenticated.fusePackagesIndexSha256,
     fuseSourcesIndexSha256: authenticated.fuseSourcesIndexSha256,
+    securityReleaseSha256: securityUpdate.release,
+    securityPackagesIndexSha256: securityUpdate.packages,
+    securitySourcesIndexSha256: securityUpdate.sources,
     packages: additions,
     inputInstalled: installed.sort((a, b) => a.name.localeCompare(b.name)),
     pruning,
@@ -438,6 +451,7 @@ async function prepare(pin: Freeze): Promise<NamedSource[]> {
   );
   const names = await sourceNames(pin);
   await sourceNotices(pin);
+  await reconstructZlibSource(output);
   return names;
 }
 interface NamedSource {
@@ -835,6 +849,10 @@ async function main(): Promise<void> {
     "Signed image dependency/source closure drift",
   );
   const names = await prepare(pin);
+  if (process.argv.includes("--prepare-inputs")) {
+    await prepareEmbeddedInputs(download);
+    return;
+  }
   const embedded = await prepareEmbedded(download);
   // Compare actual .deb controls to authenticated records, then resolve actual addon symbols.
   const signedBinaries = paragraphs(
@@ -863,6 +881,9 @@ async function sourceKit(sources: NamedSource[], pruning: PrunePolicy): Promise<
     "fuse-security.ts",
     "elf-compatibility.ts",
     "embedded.ts",
+    "computerd-build.ts",
+    "security-update.ts",
+    "trixie-security.InRelease",
     "inputs.ts",
     "image-archive.ts",
     "image-prune.ts",
@@ -933,6 +954,18 @@ async function sourceKit(sources: NamedSource[], pruning: PrunePolicy): Promise<
     "fortipi-source.tar",
     "source-revision.json",
     "computer-source.tgz",
+    "node-runtime.tar.xz",
+    "node-source.tar.xz",
+    "computerd-build.json",
+    "daemon-build/build-inputs.json",
+    "daemon-build/node-authentication.json",
+    "daemon-build/metafile.json",
+    "daemon-build/SHASUMS256.txt",
+    "daemon-build/SHASUMS256.txt.sig",
+    "daemon-build/node-release-key.pgp",
+    "daemon-build/postject.tgz",
+    "daemon-build/commander.tgz",
+    "zlib-effective.json",
     "native-compatibility.json",
     ...(await readdir(resolve(output, "security"))).map((name) => `security/${name}`),
     ...embedded.components.map(
