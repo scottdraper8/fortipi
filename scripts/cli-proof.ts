@@ -15,7 +15,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -359,12 +359,22 @@ async function offline() {
     await sudo("/usr/bin/install", ["-m", "0444", receiptPath, join(bridge, "distribution.json")]);
     const pnpm = process.env.FORTIPI_CLI_PROOF_PNPM;
     assert.ok(pnpm && isAbsolute(pnpm) && !inside(root, pnpm));
+    const pnpmBin = process.env.FORTIPI_CLI_PROOF_PNPM_BIN;
+    assert.ok(pnpmBin && inside(pnpm, pnpmBin));
+    assert.equal(
+      (await run(join(pnpmBin, "pnpm"), ["--version"], tmpdir())).stdout.trim(),
+      "12.18.0",
+    );
     await sudo("/usr/bin/cp", [
       "-a",
       join(pnpm, "node_modules"),
       join(bridge, "pnpm/node_modules"),
     ]);
-    await sudo("/usr/bin/ln", ["-s", "../pnpm/node_modules/.bin/pnpm", join(bridge, "bin/pnpm")]);
+    await sudo("/usr/bin/ln", [
+      "-s",
+      `../pnpm/${relative(pnpm, join(pnpmBin, "pnpm"))}`,
+      join(bridge, "bin/pnpm"),
+    ]);
     await chmod(receipt.consumer, 0o555);
     const boundary: Boundary = {
       consumer: receipt.consumer,

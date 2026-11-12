@@ -68,6 +68,7 @@ jobs:
           check-latest: false
           package-manager-cache: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        id: pnpm
         with:
           version: "12.18.0"
           dest: ${{ env.FORTIPI_CLI_PROOF_PNPM }}
@@ -98,6 +99,8 @@ jobs:
       - name: Pack and install the real consumer through the reviewed registry
         run: node scripts/cli-proof.ts install
       - name: Run the installed CLI with an empty OS home and no external network
+        env:
+          FORTIPI_CLI_PROOF_PNPM_BIN: ${{ steps.pnpm.outputs.bin_dest }}
         run: node scripts/cli-proof.ts offline
       - name: Require hardener still active
         if: always()
