@@ -1,21 +1,36 @@
 # Operator guide
 
-The CLI is under construction against the merged public contract. Contract validation, protected local storage and administration are implemented. Genuine Worker packaging, complete guided setup, migration-history qualification, Linux image preparation, installed dry-build and deployed verification await service integration. These remain acceptance requirements.
+The CLI validates the public contract, protects local application identities and
+packages genuine Worker assets with their contracts, templates and original
+notices. Complete guided setup, actual installed offline dry-build, native Windows
+protection and deployed verification remain acceptance gates; local artifact checks
+do not establish those outcomes.
 
 The operator file is exactly `{schemaVersion:1,deployment:{name,origin,accountId?},runtime:<Configuration>}`. Origin is a canonical HTTPS origin; account ID is an optional non-secret selection. Unknown fields are rejected. Only `runtime` becomes `vars.FORTIPI_CONFIG`; no credentials or local paths belong there. The [example](../packages/fortipi-cli/templates/operator-config.example.json) validates against the generated schema. Select Computer or explicit local workspace independently of native, cloud-JS or Linux execution. A missing local device remains a remote waiting condition. Local validation checks canonical capability declarations, not account entitlement or freshness that the contract does not establish.
 
 Provider selections use `auth:{kind:"secretRef",secretRef:"PROVIDER_SECRET"}` for API keys, or `auth:{kind:"oauth",providerId:"openai"}` for OAuth. Workers AI uses the AI binding. OpenAI Codex is a distinct OAuth-only provider. Custom gateways require a reviewed credential-routing contract. Model usage budgets are not infrastructure policy.
 
-Once genuine assets are available, the deployment interface is:
+With the packaged assets, the deployment interface is:
 
 ```sh
 fortipi login
 fortipi prepare --config operator.json --directory NEW_DIRECTORY --json
+# For an upgrade, preserve the prior prepared declaration history:
+fortipi prepare --config operator.json --directory NEXT_DIRECTORY --previous-directory NEW_DIRECTORY --json
 fortipi deploy --directory NEW_DIRECTORY --dry-run --non-interactive --json
 fortipi deploy --directory NEW_DIRECTORY --profile production --bootstrap local --json
 ```
 
 Preparation is exclusive and verifies asset closure/hashes and canonical configuration before creating its output. Dry-run generates/uploads no credentials and returns a build result, not a deployment receipt. Deployment rechecks prepared bytes and configuration, uses pinned Wrangler, then checks public health. A successful version receipt is not a rollout deployment ID. Secret upload or later auth-key setup invalidates earlier rollout evidence; release tooling must verify the final deployed state.
+
+Use `--previous-directory` for an existing prepared installation. The previous
+manifest, configuration and exact deployment identity must match their receipt.
+Known paid capability removal or migration loss/reordering fails with an explicit
+repair requirement. This preserves the prior declaration; release tooling must
+still reconcile the actual applied remote migration history. A fresh Free/native
+configuration has neither Loader nor Containers. Linux preparation requires the
+actual reviewed image manifest digest and context; its config ID is not a pullable
+registry identity. Preparing a paid variant does not purchase or prove entitlement.
 
 Customer bootstrap is persisted in `~/.fortipi/PROFILE.json` before upload. Named CLI profiles are exact-origin application credentials, protected outside Git checkouts: POSIX directories 0700/files 0600, or restrictive current-user Windows ACLs. Link, hardlink, ownership, overwrite and parent checks fail closed. Never copy deployment credentials into an application profile. Lost setup replies reuse the protected identity; revocation remains authoritative.
 

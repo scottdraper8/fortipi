@@ -64,7 +64,12 @@ export type CommandResult =
     }
   | { state: "initialized" | "selected" | "cloudflare_login_completed" }
   | { state: "binding_secret_uploaded"; rolloutEvidence: "must-be-renewed" }
-  | { state: "dry-build-completed"; sourceCommit: string; assetManifestSha256: string }
+  | {
+      state: "dry-build-completed";
+      sourceCommit: string;
+      assetManifestSha256: string;
+      workerBytesVerified: true;
+    }
   | { items: CatalogModel[]; workersAi: { providerId: string; catalog: string; auth: string } }
   | { exitCode: number }
   | { bytes: number; sha256: string };
