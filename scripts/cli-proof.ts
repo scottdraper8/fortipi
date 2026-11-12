@@ -28,7 +28,27 @@ const imageArtifact = 13910344388;
 const imageHash = "8a59a497b45ebc8125282e7766744ccbc603aed96faba0d4158217c86ff55092";
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const inside = (parent: string, path: string) => path.startsWith(`${parent}${sep}`);
+type OwnerPort = "install-harness" | "offline-consumer" | "notices";
+type HostTool = "unshare" | "mount" | "setpriv" | "unzip" | "ip";
+type InputGate =
+  | `eligibility.${
+      | "platform"
+      | "node"
+      | "actions"
+      | "branch"
+      | "source-sha"
+      | "checkout-sha"
+      | "tracked-clean"
+      | "pnpm"
+      | "hardener"}`
+  | `inputs.owner.${OwnerPort}.${"file" | "tracked"}`
+  | `inputs.host.${HostTool}`;
+let gate: InputGate | "phase" = "phase";
 let failure = "eligibility or required input";
+function inputGate(value: InputGate) {
+  gate = value;
+  failure = "guard";
+}
 const onlineEnv = (): NodeJS.ProcessEnv => {
   const env: NodeJS.ProcessEnv = {
     CI: "true",
@@ -65,22 +85,35 @@ async function run(file: string, args: string[], cwd = root, timeout = 120000) {
 const git = async (...args: string[]) => (await run("git", args)).stdout.trim();
 async function regular(path: string) {
   const stat = await lstat(path);
+  if (stat.isSymbolicLink()) failure = "symbolic-link";
+  else if (!stat.isFile()) failure = "non-regular-file";
   assert.ok(stat.isFile() && !stat.isSymbolicLink(), "Required regular proof input is absent");
 }
 async function eligible() {
+  inputGate("eligibility.platform");
   assert.equal(process.platform, "linux", "Proof requires actual Linux before any home lookup");
+  inputGate("eligibility.node");
   assert.equal(process.versions.node, "26.13.0");
+  inputGate("eligibility.actions");
   assert.equal(
     process.env.GITHUB_ACTIONS,
     "true",
     "Only the dedicated Actions boundary is eligible",
   );
+  inputGate("eligibility.branch");
   assert.match(process.env.GITHUB_REF ?? "", /^refs\/heads\/ci\/fortipi-cli-proof-[\w.-]+$/);
+  inputGate("eligibility.source-sha");
   assert.match(process.env.SOURCE_SHA ?? "", /^[a-f0-9]{40}$/);
+  inputGate("eligibility.checkout-sha");
   assert.equal(await git("rev-parse", "HEAD"), process.env.SOURCE_SHA);
+  inputGate("eligibility.tracked-clean");
   assert.equal((await run("git", ["status", "--porcelain", "--untracked-files=no"])).stdout, "");
+  inputGate("eligibility.pnpm");
   assert.equal((await run("pnpm", ["--version"], tmpdir())).stdout.trim(), "12.18.0");
+  inputGate("eligibility.hardener");
   await run("/usr/bin/systemctl", ["is-active", "--quiet", "agent.service"]);
+  gate = "phase";
+  failure = "phase guard or required input";
 }
 function distribution() {
   const directory = process.env.RUNNER_TEMP;
@@ -88,22 +121,28 @@ function distribution() {
   return join(directory, "fortipi-cli-distribution");
 }
 async function inputs() {
-  for (const path of [
-    "packages/fortipi-cli/test/install-harness.ts",
-    "packages/fortipi-cli/test/offline-consumer.ts",
-    "scripts/generate-notices.ts",
-  ]) {
+  for (const [port, path] of [
+    ["install-harness", "packages/fortipi-cli/test/install-harness.ts"],
+    ["offline-consumer", "packages/fortipi-cli/test/offline-consumer.ts"],
+    ["notices", "scripts/generate-notices.ts"],
+  ] as const) {
+    inputGate(`inputs.owner.${port}.file`);
     await regular(join(root, path));
+    inputGate(`inputs.owner.${port}.tracked`);
     await git("ls-files", "--error-unmatch", path);
   }
-  for (const tool of [
-    "/usr/bin/unshare",
-    "/usr/bin/mount",
-    "/usr/bin/setpriv",
-    "/usr/bin/unzip",
-    "/usr/sbin/ip",
-  ])
+  for (const [name, tool] of [
+    ["unshare", "/usr/bin/unshare"],
+    ["mount", "/usr/bin/mount"],
+    ["setpriv", "/usr/bin/setpriv"],
+    ["unzip", "/usr/bin/unzip"],
+    ["ip", "/usr/sbin/ip"],
+  ] as const) {
+    inputGate(`inputs.host.${name}`);
     await regular(tool);
+  }
+  gate = "phase";
+  failure = "phase guard or required input";
 }
 async function bounded(response: Response, maximum: number) {
   assert.ok(response.body, "Required producer response has no body");
@@ -470,8 +509,24 @@ async function main() {
   else throw new Error("Unknown proof phase");
 }
 if (import.meta.main)
-  await main().catch(() => {
+  await main().catch((error: unknown) => {
     // Neither signed artifact URLs nor child auth/output can enter a diagnostic.
-    process.stderr.write(`CLI proof ${process.argv[2] ?? "unknown"} failed closed: ${failure}\n`);
+    const phase = process.argv[2];
+    const label = ["inputs", "image", "context", "install", "offline", "namespace"].includes(
+      phase ?? "",
+    )
+      ? phase
+      : "unknown";
+    const condition =
+      error instanceof assert.AssertionError
+        ? "assertion"
+        : error instanceof Error &&
+            "code" in error &&
+            ["ENOENT", "EACCES", "ENOTDIR", "ELOOP"].includes(String(error.code))
+          ? String(error.code)
+          : "unclassified";
+    process.stderr.write(
+      `CLI proof ${label} failed closed: gate=${gate}; reason=${failure}; condition=${condition}\n`,
+    );
     process.exitCode = 1;
   });
