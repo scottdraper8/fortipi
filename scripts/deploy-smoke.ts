@@ -122,6 +122,7 @@ export function cloudflareRequest(
   return async (path) => {
     assert.ok(
       (path === "/workers/subdomain" ||
+        path === "/workers/durable_objects/namespaces?page=1&per_page=1000" ||
         /^\/(?:workers\/scripts|containers\/applications)\//.test(path)) &&
         !path.includes("..") &&
         ++count <= 32,
