@@ -78,6 +78,11 @@ export class ControlPlane extends RealControlPlane {
     return super.settleCapacity(ctx, input);
   }
   override async queryExecution(ctx: D.AuthContext, input: D.ExecutionIdentity) {
+    const startedAt = Date.now(),
+      sockets =
+        input.target.kind === "executor"
+          ? this.ctx.getWebSockets(input.target.executorId).length
+          : 0;
     const result = await super.queryExecution(ctx, input);
     if (!this.store.get("fixture", "trace-dispatch")) return result;
     const record = this.store.get<{ attempted: boolean; intent: D.DispatchIntent }>(
@@ -86,6 +91,9 @@ export class ControlPlane extends RealControlPlane {
       ),
       registration = this.store.get<D.AuthorityRegistration>("recipient", ctx.registrationId ?? "");
     this.store.put("fixture-query", input.jobId, {
+      startedAt,
+      finishedAt: Date.now(),
+      sockets,
       ...(result.ok
         ? { ok: true, state: result.value.state }
         : { ok: false, code: result.code, message: result.message }),
@@ -96,6 +104,34 @@ export class ControlPlane extends RealControlPlane {
       grantActions: ctx.grants.map((grant) => grant.resources.actions),
       grantTools: ctx.grants.map((grant) => grant.resources.tools),
     });
+    return result;
+  }
+  override async requestLocalWorkspace(ctx: D.AuthContext, input: D.LocalWorkspaceRequest) {
+    const startedAt = Date.now(),
+      sockets = this.ctx.getWebSockets(input.executorId).length;
+    const result = await super.requestLocalWorkspace(ctx, input);
+    if (this.store.get("fixture", "trace-dispatch")) {
+      const old = this.store.get<unknown[]>("fixture-local", input.operationId) ?? [];
+      this.store.put("fixture-local", input.operationId, [
+        ...old.slice(-7),
+        {
+          kind: input.kind,
+          startedAt,
+          finishedAt: Date.now(),
+          sockets,
+          leaseExpiresAt: "lease" in input ? input.lease.expiresAt : null,
+          ...(result.ok
+            ? { ok: true }
+            : {
+                ok: false,
+                code: result.code,
+                retryable: result.retryable,
+                retryAfterMs: result.details?.retryAfterMs ?? null,
+                reason: result.details?.reason ?? null,
+              }),
+        },
+      ]);
+    }
     return result;
   }
   override async deliverExecutorFrame(ctx: D.AuthContext, input: D.ExecutorDelivery) {
@@ -130,6 +166,11 @@ export class ControlPlane extends RealControlPlane {
         : undefined;
       return Response.json({
         query: this.store.get("fixture-query", jobId) ?? null,
+        local:
+          this.store.get(
+            "fixture-local",
+            new URL(request.url).searchParams.get("operation") ?? "",
+          ) ?? [],
         terminal: terminal ?? null,
         executor: executor ? { epoch: executor.epoch, status: executor.status } : null,
       });
@@ -462,6 +503,7 @@ export class TestAgentSession extends AgentSession {
         return new Response(await this.jobDiagnosticsJson(url.searchParams.get("job") ?? ""), {
           headers: { "Content-Type": "application/json" },
         });
+      if (action === "repair") return Response.json(await this.runRepair());
       if (action === "growth") return Response.json(await this.growthReport());
       return new Response(null, { status: 404 });
     }
@@ -1356,7 +1398,7 @@ export default {
     if (url.pathname === "/__test/dispatch-trace")
       return env.CONTROL_PLANE.getByName("control").fetch(request);
     const match =
-      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|inspect|tool|tool-state|job-diagnostics|growth)$/.exec(
+      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|inspect|tool|tool-state|job-diagnostics|repair|growth)$/.exec(
         url.pathname,
       );
     if (match) {

@@ -6,6 +6,7 @@ import {
   type Cursor,
   defineDoc,
   type EntryId,
+  ToolResultEntry,
 } from "@earendil-works/pi-durable";
 import type { PiHarness } from "agents/harness/pi";
 import {
@@ -967,7 +968,11 @@ export class Conversations {
       )
       .join("");
     const role: D.Message["role"] =
-      entry.kind === "pi.user" ? "user" : entry.kind === "pi.toolResult" ? "tool" : "assistant";
+      entry.kind === "pi.user"
+        ? "user"
+        : entry.kind === ToolResultEntry.kind
+          ? "tool"
+          : "assistant";
     const projected =
       (text || inherited) && !input
         ? (

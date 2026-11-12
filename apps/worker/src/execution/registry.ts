@@ -16,6 +16,7 @@ import Ajv from "ajv/dist/2020.js";
 import { operationDigest } from "fortipi-contract";
 import type { Admission, Conversations } from "../agent/conversations.js";
 import type { Projection } from "../agent/projection.js";
+import { repairRetryAt } from "../agent/repair-retry.js";
 import { check, digest, resourceId, ServiceError, scope, unwrap } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
@@ -118,12 +119,33 @@ export function buildRegistry(deps: {
             message:
               error instanceof ServiceError ? error.message : "Dispatch transport interrupted",
           });
-          if (state.deadline <= Date.now()) {
+          if (
+            state.job.state === "result_pending_commit" &&
+            error instanceof ServiceError &&
+            error.code === "workspace.conflict" &&
+            ["expired_lease", "stale_fence", "expected_revision"].includes(
+              String(error.details?.reason),
+            )
+          ) {
+            // An immutable prepared result cannot repair its own stale authority.
+            // Preserve it and the consumed Pi outcome for explicit reconciliation.
+            await dispatch.finish(
+              state,
+              "requires_reconciliation",
+              "Workspace publication authority expired or changed; explicit reconciliation required",
+            );
+            progress = { done: true };
+          } else if (state.deadline <= Date.now()) {
             await jobs.interrupt(task.input.jobId, "Dispatch deadline reached during recovery");
             progress = { done: true };
           } else {
             await runtime.sleepUntil(
-              Math.min(state.deadline, Date.now() + 30000),
+              Math.min(
+                state.deadline,
+                error instanceof ServiceError && error.retryable === true
+                  ? (repairRetryAt(error) ?? Date.now() + 30000)
+                  : Date.now() + 30000,
+              ),
               { phase: "step" },
               context,
             );

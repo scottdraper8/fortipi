@@ -20,7 +20,7 @@ import type * as D from "../../src/boundary/dto.js";
 import { eventually, pause } from "../agent/harness.ts";
 import { processHarness } from "../agent/process-harness.ts";
 
-interface View {
+export interface View {
   tasks: { id: number; kind: string; status: string }[];
   jobs: {
     jobId: string;
@@ -32,6 +32,25 @@ interface View {
     baseManifestHash: string | null;
     executorTransferLimits: D.ExecutorTransferLimits | null;
   }[];
+}
+export interface NativeRecoveryContext {
+  service: Awaited<ReturnType<typeof processHarness>>;
+  native: ExecutorRuntime;
+  fixture: Awaited<ReturnType<typeof fixture>>;
+  actorToken: string;
+  probe: string;
+  cid: string;
+  workspaceId: string;
+  job: View["jobs"][number];
+  identity: D.ExecutionIdentity;
+  children: number[];
+  marker: string;
+  input: D.MessageSubmit;
+  admission: { status: number; body: D.AdmissionReceipt };
+  base: D.WorkspaceBinding;
+  reconnectedAt: number;
+  offlineReleasedAt: number;
+  view: () => Promise<View>;
 }
 
 /** Real service/process recovery; safe annotation remains in the disposable build. */
@@ -45,6 +64,10 @@ export async function nativeProcessRecovery(
     | "result"
     | "receipt" = "running",
   activation: "agent-first" | "executor-first" = "agent-first",
+  recover?: {
+    outage: "until-uncertain" | "until-lease-expired";
+    verify: (context: NativeRecoveryContext) => Promise<void>;
+  },
 ) {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-native-service-kill-")),
     main = join(directory, "worker.js"),
@@ -55,6 +78,8 @@ export async function nativeProcessRecovery(
   let h: Awaited<ReturnType<typeof processHarness>> | undefined,
     runtime: ExecutorRuntime | undefined,
     connection: Promise<void> | undefined;
+  let reconnectedAt = 0,
+    offlineReleasedAt = 0;
   try {
     let candidates = 0;
     let phaseBarriers = 0;
@@ -318,6 +343,7 @@ export async function nativeProcessRecovery(
         })
         .catch(() => {});
       await eventually(async () => native.connected, Boolean);
+      reconnectedAt = Date.now();
     };
     await connect();
     const rebound = await service.api<D.WorkspaceBinding>(
@@ -344,6 +370,7 @@ export async function nativeProcessRecovery(
         "workspace.write",
         "approvals.read",
         "approvals.decide",
+        ...(recover ? ["jobs.read", "jobs.reconcile", "conversations.read", "events.read"] : []),
       ],
     });
     const canary = { nonce: crypto.randomUUID() };
@@ -541,6 +568,22 @@ export async function nativeProcessRecovery(
       .filter((task) => task.kind === "fortipi.dispatch")
       .map((task) => task.id);
     assert.equal(children.length, 1);
+    const reconnectAfterOutage = async () => {
+      if (recover?.outage === "until-uncertain")
+        await eventually(view, (value) => value.jobs[0]?.state === "requires_reconciliation");
+      if (recover?.outage === "until-lease-expired") {
+        const diagnostic = await service.api<{ observedLease: D.Lease | null }>(
+          `${probe}/job-diagnostics?job=${job.jobId}`,
+        );
+        const expiresAt = Math.max(
+          identity.lease.expiresAt,
+          diagnostic.body.observedLease?.expiresAt ?? 0,
+        );
+        while (Date.now() <= expiresAt) await pause(Math.min(500, expiresAt - Date.now() + 1));
+      }
+      offlineReleasedAt = Date.now();
+      await connect();
+    };
     if (mode === "assign-ack") {
       await eventually(
         async () => (await service.api<{ state: string }>("/__test/assign-ack")).body,
@@ -554,7 +597,7 @@ export async function nativeProcessRecovery(
       await service.start();
       if (activation === "executor-first") await connect();
       assert.deepEqual((await service.api(`${probe}/canary`)).body, canary);
-      if (activation === "agent-first") await connect();
+      if (activation === "agent-first") await reconnectAfterOutage();
     }
     assert.equal((await readFile(marker, "utf8")).match(/start/g)?.length, 1);
     await writeFile(gate, "finish");
@@ -576,7 +619,29 @@ export async function nativeProcessRecovery(
       await service.start();
       if (activation === "executor-first") await connect();
       assert.deepEqual((await service.api(`${probe}/canary`)).body, canary);
-      if (activation === "agent-first") await connect();
+      if (activation === "agent-first") await reconnectAfterOutage();
+    }
+    if (recover) {
+      await recover.verify({
+        service,
+        native,
+        fixture: f,
+        actorToken: actor.token,
+        probe,
+        cid,
+        workspaceId,
+        job,
+        identity,
+        children,
+        marker,
+        input,
+        admission: sent,
+        base: rebound.body,
+        reconnectedAt,
+        offlineReleasedAt,
+        view,
+      });
+      return;
     }
     let final: View | undefined;
     for (let i = 0; i < 900; i++) {
