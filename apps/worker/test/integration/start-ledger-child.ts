@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { closeSync, fsyncSync, openSync, writeSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export interface StartObservation {
+  scope: "complete-local-runtime" | "ledger-to-os-boundary";
   records: string[];
   pendingSync: boolean;
   repeatState: string;
@@ -125,6 +127,7 @@ async function scenario(build: string, nonce: string): Promise<StartObservation>
         "unexpected external marker bytes",
       );
       return {
+        scope: "complete-local-runtime",
         records,
         pendingSync: true,
         repeatState,
@@ -146,6 +149,87 @@ async function scenario(build: string, nonce: string): Promise<StartObservation>
   }
 }
 
+/** Component proof only: the complete runtime's independent journals are omitted. */
+async function boundary(build: string, nonce: string): Promise<StartObservation> {
+  const load = (path: string) => import(pathToFileURL(join(build, path)).href);
+  const { fixture, assignment, nodeCommand } = (await load(
+    "test/fixtures/daemon.ts",
+  )) as typeof import("../../../../packages/fortipi-executor/test/fixtures/daemon.ts");
+  const { adapter } = (await load(
+    "dist/config.js",
+  )) as typeof import("../../../../packages/fortipi-executor/dist/config.js");
+  const { childEnvironment } = (await load(
+    "dist/platform/types.js",
+  )) as typeof import("../../../../packages/fortipi-executor/dist/platform/types.js");
+  const f = await fixture();
+  const platform = adapter();
+  const marker = join(f.path, "external-component-starts");
+  const a = await assignment(nodeCommand(fileURLToPath(import.meta.url), "marker", marker, nonce));
+  const key = "synthetic-component-consent";
+  const first = f.ledger.admit(a, key);
+  first.decision = "allow";
+  f.ledger.put(first);
+  const database = new DatabaseSync(f.ledger.path, { readOnly: true });
+  const stored = () => {
+    const row = database.prepare("SELECT data FROM jobs WHERE id=?").get(a.identity.jobId) as {
+      data: string;
+    };
+    return JSON.parse(row.data) as { assignment: unknown; bodyHash: string; state: string };
+  };
+  const spawnAfterClaim = async () => {
+    if (!f.ledger.claim(a.identity.jobId, key, f.root.key, a.identity.jobId)) return false;
+    // A second connection must observe durable intent before the actual OS call.
+    assert.equal(stored().state, "start_intent");
+    const child = platform.spawn(
+      platform.shell(a.arguments.command as string, f.rootPath, childEnvironment()),
+    );
+    child.stdout?.resume();
+    child.stderr?.resume();
+    try {
+      const [code, signal] = await once(child, "close", { signal: AbortSignal.timeout(5000) });
+      assert.equal(code, 0);
+      assert.equal(signal, null);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) await platform.cancel(child, 25);
+    }
+    return true;
+  };
+  try {
+    assert.equal(
+      (f.ledger.db.prepare("PRAGMA synchronous").get() as { synchronous: number }).synchronous,
+      2,
+    );
+    const before = stored();
+    assert.equal(await spawnAfterClaim(), true);
+    assert.deepEqual((await readFile(marker, "utf8")).trim().split("\n"), [nonce]);
+    assert.equal(stored().state, "start_intent");
+    f.ledger.admit(a, key); // Repeated identical delivery; no reseeding or journal/pin reset.
+    const second = await spawnAfterClaim();
+    const after = stored();
+    assert.equal(after.state, "start_intent");
+    assert.equal(after.bodyHash, before.bodyHash);
+    assert.deepEqual(after.assignment, before.assignment);
+    assert.deepEqual(await readdir(f.rootPath), []);
+    await platform.verifyProtection(f.directory, true);
+    await platform.verifyProtection(f.ledger.path, false);
+    const records = (await readFile(marker, "utf8")).trim().split("\n");
+    assert.ok(records.every((record) => record === nonce));
+    return {
+      scope: "ledger-to-os-boundary",
+      records,
+      pendingSync: false,
+      repeatState: second ? "claim-won" : "claim-rejected",
+      persistedState: after.state,
+      sameBody: true,
+      unchangedBase: true,
+      protectedSqlite: true,
+    };
+  } finally {
+    database.close();
+    await f.cleanup();
+  }
+}
+
 if (import.meta.main) {
   const [mode, path, nonce] = process.argv.slice(2);
   assert.ok(path && nonce);
@@ -158,8 +242,8 @@ if (import.meta.main) {
       closeSync(descriptor);
     }
   } else {
-    assert.equal(mode, "scenario");
-    const result = await scenario(path, nonce);
+    assert.ok(mode === "scenario" || mode === "boundary");
+    const result = await (mode === "boundary" ? boundary(path, nonce) : scenario(path, nonce));
     result.scenarioSha256 = createHash("sha256")
       .update(await readFile(fileURLToPath(import.meta.url)))
       .digest("hex");
