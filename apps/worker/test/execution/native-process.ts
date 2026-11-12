@@ -552,8 +552,9 @@ export async function nativeProcessRecovery(
       await service.crash();
       await connection;
       await service.start();
+      if (activation === "executor-first") await connect();
       assert.deepEqual((await service.api(`${probe}/canary`)).body, canary);
-      await connect();
+      if (activation === "agent-first") await connect();
     }
     assert.equal((await readFile(marker, "utf8")).match(/start/g)?.length, 1);
     await writeFile(gate, "finish");
