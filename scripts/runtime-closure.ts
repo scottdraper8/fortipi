@@ -134,6 +134,7 @@ interface Review {
       integrity: string;
       archiveSha256: string;
       manifestSha256: string;
+      license: string;
     }
   >;
 }
@@ -372,6 +373,18 @@ export async function collectRuntimeClosure(root: string): Promise<RuntimeClosur
   const lock = documents[1]!.toJSON() as Lock;
   const reviewBytes = await readFile(resolve(root, "tools/unstale/supply-chain.json"));
   const review = JSON.parse(reviewBytes.toString("utf8")) as Review;
+  const licensePolicyBytes = await readFile(resolve(root, "tools/unstale/license-policy.json"));
+  const licensePolicy = JSON.parse(licensePolicyBytes.toString("utf8")) as {
+    exceptions: Record<string, { license: string }>;
+  };
+  // These exact existing copyleft exceptions are external-only native
+  // identities, including Sharp WASM without platform tags. Ordinary MIT WASM
+  // is not native merely because its filename ends in .wasm.
+  const policyNative = new Map(
+    Object.entries(licensePolicy.exceptions)
+      .filter(([, exception]) => /\b(?:LGPL|GPL|AGPL)-/.test(exception.license))
+      .map(([id, exception]) => [id, exception.license]),
+  );
   const patches = await dependencyPatches(root);
   const contexts = new Map<string, RuntimeContext>();
   function visit(key: string): void {
@@ -437,6 +450,8 @@ export async function collectRuntimeClosure(root: string): Promise<RuntimeClosur
     const locked = lock.packages[id];
     assert.ok(fact && locked, `Unreviewed runtime archive: ${id}`);
     assert.equal(fact.integrity, locked.resolution.integrity);
+    if (policyNative.has(id))
+      assert.equal(fact.license, policyNative.get(id), `Native policy license differs: ${id}`);
     const externalNative = Boolean(locked.os || locked.cpu || locked.libc);
     if (externalNative) {
       archives.push({
@@ -471,7 +486,7 @@ export async function collectRuntimeClosure(root: string): Promise<RuntimeClosur
     const patch = patches[id] ?? null;
     if (patch) await applyReviewedPatch(patch, root, files);
     const nativeFiles = files.records
-      .filter((file) => /\.(?:node|dylib|dll|so(?:\.\d+)*|exe)$/i.test(file.path))
+      .filter((file) => /\.(?:node(?:\.wasm)?|dylib|dll|so(?:\.\d+)*|exe)$/i.test(file.path))
       .map((file) => file.path);
     archives.push({
       id,
@@ -480,7 +495,7 @@ export async function collectRuntimeClosure(root: string): Promise<RuntimeClosur
       integrity: fact.integrity,
       archiveSha256: fact.archiveSha256,
       manifestSha256: fact.manifestSha256,
-      externalNative: nativeFiles.length > 0,
+      externalNative: policyNative.has(id) || nativeFiles.length > 0,
       platform: null,
       nativeFiles,
       manifest,
@@ -505,7 +520,7 @@ export async function collectRuntimeClosure(root: string): Promise<RuntimeClosur
       reviewSha256: hash(reviewBytes),
       patchReviewSha256: hash(await readFile(resolve(root, "patches/review.json"))),
       rootPackageSha256: hash(await readFile(resolve(root, "package.json"))),
-      licensePolicySha256: hash(await readFile(resolve(root, "tools/unstale/license-policy.json"))),
+      licensePolicySha256: hash(licensePolicyBytes),
       rootLicenseSha256: hash(await readFile(resolve(root, "LICENSE"))),
       embeddedFreezeSha256: hash(
         await readFile(resolve(root, "apps/worker/container/embedded-freeze.json")),
@@ -560,7 +575,8 @@ export async function collectRuntimeClosure(root: string): Promise<RuntimeClosur
     ];
   }
   for (const item of archives.filter(
-    (item) => item.externalNative && !item.platform && item.id !== tui?.id,
+    (item) =>
+      item.externalNative && !item.platform && !policyNative.has(item.id) && item.id !== tui?.id,
   )) {
     assert.equal(
       Object.keys((item.manifest?.dependencies ?? {}) as object).length,
@@ -836,6 +852,14 @@ export async function createRuntimeBundle(
   const itemFor = (key: string) => archives.get(contexts.get(key)!.archiveId)!;
   const externalNative: Record<string, string> = {};
   const requiredExternal: Record<string, string> = {};
+  const required = new Set<string>();
+  const markRequired = (key: string): void => {
+    if (required.has(key)) return;
+    required.add(key);
+    for (const [name, ref] of Object.entries(contexts.get(key)!.dependencies))
+      markRequired(`${name}@${ref}`);
+  };
+  Object.values(owner.roots).forEach(markRequired);
   for (const key of owner.contexts) {
     const item = itemFor(key);
     if (!item.externalNative) continue;
@@ -844,7 +868,7 @@ export async function createRuntimeBundle(
       `Conflicting exact external native versions: ${item.name}`,
     );
     externalNative[item.name] = item.version;
-    if (!item.platform) requiredExternal[item.name] = item.version;
+    if (required.has(key)) requiredExternal[item.name] = item.version;
   }
   // pnpm's supported hoisted deploy supplies ordinary Node addresses. Anchor
   // its actual frozen top-level peers too: default pack traverses dependencies,

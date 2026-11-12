@@ -57,6 +57,25 @@ test("real frozen archives/patches and supported deploy preserve all owners and 
     tui?.externalNative && tui.nativeFiles.length > 0,
     "Mixed native packages cannot become bundled JS",
   );
+  const sharpWasm = closure.archives.find((value) => value.id === "@img/sharp-wasm32@0.35.5");
+  assert.ok(sharpWasm);
+  assert.equal(
+    sharpWasm.externalNative,
+    true,
+    "Exact LGPL policy identity must remain external without OS tags",
+  );
+  const sharpBinary = sharpWasm.files.find(
+    (file) => file.path === "lib/sharp-wasm32-0.35.5.node.wasm",
+  );
+  assert.ok(sharpBinary);
+  assert.equal(sharpBinary.size, 9_150_351);
+  assert.equal(
+    sharpBinary.sha256,
+    "22f22b41516f08077500b3472fc1c4ee55f9686cbb90cef361b71f0bee94a440",
+  );
+  assert.ok(sharpWasm.nativeFiles.includes(sharpBinary.path));
+  const blake3 = closure.archives.find((value) => value.id === "blake3-wasm@2.1.5");
+  assert.ok(blake3 && !blake3.externalNative, "Reviewed MIT WASM remains independently conveyable");
   const alias = closure.archives.find((value) => value.id === "agent-base@7.1.4");
   assert.ok(alias);
   assert.ok(alias.sourceAliases.some((value) => value.path === "dist/index.js"));
@@ -189,7 +208,9 @@ test("supported ordinary packs authenticate final dependency paths and preserve 
         plan.files.reduce((sum, file) => sum + file.size, 0),
       );
       assert.ok(
-        !plan.files.some((file) => /\.(?:node|dylib|dll|so(?:\.\d+)*|exe)$/i.test(file.path)),
+        !plan.files.some((file) =>
+          /\.(?:node(?:\.wasm)?|dylib|dll|so(?:\.\d+)*|exe)$/i.test(file.path),
+        ),
       );
       assert.ok(
         !plan.files.some(
@@ -210,6 +231,40 @@ test("supported ordinary packs authenticate final dependency paths and preserve 
           ),
         );
       if (owner.sourceName === "fortipi-cli") {
+        assert.equal(plan.externalNative["@img/sharp-wasm32"], "0.35.5");
+        assert.ok(
+          !plan.addresses.some((item) => item.context.split("(")[0] === "@img/sharp-wasm32@0.35.5"),
+        );
+        assert.ok(
+          !plan.files.some(
+            (file) =>
+              file.path.includes("/@img/sharp-wasm32/") ||
+              file.sha256 === "22f22b41516f08077500b3472fc1c4ee55f9686cbb90cef361b71f0bee94a440",
+          ),
+        );
+        const blake3 = closure.archives.find((value) => value.id === "blake3-wasm@2.1.5");
+        assert.ok(blake3);
+        const allowedWasm = blake3.files.filter((file) => file.path.endsWith(".wasm"));
+        assert.equal(allowedWasm.length, 3);
+        for (const file of allowedWasm)
+          assert.ok(
+            plan.files.some(
+              (actual) =>
+                actual.path.endsWith(`/blake3-wasm/${file.path}`) &&
+                actual.size === file.size &&
+                actual.sha256 === file.sha256,
+            ),
+            "Keep the independently reviewed MIT BLAKE3 WASM members",
+          );
+        const manifest = JSON.parse(
+          await readFile(resolve(bundle.directory, "package.json"), "utf8"),
+        );
+        assert.equal(manifest.optionalDependencies["@img/sharp-wasm32"], "0.35.5");
+        assert.equal(
+          manifest.dependencies["@img/sharp-wasm32"],
+          undefined,
+          "An optional foreign-platform native branch must not become a mandatory Darwin install",
+        );
         for (const [name, versions] of [
           ["@smithy/node-http-handler", ["4.12.1", "4.14.2"]],
           ["@aws-sdk/token-providers", ["3.1127.0", "3.1166.0"]],
