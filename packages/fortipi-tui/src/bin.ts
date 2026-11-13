@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isAbsolute } from "node:path";
 import { FortiPiClient, FortiPiError } from "fortipi-client/node";
 import { Controller } from "./controller.js";
 import { applicationCredential } from "./credentials.js";
@@ -7,8 +8,9 @@ import { loadProfiles, saveProfiles } from "./profiles.js";
 import { smoke } from "./smoke.js";
 import { runTerminal } from "./terminal.js";
 
-const usage = `fortipi-tui [--profile NAME] [--conversation ID] [--no-animation] [--smoke]
+const usage = `fortipi-tui [--profiles-file PATH] [--profile NAME] [--conversation ID] [--no-animation] [--smoke]
 Application credentials only. No token arguments. Configure protected profiles.json and a per-origin client credential file; see README.
+--profiles-file selects an absolute protected profile file; updates are saved to that same file.
 --smoke performs ticket subscribe, committed completion, offline activity and cursor replay with a 120-second deadline.`;
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -16,12 +18,25 @@ async function main(): Promise<void> {
     console.log(usage);
     return;
   }
-  let profileName: string | undefined, conversationId: string | undefined;
+  let profileName: string | undefined,
+    conversationId: string | undefined,
+    profilesFile: string | undefined;
   let noAnimation = false,
     runSmoke = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--profile" || arg === "--conversation") {
+    if (arg === "--profiles-file") {
+      const value = args[++i];
+      if (
+        profilesFile ||
+        !value ||
+        !isAbsolute(value) ||
+        value.length > 4096 ||
+        value.includes("\0")
+      )
+        throw new FortiPiError("invalid_arguments");
+      profilesFile = value;
+    } else if (arg === "--profile" || arg === "--conversation") {
       const value = args[++i];
       if (!value || !/^[A-Za-z0-9_-]{1,128}$/.test(value))
         throw new FortiPiError("invalid_arguments");
@@ -31,7 +46,7 @@ async function main(): Promise<void> {
     else if (arg === "--smoke") runSmoke = true;
     else throw new FortiPiError("invalid_arguments");
   }
-  const profiles = await loadProfiles();
+  const profiles = await loadProfiles(profilesFile);
   const profile = profileName
     ? profiles.profiles.find((p) => p.name === profileName)
     : profiles.profiles[0];
@@ -89,7 +104,7 @@ async function main(): Promise<void> {
   if (controller.agentId) activeProfile.agentId = controller.agentId;
   if (controller.conversationId) activeProfile.conversationId = controller.conversationId;
   else delete activeProfile.conversationId;
-  await saveProfiles(profiles);
+  await saveProfiles(profiles, profilesFile);
 }
 void main().catch((error) => {
   console.error(error instanceof FortiPiError ? error.message : "FortiPi: startup_failed");
