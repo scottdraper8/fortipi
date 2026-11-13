@@ -126,11 +126,11 @@ jobs:
           path: ${{ runner.temp }}/transfer
           if-no-files-found: error
           retention-days: 30
-  operate:
+  initial-installed-deployment:
     needs: proofs
     runs-on: ubuntu-24.04
     environment: ${{ fromJSON(inputs.target).slot == 'paid-validation' && 'paid-validation' || 'production' }}
-    timeout-minutes: 60
+    timeout-minutes: 15
     permissions:
       contents: read
       actions: read
@@ -140,10 +140,11 @@ jobs:
           egress-policy: block
           allowed-endpoints:
             api.github.com:443 github.com:443 release-assets.githubusercontent.com:443
-            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.stepsecurity.io:443 registry.npmjs.org:443
-            nodejs.org:443 api.cloudflare.com:443 *.workers.dev:443 download.docker.com:443 auth.docker.io:443
-            registry-1.docker.io:443 production.cloudflare.docker.com:443 ghcr.io:443
-            pkg-containers.githubusercontent.com:443 *.cloudflare.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.stepsecurity.io:443
+            registry.npmjs.org:443 nodejs.org:443 api.cloudflare.com:443 *.workers.dev:443
+            download.docker.com:443 auth.docker.io:443 registry-1.docker.io:443
+            production.cloudflare.docker.com:443 ghcr.io:443 pkg-containers.githubusercontent.com:443
+            *.cloudflare.com:443
       - run: /usr/bin/systemctl is-active --quiet agent.service
         name: Require Linux hardener service active
         if: runner.os == 'Linux'
@@ -164,8 +165,7 @@ jobs:
           run_install: false
           cache: false
       - run: node scripts/install-dependencies.ts
-      - run: node node_modules/typescript/bin/tsc -p packages/fortipi-contract/tsconfig.json
-      - run: node node_modules/typescript/bin/tsc -p packages/fortipi-cli/tsconfig.json
+      - run: node scripts/build-workspaces.ts build:evidence
       - run: node scripts/verify-release-gates.ts dispatch
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
@@ -180,17 +180,18 @@ jobs:
       - name: Assemble original proof references
         env:
           CANDIDATE_REFERENCE: ${{ inputs.candidate }}
-        run: node scripts/verify-release-gates.ts assemble --root "$RUNNER_TEMP/proofs" --out "$RUNNER_TEMP/proofs.json"
+        run: node scripts/verify-release-gates.ts assemble --root "$RUNNER_TEMP/proofs" --out
+          "$RUNNER_TEMP/proofs.json"
       - name: Save bounded target data
         env:
           TARGET_REFERENCE: ${{ inputs.target }}
         run: node scripts/prepare-release.ts descriptor --out "$RUNNER_TEMP/target.json" --kind target
-      - name: Install real candidate before deployment credentials enter any process
+      - name: Install all five real candidate packages before deployment credentials enter any process
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run:
-          node scripts/deploy-smoke.ts install --candidate "$RUNNER_TEMP/candidate/candidate.json" --target
-          "$RUNNER_TEMP/target.json" --directory "$RUNNER_TEMP/installed" --out "$RUNNER_TEMP/installation.json"
+          node scripts/live-device-evidence.ts install --candidate "$RUNNER_TEMP/candidate/candidate.json" --target
+          "$RUNNER_TEMP/target.json" --out "$RUNNER_TEMP/installation.json"
       - name: Resolve prior retained CLI receipt for verification
         if: inputs.operation == 'verify'
         env:
@@ -210,6 +211,383 @@ jobs:
         run:
           node scripts/deploy-smoke.ts operate --installation "$RUNNER_TEMP/installation.json" --out
           "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json" --confirm "$CONFIRM"
+      - name: Provision bounded device roles and public ownership journal
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+        run:
+          node scripts/live-device-evidence.ts initial --installation "$RUNNER_TEMP/installation.json" --deployment
+          "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json" --out "$RUNNER_TEMP/devices"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        id: custody
+        with:
+          name:
+            device-custody-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt
+            }}
+          path: ${{ runner.temp }}/devices/custody
+          if-no-files-found: error
+          retention-days: 30
+      - name: Bind uploaded custody artifact to public initial metadata
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run:
+          node scripts/live-device-evidence.ts initial-metadata --installation "$RUNNER_TEMP/installation.json"
+          --out "$RUNNER_TEMP/devices" --custody-id '${{ steps.custody.outputs.artifact-id }}'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name:
+            deployment-initial-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{
+            github.run_attempt }}
+          path: ${{ runner.temp }}/devices/initial
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name:
+            device-ownership-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{
+            github.run_attempt }}
+          path: ${{ runner.temp }}/devices/ownership
+          if-no-files-found: warn
+          retention-days: 30
+  live-device-a:
+    needs: initial-installed-deployment
+    runs-on: ubuntu-24.04
+    environment: ${{ fromJSON(inputs.target).slot == 'paid-validation' && 'paid-validation' || 'production' }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+        with:
+          egress-policy: block
+          allowed-endpoints:
+            api.github.com:443 github.com:443 release-assets.githubusercontent.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.stepsecurity.io:443
+            registry.npmjs.org:443 nodejs.org:443 api.cloudflare.com:443 *.workers.dev:443
+            download.docker.com:443 auth.docker.io:443 registry-1.docker.io:443
+            production.cloudflare.docker.com:443 ghcr.io:443 pkg-containers.githubusercontent.com:443
+            *.cloudflare.com:443
+      - run: /usr/bin/systemctl is-active --quiet agent.service
+        name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.13.1
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 12.18.0
+          run_install: false
+          cache: false
+      - run: node scripts/install-dependencies.ts
+      - run: node scripts/build-workspaces.ts build:evidence
+      - run: node scripts/verify-release-gates.ts dispatch
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(inputs.candidate).runId }}
+          artifact-ids: ${{ fromJSON(inputs.candidate).artifactId }}
+          path: ${{ runner.temp }}/candidate
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: proof-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/proofs
+      - name: Assemble original proof references
+        env:
+          CANDIDATE_REFERENCE: ${{ inputs.candidate }}
+        run: node scripts/verify-release-gates.ts assemble --root "$RUNNER_TEMP/proofs" --out
+          "$RUNNER_TEMP/proofs.json"
+      - name: Save bounded target data
+        env:
+          TARGET_REFERENCE: ${{ inputs.target }}
+        run: node scripts/prepare-release.ts descriptor --out "$RUNNER_TEMP/target.json" --kind target
+      - name: Install all five real candidate packages before deployment credentials enter any process
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run:
+          node scripts/live-device-evidence.ts install --candidate "$RUNNER_TEMP/candidate/candidate.json" --target
+          "$RUNNER_TEMP/target.json" --out "$RUNNER_TEMP/installation.json"
+      - name: Run actual installed device phase A or verify its retained history
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+        run:
+          node scripts/live-device-evidence.ts phase --phase a --installation "$RUNNER_TEMP/installation.json"
+          --out "$RUNNER_TEMP/devices"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: device-a-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/devices/a
+          if-no-files-found: error
+          retention-days: 30
+  live-device-b:
+    needs: live-device-a
+    runs-on: ubuntu-24.04
+    environment: ${{ fromJSON(inputs.target).slot == 'paid-validation' && 'paid-validation' || 'production' }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+        with:
+          egress-policy: block
+          allowed-endpoints:
+            api.github.com:443 github.com:443 release-assets.githubusercontent.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.stepsecurity.io:443
+            registry.npmjs.org:443 nodejs.org:443 api.cloudflare.com:443 *.workers.dev:443
+            download.docker.com:443 auth.docker.io:443 registry-1.docker.io:443
+            production.cloudflare.docker.com:443 ghcr.io:443 pkg-containers.githubusercontent.com:443
+            *.cloudflare.com:443
+      - run: /usr/bin/systemctl is-active --quiet agent.service
+        name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.13.1
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 12.18.0
+          run_install: false
+          cache: false
+      - run: node scripts/install-dependencies.ts
+      - run: node scripts/build-workspaces.ts build:evidence
+      - run: node scripts/verify-release-gates.ts dispatch
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(inputs.candidate).runId }}
+          artifact-ids: ${{ fromJSON(inputs.candidate).artifactId }}
+          path: ${{ runner.temp }}/candidate
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: proof-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/proofs
+      - name: Assemble original proof references
+        env:
+          CANDIDATE_REFERENCE: ${{ inputs.candidate }}
+        run: node scripts/verify-release-gates.ts assemble --root "$RUNNER_TEMP/proofs" --out
+          "$RUNNER_TEMP/proofs.json"
+      - name: Save bounded target data
+        env:
+          TARGET_REFERENCE: ${{ inputs.target }}
+        run: node scripts/prepare-release.ts descriptor --out "$RUNNER_TEMP/target.json" --kind target
+      - name: Install all five real candidate packages before deployment credentials enter any process
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run:
+          node scripts/live-device-evidence.ts install --candidate "$RUNNER_TEMP/candidate/candidate.json" --target
+          "$RUNNER_TEMP/target.json" --out "$RUNNER_TEMP/installation.json"
+      - name: Run actual installed device phase B or verify its retained history
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+        run:
+          node scripts/live-device-evidence.ts phase --phase b --installation "$RUNNER_TEMP/installation.json"
+          --out "$RUNNER_TEMP/devices"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: device-b-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/devices/b
+          if-no-files-found: error
+          retention-days: 30
+  live-device-cleanup:
+    needs:
+      - initial-installed-deployment
+      - live-device-a
+      - live-device-b
+    runs-on: ubuntu-24.04
+    environment: ${{ fromJSON(inputs.target).slot == 'paid-validation' && 'paid-validation' || 'production' }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+        with:
+          egress-policy: block
+          allowed-endpoints:
+            api.github.com:443 github.com:443 release-assets.githubusercontent.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.stepsecurity.io:443
+            registry.npmjs.org:443 nodejs.org:443 api.cloudflare.com:443 *.workers.dev:443
+            download.docker.com:443 auth.docker.io:443 registry-1.docker.io:443
+            production.cloudflare.docker.com:443 ghcr.io:443 pkg-containers.githubusercontent.com:443
+            *.cloudflare.com:443
+      - run: /usr/bin/systemctl is-active --quiet agent.service
+        name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.13.1
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 12.18.0
+          run_install: false
+          cache: false
+      - run: node scripts/install-dependencies.ts
+      - run: node scripts/build-workspaces.ts build:evidence
+      - run: node scripts/verify-release-gates.ts dispatch
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(inputs.candidate).runId }}
+          artifact-ids: ${{ fromJSON(inputs.candidate).artifactId }}
+          path: ${{ runner.temp }}/candidate
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: proof-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/proofs
+      - name: Assemble original proof references
+        env:
+          CANDIDATE_REFERENCE: ${{ inputs.candidate }}
+        run: node scripts/verify-release-gates.ts assemble --root "$RUNNER_TEMP/proofs" --out
+          "$RUNNER_TEMP/proofs.json"
+      - name: Save bounded target data
+        env:
+          TARGET_REFERENCE: ${{ inputs.target }}
+        run: node scripts/prepare-release.ts descriptor --out "$RUNNER_TEMP/target.json" --kind target
+      - name: Install all five real candidate packages before deployment credentials enter any process
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run:
+          node scripts/live-device-evidence.ts install --candidate "$RUNNER_TEMP/candidate/candidate.json" --target
+          "$RUNNER_TEMP/target.json" --out "$RUNNER_TEMP/installation.json"
+      - name: Revoke public device ownership references and record actual cleanup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+        run:
+          node scripts/live-device-evidence.ts cleanup --installation "$RUNNER_TEMP/installation.json" --out
+          "$RUNNER_TEMP/devices"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name:
+            device-cleanup-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt
+            }}
+          path: ${{ runner.temp }}/devices/cleanup
+          if-no-files-found: error
+          retention-days: 30
+    if: always() && ((inputs.operation == 'deploy' || inputs.operation == 'verify') && github.ref ==
+      'refs/heads/main' && github.repository == 'scottdraper8/fortipi')
+  operate:
+    needs:
+      - proofs
+      - initial-installed-deployment
+      - live-device-a
+      - live-device-b
+      - live-device-cleanup
+    runs-on: ubuntu-24.04
+    environment: ${{ fromJSON(inputs.target).slot == 'paid-validation' && 'paid-validation' || 'production' }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+        with:
+          egress-policy: block
+          allowed-endpoints:
+            api.github.com:443 github.com:443 release-assets.githubusercontent.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 *.stepsecurity.io:443
+            registry.npmjs.org:443 nodejs.org:443 api.cloudflare.com:443 *.workers.dev:443
+            download.docker.com:443 auth.docker.io:443 registry-1.docker.io:443
+            production.cloudflare.docker.com:443 ghcr.io:443 pkg-containers.githubusercontent.com:443
+            *.cloudflare.com:443
+      - run: /usr/bin/systemctl is-active --quiet agent.service
+        name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.13.1
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 12.18.0
+          run_install: false
+          cache: false
+      - run: node scripts/install-dependencies.ts
+      - run: node scripts/build-workspaces.ts build:evidence
+      - run: node scripts/verify-release-gates.ts dispatch
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(inputs.candidate).runId }}
+          artifact-ids: ${{ fromJSON(inputs.candidate).artifactId }}
+          path: ${{ runner.temp }}/candidate
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: proof-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/proofs
+      - name: Assemble original proof references
+        env:
+          CANDIDATE_REFERENCE: ${{ inputs.candidate }}
+        run: node scripts/verify-release-gates.ts assemble --root "$RUNNER_TEMP/proofs" --out
+          "$RUNNER_TEMP/proofs.json"
+      - name: Save bounded target data
+        env:
+          TARGET_REFERENCE: ${{ inputs.target }}
+        run: node scripts/prepare-release.ts descriptor --out "$RUNNER_TEMP/target.json" --kind target
+      - name: Install all five real candidate packages before deployment credentials enter any process
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run:
+          node scripts/live-device-evidence.ts install --candidate "$RUNNER_TEMP/candidate/candidate.json" --target
+          "$RUNNER_TEMP/target.json" --out "$RUNNER_TEMP/installation.json"
+      - name: Observe initial current version without redeploying installed bytes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+        run:
+          node scripts/live-device-evidence.ts observe --installation "$RUNNER_TEMP/installation.json" --out
+          "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json"
+      - name: Authenticate completed device phases and cleanup for evidence composition
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run:
+          node scripts/live-device-evidence.ts collect --installation "$RUNNER_TEMP/installation.json" --deployment
+          "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json" --out
+          "$RUNNER_TEMP/device-evidence.json"
       - name: Coordinate actual recovery with isolated application evidence
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -218,8 +596,9 @@ jobs:
           FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
         run:
           node scripts/deploy-smoke.ts evidence --candidate "$RUNNER_TEMP/candidate/candidate.json" --fixture
-          "$FORTIPI_EVIDENCE_FIXTURE" --out "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json" --installation
-          "$RUNNER_TEMP/installation.json" --proofs "$RUNNER_TEMP/proofs.json"
+          "$FORTIPI_EVIDENCE_FIXTURE" --out "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json"
+          --installation "$RUNNER_TEMP/installation.json" --proofs "$RUNNER_TEMP/proofs.json" --devices
+          "$RUNNER_TEMP/device-evidence.json"
       - name: Retain observed identity and actual claim results
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -233,15 +612,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run:
-          node scripts/deploy-smoke.ts retain-operation --candidate "$RUNNER_TEMP/candidate/candidate.json" --claims
-          "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json" --out "$RUNNER_TEMP/live" --readiness
-          "$RUNNER_TEMP/readiness" --recovery "$RUNNER_TEMP/claims.recovery-link.json" --current
-          "$RUNNER_TEMP/deployment.json.provider-version.json" --proofs "$RUNNER_TEMP/proofs.json"
+          node scripts/deploy-smoke.ts retain-operation --candidate "$RUNNER_TEMP/candidate/candidate.json"
+          --claims "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json" --out "$RUNNER_TEMP/live"
+          --readiness "$RUNNER_TEMP/readiness" --recovery "$RUNNER_TEMP/claims.recovery-link.json" --current
+          "$RUNNER_TEMP/deployment.json.provider-version.json" --proofs "$RUNNER_TEMP/proofs.json" --devices
+          "$RUNNER_TEMP/device-evidence.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name:
-            ${{ inputs.operation == 'deploy' && 'live' || 'independent' }}-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{
-            github.run_id }}-${{ github.run_attempt }}
+            ${{ inputs.operation == 'deploy' && 'live' || 'independent' }}-${{ inputs.commit_sha }}-${{ inputs.scope
+            }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/live
           if-no-files-found: error
           retention-days: 30
@@ -251,3 +631,7 @@ jobs:
           path: ${{ runner.temp }}/readiness
           if-no-files-found: error
           retention-days: 30
+    if:
+      always() && needs.proofs.result == 'success' && needs.initial-installed-deployment.result == 'success' &&
+      needs.live-device-a.result == 'success' && needs.live-device-b.result == 'success' &&
+      needs.live-device-cleanup.result == 'success'
