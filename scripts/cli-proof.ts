@@ -68,8 +68,20 @@ async function run(file: string, args: string[], cwd = root, timeout = 120000) {
       args[0] === "packages/fortipi-cli/test/install-harness.ts" &&
       error instanceof Error &&
       "stderr" in error
-    )
-      failure = installedFailureLocation(error.stderr);
+    ) {
+      const code = "code" in error && typeof error.code === "number" ? error.code : null;
+      const signal =
+        "signal" in error &&
+        ["SIGKILL", "SIGTERM", "SIGABRT", "SIGSEGV"].includes(String(error.signal))
+          ? String(error.signal)
+          : "none";
+      const stderr = typeof error.stderr === "string" ? error.stderr : "";
+      const condition =
+        ["ERR_ASSERTION", "ERR_MODULE_NOT_FOUND", "ENOENT", "EACCES", "ENOSPC", "ENOMEM"].find(
+          (known) => stderr.includes(known),
+        ) ?? "unknown";
+      failure = `${installedFailureLocation(stderr)}; exit=${code}; signal=${signal}; stderrBytes=${Buffer.byteLength(stderr)}; kind=${condition}`;
+    }
     throw error;
   }
 }
@@ -80,7 +92,7 @@ export function installedFailureLocation(stderr: unknown): string {
   const locations =
     typeof stderr === "string"
       ? (stderr.match(
-          /(?:scripts\/(?:prepare-release|runtime-closure|generate-notices|stage-runtime-bundle|verify-release-gates|pnpm-executable)\.ts|scripts\/test\/release\/fixtures\.ts|packages\/fortipi-cli\/(?:dist|test)\/[a-z.-]+\.(?:ts|js)):\d{1,6}:\d{1,6}/g,
+          /(?:scripts\/(?:prepare-release|rewrite-publish-names|runtime-closure|runtime-conveyance|check-licenses|generate-notices|stage-runtime-bundle|verify-release-gates|pnpm-executable)\.ts|scripts\/test\/release\/fixtures\.ts|packages\/fortipi-cli\/(?:dist|test)\/[a-z.-]+\.(?:ts|js)):\d{1,6}:\d{1,6}/g,
         ) ?? [])
       : [];
   const selected = [...new Set(locations)].slice(0, 4);
