@@ -1,0 +1,76 @@
+name: Source runtime Linux control
+on:
+  push:
+    branches: ["ci/fortipi-source-runtime-proof-*"]
+permissions:
+  contents: read
+concurrency:
+  group: source-runtime-proof-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  CI: "true"
+  GOTOOLCHAIN: local
+  WRANGLER_SEND_METRICS: "false"
+  CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"
+  npm_config_node_gyp: ${{ github.workspace }}/node_modules/node-gyp/bin/node-gyp.js
+  npm_config_build_from_source: "true"
+jobs:
+  source-runtime-control:
+    if: >-
+      github.repository == 'scottdraper8/fortipi' && !github.event.repository.fork &&
+      startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            api.github.com:443 github.com:443 objects.githubusercontent.com:443
+            raw.githubusercontent.com:443 release-assets.githubusercontent.com:443
+            codeload.github.com:443 *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443 registry.npmjs.org:443 nodejs.org:443
+            api.osv.dev:443 go.dev:443 dl.google.com:443 proxy.golang.org:443
+            sum.golang.org:443 storage.googleapis.com:443 *.stepsecurity.io:443
+      - name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        run: /usr/bin/systemctl is-active --quiet agent.service
+        timeout-minutes: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.13.1"
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: "12.18.0"
+          run_install: false
+          cache: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15.2"
+          check-latest: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.4"
+          cache: false
+      - run: node scripts/install-dependencies.ts
+      - run: pnpm --dir tools/unstale install --frozen-lockfile
+      - run: node scripts/verify-foundation.ts --native
+      - run: node tools/unstale/review-supply-chain.ts --locks --check
+      - run: node scripts/check-licenses.ts --foundation
+      - run: node scripts/build-workspaces.ts build:evidence
+      - name: Observe three actual source test processes directly
+        run: >-
+          node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
+          apps/worker/test/agent/admin-file-bearing.test.ts
+          apps/worker/test/agent/process-recovery.test.ts
+          apps/worker/test/api/stream-boundaries.test.ts
+      - name: Require Linux hardener service still active
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: /usr/bin/systemctl is-active --quiet agent.service
+        timeout-minutes: 1
