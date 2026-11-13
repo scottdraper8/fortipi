@@ -38,6 +38,7 @@ async function fixture(scope = "release-fixture", job = "native") {
   ).stdout;
   c.scope = scope;
   c.publishable = scope !== SYNTHETIC_SCOPE;
+  for (const pkg of c.packages) pkg.name = `@${scope}/${pkg.sourceName}`;
   c.producer = {
     workflowPath: ".github/workflows/release.yml",
     workflowSha256: sha256(workflow),
@@ -156,9 +157,10 @@ async function fixture(scope = "release-fixture", job = "native") {
     else if (route.includes("/contents/"))
       value = {
         encoding: "base64",
-        content: Buffer.from(fault === "workflow-bytes" ? "foreign workflow" : workflow).toString(
-          "base64",
-        ),
+        content: `${Buffer.from(fault === "workflow-bytes" ? "foreign workflow" : workflow)
+          .toString("base64")
+          .match(/.{1,60}/g)
+          ?.join("\n")}\n`,
       };
     else if (route.endsWith("/actions/workflows/11"))
       value = { id: 11, path: ".github/workflows/release.yml", state: "active" };

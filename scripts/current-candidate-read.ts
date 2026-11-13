@@ -215,8 +215,9 @@ export async function verifyCurrentCandidateRead(
     await request(`${base}/contents/${workflowPath}?ref=${candidate.sourceCommit}`),
   );
   assert.equal(content.encoding, "base64");
+  assert.ok(typeof content.content === "string" && content.content.length <= 4_000_000);
   assert.equal(
-    sha256(Buffer.from(string(content.content, 4_000_000).replaceAll("\n", ""), "base64")),
+    sha256(Buffer.from(content.content.replaceAll("\n", ""), "base64")),
     producer.workflowSha256,
     "Current candidate API workflow differs",
   );
