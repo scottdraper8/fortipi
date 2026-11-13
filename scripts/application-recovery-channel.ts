@@ -46,7 +46,13 @@ function safeMessage(value: unknown, forbidden: readonly string[] = []): string 
   const bytes = JSON.stringify(value);
   assert.ok(Buffer.byteLength(bytes) <= 1_000_000, "Recovery channel byte bound");
   for (const secret of forbidden)
-    if (secret) assert.ok(!bytes.includes(secret), "Credential forbidden in recovery response");
+    if (secret) {
+      const escaped = JSON.stringify(secret).slice(1, -1);
+      assert.ok(
+        !bytes.includes(secret) && !bytes.includes(escaped),
+        "Credential forbidden in recovery response",
+      );
+    }
   return bytes;
 }
 

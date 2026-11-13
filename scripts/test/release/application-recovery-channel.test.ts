@@ -176,29 +176,32 @@ test("wrong checkpoint paths and read-only channel writes fail before a trusted 
 });
 
 test("provider errors and accidentally credential-bearing replies stay in the trusted process", async () => {
-  const secret = "synthetic-private-cloudflare-canary-value";
-  for (const throws of [false, true]) {
-    const result = await run(
-      `
+  for (const secret of [
+    "synthetic-private-cloudflare-canary-value",
+    'synthetic-quote"and-backslash\\-newline\n-canary',
+  ])
+    for (const throws of [false, true]) {
+      const result = await run(
+        `
       try { await applicationRecoveryChannel('perform').perform(${JSON.stringify(before)}); throw Error('Leaked response'); }
       catch(error) { if(!String(error).includes('response rejected'))throw error; console.log(String(error)); }
     `,
-      {
-        mode: "perform",
-        bridge: {
-          async perform() {
-            if (throws) throw new Error(secret);
-            return { status: "unavailable", reason: secret };
-          },
-          async finish() {
-            throw new Error("Unexpected finish");
+        {
+          mode: "perform",
+          bridge: {
+            async perform() {
+              if (throws) throw new Error(secret);
+              return { status: "unavailable", reason: secret };
+            },
+            async finish() {
+              throw new Error("Unexpected finish");
+            },
           },
         },
-      },
-      [secret],
-    );
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(result.rejection, /channel rejected/);
-    assert.equal(`${result.stdout}${result.stderr}${result.rejection}`.includes(secret), false);
-  }
+        [secret],
+      );
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(result.rejection, /channel rejected/);
+      assert.equal(`${result.stdout}${result.stderr}${result.rejection}`.includes(secret), false);
+    }
 });
