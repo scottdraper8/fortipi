@@ -74,6 +74,8 @@ jobs:
           check-latest: false
       - name: Require frozen owner ports
         run: node scripts/cli-proof.ts inputs
+      - name: Populate the pinned producer store before the normal frozen install
+        run: pnpm fetch --frozen-lockfile
       - run: node scripts/install-dependencies.ts
       - run: pnpm --dir tools/unstale install --frozen-lockfile
       - run: node scripts/verify-foundation.ts --egress
@@ -97,8 +99,6 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run schema:check
       - run: pnpm run check:licenses
-      - name: Populate the pinned producer store before offline packaging
-        run: pnpm fetch --prod --frozen-lockfile
       - name: Stage and install the five scoped source component bundles
         run: node scripts/cli-proof.ts install
       - name: Run the installed CLI with an empty OS home and no external network
