@@ -965,7 +965,8 @@ async function controlled() {
       artifactDigest: `sha256:${sha256(originalZip.bytes)}`,
       candidateSha256: manifestHash,
     };
-    await saveJson(proofsPath, {
+    const verifyProofsPath = resolve(root, "verify-proofs.json");
+    await saveJson(verifyProofsPath, {
       schemaVersion: 1,
       candidateArtifact: originalReference,
       proofs: [
@@ -973,6 +974,7 @@ async function controlled() {
         { artifact: integratedReference, directory: integratedDirectory },
       ],
     });
+    common.proofsPath = verifyProofsPath;
     const verifyDeployment = resolve(root, "verify-deployment.json");
     await saveJson(verifyDeployment, link.current);
     await copyFile(result.currentReceiptPath, `${verifyDeployment}.cli.json`);
