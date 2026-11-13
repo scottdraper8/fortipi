@@ -73,7 +73,10 @@ export class RoleContext {
   assertSanitized(value: unknown) {
     const bytes = JSON.stringify(value);
     for (const token of [this.#admin, ...this.#roles.map((r) => r.receipt.token)])
-      assert.ok(!bytes.includes(token), "Credential appeared in evidence");
+      assert.ok(
+        !bytes.includes(token) && !bytes.includes(JSON.stringify(token).slice(1, -1)),
+        "Credential appeared in evidence",
+      );
   }
   revoke(credentialId: string): Promise<RevocationReceipt> {
     const role = this.#roles.find((r) => r.receipt.credential.credentialId === credentialId);
