@@ -482,7 +482,7 @@ export async function runEvidence(
       [
         "runLocalInfrastructureDetails",
         "runInfrastructureLocalOutput",
-        "runInfrastructureLocalRefusal",
+        "produceLocalRefusalRestoration",
         "existing-retention-and-retirement",
       ],
       "Actual LOCAL output/pressure/SQLite/staging/history/headroom cases plus already observed retention/physical retirement complete the detailed original infrastructure claim",
@@ -494,22 +494,14 @@ export async function runEvidence(
             ).href
           ),
         );
-        const runCore = core.runLocalInfrastructureDetails;
-        assert.ok(typeof runCore === "function");
-        const details = object(await runCore());
-        const helper = async (path: string, name: string) => {
-          await git("ls-files", "--error-unmatch", path);
-          const module = object(await import(pathToFileURL(resolve(repository, path)).href));
-          const fn = module[name];
-          assert.equal(typeof fn, "function");
-          assert.ok(typeof fn === "function");
-          const observed: unknown = await fn();
-          return observed;
-        };
-        const [output, refusalRestoration] = await Promise.all([
-          helper("tests/clients/infrastructure-local-output.ts", "runInfrastructureLocalOutput"),
-          helper("tests/clients/infrastructure-local-refusal.ts", "runInfrastructureLocalRefusal"),
-        ]);
+        const completeLocal = core.completeLocalInfrastructureObservation;
+        assert.ok(typeof completeLocal === "function");
+        await git(
+          "ls-files",
+          "--error-unmatch",
+          "tests/clients/infrastructure-local-output.ts",
+          "tests/clients/infrastructure-local-refusal.ts",
+        );
         const original = results.find((row) => row.id === "infrastructure-boundaries");
         const replay = results.find((row) => row.id === "application-replay");
         const retirement = results.find((row) => row.id === "sealed-store-retirement");
@@ -518,27 +510,19 @@ export async function runEvidence(
             replay?.outcome === "pass" &&
             retirement?.outcome === "pass",
         );
-        const { verifyLocalInfrastructureObservation } = await import(
-          "./infrastructure-local-proof.ts"
-        );
         const { infrastructureFixtureBounds } = await import("./live-infrastructure-controls.ts");
         const { canonicalJson } = await import("../../packages/fortipi-contract/dist/index.js");
-        const complete = {
-          ...original.observation,
-          localInfrastructureDetails: {
-            schemaVersion: 1,
-            baseBoundsSha256: sha256(canonicalJson(infrastructureFixtureBounds)),
+        const complete = object(
+          await completeLocal({
+            observation: original.observation,
             retention: object(replay.observation.bounds),
             retirement: retirement.observation,
-            output,
-            refusalRestoration,
-            ...details,
-          },
-        };
-        original.observation = verifyLocalInfrastructureObservation(
-          complete,
-          sha256(canonicalJson(infrastructureFixtureBounds)),
+            baseBoundsSha256: sha256(canonicalJson(infrastructureFixtureBounds)),
+          }),
         );
+        original.observation = object(complete.observation);
+        assert.ok(Array.isArray(complete.limitations));
+        original.limitations.push(...complete.limitations.map((value) => string(value, 8192)));
         original.oracle =
           "Detailed actual LOCAL admission, workspace bytes/staging/history, event/output retention, receiver refusal/restoration, retained completion headroom and physical retirement preserve original identities/bytes under declared local allocations/faults";
         original.limitations.push(

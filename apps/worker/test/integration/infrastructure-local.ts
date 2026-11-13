@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { manifestDigest } from "../../../../packages/fortipi-contract/dist/index.js";
+import {
+  infrastructureLocalOutputLimitations,
+  runInfrastructureLocalOutput,
+} from "../../../../tests/clients/infrastructure-local-output.ts";
+import { verifyLocalInfrastructureObservation } from "../../../../tests/clients/infrastructure-local-proof.ts";
+import { produceLocalRefusalRestoration } from "../../../../tests/clients/infrastructure-local-refusal.ts";
 import { RoleContext } from "../../../../tests/clients/roles.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { assignedJob } from "../control/artifact-job.ts";
@@ -11,6 +17,46 @@ import { type Runtime, start } from "./runtime.ts";
 import { stageWorkspace } from "./workspace-portability.ts";
 
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
+
+/** Completes the SAME original LOCAL observation using genuine companion
+ * results. This is shared by the runner and its bounded composition check;
+ * neither invocation creates a Gate or authenticates an artifact producer. */
+export async function completeLocalInfrastructureObservation(prior: {
+  observation: Record<string, unknown>;
+  retention: unknown;
+  retirement: unknown;
+  baseBoundsSha256: string;
+}) {
+  const [details, output, refusalRestoration] = await Promise.all([
+    runLocalInfrastructureDetails(),
+    runInfrastructureLocalOutput(),
+    produceLocalRefusalRestoration(),
+  ]);
+  const observation = verifyLocalInfrastructureObservation(
+    {
+      ...prior.observation,
+      localInfrastructureDetails: {
+        schemaVersion: 1,
+        baseBoundsSha256: prior.baseBoundsSha256,
+        retention: prior.retention,
+        retirement: prior.retirement,
+        output,
+        refusalRestoration,
+        ...details,
+      },
+    },
+    prior.baseBoundsSha256,
+  );
+  return {
+    observation,
+    limitations: [
+      ...infrastructureLocalOutputLimitations,
+      "Output uses ASCII stdout with artifact capacity equal to output capacity; no independent Unicode/stderr or artifact-clipping boundary claim",
+      "Refusal uses real workerd/SQLite INSERT-abort and SIGKILL/same-storage canary recovery; recipient pressure and known120s guidance are synthetic, not observed provider exhaustion or reset discovery",
+      "Detailed allocations/faults and registered CP cleanup are LOCAL; they do not certify Cloudflare account ceilings, a native process stop or provider recovery",
+    ],
+  };
+}
 
 /** Public Computer staging/history at schema-valid reduced LOCAL allocations.
  * No actual Cloudflare/account exhaustion or copied private ledger counters. */
