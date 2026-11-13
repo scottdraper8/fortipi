@@ -700,6 +700,9 @@ export function evidenceEnvironment(
   return childEnvironment({
     FORTIPI_EVIDENCE_PRODUCER: canonicalJson(producer),
     ...(mode === "live" ? { FORTIPI_ADMIN_TOKEN: process.env.FORTIPI_ADMIN_TOKEN } : {}),
+    ...(mode === "native" && context?.kind === "current"
+      ? { RUNNER_NAME: process.env.RUNNER_NAME }
+      : {}),
     ...(context
       ? {
           GITHUB_TOKEN: process.env.GITHUB_TOKEN,

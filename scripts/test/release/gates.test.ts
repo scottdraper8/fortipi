@@ -309,12 +309,13 @@ test("only trusted candidate setup receives GitHub context and ordinary client c
       kind:'current',reference:${JSON.stringify(reference)},request:()=>{throw Error('No API call in environment test')}
     });
     const result=await execute(process.execPath,['--input-type=module','-e',
-      "const {childEnvironment,execute}=await import("+${JSON.stringify(JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href))}+"); const result=await execute(process.execPath,['-e', 'console.log(JSON.stringify({github:!!process.env.GITHUB_TOKEN,reference:!!process.env.FORTIPI_CANDIDATE_REFERENCE,admin:!!process.env.FORTIPI_ADMIN_TOKEN,cf:!!process.env.CLOUDFLARE_API_TOKEN,npm:!!process.env.NPM_TOKEN,model:!!process.env.OPENAI_API_KEY}))'],process.cwd(),childEnvironment());if(result.code!==0)throw Error('client failed');console.log(JSON.stringify({trustedGithub:!!process.env.GITHUB_TOKEN,operation:process.env.OPERATION,reference:JSON.parse(process.env.FORTIPI_CANDIDATE_REFERENCE),client:JSON.parse(result.stdout)}));"
+      "const {childEnvironment,execute}=await import("+${JSON.stringify(JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href))}+"); const result=await execute(process.execPath,['-e', 'console.log(JSON.stringify({github:!!process.env.GITHUB_TOKEN,reference:!!process.env.FORTIPI_CANDIDATE_REFERENCE,runnerName:!!process.env.RUNNER_NAME,admin:!!process.env.FORTIPI_ADMIN_TOKEN,cf:!!process.env.CLOUDFLARE_API_TOKEN,npm:!!process.env.NPM_TOKEN,model:!!process.env.OPENAI_API_KEY}))'],process.cwd(),childEnvironment());if(result.code!==0)throw Error('client failed');console.log(JSON.stringify({trustedGithub:!!process.env.GITHUB_TOKEN,runnerName:process.env.RUNNER_NAME,operation:process.env.OPERATION,reference:JSON.parse(process.env.FORTIPI_CANDIDATE_REFERENCE),client:JSON.parse(result.stdout)}));"
     ],${JSON.stringify(repository)},trusted);
     if(result.code!==0)throw Error('trusted setup failed');process.stdout.write(result.stdout);`;
   const result = await execute(process.execPath, ["--input-type=module", "-e", code], repository, {
     PATH: process.env.PATH,
     GITHUB_TOKEN: "synthetic-github-role",
+    RUNNER_NAME: "synthetic-native-runner",
     CLOUDFLARE_API_TOKEN: "synthetic-cloudflare-role",
     NPM_TOKEN: "synthetic-npm-role",
     OPENAI_API_KEY: "synthetic-model-role",
@@ -324,9 +325,18 @@ test("only trusted candidate setup receives GitHub context and ordinary client c
   assert.equal(result.code, 0, result.stdout);
   assert.deepEqual(JSON.parse(result.stdout), {
     trustedGithub: true,
+    runnerName: "synthetic-native-runner",
     operation: "candidate",
     reference,
-    client: { github: false, reference: false, admin: false, cf: false, npm: false, model: false },
+    client: {
+      github: false,
+      reference: false,
+      runnerName: false,
+      admin: false,
+      cf: false,
+      npm: false,
+      model: false,
+    },
   });
 });
 
