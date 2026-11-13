@@ -8,6 +8,10 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import {
+  offlineWranglerEnvironment,
+  verifyOfflineWranglerAuth,
+} from "../../../../tests/clients/offline-wrangler.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { bootstrap, config } from "../control/harness.ts";
 
@@ -45,6 +49,7 @@ async function runtime() {
     dirname(fileURLToPath(import.meta.resolve("wrangler"))),
     "../bin/wrangler.js",
   );
+  await verifyOfflineWranglerAuth(executable);
   let child: ChildProcess | undefined;
   async function start(key: string | null = "a1".repeat(32)) {
     assert.equal(child, undefined);
@@ -108,13 +113,7 @@ async function runtime() {
         cwd: directory,
         detached: process.platform !== "win32",
         stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          PATH: process.env.PATH,
-          WRANGLER_SEND_METRICS: "false",
-          XDG_CONFIG_HOME: join(directory, "config"),
-          XDG_CACHE_HOME: join(directory, "cache"),
-          CI: "true",
-        },
+        env: offlineWranglerEnvironment(directory),
       },
     );
     let output = "";
