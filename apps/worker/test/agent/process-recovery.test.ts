@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually } from "./harness.ts";
-import { processHarness } from "./process-harness.ts";
+import { processHarness, processRequestFailure } from "./process-harness.ts";
 
 interface ProbeState {
   barrier: string | null;
@@ -61,7 +61,9 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
             : null;
         if (frame) diagnostic.location = `${frame[1]}:${frame[2]}:${frame[3]}`;
       }
-      t.diagnostic(JSON.stringify(diagnostic));
+      t.diagnostic(
+        JSON.stringify({ ...diagnostic, request: processRequestFailure(error) ?? null }),
+      );
     } catch {
       /* Diagnostics must not replace the original thrown value. */
     }
@@ -138,7 +140,8 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
         .catch(() => undefined);
       phase = `${point}.wait`;
       const before = await eventually(
-        async () => (await h.api<ProbeState>(`${probe}/state`)).body,
+        async () =>
+          (await h.api<Pick<ProbeState, "barrier" | "admissions">>(`${probe}/barrier`)).body,
         (s) => s.barrier === point,
       );
       const identity = before.admissions.find((a) => !previous.includes(a.operationId));

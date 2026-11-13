@@ -481,10 +481,21 @@ export class TestAgentSession extends AgentSession {
         await this.store.put("fixture", "fault", await request.json());
         return Response.json({ armed: true });
       }
-      if (action === "state") {
+      if (action === "state" || action === "barrier") {
         const admissions = await this.store.page<
           import("../../src/agent/conversations.js").Admission
         >("admission", 100);
+        const observed = async () => ({
+          barrier: (await this.store.get("fixture", "barrier")) ?? null,
+          admissions: admissions.map((row) => ({
+            operationId: row.value.operationId,
+            messageId: row.value.messageId,
+            taskId: row.value.taskId,
+            receipt: row.value.receipt ?? null,
+          })),
+        });
+        // Observe a committed fault boundary without joining Pi's execution line.
+        if (action === "barrier") return Response.json(await observed());
         const creations = await this.store.page<
           import("../../src/agent/conversations.js").CreationIntent
         >("creation", 100);
@@ -497,13 +508,7 @@ export class TestAgentSession extends AgentSession {
           BACKGROUND_CONTEXT,
         );
         return Response.json({
-          barrier: (await this.store.get("fixture", "barrier")) ?? null,
-          admissions: admissions.map((row) => ({
-            operationId: row.value.operationId,
-            messageId: row.value.messageId,
-            taskId: row.value.taskId,
-            receipt: row.value.receipt ?? null,
-          })),
+          ...(await observed()),
           admissionIntents: admissionIntents.map(({ value }) => ({
             operationId: value.operationId,
             messageId: value.messageId,
@@ -1421,7 +1426,7 @@ export default {
     if (url.pathname === "/__test/dispatch-trace")
       return env.CONTROL_PLANE.getByName("control").fetch(request);
     const match =
-      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|inspect|tool|tool-state|job-diagnostics|repair|growth)$/.exec(
+      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|barrier|inspect|tool|tool-state|job-diagnostics|repair|growth)$/.exec(
         url.pathname,
       );
     if (match) {

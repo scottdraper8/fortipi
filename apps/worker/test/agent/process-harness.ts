@@ -11,6 +11,18 @@ import { freeInfrastructurePolicy } from "fortipi-contract";
 
 const pause = (ms: number) => new Promise<void>((accept) => setTimeout(accept, ms));
 export const processBootstrap = "synthetic-process-thread5-bootstrap-000000000000";
+interface RequestFailure {
+  operation: "state" | "barrier" | "submission" | "other";
+  stage: "response" | "body";
+  reason: "deadline" | "transport" | "body";
+  code: string | null;
+  childExitCode: number | null;
+  childSignal: "SIGKILL" | "SIGTERM" | null;
+}
+const requestFailures = new WeakMap<object, RequestFailure>();
+export function processRequestFailure(error: unknown): RequestFailure | undefined {
+  return error !== null && typeof error === "object" ? requestFailures.get(error) : undefined;
+}
 async function freePort() {
   const server = createServer();
   await new Promise<void>((accept) => server.listen(0, "127.0.0.1", accept));
@@ -67,13 +79,60 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     method = body === undefined ? "GET" : "POST",
     token = processBootstrap,
   ) => {
-    const response = await fetch(`${origin}${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(20000),
-    });
-    return { status: response.status, body: (await response.json()) as T };
+    const signal = AbortSignal.timeout(20000);
+    let stage: RequestFailure["stage"] = "response";
+    try {
+      const response = await fetch(`${origin}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal,
+      });
+      stage = "body";
+      return { status: response.status, body: (await response.json()) as T };
+    } catch (error) {
+      try {
+        if (error !== null && typeof error === "object") {
+          const cause = Object.getOwnPropertyDescriptor(error, "cause")?.value;
+          const code = Object.getOwnPropertyDescriptor(
+            cause !== null && typeof cause === "object" ? cause : error,
+            "code",
+          )?.value;
+          requestFailures.set(error, {
+            operation: /^\/__test\/agents\/[A-Za-z0-9_-]+\/state$/.test(path)
+              ? "state"
+              : /^\/__test\/agents\/[A-Za-z0-9_-]+\/barrier$/.test(path)
+                ? "barrier"
+                : /^\/v1\/conversations\/[A-Za-z0-9_-]+\/messages$/.test(path)
+                  ? "submission"
+                  : "other",
+            stage,
+            reason: signal.aborted ? "deadline" : stage === "body" ? "body" : "transport",
+            code:
+              typeof code === "string" &&
+              [
+                "ECONNRESET",
+                "ECONNREFUSED",
+                "ETIMEDOUT",
+                "UND_ERR_SOCKET",
+                "UND_ERR_CONNECT_TIMEOUT",
+                "UND_ERR_HEADERS_TIMEOUT",
+                "UND_ERR_BODY_TIMEOUT",
+              ].includes(code)
+                ? code
+                : null,
+            childExitCode: child?.exitCode ?? null,
+            childSignal:
+              child?.signalCode === "SIGKILL" || child?.signalCode === "SIGTERM"
+                ? child.signalCode
+                : null,
+          });
+        }
+      } catch {
+        /* Diagnostics must not replace the original request failure. */
+      }
+      throw error;
+    }
   };
   async function start() {
     assert.ok(!child, "Previous process must be stopped");
