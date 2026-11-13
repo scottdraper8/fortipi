@@ -120,11 +120,11 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "90ed3e3b14b58c48193a467e4d5af035570ce56d",
+        "commit": "071c1e0082b0a2df0b0dbad71e6e55db5289a285",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
-          "packages/ai": "b458489305325e346798f525895c0c7a8cf0c64a51bb3cdf025958f903f039ee",
+          "packages/ai": "b49f6b5e94704d9a40b31412eabcbf2dd33f0b914f61f00b2a158bd5e0255a87",
           "packages/chord": "9678684f102beda9d8635d14b277de5872b0acbfb921bf41eb627b68792fcff7",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "dc87d765abc06c7764d3569f4bfc5aacb424eec3573a9aabd4197c346d5ef2fa",
@@ -135,7 +135,7 @@
           "packages/tui": "5483c0578f10b3c4346666658e4486062e9ad03707c10ded58ccf59eddf318d9",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "a50712909378f65131be8aca3db3bb5724b0bbed17e6c2310a0bdc3024dfb8ff"
+        "sha256": "b7d1d4bc424cbc47581e82bc181dd5d7ab168ad5db5fa12427a92f980e1347ba"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-13T10:13:42.213Z",
-      "reviewNote": "Reviewed immutable47e9d74f..90ed3e3b:1commit/9files (+233/-19). Chord production only reorders internal Target.call context/binding arguments consistently; tests cover drain-version admission reuse, event retry transfer, terminal revocation/call/watch closure and GC/order. Bench/docs correct observed heap and wire-hold/activity meanings. Selected context/SQLite/Delta helpers unchanged; no Durable/AI/agent change. Shared-hold join still skips fresh admission; future adoption needs authority/revocation review. Latest official release/all10 npm packages remain mature1.5.2; seven installed SRI/archive hashes and three patches retained. Reference only: no dependency/runtime/security adoption or root-canary diagnosis. Evidence:phase3/thread-9/compatibility-pi-90ed-build.md."
+      "reviewedAt": "2026-11-13T12:11:56.364Z",
+      "reviewNote": "Reviewed immutable90ed3e3b..071c1e00:6commits/49files (+1683/-51). Only watched AI changes: standalone Node socket-code/reset-by-peer retry classification, unreleased changelog/tests. Used Worker retry utility; loop/bounds/abort/quota exclusions unchanged. Authenticated installed1.5.2 utility lacks new matches; bounded synthetic call shows old1/new2 with one retry. Other changes: uninstalled P2 telemetry opt-in/refused ingest and owner scope-prompt UI, coding-agent copy/RPC text selection. Watched manifests/exports, Durable/Chord, storage/tool dispatch and provider-auth APIs unchanged. All10 official latest/most-recent packages remain mature1.5.2; seven raw SRI/SHA archives and three patches retained. Prior Chord shared-hold authority caveat remains. Reference only: no unpublished adoption/security/root-canary or live clearance. Evidence:phase3/thread-9/compatibility-pi-071c-build.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
