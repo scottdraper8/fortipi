@@ -427,6 +427,8 @@ export async function operateDeployment(
   assert.equal(hash, installed.candidateSha256);
   await privilegedCheckout(candidate);
   await trustedMain(candidate, githubRequest(process.env.GITHUB_TOKEN));
+  const target = installed.target;
+  assertTarget(target);
   const gate = await execute(
     process.execPath,
     [
@@ -436,13 +438,14 @@ export async function operateDeployment(
       candidatePath,
       "--proofs",
       proofsPath,
+      "--account-binding-sha256",
+      target.accountBindingSha256,
     ],
     repository,
     childEnvironment({ GITHUB_TOKEN: process.env.GITHUB_TOKEN }),
     300000,
   );
   assert.equal(gate.code, 0, "Deployment prerequisites unavailable");
-  const target = installed.target;
   assertTarget(target);
   const _deployment = object(object(target.operator).deployment);
   assert.equal(

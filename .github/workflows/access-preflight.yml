@@ -1,27 +1,40 @@
 name: Access preflight
-
 on:
   workflow_dispatch:
-
+    inputs:
+      purpose:
+        type: choice
+        options: [informational, deployment, publication]
+        default: informational
+        required: true
+      candidate:
+        description: Exact completed candidate ArtifactReference; required for recorded purposes
+        type: string
+        default: "{}"
 permissions:
   contents: read
-
+  actions: read
+env:
+  CI: "true"
+  WRANGLER_SEND_METRICS: "false"
+  FORTIPI_CANDIDATE_REFERENCE: ${{ inputs.purpose != 'informational' && inputs.candidate || '' }}
 jobs:
   cloudflare:
+    if: github.ref == 'refs/heads/main' && github.repository == 'scottdraper8/fortipi'
     runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 5
+    outputs:
+      artifact-id: ${{ steps.cf-artifact.outputs.artifact-id }}
+      artifact-digest: ${{ steps.cf-artifact.outputs.artifact-digest }}
     steps:
       - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
-            api.cloudflare.com:443
-            github.com:443
-            api.github.com:443
-            raw.githubusercontent.com:443
-            release-assets.githubusercontent.com:443
-            nodejs.org:443
+            api.cloudflare.com:443 github.com:443 api.github.com:443 raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443 nodejs.org:443 objects.githubusercontent.com:443
+            codeload.github.com:443 *.actions.githubusercontent.com:443 *.blob.core.windows.net:443 registry.npmjs.org:443
       - name: Require Linux hardener service active
         if: runner.os == 'Linux'
         shell: bash
@@ -34,13 +47,57 @@ jobs:
         with:
           node-version: "26.13.1"
           package-manager-cache: false
-      - name: Verify Cloudflare access
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        if: inputs.purpose != 'informational'
+        with:
+          version: 12.18.0
+          run_install: false
+          cache: false
+      - if: inputs.purpose != 'informational'
+        run: node scripts/install-dependencies.ts
+      - if: inputs.purpose != 'informational'
+        run: node scripts/build-workspaces.ts build:evidence
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.purpose != 'informational'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(inputs.candidate).runId }}
+          artifact-ids: ${{ fromJSON(inputs.candidate).artifactId }}
+          path: ${{ runner.temp }}/candidate
+      - name: Authenticate original candidate before access credentials
+        if: inputs.purpose != 'informational'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ACCESS_PURPOSE: ${{ inputs.purpose }}
+        run: node scripts/access-evidence.ts authenticate --candidate "$RUNNER_TEMP/candidate/candidate.json" --purpose "$ACCESS_PURPOSE"
+      - name: Informational Cloudflare preflight only
+        if: inputs.purpose == 'informational'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/check-access.ts cloudflare
-
+      - name: Record actual candidate-bound Cloudflare read access
+        if: inputs.purpose != 'informational'
+        id: proof
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ACCESS_PURPOSE: ${{ inputs.purpose }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/access-evidence.ts cloudflare --candidate "$RUNNER_TEMP/candidate/candidate.json" --purpose "$ACCESS_PURPOSE" --out "$RUNNER_TEMP/cloudflare-access"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: inputs.purpose != 'informational'
+        id: cf-artifact
+        with:
+          name: ${{ steps.proof.outputs.artifact }}
+          path: ${{ runner.temp }}/cloudflare-access
+          if-no-files-found: error
+          retention-days: 30
   npm:
+    needs: cloudflare
+    if: >-
+      always() && github.ref == 'refs/heads/main' && github.repository == 'scottdraper8/fortipi' &&
+      (inputs.purpose == 'informational' || (inputs.purpose == 'publication' && needs.cloudflare.result == 'success'))
     runs-on: ubuntu-24.04
     environment: npm-release
     timeout-minutes: 5
@@ -49,12 +106,9 @@ jobs:
         with:
           egress-policy: block
           allowed-endpoints: >
-            registry.npmjs.org:443
-            github.com:443
-            api.github.com:443
-            raw.githubusercontent.com:443
-            release-assets.githubusercontent.com:443
-            nodejs.org:443
+            registry.npmjs.org:443 github.com:443 api.github.com:443 raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443 nodejs.org:443 objects.githubusercontent.com:443
+            codeload.github.com:443 *.actions.githubusercontent.com:443 *.blob.core.windows.net:443
       - name: Require Linux hardener service active
         if: runner.os == 'Linux'
         shell: bash
@@ -67,8 +121,53 @@ jobs:
         with:
           node-version: "26.13.1"
           package-manager-cache: false
-      - name: Verify npm access
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        if: inputs.purpose == 'publication'
+        with:
+          version: 12.18.0
+          run_install: false
+          cache: false
+      - if: inputs.purpose == 'publication'
+        run: node scripts/install-dependencies.ts
+      - if: inputs.purpose == 'publication'
+        run: node scripts/build-workspaces.ts build:evidence
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.purpose == 'publication'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(inputs.candidate).runId }}
+          artifact-ids: ${{ fromJSON(inputs.candidate).artifactId }}
+          path: ${{ runner.temp }}/candidate
+      - name: Authenticate original candidate before npm credentials
+        if: inputs.purpose == 'publication'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/access-evidence.ts authenticate --candidate "$RUNNER_TEMP/candidate/candidate.json" --purpose publication
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.purpose == 'publication'
+        with:
+          artifact-ids: ${{ needs.cloudflare.outputs.artifact-id }}
+          path: ${{ runner.temp }}/cloudflare-access
+      - name: Informational npm preflight only
+        if: inputs.purpose == 'informational'
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_SCOPE: ${{ vars.NPM_SCOPE }}
         run: node scripts/check-access.ts npm
+      - name: Record actual full publication access
+        if: inputs.purpose == 'publication'
+        id: proof
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FORTIPI_CF_ARTIFACT_ID: ${{ needs.cloudflare.outputs.artifact-id }}
+          FORTIPI_CF_ARTIFACT_DIGEST: ${{ needs.cloudflare.outputs.artifact-digest }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_SCOPE: ${{ vars.NPM_SCOPE }}
+        run: node scripts/access-evidence.ts publication --candidate "$RUNNER_TEMP/candidate/candidate.json" --purpose publication --cloudflare "$RUNNER_TEMP/cloudflare-access" --out "$RUNNER_TEMP/access"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: inputs.purpose == 'publication'
+        with:
+          name: ${{ steps.proof.outputs.artifact }}
+          path: ${{ runner.temp }}/access
+          if-no-files-found: error
+          retention-days: 30

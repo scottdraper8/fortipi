@@ -5,6 +5,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { create as createTar } from "tar";
 import { repository } from "../../build-workspaces.ts";
+import { cloudflareAccessChecks, npmAccessChecks } from "../../check-access.ts";
 import {
   operatorConfirmedFreePlan,
   operatorFreeDecision,
@@ -43,6 +44,7 @@ import {
   sha256,
   trustedMain,
   verifyCurrentReadiness,
+  verifyDeploymentGates,
   verifyPayload,
   verifyProducer,
   verifyReleaseGates,
@@ -928,6 +930,7 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
       ],
     },
     access: { path: "access-preflight.yml", jobs: ["cloudflare", "npm"] },
+    "cloudflare-access": { path: "access-preflight.yml", jobs: ["cloudflare"] },
     live: { path: "deploy.yml", jobs: deviceProducerJobs },
     independent: { path: "deploy.yml", jobs: deviceProducerJobs },
     readiness: { path: "deploy.yml", jobs: ["operate"] },
@@ -978,14 +981,34 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
         ? [...integratedClaims]
         : kind === "native"
           ? ["portable-daemon-linux", "portable-daemon-darwin", "portable-daemon-win32"]
-          : kind === "access"
-            ? ["access"]
+          : kind === "access" || kind === "cloudflare-access"
+            ? ["cloudflare-read-access", ...(kind === "access" ? ["npm-read-access"] : [])]
             : kind === "readiness"
               ? ["readiness"]
               : liveClaims.filter(
                   (value) => value !== "real-cloud-tools" || deployment?.backend !== "free",
                 );
-    for (const claim of ids) await writeFile(resolve(path, `${claim}.json`), "{}", { mode: 0o600 });
+    for (const claim of ids) {
+      const cf = claim === "cloudflare-read-access";
+      const npm = claim === "npm-read-access";
+      const value =
+        cf || npm
+          ? {
+              schemaVersion: 1,
+              kind: cf ? "cloudflare" : "npm",
+              checkedAt: new Date(now - 2000).toISOString(),
+              checks: cf ? cloudflareAccessChecks : npmAccessChecks,
+              ...(cf
+                ? { accountBindingSha256: freeDecision.accountBindingSha256 }
+                : { scope: c.scope }),
+            }
+          : {};
+      await writeFile(
+        resolve(path, cf ? "cloudflare.json" : npm ? "npm.json" : `${claim}.json`),
+        `${canonicalJson(value)}\n`,
+        { mode: 0o600 },
+      );
+    }
     const files = await inventory(path);
     const receipt: GateReceipt = {
       schemaVersion: 1,
@@ -1002,7 +1025,15 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
       },
       checkedAt: new Date(now - 2000).toISOString(),
       claims: ids.map((id) => {
-        const result = files.find((f) => f.path === `${id}.json`);
+        const result = files.find(
+          (f) =>
+            f.path ===
+            (id === "cloudflare-read-access"
+              ? "cloudflare.json"
+              : id === "npm-read-access"
+                ? "npm.json"
+                : `${id}.json`),
+        );
         assert.ok(result);
         return { id, outcome: "pass", result };
       }),
@@ -1027,6 +1058,7 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
   for (const kind of ["integrated", "native", "access"] as const) await add(kind);
   for (const kind of ["live", "independent", "readiness"] as const)
     for (const d of deployments) await add(kind, d);
+  let accessFault: "run" | "attempt" | "job" | null = null;
   const server = await httpFixture((request, response) => {
     const route = request.url ?? "";
     let value: unknown;
@@ -1087,7 +1119,8 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
             jobs: rules[item.kind].jobs.map((name) => ({
               name,
               status: "completed",
-              conclusion: "success",
+              conclusion:
+                item.kind === "cloudflare-access" && accessFault === "job" ? "skipped" : "success",
               started_at: new Date(now - 10000).toISOString(),
               completed_at: new Date(now - 1000).toISOString(),
             })),
@@ -1103,7 +1136,12 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
             head_repository: { id: REPOSITORY_ID },
             path: `.github/workflows/${rules[item.kind].path}`,
             status: "completed",
-            conclusion: "success",
+            conclusion:
+              item.kind === "cloudflare-access" &&
+              ((accessFault === "run" && !route.includes("/attempts/")) ||
+                (accessFault === "attempt" && route.includes("/attempts/")))
+                ? "failure"
+                : "success",
             run_started_at: new Date(now - 20000).toISOString(),
             updated_at: new Date(now - 1000).toISOString(),
           };
@@ -1124,6 +1162,113 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
       githubRequest(undefined, server.transport),
       now,
     );
+    const account = freeDecision.accountBindingSha256;
+    await verifyDeploymentGates(
+      c,
+      hash,
+      candidateRef,
+      proofs,
+      githubRequest(undefined, server.transport),
+      account,
+      now,
+    );
+    const full = [...proofs];
+    await add("cloudflare-access");
+    const cf = proofs.at(-1);
+    assert.ok(cf && cf.receipt.kind === "cloudflare-access");
+    const cfOnly = [...full.filter((p) => p.receipt.kind !== "access"), cf];
+    await verifyDeploymentGates(
+      c,
+      hash,
+      candidateRef,
+      cfOnly,
+      githubRequest(undefined, server.transport),
+      account,
+      now,
+    );
+    await assert.rejects(
+      verifyReleaseGates(
+        c,
+        hash,
+        candidateRef,
+        cfOnly,
+        githubRequest(undefined, server.transport),
+        now,
+      ),
+      /Missing\/duplicate access/,
+    );
+    await assert.rejects(
+      verifyDeploymentGates(
+        c,
+        hash,
+        candidateRef,
+        [...full, cf],
+        githubRequest(undefined, server.transport),
+        account,
+        now,
+      ),
+      /Exactly one Cloudflare/,
+    );
+    await assert.rejects(
+      verifyDeploymentGates(
+        c,
+        hash,
+        candidateRef,
+        cfOnly,
+        githubRequest(undefined, server.transport),
+        sha256("foreign account"),
+        now,
+      ),
+      /account differs from target/,
+    );
+    for (const fault of ["run", "attempt", "job"] as const) {
+      accessFault = fault;
+      await assert.rejects(
+        verifyDeploymentGates(
+          c,
+          hash,
+          candidateRef,
+          cfOnly,
+          githubRequest(undefined, server.transport),
+          account,
+          now,
+        ),
+      );
+    }
+    accessFault = null;
+    const claimed = structuredClone(cf);
+    claimed.receipt.checkedAt = new Date(now - 1000).toISOString();
+    await assert.rejects(
+      verifyDeploymentGates(
+        c,
+        hash,
+        candidateRef,
+        [...cfOnly.filter((p) => p !== cf), claimed],
+        githubRequest(undefined, server.transport),
+        account,
+        now,
+      ),
+      /object differs from saved bytes/,
+    );
+    const resultPath = resolve(cf.directory, "cloudflare.json");
+    const originalResult = await readFile(resultPath);
+    await writeFile(resultPath, Buffer.from(originalResult).fill(32, 0, 1));
+    try {
+      await assert.rejects(
+        verifyDeploymentGates(
+          c,
+          hash,
+          candidateRef,
+          cfOnly,
+          githubRequest(undefined, server.transport),
+          account,
+          now,
+        ),
+        /payload differs/,
+      );
+    } finally {
+      await writeFile(resultPath, originalResult);
+    }
     await assert.rejects(
       verifyReleaseGates(
         c,

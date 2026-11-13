@@ -20,6 +20,7 @@ import { assetPath } from "../packages/fortipi-cli/src/asset-manifest.ts";
 import { canonicalJson } from "../packages/fortipi-contract/dist/index.js";
 import { readArtifactZip } from "./artifact-zip.ts";
 import { repository } from "./build-workspaces.ts";
+import { cloudflareAccessChecks, npmAccessChecks } from "./check-access.ts";
 import {
   assertOperatorConfirmedFreePlan,
   type OperatorConfirmedFreePlan,
@@ -117,6 +118,7 @@ export type GateKind =
   | "integrated"
   | "native"
   | "access"
+  | "cloudflare-access"
   | "live"
   | "independent"
   | "readiness";
@@ -197,6 +199,7 @@ const policy: Record<GateKind, { workflow: string; jobs: string[]; hours: number
     hours: 24,
   },
   access: { workflow: "access-preflight.yml", jobs: ["cloudflare", "npm"], hours: 24 },
+  "cloudflare-access": { workflow: "access-preflight.yml", jobs: ["cloudflare"], hours: 24 },
   live: {
     workflow: "deploy.yml",
     jobs: deploymentJobs,
@@ -983,6 +986,66 @@ export interface ProofInput {
   receipt: GateReceipt;
   directory: string;
 }
+export function assertAccessResult(
+  value: unknown,
+  kind: "cloudflare" | "npm",
+  scope: string,
+  now?: number,
+): void {
+  const result = object(value);
+  const cf = kind === "cloudflare";
+  closed(result, [
+    "schemaVersion",
+    "kind",
+    "checkedAt",
+    "checks",
+    cf ? "accountBindingSha256" : "scope",
+  ]);
+  assert.equal(result.schemaVersion, 1);
+  assert.equal(result.kind, kind);
+  assert.deepEqual(result.checks, cf ? cloudflareAccessChecks : npmAccessChecks);
+  freshness(string(result.checkedAt), 24, now);
+  if (cf) digest(result.accountBindingSha256);
+  else assert.equal(result.scope, scope, "npm scope differs from candidate");
+}
+/** Payload validation only. Callers must authenticate the original producer/archive first. */
+export async function readAccessGate(
+  proof: Pick<ProofInput, "receipt" | "directory">,
+  candidate: CandidateManifest,
+  now?: number,
+): Promise<{ accountBindingSha256: string }> {
+  const r = proof.receipt;
+  assert.ok(r.kind === "access" || r.kind === "cloudflare-access");
+  const expected = [
+    ["cloudflare-read-access", "cloudflare.json"],
+    ...(r.kind === "access" ? [["npm-read-access", "npm.json"]] : []),
+  ];
+  assert.deepEqual(r.platforms, []);
+  assert.deepEqual(r.deployments, []);
+  assert.deepEqual(r.claims.map((c) => c.id).sort(), expected.map(([id]) => id).sort());
+  assert.deepEqual(r.files.map((f) => f.path).sort(), expected.map(([, path]) => path).sort());
+  let accountBindingSha256 = "";
+  let oldest = Infinity;
+  for (const [id, path] of expected) {
+    const claim = r.claims.find((c) => c.id === id);
+    assert.ok(claim && path);
+    assert.equal(claim.result.path, path);
+    const bytes = await regularBytes(resolve(proof.directory, path), 8192);
+    assert.equal(bytes.length, claim.result.size);
+    assert.equal(sha256(bytes), claim.result.sha256, "Access result changed");
+    const value = object(JSON.parse(bytes.toString("utf8")));
+    assert.equal(bytes.toString("utf8"), `${canonicalJson(value)}\n`);
+    const cf = id === "cloudflare-read-access";
+    assertAccessResult(value, cf ? "cloudflare" : "npm", candidate.scope, now);
+    oldest = Math.min(oldest, Date.parse(string(value.checkedAt)));
+    if (cf) {
+      digest(value.accountBindingSha256);
+      accountBindingSha256 = string(value.accountBindingSha256);
+    }
+  }
+  assert.equal(Date.parse(r.checkedAt), oldest, "Access receipt refreshed original observation");
+  return { accountBindingSha256 };
+}
 export interface CurrentReadinessContext {
   directory: string;
   phase: "readiness" | "final-readiness";
@@ -996,6 +1059,9 @@ export async function verifyReleaseGates(
   now?: number,
   currentReadiness?: CurrentReadinessContext,
 ): Promise<void> {
+  candidate = structuredClone(candidate);
+  candidateArtifact = structuredClone(candidateArtifact);
+  proofs = structuredClone(proofs);
   assertCandidate(candidate);
   digest(candidateHash);
   assert.equal(candidateArtifact.candidateSha256, candidateHash);
@@ -1018,6 +1084,13 @@ export async function verifyReleaseGates(
       assert.equal(r.sourceCommit, candidate.sourceCommit);
       assert.equal(r.scope, candidate.scope);
       freshness(r.checkedAt, policy[kind].hours, now);
+      const gateBytes = await regularBytes(resolve(proof.directory, "gate.json"));
+      if (kind === "access")
+        assert.deepEqual(
+          JSON.parse(gateBytes.toString("utf8")),
+          r,
+          "Access receipt object differs from saved bytes",
+        );
       await verifyProducer(
         candidate,
         kind,
@@ -1025,9 +1098,11 @@ export async function verifyReleaseGates(
         proof.artifact,
         request,
         now,
-        sha256(await regularBytes(resolve(proof.directory, "gate.json"))),
+        sha256(gateBytes),
       );
       await verifyPayload(proof.directory, r.files, ["gate.json"]);
+      if (kind === "access")
+        await readAccessGate({ receipt: r, directory: proof.directory }, candidate, now);
       if (kind === "integrated" || kind === "live" || kind === "independent")
         for (const id of kind === "integrated"
           ? integratedClaims
@@ -1134,25 +1209,43 @@ export async function verifyDeploymentGates(
   candidateArtifact: ArtifactReference,
   proofs: ProofInput[],
   request: GitHubRequest,
-  now = Date.now(),
+  targetAccountBindingSha256: string,
+  now?: number,
 ): Promise<void> {
+  candidate = structuredClone(candidate);
+  candidateArtifact = structuredClone(candidateArtifact);
+  proofs = structuredClone(proofs);
   assertCandidate(candidate);
   digest(candidateHash);
   assert.equal(candidateArtifact.candidateSha256, candidateHash);
+  digest(targetAccountBindingSha256);
+  const access = proofs.filter(
+    (p) => p.receipt.kind === "access" || p.receipt.kind === "cloudflare-access",
+  );
+  assert.equal(access.length, 1, "Exactly one Cloudflare access prerequisite required");
+  const accessKind = access[0]?.receipt.kind;
+  assert.ok(accessKind === "access" || accessKind === "cloudflare-access");
   await trustedMain(candidate, request);
   await verifyProducer(candidate, "candidate", candidate.producer, candidateArtifact, request, now);
-  for (const kind of ["integrated", "native", "access"] as const) {
+  const selected: GateReceipt[] = [];
+  for (const kind of ["integrated", "native", accessKind] as const) {
     const matches = proofs.filter((p) => p.receipt.kind === kind);
     assert.equal(matches.length, 1, `Missing/duplicate ${kind} prerequisite`);
     const proof = matches[0];
     assert.ok(proof);
-    const r = proof.receipt;
+    const r = structuredClone(proof.receipt);
     assertGate(r);
     assert.equal(r.candidateSha256, candidateHash);
     assert.equal(proof.artifact.candidateSha256, candidateHash);
     assert.equal(r.sourceCommit, candidate.sourceCommit);
     assert.equal(r.scope, candidate.scope);
     freshness(r.checkedAt, 24, now);
+    const gateBytes = await regularBytes(resolve(proof.directory, "gate.json"));
+    assert.deepEqual(
+      JSON.parse(gateBytes.toString("utf8")),
+      r,
+      "Receipt object differs from saved bytes",
+    );
     await verifyProducer(
       candidate,
       kind,
@@ -1160,9 +1253,21 @@ export async function verifyDeploymentGates(
       proof.artifact,
       request,
       now,
-      sha256(await regularBytes(resolve(proof.directory, "gate.json"))),
+      sha256(gateBytes),
     );
     await verifyPayload(proof.directory, r.files, ["gate.json"]);
+    assert.equal(
+      sha256(await regularBytes(resolve(proof.directory, "gate.json"))),
+      sha256(gateBytes),
+    );
+    if (kind === "access" || kind === "cloudflare-access") {
+      const result = await readAccessGate({ ...proof, receipt: r }, candidate, now);
+      assert.equal(
+        result.accountBindingSha256,
+        targetAccountBindingSha256,
+        "Cloudflare access account differs from target",
+      );
+    }
     if (kind === "integrated")
       for (const id of integratedClaims)
         assert.ok(
@@ -1174,7 +1279,10 @@ export async function verifyDeploymentGates(
       for (const platform of r.platforms)
         assert.ok(r.claims.some((c) => c.id === `portable-daemon-${platform}`));
     }
+    selected.push(r);
   }
+  await trustedMain(candidate, request);
+  for (const r of selected) freshness(r.checkedAt, 24, now ?? Date.now());
 }
 export async function git(...args: string[]): Promise<string> {
   return (
@@ -1490,7 +1598,8 @@ if (import.meta.main) {
       proofs,
       githubRequest(process.env.GITHUB_TOKEN),
     ] as const;
-    if (process.argv[2] === "deployment") await verifyDeploymentGates(...base);
+    if (process.argv[2] === "deployment")
+      await verifyDeploymentGates(...base, string(args["account-binding-sha256"]));
     else {
       const phase = args.phase ?? "readiness";
       assert.ok(phase === "readiness" || phase === "final-readiness");

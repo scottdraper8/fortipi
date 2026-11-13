@@ -6,6 +6,79 @@ import { parse } from "yaml";
 import { repository } from "../../build-workspaces.ts";
 import { object } from "../../verify-release-gates.ts";
 
+test("access dispatch preserves informational bootstrap and authenticates recorded candidates before scoped keys", async () => {
+  const access = object(
+    parse(await readFile(resolve(repository, ".github/workflows/access-preflight.yml"), "utf8")),
+  );
+  const inputs = object(object(object(access.on).workflow_dispatch).inputs);
+  assert.deepEqual(object(inputs.purpose).options, ["informational", "deployment", "publication"]);
+  assert.equal(object(inputs.purpose).default, "informational");
+  assert.equal(object(inputs.candidate).default, "{}");
+  const jobs = object(access.jobs);
+  assert.equal(object(jobs.npm).needs, "cloudflare");
+  assert.match(String(object(jobs.npm).if), /inputs\.purpose == 'informational'/);
+  assert.match(
+    String(object(jobs.npm).if),
+    /inputs\.purpose == 'publication' && needs\.cloudflare\.result == 'success'/,
+  );
+  const validate = (value: Record<string, unknown>) => {
+    for (const [name, raw] of Object.entries(object(value.jobs))) {
+      const job = object(raw);
+      assert.equal(job.environment, name === "cloudflare" ? "production" : "npm-release");
+      assert.ok(Array.isArray(job.steps));
+      const steps = job.steps.map(object);
+      assert.match(String(steps[0]?.uses), /^step-security\/harden-runner@[a-f0-9]{40}$/);
+      assert.equal(object(steps[0]?.with)["egress-policy"], "block");
+      const condition =
+        name === "cloudflare"
+          ? "inputs.purpose != 'informational'"
+          : "inputs.purpose == 'publication'";
+      const authenticated = steps.findIndex((s) =>
+        String(s.run).includes("access-evidence.ts authenticate"),
+      );
+      const recorded = steps.findIndex((s) =>
+        String(s.run).includes(
+          `access-evidence.ts ${name === "cloudflare" ? "cloudflare" : "publication"} `,
+        ),
+      );
+      assert.ok(authenticated >= 0 && recorded > authenticated);
+      assert.equal(steps[authenticated]?.if, condition);
+      for (const key of ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "NPM_TOKEN"])
+        assert.equal(object(steps[authenticated]?.env)[key], undefined);
+      assert.equal(steps[recorded]?.if, condition);
+      assert.equal(object(steps[recorded]?.env).GITHUB_TOKEN, "$" + "{{ github.token }}");
+      const probe = steps.find((s) => String(s.run) === `node scripts/check-access.ts ${name}`);
+      assert.ok(probe);
+      assert.equal(probe.if, "inputs.purpose == 'informational'");
+      const uploads = steps.filter((s) => String(s.uses).startsWith("actions/upload-artifact@"));
+      assert.equal(uploads.length, 1);
+      assert.equal(uploads[0]?.if, condition);
+      assert.equal(object(uploads[0]?.with)["if-no-files-found"], "error");
+      assert.equal(object(uploads[0]?.with)["retention-days"], 30);
+      const checkout = steps.find((s) => String(s.uses).startsWith("actions/checkout@"));
+      assert.equal(object(checkout?.with)["persist-credentials"], false);
+    }
+  };
+  validate(access);
+  const bad = structuredClone(access);
+  const steps = object(object(bad.jobs).cloudflare).steps;
+  assert.ok(Array.isArray(steps));
+  const auth = steps
+    .map(object)
+    .find((s) => String(s.run).includes("access-evidence.ts authenticate"));
+  assert.ok(auth);
+  object(auth.env).CLOUDFLARE_API_TOKEN = "synthetic-only";
+  assert.throws(() => validate(bad));
+  const deploySource = await readFile(resolve(repository, "scripts/deploy-smoke.ts"), "utf8");
+  const operation = deploySource.slice(
+    deploySource.indexOf("export async function operateDeployment("),
+  );
+  assert.ok(
+    operation.indexOf("assertTarget(target)") < operation.indexOf("const gate = await execute("),
+  );
+  assert.match(operation, /"--account-binding-sha256",\s+target\.accountBindingSha256/);
+});
+
 test("workflow topology keeps target credentials in fixed slots, publication after readiness, and finalization after publication", async () => {
   const release = object(
     parse(await readFile(resolve(repository, ".github/workflows/release.yml"), "utf8")),
