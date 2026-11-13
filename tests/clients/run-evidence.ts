@@ -880,6 +880,21 @@ export async function runEvidence(
           workspaceLimits,
           workspaceSensitivity,
         );
+        const allocationLimits: string[] = [],
+          allocationSensitivity: string[] = [];
+        await measure(
+          "live-allocation-refusals",
+          ["runLiveAllocationRefusals", "installed-node-export", "public-Computer", "seed1010"],
+          "Above-default file/snapshot/manifest declarations fail as public quota429 before chunk delivery; releases and original canonical bytes remain intact",
+          async () => {
+            const evidence = await context.allocationRefusals();
+            allocationLimits.push(...evidence.limitations);
+            allocationSensitivity.push(...evidence.sensitivity);
+            return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
+          },
+          allocationLimits,
+          allocationSensitivity,
+        );
         const controlLimits: string[] = [],
           controlSensitivity: string[] = [];
         await measure(

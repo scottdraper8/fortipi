@@ -18,6 +18,7 @@ import {
 } from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
 import { publicAccess } from "./live-access.ts";
+import { runLiveAllocationRefusals } from "./live-allocation-refusals.ts";
 import { publicRequestPressure } from "./live-pressure.ts";
 import { runLiveTaskControls } from "./live-task-controls.ts";
 import { runLiveWorkspace } from "./live-workspace.ts";
@@ -341,6 +342,10 @@ export async function liveContext(
           helperIdentityView: "public-protocol",
         },
       };
+    },
+    async allocationRefusals() {
+      assert.ok(workspaceCanary, "Actual independently verified Computer canary is required");
+      return runLiveAllocationRefusals({ installed, roles, workspace: workspaceCanary });
     },
     async pendingTaskControls() {
       assert.ok(workspaceCanary, "Actual independently verified Computer canary is required");
