@@ -75,12 +75,31 @@ async function run(file: string, args: string[], cwd = root, timeout = 120000) {
         ["SIGKILL", "SIGTERM", "SIGABRT", "SIGSEGV"].includes(String(error.signal))
           ? String(error.signal)
           : "none";
-      const stderr = typeof error.stderr === "string" ? error.stderr : "";
+      const stderr =
+        typeof error.stderr === "string"
+          ? error.stderr
+          : Buffer.isBuffer(error.stderr)
+            ? error.stderr.toString("utf8")
+            : "";
+      const stdoutBytes =
+        "stdout" in error && (typeof error.stdout === "string" || Buffer.isBuffer(error.stdout))
+          ? Buffer.byteLength(error.stdout)
+          : 0;
       const condition =
-        ["ERR_ASSERTION", "ERR_MODULE_NOT_FOUND", "ENOENT", "EACCES", "ENOSPC", "ENOMEM"].find(
-          (known) => stderr.includes(known),
-        ) ?? "unknown";
-      failure = `${installedFailureLocation(stderr)}; exit=${code}; signal=${signal}; stderrBytes=${Buffer.byteLength(stderr)}; kind=${condition}`;
+        [
+          "ERR_ASSERTION",
+          "ERR_MODULE_NOT_FOUND",
+          "ERR_PACKAGE_PATH_NOT_EXPORTED",
+          "ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX",
+          "ERR_UNKNOWN_BUILTIN_MODULE",
+          "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+          "ENOENT",
+          "EACCES",
+          "ENOSPC",
+          "ENOMEM",
+        ].find((known) => stderr.includes(known) || ("code" in error && error.code === known)) ??
+        "unknown";
+      failure = `${installedFailureLocation(stderr)}; exit=${code}; signal=${signal}; stderrBytes=${Buffer.byteLength(stderr)}; stdoutBytes=${stdoutBytes}; kind=${condition}`;
     }
     throw error;
   }
