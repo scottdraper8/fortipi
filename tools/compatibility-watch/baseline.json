@@ -153,20 +153,20 @@
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "f005593c1ed0d1f429dafc6919c4335f4d5070c7",
-        "version": "4.161.0",
+        "commit": "349fc4e7443aa744cbe129f84f28571bf8625155",
+        "version": "4.162.0",
         "paths": {
-          "packages/wrangler": "50bfb17ed56a66dce21cdaf2b825173beab296d5e613b4bbaa26e6de03323a40",
-          "packages/wrangler/package.json": "c877d86ad89cff48b01d169528c09ea474627cc41beaba1314d273c32ac66fba"
+          "packages/wrangler": "7cee392a5bf9f63ab53b61fadb22ac957cf6f9581b0870b4fd4454f9349080d7",
+          "packages/wrangler/package.json": "c3b2a67bdcb6ea59be3f01ad89acdff5110d607d4d70afd27fc069a08f6d6932"
         },
-        "sha256": "0979df07f9c17bc8f72a625d53593de16d3cc792ee0fdd572eedf26877d53854"
+        "sha256": "826a1d2dc16cf6a4c28e1213216cc8ca3a4d14ea233381dff6e333004f1d288f"
       },
       "pins": {
         "apps/worker/package.json#devDependencies/wrangler": "4.161.0",
         "packages/fortipi-cli/package.json#dependencies/wrangler": "4.161.0"
       },
-      "reviewedAt": "2026-11-13T10:58:39.272Z",
-      "reviewNote": "Reviewed immutable032f8c2b..f005593c:1commit/31files (+435/-359). Unreleased Artifacts defaults dev/getPlatformProxy/Vite to local unless remote:true; removes MF v4 remote field, centralizes routing/warning-once and drops redundant Vitest shim. FortiPi closed templates/probes declare no Artifacts binding; CLI deploy/dry-run/secret/login/child-env/DO/image paths unchanged. Future Artifacts adoption needs explicit remote choice/local Git review. Retain Wrangler4.161.0/selected MF5.20261110.2-beta exact workerd1.20261110.1; SRIs/archive hashes match and targeted OSV3 empty. Known workerd13.1 remains separately reviewed/unadopted. Prior unpublished hot-reload caveat retained. Reference only: no dependency/runtime/security/root clearance. Evidence:phase3/thread-9/compatibility-wrangler-f005-build.md."
+      "reviewedAt": "2026-11-13T19:51:19.313Z",
+      "reviewNote": "Reviewed immutablef005593c..349fc4e7:5commits; ALL8 Wrangler patches(+389/-37),1111 unchanged blobs. Unpublished Artifacts-event routing assigns one local Workflow owner; closed FortiPi templates/probes use neither binding. Release4.162.0 now publishes prior Artifacts/Workflow changes and hot-reload fix; no hosted-restart cause proved. Registry/tag79b890ab confirm exact MF5.20261113.0-beta/workerd1.20261113.1, types peer^5.20261113.1: separate Foundation review needed before final latest-pin freeze; no adoption here. Retain installed4.161.0/MF5.20261110.2-beta/workerd10.1 and types5.20261112.1; targeted OSV6 empty, not security clearance. Explicit compat date/DO/image/deploy/auth paths unchanged in this source interval. Prior hot-reload caveat remains. Reference only, no runtime/root/release clearance. Evidence:phase3/thread-9/compatibility-wrangler-349-build.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
