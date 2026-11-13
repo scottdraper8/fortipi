@@ -13,14 +13,38 @@ async function request(
   origin: string,
   path: string,
   token: string,
+  bounded = false,
 ): Promise<Record<string, unknown>> {
   try {
     const response = await fetch(new URL(path, origin), {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       signal: AbortSignal.timeout(30_000),
+      ...(bounded ? { redirect: "error" as const } : {}),
     });
-    if (!response.ok) throw new AccessError(`HTTP ${response.status}`);
-    const value: unknown = await response.json();
+    if (!response.ok) {
+      if (bounded) void response.body?.cancel().catch(() => {});
+      throw new AccessError(`HTTP ${response.status}`);
+    }
+    let value: unknown;
+    if (bounded) {
+      if (!response.body) throw new AccessError("Invalid API response");
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let length = 0;
+      try {
+        for (;;) {
+          const part = await reader.read();
+          if (part.done) break;
+          length += part.value.byteLength;
+          if (length > 2_000_000) throw new AccessError("Response exceeds size bound");
+          chunks.push(part.value);
+        }
+      } finally {
+        void reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
+      value = JSON.parse(Buffer.concat(chunks, length).toString("utf8"));
+    } else value = await response.json();
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
       throw new AccessError("Invalid API response");
     }
@@ -145,7 +169,35 @@ async function cloudflare(): Promise<void> {
     console.log(`${label}: verified`);
   }
   await analyticsAccess(account, token);
+  let subdomain: unknown;
+  try {
+    const response = await request(
+      "https://api.cloudflare.com",
+      `${base}/workers/subdomain`,
+      token,
+      true,
+    );
+    const result = response.result;
+    if (
+      response.success !== true ||
+      result === null ||
+      typeof result !== "object" ||
+      Array.isArray(result)
+    )
+      throw new AccessError("Unavailable subdomain");
+    subdomain = (result as Record<string, unknown>).subdomain;
+    if (
+      typeof subdomain !== "string" ||
+      !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomain) ||
+      subdomain.includes(account.toLowerCase()) ||
+      subdomain.includes(token.toLowerCase())
+    )
+      throw new AccessError("Unavailable subdomain");
+  } catch {
+    throw new AccessError("Workers.dev target: unavailable");
+  }
   console.log(`Account binding SHA-256: ${createHash("sha256").update(account).digest("hex")}`);
+  console.log(`Workers.dev base: https://${subdomain}.workers.dev`);
   console.log("Write/deploy permissions will be verified by the actual deployment.");
 }
 
