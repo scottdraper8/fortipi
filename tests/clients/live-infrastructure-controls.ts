@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { Ajv } from "ajv";
-import type { FortiPiClient } from "../../packages/fortipi-client/dist/node.js";
+import type { FortiPiClient, FortiPiError } from "../../packages/fortipi-client/dist/node.js";
 import {
   type AdmissionReceipt,
   type Approval,
@@ -14,6 +14,7 @@ import {
   type InfrastructurePressure,
   type Manifest,
   type UploadBegin,
+  type WorkspaceBinding,
   type WorkspaceOperationLease,
 } from "../../packages/fortipi-contract/dist/index.js";
 import {
@@ -748,6 +749,363 @@ export function classifyInfrastructureRace(
   };
 }
 
+type InfrastructureRequest = <T>(
+  operation: () => Promise<T>,
+  lease?: WorkspaceOperationLease,
+) => Promise<T>;
+interface ComputerProbe {
+  client: FortiPiClient;
+  errorType: typeof FortiPiError;
+  request: InfrastructureRequest;
+}
+const infrastructureCanaryBytes = Buffer.from("old-v1\n");
+function uploadDeclaration(
+  binding: WorkspaceBinding,
+  lease: WorkspaceOperationLease,
+  manifest: Manifest,
+  remove: string[] = [],
+): UploadBegin {
+  return {
+    requestId: randomUUID(),
+    operationId: lease.operationId,
+    commitId: randomUUID(),
+    lease,
+    baseRevision: binding.revision,
+    manifest,
+    manifestHash: sha256(`fortipi:manifest:v1\n${canonicalJson(manifest)}`),
+    mutations: [
+      ...remove.map((path) => ({ kind: "delete" as const, path })),
+      ...manifest.entries.map((entry) => {
+        assert.ok(entry.type === "file");
+        return {
+          kind: "put" as const,
+          path: entry.path,
+          mode: entry.mode,
+          size: entry.size,
+          sha256: entry.sha256,
+        };
+      }),
+    ],
+  };
+}
+async function releaseProbeLease(input: ComputerProbe, lease: WorkspaceOperationLease) {
+  const body = { requestId: randomUUID(), lease, reason: "cancelled" as const };
+  const receipt = await input.request(() =>
+    input.client.operations.releaseWorkspaceLease({
+      path: { workspaceId: lease.workspaceId, leaseId: lease.leaseId },
+      query: {},
+      body,
+    }),
+  );
+  assert.equal(receipt.leaseId, lease.leaseId);
+  assert.equal(receipt.released, true);
+  return receipt;
+}
+export async function abortInfrastructureStage(
+  input: ComputerProbe,
+  lease: WorkspaceOperationLease,
+  uploadId: string,
+) {
+  let conflictStatus: 409 | null = null;
+  try {
+    await input.request(() => input.client.uploads.abort(lease.workspaceId, uploadId), lease);
+  } catch (error) {
+    assert.ok(error instanceof input.errorType);
+    assert.equal(error.status, 409);
+    assert.equal(error.code, "interrupted");
+    conflictStatus = 409;
+  }
+  const after = await input.request(
+    () => input.client.uploads.get(lease.workspaceId, uploadId),
+    lease,
+  );
+  assert.equal(after.uploadId, uploadId);
+  assert.equal(after.state, "aborted", "Unknown or nonterminal upload cleanup is not accepted");
+  return {
+    uploadId,
+    state: after.state,
+    conflictStatus,
+    acknowledgment: conflictStatus === null ? "direct" : "recovered-by-current-scoped-status",
+  };
+}
+export function assertKnownSnapshotRefusal(delta: -1 | 0 | 1, error: FortiPiError) {
+  assert.equal(error.status, 429);
+  assert.equal(error.code, "quota_exceeded");
+  assert.equal(error.retryable, false);
+  const pressure = error.details?.pressure;
+  assert.ok(pressure);
+  assertInfrastructurePressure(pressure);
+  assert.equal(pressure.resource, "storage");
+  assert.equal(pressure.scope.kind, "object");
+  assert.equal(pressure.source, "policy");
+  assert.equal(pressure.measurement, "estimated");
+  assert.equal(pressure.action, "reclaim-storage");
+  assert.equal(pressure.resetAt, undefined);
+  assert.equal(
+    pressure.reason,
+    delta > 0
+      ? "Snapshot exceeds effective workspace bounds"
+      : "Workspace physical copies and unspent growth exhaust the shared pool",
+  );
+  return structuredClone(pressure);
+}
+/** Actual tiny publication provides an independently hashed same-workspace
+ * canary; declaration stages must never change its revision, manifest or bytes. */
+export async function seedInfrastructureWorkspace(
+  input: ComputerProbe,
+  binding: WorkspaceBinding,
+): Promise<RecoveryWorkspaceCanary> {
+  const lease = await input.request(() =>
+    input.client.operations.acquireWorkspaceLease({
+      path: { workspaceId: binding.workspaceId },
+      query: {},
+      body: {
+        requestId: randomUUID(),
+        operationId: randomUUID(),
+        bindingVersion: binding.bindingVersion,
+        baseRevision: binding.revision,
+        deadline: Date.now() + 120000,
+      },
+    }),
+  );
+  let uploadId: string | undefined,
+    committed = false;
+  try {
+    const entry = {
+      path: "notes.txt",
+      type: "file" as const,
+      mode: 420 as const,
+      size: infrastructureCanaryBytes.length,
+      sha256: sha256(infrastructureCanaryBytes),
+    };
+    const body = uploadDeclaration(binding, lease, { version: 1, entries: [entry] });
+    const opened = await input.request(
+      () => input.client.uploads.begin(binding.workspaceId, body),
+      lease,
+    );
+    uploadId = opened.uploadId;
+    await input.request(
+      () =>
+        input.client.uploads.chunk({
+          path: {
+            workspaceId: binding.workspaceId,
+            uploadId: opened.uploadId,
+            sha256: entry.sha256,
+            chunkIndex: 0,
+          },
+          query: { length: entry.size, sha256: entry.sha256 },
+          body: infrastructureCanaryBytes,
+        }),
+      lease,
+    );
+    const validated = await input.request(
+      () => input.client.uploads.validate(binding.workspaceId, opened.uploadId),
+      lease,
+    );
+    const receipt = await input.request(
+      () =>
+        input.client.uploads.commit(binding.workspaceId, opened.uploadId, {
+          requestId: randomUUID(),
+          operationId: lease.operationId,
+          workspaceId: binding.workspaceId,
+          uploadId: opened.uploadId,
+          commitId: body.commitId,
+          stageId: validated.stageId,
+          lease,
+          baseRevision: binding.revision,
+          manifestHash: body.manifestHash,
+        }),
+      lease,
+    );
+    committed = true;
+    assert.equal(receipt.providerKind, "computer");
+    assert.equal(receipt.manifestHash, body.manifestHash);
+    const current = await input.request(
+      () => input.client.workspaces.get(binding.workspaceId),
+      lease,
+    );
+    assert.equal(current.revision, receipt.revision);
+    assert.equal(current.manifestHash, receipt.manifestHash);
+    return {
+      binding: current,
+      files: [{ path: entry.path, size: entry.size, sha256: entry.sha256 }],
+    };
+  } finally {
+    try {
+      if (uploadId && !committed) await abortInfrastructureStage(input, lease, uploadId);
+    } finally {
+      await releaseProbeLease(input, lease);
+    }
+  }
+}
+/** Same public SDK path used live and by the real local regression. Bounds
+ * intersect: snapshot descriptors below/at16MiB still exceed the reserved pool. */
+export async function observeComputerDeclaration(
+  input: ComputerProbe & {
+    canary: RecoveryWorkspaceCanary;
+    resource: "file" | "snapshot" | "entries";
+    delta: -1 | 0 | 1;
+  },
+) {
+  const { client, canary, resource, delta, request } = input,
+    binding = canary.binding;
+  const fixture = allocationDeclaration(resource, delta);
+  const lease = await request(() =>
+    client.operations.acquireWorkspaceLease({
+      path: { workspaceId: binding.workspaceId },
+      query: {},
+      body: {
+        requestId: randomUUID(),
+        operationId: randomUUID(),
+        bindingVersion: binding.bindingVersion,
+        baseRevision: binding.revision,
+        deadline: Date.now() + 120000,
+      },
+    }),
+  );
+  let open: Awaited<ReturnType<typeof client.uploads.begin>> | undefined,
+    observation: Record<string, unknown> | undefined,
+    release: Awaited<ReturnType<typeof releaseProbeLease>> | undefined;
+  async function canonical() {
+    assert.deepEqual(
+      await request(() => client.workspaces.get(binding.workspaceId), lease),
+      binding,
+    );
+    const described = await request(
+      () => client.workspaces.manifest(binding.workspaceId, { revision: binding.revision }),
+      lease,
+    );
+    assert.equal(
+      sha256(`fortipi:manifest:v1\n${canonicalJson(described.manifest)}`),
+      binding.manifestHash,
+    );
+    for (const file of canary.files) {
+      const bytes = await request(
+        () =>
+          client.workspaces.read(binding.workspaceId, {
+            revision: binding.revision,
+            path: file.path,
+          }),
+        lease,
+      );
+      assert.equal(bytes.length, file.size);
+      assert.equal(sha256(bytes), file.sha256);
+    }
+  }
+  try {
+    const body = uploadDeclaration(
+      binding,
+      lease,
+      fixture.manifest,
+      canary.files.map((file) => file.path),
+    );
+    let rejected: unknown;
+    try {
+      open = await request(() => client.uploads.begin(binding.workspaceId, body), lease);
+    } catch (error) {
+      rejected = error;
+    }
+    let pressure: InfrastructurePressure | undefined,
+      ordinary: Record<string, unknown> | undefined,
+      abort: Awaited<ReturnType<typeof abortInfrastructureStage>> | undefined;
+    if (delta <= 0 && resource !== "snapshot") {
+      if (rejected) throw rejected;
+      assert.ok(open);
+      assert.equal(open.state, "open");
+      assert.equal(open.manifestHash, fixture.manifestHash);
+      const uploadId = open.uploadId;
+      const status = await request(() => client.uploads.get(binding.workspaceId, uploadId), lease);
+      assert.equal(status.uploadId, open.uploadId);
+      assert.equal(status.state, "open");
+      assert.deepEqual(status.receivedChunks, []);
+      abort = await abortInfrastructureStage(input, lease, open.uploadId);
+      open = undefined;
+    } else {
+      assert.ok(!open, "A declaration required to refuse was admitted");
+      assert.ok(rejected instanceof input.errorType);
+      assert.equal(rejected.status, 429);
+      assert.equal(rejected.code, "quota_exceeded");
+      assert.ok(rejected.details?.pressure);
+      assertInfrastructurePressure(rejected.details.pressure);
+      pressure =
+        resource === "snapshot"
+          ? assertKnownSnapshotRefusal(delta, rejected)
+          : structuredClone(rejected.details.pressure);
+      await canonical();
+      if (resource === "snapshot") {
+        const size = 2 * 1024 * 1024;
+        const manifest: Manifest = {
+          version: 1,
+          entries: [
+            {
+              path: "ordinary.bin",
+              type: "file",
+              mode: 420,
+              size,
+              sha256: sha256(Buffer.alloc(size, 101)),
+            },
+          ],
+        };
+        const feasible = uploadDeclaration(
+          binding,
+          lease,
+          manifest,
+          canary.files.map((file) => file.path),
+        );
+        open = await request(() => client.uploads.begin(binding.workspaceId, feasible), lease);
+        assert.equal(open.state, "open");
+        assert.equal(open.manifestHash, feasible.manifestHash);
+        const uploadId = open.uploadId;
+        const status = await request(
+          () => client.uploads.get(binding.workspaceId, uploadId),
+          lease,
+        );
+        assert.equal(status.uploadId, open.uploadId);
+        assert.equal(status.state, "open");
+        assert.deepEqual(status.receivedChunks, []);
+        abort = await abortInfrastructureStage(input, lease, open.uploadId);
+        ordinary = {
+          declaredBytes: size,
+          state: status.state,
+          manifestHash: status.manifestHash,
+          chunksDelivered: 0,
+          abort,
+        };
+        open = undefined;
+      }
+    }
+    await canonical();
+    observation = {
+      resource,
+      relation: delta < 0 ? "below" : delta === 0 ? "at" : "above",
+      limit: fixture.limit,
+      declared: fixture.declared,
+      outcome:
+        resource === "snapshot" && delta <= 0
+          ? "combined-budget-refusal"
+          : delta > 0
+            ? "descriptor-refusal"
+            : "opened-and-aborted",
+      pressure,
+      ordinary,
+      abort,
+      chunksDelivered: 0,
+      publishedRevision: binding.revision,
+      publishedManifestHash: binding.manifestHash,
+      canonicalFiles: canary.files,
+    };
+  } finally {
+    try {
+      if (open) await abortInfrastructureStage(input, lease, open.uploadId);
+    } finally {
+      release = await releaseProbeLease(input, lease);
+    }
+  }
+  assert.ok(observation);
+  assert.ok(release);
+  return { ...observation, leaseRelease: release };
+}
+
 export async function runLiveInfrastructureControls(input: {
   installed: Installed;
   roles: RoleContext;
@@ -781,12 +1139,14 @@ export async function runLiveInfrastructureControls(input: {
   const sdk = (await import(
     pathToFileURL(installed.resolveExport(`@${installed.candidate.scope}/fortipi-client/node`)).href
   )) as typeof import("../../packages/fortipi-client/dist/node.js");
-  let activeLease: { client: FortiPiClient; lease: WorkspaceOperationLease } | undefined;
   const deadline = Date.now() + 25 * 60000;
   let rateWaits = 0;
-  async function request<T>(operation: () => Promise<T>, leased = false): Promise<T> {
+  async function request<T>(
+    operation: () => Promise<T>,
+    lease?: WorkspaceOperationLease,
+  ): Promise<T> {
     for (;;) {
-      if (leased && activeLease && activeLease.lease.expiresAt <= Date.now() + 5000)
+      if (lease && lease.expiresAt <= Date.now() + 5000)
         throw new InfrastructureEvidenceUnavailable(
           "The original lease cannot survive a public request-window wait",
         );
@@ -809,7 +1169,7 @@ export async function runLiveInfrastructureControls(input: {
             ++rateWaits <= 16 &&
             Date.now() + wait < deadline,
         );
-        if (leased && activeLease && activeLease.lease.expiresAt <= Date.now() + wait + 5000)
+        if (lease && lease.expiresAt <= Date.now() + wait + 5000)
           throw new InfrastructureEvidenceUnavailable(
             "Rate window cannot outlive the original lease",
           );
@@ -896,7 +1256,6 @@ export async function runLiveInfrastructureControls(input: {
     assert.equal(ticket.identity.role, "client");
     assert.equal(ticket.identity.deploymentId, protocol.deploymentId);
     assert.deepEqual(ticket.identity.credential, readRole.credential);
-    let openStage: { client: FortiPiClient; workspaceId: string; uploadId: string } | undefined;
     const leases: { leaseId: string; released: boolean }[] = [];
     const declarations: Record<string, unknown>[] = [];
     const capabilityRefusals: { kind: string; status: number; unchangedVersion: number }[] = [];
@@ -936,22 +1295,6 @@ export async function runLiveInfrastructureControls(input: {
         providerSqlWrites: "not-observed",
         sharedAccountRemaining: "unknown",
       });
-    }
-    async function release() {
-      if (!activeLease) return;
-      const { client, lease } = activeLease;
-      const body = { requestId: randomUUID(), lease, reason: "cancelled" as const };
-      const receipt = await request(() =>
-        client.operations.releaseWorkspaceLease({
-          path: { workspaceId: lease.workspaceId, leaseId: lease.leaseId },
-          query: {},
-          body,
-        }),
-      );
-      assert.equal(receipt.leaseId, lease.leaseId);
-      assert.equal(receipt.released, true);
-      leases.push(receipt);
-      activeLease = undefined;
     }
     let failure: unknown;
     let publicControls: ScenarioEvidence | undefined;
@@ -1031,110 +1374,32 @@ export async function runLiveInfrastructureControls(input: {
           workspaceIds: [binding.workspaceId],
           actions: ["workspace.write", "workspace.read", "workspaces.read"],
         });
-        allocationGroups.push({ resource, binding, client });
+        const probe = { client, errorType: sdk.FortiPiError, request };
+        const canary = await seedInfrastructureWorkspace(probe, binding);
+        allocationGroups.push({ resource, canary, client });
       }
       for (const delta of [-1, 0, 1] as const) {
-        // Separate principals/workspaces share this real quiet interval. Each
-        // group's preceding stage is already aborted and its lease released.
-        // Keep stages sequential so overlapping reservations do not create a
-        // different shared-pool refusal. No lease is acquired before the wait.
+        // Preserve the three original scopes and real quiet rounds. A quiet
+        // request window never bypasses child-role or install storage limits;
+        // those still refuse admission and leave this claim nonpassing.
         const quietFrom = Date.now();
         await delay(60000);
         const quietThrough = Date.now();
         assert.ok(quietThrough - quietFrom >= 60000);
-        for (const { resource, binding, client } of allocationGroups) {
-          const fixture = allocationDeclaration(resource, delta),
-            operationId = randomUUID();
-          const lease = await request(() =>
-            client.operations.acquireWorkspaceLease({
-              path: { workspaceId: binding.workspaceId },
-              query: {},
-              body: {
-                requestId: randomUUID(),
-                operationId,
-                bindingVersion: binding.bindingVersion,
-                baseRevision: binding.revision,
-                deadline: Date.now() + 120000,
-              },
-            }),
-          );
-          activeLease = { client, lease };
-          const body: UploadBegin = {
-            requestId: randomUUID(),
-            operationId,
-            commitId: randomUUID(),
-            lease,
-            baseRevision: binding.revision,
-            manifest: fixture.manifest,
-            manifestHash: fixture.manifestHash,
-            mutations: fixture.manifest.entries.map((entry) => {
-              assert.equal(entry.type, "file");
-              if (entry.type !== "file") throw new Error("File declaration required");
-              return {
-                kind: "put",
-                path: entry.path,
-                mode: entry.mode,
-                size: entry.size,
-                sha256: entry.sha256,
-              };
-            }),
-          };
-          let opened: Awaited<ReturnType<typeof client.uploads.begin>> | undefined,
-            rejected: unknown;
-          try {
-            opened = await request(() => client.uploads.begin(binding.workspaceId, body), true);
-          } catch (error) {
-            rejected = error;
-          }
-          try {
-            if (delta <= 0) {
-              if (rejected) throw rejected;
-              assert.ok(opened);
-              assert.equal(opened.state, "open");
-              assert.equal(opened.manifestHash, fixture.manifestHash);
-              openStage = { client, workspaceId: binding.workspaceId, uploadId: opened.uploadId };
-              const observed = await request(() =>
-                client.uploads.get(binding.workspaceId, opened.uploadId),
-              );
-              assert.equal(observed.uploadId, opened.uploadId);
-              assert.equal(observed.state, "open");
-              assert.deepEqual(observed.receivedChunks, []);
-              await request(() => client.uploads.abort(binding.workspaceId, opened.uploadId));
-              assert.equal(
-                (await request(() => client.uploads.get(binding.workspaceId, opened.uploadId)))
-                  .state,
-                "aborted",
-              );
-              openStage = undefined;
-            } else {
-              // Never reinterpret an admitted-stage abort failure as begin's quota.
-              if (opened) {
-                openStage = { client, workspaceId: binding.workspaceId, uploadId: opened.uploadId };
-                throw new Error("Above-default declaration was admitted");
-              }
-              assert.ok(rejected instanceof sdk.FortiPiError);
-              assert.equal(rejected.status, 429);
-              assert.equal(rejected.code, "quota_exceeded");
-              assert.ok(rejected.details?.pressure);
-              assertInfrastructurePressure(rejected.details.pressure);
-            }
-            assert.deepEqual(
-              await request(() => client.workspaces.get(binding.workspaceId)),
-              binding,
-            );
-            declarations.push({
-              resource,
-              relation: delta < 0 ? "below" : delta === 0 ? "at" : "above",
-              limit: fixture.limit,
-              declared: fixture.declared,
-              outcome: delta <= 0 ? "opened-and-aborted" : "quota429",
-              chunksDelivered: 0,
-              publishedRevision: binding.revision,
-              quietWindow: { from: quietFrom, through: quietThrough },
-            });
-          } finally {
-            await release();
-          }
+        for (const { resource, canary, client } of allocationGroups) {
+          const observation = await observeComputerDeclaration({
+            client,
+            errorType: sdk.FortiPiError,
+            request,
+            resource,
+            delta,
+            canary,
+          });
+          leases.push(observation.leaseRelease);
+          declarations.push({
+            ...observation,
+            quietWindow: { from: quietFrom, through: quietThrough },
+          });
         }
         await deviceCanonicalBytes(reader, workspace, request);
       }
@@ -1168,11 +1433,11 @@ export async function runLiveInfrastructureControls(input: {
         oracle:
           "Actual default-policy public declaration boundaries, last-slot admission/refused-key recovery and request-window recovery preserve independently hashed canonical bytes; application accounting never invents provider CPU, SQL writes, reset or shared headroom",
         sensitivity: [
-          "Below/at declarations require real allocated stages and confirmed abort; above admission never passes through cleanup error classification",
+          "Feasible file/entry declarations require real stages; snapshot descriptors require the exact policy storage cause and a same-workspace2MiB positive, with original hashes and fresh confirmed cleanup. No cleanup failure is begin-refusal evidence",
           "Public refused contender creates no accepted receipt/canonical message or assignment before its exact key becomes admissible after settlement",
         ],
         limitations: [
-          "Allocation/declaration boundaries only; no maximum-size byte-transfer or provider/account exhaustion claim",
+          "Allocation/declaration boundaries only; default snapshot pool refusals do not certify a maximum transferable snapshot or provider/account exhaustion",
           "Original canary bytes are freshly read; local reduced-cap tests, SQL/CPU counters, physical reclamation and event/output maxima are not aliased into this row",
           "Three real60s quiet rounds cover separate declaration principals/workspaces; sequential stages avoid adding shared-pool contention, and original short leases are acquired only after each wait",
         ],
@@ -1180,23 +1445,7 @@ export async function runLiveInfrastructureControls(input: {
     } catch (error) {
       failure = error;
     } finally {
-      try {
-        if (openStage) {
-          const stage = openStage;
-          await request(() => stage.client.uploads.abort(stage.workspaceId, stage.uploadId));
-          assert.equal(
-            (await request(() => stage.client.uploads.get(stage.workspaceId, stage.uploadId)))
-              .state,
-            "aborted",
-          );
-        }
-      } finally {
-        try {
-          await release();
-        } finally {
-          await revokeIssued();
-        }
-      }
+      await revokeIssued();
     }
     if (failure) throw failure;
     assert.ok(publicControls && concurrency && pressure);
