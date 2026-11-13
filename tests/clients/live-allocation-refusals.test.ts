@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 import { test } from "node:test";
+import { FortiPiError } from "../../packages/fortipi-client/dist/node.js";
+import type { InfrastructurePressure } from "../../packages/fortipi-contract/dist/index.js";
+import { assertKnownDeclarationRefusal } from "./live-allocation-refusals.ts";
 
 test("allocation refusal classifies begin only; admitted stage never passes through a failed abort", async () => {
   const source = await readFile(new URL("./live-allocation-refusals.ts", import.meta.url), "utf8");
@@ -16,6 +19,7 @@ test("allocation refusal classifies begin only; admitted stage never passes thro
     "module",
     "observations",
     "release",
+    "assertKnownDeclarationRefusal",
     `return (async () => {
       const call = (operation) => operation();
       const workspace = { binding: { workspaceId: "owned-workspace" } };
@@ -24,23 +28,33 @@ test("allocation refusal classifies begin only; admitted stage never passes thro
       ${stripTypeScriptTypes(source.slice(start, end))}
     })();`,
   );
-  class FortiPiError extends Error {
-    readonly status: number;
-    readonly code: string;
-    constructor(status: number, code: string) {
-      super(code);
-      this.status = status;
-      this.code = code;
-    }
-  }
-  async function run(admitted: boolean, abortError?: Error) {
+  const pressure: InfrastructurePressure = {
+    resource: "storage",
+    scope: { kind: "object" },
+    source: "policy",
+    measurement: "estimated",
+    reason: "Snapshot exceeds effective workspace bounds",
+    action: "reclaim-storage",
+  };
+  const quotaError = () =>
+    FortiPiError.remote(
+      {
+        code: "quota_exceeded",
+        message: "Declared snapshot exceeds the workspace allocation",
+        requestId: crypto.randomUUID(),
+        retryable: false,
+        details: { retryAfterMs: 0, pressure },
+      },
+      429,
+    );
+  async function run(admitted: boolean, abortError?: Error, beginError = quotaError()) {
     const observations: unknown[] = [];
     let released = 0,
       aborted = 0;
     const client = {
       uploads: {
         async begin() {
-          if (!admitted) throw new FortiPiError(429, "quota_exceeded");
+          if (!admitted) throw beginError;
           return { uploadId: "actual-admitted-stage" };
         },
         async abort(workspaceId: string, uploadId: string) {
@@ -59,6 +73,7 @@ test("allocation refusal classifies begin only; admitted stage never passes thro
       async () => {
         released++;
       },
+      assertKnownDeclarationRefusal,
     );
     return { done, observations, releases: () => released, aborts: () => aborted };
   }
@@ -71,14 +86,16 @@ test("allocation refusal classifies begin only; admitted stage never passes thro
       declared: 4194305,
       status: 429,
       code: "quota_exceeded",
+      retryable: false,
+      pressure,
     },
   ]);
   assert.equal(refused.releases(), 1);
   assert.equal(refused.aborts(), 0);
   for (const abortError of [
     undefined,
-    new FortiPiError(429, "quota_exceeded"),
-    new FortiPiError(409, "workspace.conflict"),
+    quotaError(),
+    new FortiPiError("workspace.conflict", { status: 409 }),
   ]) {
     const accepted = await run(true, abortError);
     await assert.rejects(accepted.done, /Above-allocation upload was admitted/);
@@ -86,4 +103,17 @@ test("allocation refusal classifies begin only; admitted stage never passes thro
     assert.equal(accepted.releases(), 1);
     assert.equal(accepted.aborts(), 1);
   }
+  const missingPressure = await run(
+    false,
+    undefined,
+    new FortiPiError("quota_exceeded", {
+      status: 429,
+      retryable: false,
+      details: { retryAfterMs: 0 },
+    }),
+  );
+  await assert.rejects(missingPressure.done, assert.AssertionError);
+  assert.deepEqual(missingPressure.observations, []);
+  assert.equal(missingPressure.releases(), 1);
+  assert.equal(missingPressure.aborts(), 0);
 });
