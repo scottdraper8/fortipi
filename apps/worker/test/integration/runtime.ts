@@ -46,9 +46,18 @@ export interface RuntimeOptions {
   tls?: { key: string; cert: string; ca: string };
   testBounds?: Partial<typeof freeInfrastructurePolicy.bounds>;
   traffic?: "free";
+  /** Test-only real local Loader; requires an explicit source fixture main.
+   * Never inferred from Free traffic or advertised as a paid account proof. */
+  sourceLoader?: true;
 }
 /** Real TCP/workerd/SQLite, one immutable config and storage directory across kills. */
 export async function start(options: RuntimeOptions = {}) {
+  if (options.sourceLoader)
+    assert.equal(
+      options.main && resolve(options.main),
+      join(repository, "apps/worker/test/integration/cloud-tool-worker.ts"),
+      "Local Loader binding requires the explicit source-only cloud tool fixture; default Free composition must omit it",
+    );
   const directory =
     options.directory ?? (await mkdtemp(join(tmpdir(), "fortipi-evidence-runtime-")));
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -89,7 +98,9 @@ export async function start(options: RuntimeOptions = {}) {
       main: options.main ?? join(repository, "apps/worker/test/integration/fixture-worker.ts"),
       compatibility_date: "2026-11-10",
       compatibility_flags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
+      ...(options.sourceLoader ? { worker_loaders: [{ binding: "LOADER" }] } : {}),
       vars: {
+        FORTIPI_EVIDENCE_SOURCE_TIME: Date.now(),
         FORTIPI_ADMIN_TOKEN: admin,
         FORTIPI_CONFIG: { version: 1, infrastructure: policy },
         ...(options.allowedOrigin ? { FORTIPI_ALLOWED_ORIGINS: [options.allowedOrigin] } : {}),
