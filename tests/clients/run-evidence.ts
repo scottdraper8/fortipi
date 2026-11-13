@@ -63,6 +63,10 @@ import {
   writeEvidence,
 } from "./evidence.ts";
 import { type LiveRecoveryBridge, liveContext } from "./live.ts";
+import {
+  InfrastructureEvidenceUnavailable,
+  type InfrastructureObserver,
+} from "./live-infrastructure-controls.ts";
 import { runNativeDaemon } from "./native-daemon.ts";
 import { nativePlatform } from "./native-matrix.ts";
 import { publicFlow } from "./public-flow.ts";
@@ -78,9 +82,15 @@ export async function runEvidence(
   context?: CandidateReadContext,
   recovery?: LiveRecoveryBridge,
   devices?: DeviceEvidenceData,
+  infrastructure?: InfrastructureObserver,
 ): Promise<ClaimResult[]> {
   assert.ok(["local", "native", "live"].includes(input.mode));
   assert.ok(input.mode === "live" || recovery === undefined, "Recovery bridge is live-only");
+  assert.ok(
+    input.mode === "live" || infrastructure === undefined,
+    "Infrastructure observer is live-only",
+  );
+  if (infrastructure) assert.equal(typeof infrastructure.read, "function");
   assert.ok(
     input.mode === "live" || (devices === undefined && input.devicesReceipt === undefined),
     "Device evidence is live-only",
@@ -221,7 +231,12 @@ export async function runEvidence(
       // sanitized failure metadata, never stringify the thrown object/stack.
       results.push({
         id,
-        outcome: error instanceof Error && error.name === "TimeoutError" ? "timeout" : "fail",
+        outcome:
+          error instanceof InfrastructureEvidenceUnavailable
+            ? "unavailable"
+            : error instanceof Error && error.name === "TimeoutError"
+              ? "timeout"
+              : "fail",
         identity,
         command,
         observation: {
@@ -880,21 +895,6 @@ export async function runEvidence(
           workspaceLimits,
           workspaceSensitivity,
         );
-        const allocationLimits: string[] = [],
-          allocationSensitivity: string[] = [];
-        await measure(
-          "live-allocation-refusals",
-          ["runLiveAllocationRefusals", "installed-node-export", "public-Computer", "seed1010"],
-          "Above-default file/snapshot/manifest declarations fail as public quota429 before chunk delivery; releases and original canonical bytes remain intact",
-          async () => {
-            const evidence = await context.allocationRefusals();
-            allocationLimits.push(...evidence.limitations);
-            allocationSensitivity.push(...evidence.sensitivity);
-            return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
-          },
-          allocationLimits,
-          allocationSensitivity,
-        );
         const controlLimits: string[] = [],
           controlSensitivity: string[] = [];
         let execution: Awaited<ReturnType<typeof context.executionControls>> | undefined;
@@ -1045,21 +1045,6 @@ export async function runEvidence(
             "Discovery does not prove account-wide capacity/exhaustion; infrastructure-boundaries remains a separate required live claim",
           ],
         );
-        const pressureLimits: string[] = [],
-          pressureSensitivity: string[] = [];
-        await measure(
-          "live-request-pressure",
-          ["publicRequestPressure", "bounded-read-only", "declared-retry-window"],
-          "Bounded ordinary public reads encounter actual request admission pressure and recover the same scoped resource after its declared wait without changing policy",
-          async () => {
-            const evidence = await context.requestPressure();
-            pressureLimits.push(...evidence.limitations);
-            pressureSensitivity.push(...evidence.sensitivity);
-            return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
-          },
-          pressureLimits,
-          pressureSensitivity,
-        );
         await measure(
           "installed-browser",
           ["Chromium", "installed-browser-export", "seed1010"],
@@ -1120,6 +1105,62 @@ export async function runEvidence(
           },
           [
             "Live backend/native decisions, platform recovery, separate devices and real account limits remain independent required claims",
+          ],
+        );
+        // One infrastructure run replaces the earlier partial declaration/rate
+        // invocations. Its fresh public controls are retained separately from
+        // required provider observations, never aliased from local tests.
+        let controls: Awaited<ReturnType<typeof context.infrastructureControls>> | undefined;
+        const publicLimits: string[] = [],
+          publicSensitivity: string[] = [];
+        await measure(
+          "live-infrastructure-controls",
+          ["runLiveInfrastructureControls", "installed-public-SDK", "default-policy"],
+          "Fresh public default allocation declarations, final-slot contention/refused-key recovery and request-window recovery preserve canonical bytes and complete scoped cleanup",
+          async () => {
+            controls = await context.infrastructureControls();
+            publicLimits.push(...controls.publicControls.limitations);
+            publicSensitivity.push(...controls.publicControls.sensitivity);
+            return {
+              ...controls.publicControls.observation,
+              providerReadRequest: controls.readRequest,
+            };
+          },
+          publicLimits,
+          publicSensitivity,
+        );
+        const qualified = controls;
+        if (qualified) {
+          const limits: string[] = [],
+            sensitivity: string[] = [];
+          await measure(
+            "live-infrastructure-observations",
+            ["fresh-public-controls", "trusted-read-only-provider-observer", "active-idle-windows"],
+            "Compare scoped active/idle provider request/write records with explicit quality/windows/lag; active CPU sums and isolate-memory P99 are observations, not exact absence or peaks",
+            async () => {
+              const evidence = await qualified.qualify(infrastructure);
+              limits.push(...evidence.limitations);
+              sensitivity.push(...evidence.sensitivity);
+              return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
+            },
+            limits,
+            sensitivity,
+          );
+        }
+        // This new bounded observation port cannot stand in for every approved
+        // infrastructure control. Keep the required full row explicitly open;
+        // no source-only result or analytics zero is promoted into live proof.
+        await measure(
+          "infrastructure-boundaries",
+          ["required-full-application-infrastructure-controls"],
+          "Every approved application event/output/storage-restoration/refusal control and live observation must be present; partial telemetry cannot clear the full row",
+          async () => {
+            throw new InfrastructureEvidenceUnavailable(
+              "Full event/output and storage-restoration controls remain required",
+            );
+          },
+          [
+            "Fresh public declaration/contention/rate controls and provider comparisons are separate bounded rows; full application infrastructure coverage remains unavailable",
           ],
         );
       }

@@ -20,6 +20,7 @@ import type { Installed } from "../distribution/install.ts";
 import { publicAccess } from "./live-access.ts";
 import { runLiveAllocationRefusals } from "./live-allocation-refusals.ts";
 import { openLiveExecutionControls } from "./live-execution-controls.ts";
+import { runLiveInfrastructureControls } from "./live-infrastructure-controls.ts";
 import { publicRequestPressure } from "./live-pressure.ts";
 import { runLiveTaskControls } from "./live-task-controls.ts";
 import { runLiveWorkspace } from "./live-workspace.ts";
@@ -351,6 +352,16 @@ export async function liveContext(
     async executionControls() {
       assert.ok(workspaceCanary, "Actual independently verified Computer canary is required");
       return openLiveExecutionControls({
+        installed,
+        roles,
+        deployment,
+        agentId: agent.agentId,
+        workspace: workspaceCanary,
+      });
+    },
+    async infrastructureControls() {
+      assert.ok(workspaceCanary, "Actual independently verified Computer canary is required");
+      return runLiveInfrastructureControls({
         installed,
         roles,
         deployment,

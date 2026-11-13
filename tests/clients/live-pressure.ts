@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import type { CredentialRef } from "../../packages/fortipi-contract/dist/index.js";
 import type { Installed } from "../distribution/install.ts";
 import type { ScenarioEvidence } from "./evidence.ts";
 import type { RoleContext } from "./roles.ts";
@@ -12,6 +13,8 @@ export async function publicRequestPressure(input: {
   installed: Pick<Installed, "candidate" | "resolveExport">;
   roles: RoleContext;
   agentId: string;
+  /** Trusted enclosing fixture journals the PUBLIC ref before consumer effects. */
+  onRole?: (credential: CredentialRef) => void;
 }): Promise<ScenarioEvidence> {
   const role = await input.roles.issue({
     requestId: randomUUID(),
@@ -33,6 +36,7 @@ export async function publicRequestPressure(input: {
       },
     ],
   });
+  input.onRole?.(structuredClone(role.credential));
   const module = (await import(
     pathToFileURL(
       input.installed.resolveExport(`@${input.installed.candidate.scope}/fortipi-client/node`),
