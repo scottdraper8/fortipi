@@ -496,6 +496,33 @@ test("completed initial/A/B/cleanup records authenticate current jobs and immuta
   }
 });
 
+test("cleanup retains the exact initial provider observation while its own timestamp belongs to the cleanup job", async (t) => {
+  const f = await fixture(t, "cleanup");
+  const initialTime = new Date(Date.parse(f.input.deployment.checkedAt) - 31000).toISOString();
+  f.input.deployment = { ...f.input.deployment, checkedAt: initialTime };
+  await f.rewrite((meta) => {
+    meta.deployment = { ...meta.deployment, checkedAt: initialTime };
+  });
+  const original = await readDevicePhaseArtifact(f.input, f.request);
+  assert.equal(original.metadata.deployment.checkedAt, initialTime);
+  assert.ok(Date.parse(original.metadata.checkedAt) > Date.parse(initialTime));
+  await f.rewrite((meta) => {
+    meta.deployment.checkedAt = meta.checkedAt;
+  });
+  await assert.rejects(readDevicePhaseArtifact(f.input, f.request), /unavailable/);
+  await f.rewrite((meta) => {
+    meta.deployment.checkedAt = initialTime;
+    meta.checkedAt = initialTime;
+  });
+  await assert.rejects(readDevicePhaseArtifact(f.input, f.request), /unavailable/);
+  const a = await fixture(t, "a");
+  a.input.deployment = { ...a.input.deployment, checkedAt: initialTime };
+  await a.rewrite((meta) => {
+    meta.deployment = { ...meta.deployment, checkedAt: initialTime };
+  });
+  await assert.rejects(readDevicePhaseArtifact(a.input, a.request), /unavailable/);
+});
+
 test("reference/source/latest attempt/job/runner/window guards reject before artifact payload; generic live producer still requires completed run", async (t) => {
   const f = await fixture(t);
   for (const fault of [

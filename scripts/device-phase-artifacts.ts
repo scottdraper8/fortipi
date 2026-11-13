@@ -664,7 +664,14 @@ function metadata(
     deviceTargetIdentitySha256(bound.deployment),
   );
   assert.ok(observed.job.completedAt);
-  for (const at of [value.checkedAt, value.deployment.checkedAt])
+  const observedTimes = [value.checkedAt];
+  if (bound.phase === "cleanup") {
+    // Cleanup revokes saved roles; it retains the authenticated initial provider
+    // observation rather than claiming another provider read without CF access.
+    assert.equal(value.deployment.checkedAt, bound.deployment.checkedAt);
+    freshness(value.deployment.checkedAt, 6);
+  } else observedTimes.push(value.deployment.checkedAt);
+  for (const at of observedTimes)
     assert.ok(
       time(at) >= time(observed.job.startedAt) && time(at) <= time(observed.job.completedAt),
     );
