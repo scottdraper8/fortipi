@@ -120,12 +120,12 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "6249ca27d2230a93d2fd44c3ceb3a651bc2baaec",
+        "commit": "20a6e09dc60a13a3ec4988ba4d3e4b9e78c1f940",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
           "packages/ai": "91ed66697d7398fb0d507afeaa6b6b06f4ad4972aeae8117dbf3d8c297766235",
-          "packages/chord": "8d858c33303e1f6c1c5ee27fab8f3a8a5b692c657c4cd71ddecffda62f962fc8",
+          "packages/chord": "4c2f26f420b632f5a80253bd27d25e50a8031bccc05c4d16c3c89c7e5de7f5ec",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "dc87d765abc06c7764d3569f4bfc5aacb424eec3573a9aabd4197c346d5ef2fa",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
@@ -135,7 +135,7 @@
           "packages/tui": "9b71a3439eb5858a0b46a15713ad41690e5ed5c6fef8d8fb38b259617530fd9f",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "54d099f8c8955360ea98d37f62ce90212574c8a553e74189a12f9a22c24d3b9c"
+        "sha256": "2b7107ebb8e4b88b4eefbb7d96cd6f2a8636cb234f7f3ba37b0bd00155978096"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-12T19:21:44.963Z",
-      "reviewNote": "Reviewed immutable2443c687...6249ca27:5commits/41files,8watchedChord files. Changes add telemetry-ingest export and required admit(principal) for optional app/page telemetry; FortiPi uses its own HTTP/WS and does not instantiate this facet/app kit. Actual51a Worker has13 Chord inputs (context,SQLite,delta,JSON/watch/output); their upstream recursive tree/blob identities are unchanged, as are contracts/host/data/store/core telemetry. All other watched Pi paths and1.5.2 pins unchanged. Preserve accepted a360 Anthropic aa47 repair (schema HOLD resolved), Durable9b88 and Agents5071 declared patches; hashes verified. Future ingest/main adoption needs explicit admission migration. Reference acknowledgment only: no dependency/code/version adoption, budget/cap change or runtime/deployed blanket clearance. Evidence:phase3/thread-8/candidate-chord-incremental-review.md."
+      "reviewedAt": "2026-11-12T23:02:11.755Z",
+      "reviewNote": "Reviewed immutable6249ca27...20a6e09d:4commits/22files, complete patches; sole watched change is Chord shared-holds design.md (+157), no implementation. Chord src/tests/manifest/exports and other10 watched identities unchanged. Compared real PiHarness/Harness.open/onWake and createModels credential/auth-context factory; selected models/provider sources equal authenticated1.5.2 map sources. Latest published Pi family1.5.2 is age-eligible; archives/SRIs/manifests/pins and all3 declared installed patches (Durable9b88,Agents5071,Anthropicaa47) verified unchanged. P2 telemetry/settings are unselected; actual4c Worker has13 Chord context/SQLite/delta inputs and no P2/host/remote inputs. No new used-path defect. Reference only: future shared-hold implementation requires principal/address/release/revocation qualification. No version/config/cap adoption or blanket runtime/deployed/security/release clearance. Evidence:phase3/thread-8/pi-20a-incremental-review.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
