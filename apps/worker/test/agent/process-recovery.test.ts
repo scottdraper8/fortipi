@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually } from "./harness.ts";
-import { processHarness, processRequestFailure } from "./process-harness.ts";
+import { processCueMatches, processHarness, processRequestFailure } from "./process-harness.ts";
 
 interface ProbeState {
   barrier: string | null;
@@ -124,7 +124,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
       allocated.piIds,
       "Lost allocation response must not allocate a second Pi conversation",
     );
-    for (const point of ["before-submit", "after-submit"]) {
+    for (const point of ["before-submit", "after-submit"] as const) {
       phase = `${point}.arm`;
       const input = {
         clientRequestId: crypto.randomUUID(),
@@ -134,24 +134,21 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
       const previous = (await h.api<ProbeState>(`${probe}/state`)).body.admissions.map(
         (a) => a.operationId,
       );
-      await h.api(`${probe}/fault`, point);
+      const observation = await h.armBarrier(agent.body.agentId, point);
       const lost = h
         .api(`/v1/conversations/${conversation.body.conversationId}/messages`, input)
         .catch(() => undefined);
       phase = `${point}.wait`;
-      const before = await eventually(
-        async () =>
-          (await h.api<Pick<ProbeState, "barrier" | "admissions">>(`${probe}/barrier`)).body,
-        (s) => s.barrier === point,
-      );
-      const identity = before.admissions.find((a) => !previous.includes(a.operationId));
-      assert.ok(identity);
-      assert.equal(identity.receipt, null);
+      await eventually(async () => observation.cue(), Boolean);
       phase = `${point}.crash`;
       await h.crash();
       await lost;
       phase = `${point}.restart`;
       await h.start();
+      const before = await h.readWitness(observation.arm);
+      const identity = before.admissions.find((a) => !previous.includes(a.operationId));
+      assert.ok(identity);
+      assert.equal(identity.receipt, null);
       phase = `${point}.retry`;
       const accepted = await h.api<D.AdmissionReceipt>(
         `/v1/conversations/${conversation.body.conversationId}/messages`,
@@ -199,4 +196,105 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
     phase = "cleanup";
     await h.close().catch(failure);
   }
+});
+
+test("premature cues from held or rejected marker transactions cannot become historical proof", {
+  timeout: 90000,
+}, async () => {
+  for (const fault of ["hold", "reject"] as const) {
+    const h = await processHarness();
+    try {
+      const agent = await h.api<D.Agent>("/v1/agents", {
+        requestId: crypto.randomUUID(),
+        name: "negative-marker",
+        model: { providerId: "cloudflare", modelId: "@cf/zai-org/glm-5.3-flash" },
+      });
+      assert.equal(agent.status, 201);
+      const probe = `/__test/agents/${agent.body.agentId}`;
+      const conversation = await h.api<D.Conversation>(
+        `/v1/agents/${agent.body.agentId}/conversations`,
+        { requestId: crypto.randomUUID(), title: "marker rejection" },
+      );
+      assert.equal(conversation.status, 201);
+      const canary = { nonce: crypto.randomUUID() };
+      await h.api(`${probe}/canary`, canary, "PUT");
+      const observation = await h.armBarrier(agent.body.agentId, "before-submit", fault);
+      const input = {
+        clientRequestId: crypto.randomUUID(),
+        content: fault,
+        busyBehavior: "followUp",
+      };
+      const lost = h
+        .api(`/v1/conversations/${conversation.body.conversationId}/messages`, input)
+        .catch(() => undefined);
+      await eventually(async () => observation.cue(), Boolean);
+      assert.equal(observation.cue(), false, "A cue is consumed once");
+      await h.crash();
+      await lost;
+      await h.start();
+      assert.equal(observation.cue(), false, "An old child pipe cannot cue its replacement");
+      assert.deepEqual((await h.api(`${probe}/canary`)).body, canary);
+      await assert.rejects(h.readWitness(observation.arm), /Missing committed historical marker/);
+      assert.equal(
+        (
+          await h.api(`${probe}/fault`, {
+            runId: observation.arm.runId,
+            armId: observation.arm.armId,
+            point: observation.arm.point,
+          })
+        ).status,
+        409,
+        "Replaying the old arm cannot refresh its generation",
+      );
+      const accepted = await h.api<D.AdmissionReceipt>(
+        `/v1/conversations/${conversation.body.conversationId}/messages`,
+        input,
+      );
+      assert.equal(accepted.status, 202);
+      await eventually(
+        async () =>
+          (
+            await h.api<D.ConversationProjection>(
+              `/v1/conversations/${conversation.body.conversationId}`,
+            )
+          ).body,
+        (s) => s.messages?.some((m) => m.content === `answer:${fault}`),
+      );
+      // Actual late submission/recovery has run in the replacement generation.
+      // A read must still neither manufacture nor repair the rolled-back witness.
+      await assert.rejects(h.readWitness(observation.arm), /Missing committed historical marker/);
+      assert.deepEqual((await h.api(`${probe}/canary`)).body, canary);
+    } finally {
+      await h.close();
+    }
+  }
+});
+
+test("kill cues match only the exact run, agent, phase, arm and actor generation; no storage proof", () => {
+  const arm = {
+    runId: crypto.randomUUID(),
+    agentId: "agent-local",
+    point: "before-submit" as const,
+    armId: crypto.randomUUID(),
+    generation: crypto.randomUUID(),
+  };
+  const cue = `FORTIPI_PROCESS_CUE ${JSON.stringify(arm)}`;
+  assert.equal(processCueMatches(cue, arm), true);
+  for (const key of ["runId", "agentId", "point", "armId", "generation"] as const)
+    assert.equal(processCueMatches(cue, { ...arm, [key]: "foreign" }), false);
+  assert.equal(processCueMatches(`${cue} synthetic-private-canary`, arm), false);
+  assert.equal(
+    processCueMatches(
+      `FORTIPI_PROCESS_CUE {"runId":"synthetic-private-canary",${JSON.stringify(arm).slice(1)}`,
+      arm,
+    ),
+    false,
+  );
+  assert.equal(
+    processCueMatches(
+      `FORTIPI_PROCESS_CUE ${JSON.stringify({ ...arm, private: "synthetic-private-canary" })}`,
+      arm,
+    ),
+    false,
+  );
 });
