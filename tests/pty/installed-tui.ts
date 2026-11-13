@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, open, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, resolve, sep } from "node:path";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import type { FortiPiClient } from "../../packages/fortipi-client/dist/node.js";
 import type {
   ConversationProjection,
@@ -23,11 +25,6 @@ async function until(read: () => Promise<boolean>, timeout = 20000) {
 }
 /** Public normal-profile flow only; own protected temporary application role. */
 export async function tuiProfile(installed: Installed, role: PublicRole) {
-  assert.notEqual(
-    process.platform,
-    "darwin",
-    "Actual isolated OS user or a product-owned private profile-path port is required: the Darwin TUI fixes its profile path under the OS home; this fixture must not read/write the user's profile or override HOME",
-  );
   const home = await realpath(await mkdtemp(resolve(tmpdir(), "fortipi-evidence-tui-")));
   try {
     const env: NodeJS.ProcessEnv = {
@@ -53,22 +50,42 @@ export async function tuiProfile(installed: Installed, role: PublicRole) {
     const platform = executor.adapter();
     await platform.protect(home, true);
     await platform.verifyProtection(home, true);
-    const discovery = await execute(
-      process.execPath,
-      [
-        "--input-type=module",
-        "-e",
-        `import {profilePath} from ${JSON.stringify(pathToFileURL(entry).href)}; console.log(profilePath());`,
-      ],
-      home,
-      env,
-      15000,
-    );
-    assert.ok(discovery.code === 0 && !discovery.timedOut);
-    const profilePath = discovery.stdout.trim();
-    assert.ok(
-      isAbsolute(profilePath) && profilePath.startsWith(`${home}${sep}`),
-      "The supported product config path must stay in this fixture's private directory",
+    const profilePath = resolve(home, "profiles.json");
+    const bin = installed.bins["fortipi-tui"];
+    assert.ok(bin, "Actual installed TUI bin required");
+    await module.saveProfiles({ version: 1, profiles: [] }, profilePath);
+    // Before any role file exists, prove this actual installed CLI honors the
+    // qualified private-path port. An old/ignoring CLI cannot read the default
+    // OS profile through this permission-guarded probe or pass by printing help.
+    await assert.rejects(
+      () =>
+        promisify(execFile)(
+          process.execPath,
+          [
+            "--permission",
+            `--allow-fs-read=${installed.consumer}`,
+            `--allow-fs-read=${home}`,
+            // The product's existing Windows ACL check uses fixed PowerShell -NoProfile.
+            ...(process.platform === "win32" ? ["--allow-child-process"] : []),
+            bin,
+            "--profiles-file",
+            profilePath,
+            "--profile",
+            "missing",
+            "--no-animation",
+          ],
+          { cwd: home, env, timeout: 15000, maxBuffer: 32768, windowsHide: true },
+        ),
+      (error: unknown) => {
+        const failure = error as { code?: unknown; stderr?: unknown; killed?: unknown };
+        return (
+          failure.code === 1 &&
+          failure.killed !== true &&
+          typeof failure.stderr === "string" &&
+          /^FortiPi: profile_required\s*$/.test(failure.stderr)
+        );
+      },
+      "Actual installed TUI must read the protected empty private profile with default-home access denied",
     );
     const privateDirectory = resolve(home, "roles");
     await mkdir(privateDirectory, { mode: 0o700 });
@@ -102,8 +119,6 @@ export async function tuiProfile(installed: Installed, role: PublicRole) {
       },
       profilePath,
     );
-    const bin = installed.bins["fortipi-tui"];
-    assert.ok(bin, "Actual installed TUI bin required");
     return {
       home,
       env,
@@ -122,7 +137,15 @@ export async function smokeTui(installed: Installed, role: PublicRole) {
   try {
     const result = await execute(
       process.execPath,
-      [profile.bin, "--profile", "evidence", "--no-animation", "--smoke"],
+      [
+        profile.bin,
+        "--profiles-file",
+        profile.profilePath,
+        "--profile",
+        "evidence",
+        "--no-animation",
+        "--smoke",
+      ],
       profile.home,
       profile.env,
       135000,
@@ -165,7 +188,14 @@ export async function keyboardTui(
   const profile = await tuiProfile(installed, role);
   const pty = terminal(
     process.execPath,
-    [profile.bin, "--profile", "evidence", "--no-animation"],
+    [
+      profile.bin,
+      "--profiles-file",
+      profile.profilePath,
+      "--profile",
+      "evidence",
+      "--no-animation",
+    ],
     profile.home,
     profile.env,
   );
@@ -233,7 +263,14 @@ export async function keyboardConversationTui(
   const profile = await tuiProfile(installed, role);
   const pty = terminal(
     process.execPath,
-    [profile.bin, "--profile", "evidence", "--no-animation"],
+    [
+      profile.bin,
+      "--profiles-file",
+      profile.profilePath,
+      "--profile",
+      "evidence",
+      "--no-animation",
+    ],
     profile.home,
     profile.env,
   );

@@ -752,7 +752,7 @@ export async function runEvidence(
       async () => {
         const platform = results.find((row) => row.id === "portable-daemon-platform");
         assert.equal(platform?.outcome, "pass");
-        const daemon = await runNativeDaemon(ports);
+        const daemon = await runNativeDaemon(ports, context);
         return { platform: platform.observation, daemon };
       },
       [

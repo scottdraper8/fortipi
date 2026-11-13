@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm } from "node:fs/promises";
+import { homedir, tmpdir, userInfo } from "node:os";
+import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+import { parse as parseYaml } from "yaml";
 import type { Job, Task } from "../../packages/fortipi-contract/dist/index.js";
 import type { Profile } from "../../packages/fortipi-executor/dist/index.js";
 import { nodeCommand } from "../../packages/fortipi-executor/test/fixtures/daemon.ts";
-import { execute } from "../../scripts/prepare-release.ts";
+import { type CandidateReadContext, execute } from "../../scripts/prepare-release.ts";
+import { object, REPOSITORY, REPOSITORY_ID, sha256 } from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
 import type { ScenarioEvidence } from "./evidence.ts";
 
@@ -33,14 +36,162 @@ async function until<T>(read: () => Promise<T>, predicate: (value: T) => boolean
   }
   throw new Error("Installed daemon public observation deadline exceeded");
 }
+/** Trusted current native setup only. No caller-supplied "isolated" flag or
+ * serialized receipt can enable use of the OS user's product registry. Hosted
+ * VM freshness is an inference from the authenticated job/workflow plus the
+ * provider contract; OS identity and absent/empty product state are observed. */
+async function freshDarwinRunner(installed: Installed, context?: CandidateReadContext) {
+  assert.ok(
+    context?.kind === "current",
+    "Darwin native evidence requires actual current Actions read context",
+  );
+  assert.equal(process.env.GITHUB_ACTIONS, "true");
+  assert.equal(process.env.GITHUB_JOB, "native");
+  assert.equal(process.env.GITHUB_SERVER_URL, "https://github.com");
+  assert.equal(process.env.GITHUB_REPOSITORY, REPOSITORY);
+  assert.equal(process.env.GITHUB_REPOSITORY_ID, String(REPOSITORY_ID));
+  assert.equal(process.env.GITHUB_REF, "refs/heads/main");
+  assert.equal(process.env.GITHUB_EVENT_NAME, "workflow_dispatch");
+  assert.equal(
+    process.env.GITHUB_WORKFLOW_REF,
+    `${REPOSITORY}/.github/workflows/release.yml@refs/heads/main`,
+  );
+  assert.equal(installed.candidate.producer.workflowPath, ".github/workflows/release.yml");
+  assert.equal(process.env.GITHUB_SHA, installed.candidate.sourceCommit);
+  assert.equal(Number(process.env.GITHUB_RUN_ID), context.reference.runId);
+  assert.equal(Number(process.env.GITHUB_RUN_ATTEMPT), context.reference.runAttempt);
+  assert.equal(context.reference.candidateSha256, installed.hash);
+  assert.equal(process.env.RUNNER_ENVIRONMENT, "github-hosted");
+  assert.equal(process.env.RUNNER_OS, "macOS");
+  assert.equal(process.env.RUNNER_ARCH, process.arch === "arm64" ? "ARM64" : "X64");
+  const runnerName = process.env.RUNNER_NAME;
+  assert.ok(
+    runnerName && runnerName.length <= 256,
+    "Trusted setup must receive nonsecret RUNNER_NAME",
+  );
+  const root = resolve(import.meta.dirname, "../..");
+  const publicEnvironment = { PATH: process.env.PATH, LANG: "C.UTF-8" };
+  const workflow = await promisify(execFile)(
+    "git",
+    ["show", `${installed.candidate.sourceCommit}:.github/workflows/release.yml`],
+    { cwd: root, env: publicEnvironment, encoding: "buffer", timeout: 20000, maxBuffer: 262144 },
+  );
+  assert.equal(sha256(workflow.stdout), installed.candidate.producer.workflowSha256);
+  const native = object(object(object(parseYaml(workflow.stdout.toString())).jobs).native);
+  assert.equal(native.name, "native (${{ matrix.os }})");
+  assert.equal(native["runs-on"], "${{ matrix.os }}");
+  assert.equal(native.container, undefined);
+  const matrix = object(object(native.strategy).matrix);
+  assert.deepEqual(Object.keys(matrix), ["os"]);
+  assert.deepEqual(matrix.os, ["ubuntu-24.04", "macos-15", "windows-2025"]);
+  const jobs: Record<string, unknown>[] = [];
+  for (let page = 1; page <= 20; page++) {
+    const response = object(
+      await context.request(
+        `/repos/${REPOSITORY}/actions/runs/${context.reference.runId}/attempts/${context.reference.runAttempt}/jobs?per_page=100&page=${page}`,
+      ),
+    );
+    assert.ok(Array.isArray(response.jobs) && response.jobs.length <= 100);
+    assert.ok(Number.isSafeInteger(response.total_count) && Number(response.total_count) <= 2000);
+    jobs.push(...response.jobs.map(object));
+    if (jobs.length >= Number(response.total_count)) {
+      assert.equal(jobs.length, response.total_count);
+      break;
+    }
+    assert.ok(response.jobs.length === 100 && page < 20, "Native job pagination is incomplete");
+  }
+  const matching = jobs.filter((job) => job.name === "native (macos-15)");
+  assert.equal(matching.length, 1, "Actual current macos-15 native job must be unique");
+  const job = matching[0];
+  assert.ok(job);
+  assert.equal(job.run_id, context.reference.runId);
+  assert.equal(job.head_sha, installed.candidate.sourceCommit);
+  assert.equal(job.status, "in_progress");
+  assert.equal(job.conclusion, null);
+  assert.equal(job.runner_name, runnerName);
+  assert.ok(Number.isSafeInteger(job.id) && Number(job.id) > 0);
+  assert.ok(Number.isSafeInteger(job.runner_id) && Number(job.runner_id) > 0);
+  assert.ok(Array.isArray(job.labels) && job.labels.includes("macos-15"));
+  assert.ok(
+    !job.labels.some((label) => typeof label !== "string" || label.toLowerCase() === "self-hosted"),
+  );
+  const started = Date.parse(String(job.started_at));
+  assert.ok(Number.isFinite(started) && started <= Date.now() && Date.now() - started < 45 * 60000);
+
+  // Only now inspect fixed product paths. Never open a user's auth/profile
+  // file, enumerate the home directory, clear old state or create an OS user.
+  const systemVersion = "/usr/bin/sw_vers";
+  const binary = await lstat(systemVersion);
+  assert.ok(
+    binary.isFile() && !binary.isSymbolicLink() && binary.uid === 0 && (binary.mode & 0o022) === 0,
+  );
+  const version = await promisify(execFile)(systemVersion, ["-productVersion"], {
+    env: publicEnvironment,
+    timeout: 10000,
+    maxBuffer: 1024,
+  });
+  assert.match(version.stdout.trim(), /^15\.\d+(?:\.\d+)?$/);
+  const user = userInfo();
+  assert.ok(user.uid > 0 && process.getuid?.() === user.uid && process.geteuid?.() === user.uid);
+  assert.ok(isAbsolute(user.homedir));
+  assert.equal(homedir(), user.homedir);
+  if (process.env.HOME !== undefined) assert.equal(process.env.HOME, user.homedir);
+  assert.equal(await realpath(user.homedir), user.homedir);
+  const home = await lstat(user.homedir);
+  assert.ok(
+    home.isDirectory() &&
+      !home.isSymbolicLink() &&
+      home.uid === user.uid &&
+      (home.mode & 0o022) === 0,
+  );
+  let state: "absent" | "empty" = "absent";
+  for (const path of [
+    resolve(user.homedir, "Library"),
+    resolve(user.homedir, "Library/Application Support"),
+    resolve(user.homedir, "Library/Application Support/FortiPi"),
+  ]) {
+    const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined;
+      throw error;
+    });
+    if (!stat) break;
+    assert.ok(
+      stat.isDirectory() &&
+        !stat.isSymbolicLink() &&
+        stat.uid === user.uid &&
+        (stat.mode & 0o022) === 0,
+    );
+    assert.equal(await realpath(path), path);
+    if (path.endsWith("/FortiPi")) {
+      assert.equal(
+        (await readdir(path)).length,
+        0,
+        "Existing FortiPi state prevents fresh-user qualification",
+      );
+      state = "empty";
+    }
+  }
+  return {
+    nativeJobId: job.id,
+    runnerId: job.runner_id,
+    label: "macos-15",
+    macosVersion: version.stdout.trim(),
+    osUid: user.uid,
+    homeMatchesOsUserRecord: true,
+    homeSha256: sha256(user.homedir),
+    fortipiStateBeforeLoad: state,
+    freshness: "inferred-from-authenticated-hosted-job-contract",
+    actualHostedExecutionProof: "requires-retained-native-job-artifact",
+  };
+}
 /** Actual installed CLI, new protected root/ledger, no copied node_modules or
  * prior ledger. Only this OS counts; cloud deployment and other OS jobs do not. */
-export async function runNativeDaemon(installed: Installed): Promise<ScenarioEvidence> {
-  assert.notEqual(
-    process.platform,
-    "darwin",
-    "Actual isolated OS user or a supported private executor registry path is required: --profile does not relocate stateHome()/roots on Darwin; refuse before service setup, profile loading or registry access without overriding HOME",
-  );
+export async function runNativeDaemon(
+  installed: Installed,
+  context?: CandidateReadContext,
+): Promise<ScenarioEvidence> {
+  const isolation =
+    process.platform === "darwin" ? await freshDarwinRunner(installed, context) : undefined;
   const module = (await import(
     pathToFileURL(installed.resolveExport(`@${installed.candidate.scope}/fortipi-executor`)).href
   )) as typeof import("../../packages/fortipi-executor/dist/index.js");
@@ -293,6 +444,7 @@ export async function runNativeDaemon(installed: Installed): Promise<ScenarioEvi
     await installed.verifyUnchanged();
     return {
       observation: {
+        ...(isolation ? { isolation } : {}),
         installedExecutorCli: true,
         platform: process.platform,
         freshRootAndLedger: true,
@@ -317,6 +469,11 @@ export async function runNativeDaemon(installed: Installed): Promise<ScenarioEvi
       limitations: [
         "Actual current native OS only; source local service/real Pi and Computer with synthetic model",
         "No separate live host, other native OS, paid cloud backend or platform eviction claim",
+        ...(isolation
+          ? [
+              "Fresh hosted VM is inferred from the authenticated job/workflow and GitHub contract; actual OS/user and empty product paths are checked, without hardware attestation",
+            ]
+          : []),
       ],
     };
   } finally {
