@@ -22,7 +22,10 @@ import { basename, dirname, resolve, sep } from "node:path";
 import { t as listTar } from "tar";
 import { parse as parseYaml } from "yaml";
 import type { DeviceEvidenceData } from "../tests/clients/device-observer.ts";
-import { attachApplicationRecoveryChannel } from "./application-recovery-channel.ts";
+import {
+  attachApplicationRecoveryChannel,
+  type InfrastructureObservationPort,
+} from "./application-recovery-channel.ts";
 import { packagePaths, repository } from "./build-workspaces.ts";
 import {
   resolveCurrentCandidateReference,
@@ -2112,6 +2115,7 @@ export interface EvidenceRecovery {
   checkpointDirectory: string;
   coordinator: Parameters<typeof attachApplicationRecoveryChannel>[2];
   forbiddenValues?: readonly string[];
+  infrastructure?: InfrastructureObservationPort;
 }
 export async function runEvidence(
   mode: "local" | "native" | "live",
@@ -2168,6 +2172,7 @@ export async function runEvidence(
               recovery.checkpointDirectory,
               recovery.coordinator,
               recovery.forbiddenValues,
+              recovery.infrastructure,
             );
           }
         : undefined,
