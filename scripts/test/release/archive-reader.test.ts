@@ -67,6 +67,7 @@ test("the streaming reader retains normal gzip member bytes and manifest", async
     const file = resolve(directory, "positive.tgz");
     await create({ file, cwd: directory, gzip: true }, ["package"]);
     const result = await archiveInventory(file);
+    await assert.rejects(archiveInventory(file, undefined, {}), /Unrecognized archive authority/);
     assert.equal(result.manifest.name, "reader-fixture");
     assert.deepEqual(
       result.entries.map((entry) => entry.path),
