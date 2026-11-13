@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
+  assertDeployment,
   assertProducer,
   type CandidateManifest,
   type DeploymentIdentity,
@@ -61,8 +62,22 @@ export interface DecisionClientPort {
   firstJob: { jobId: string; approvalId: string };
   assertRejectedAndSettledWithoutStart(): Promise<void>;
 }
-export const releaseSet = (mode: Mode): readonly string[] =>
-  mode === "local"
+export const releaseSet = (
+  mode: Mode,
+  deployments: readonly DeploymentIdentity[] = [],
+): readonly string[] => {
+  if (mode === "live") {
+    // Only the validated actual target may determine applicability. An absent
+    // identity stays fail-closed; no fixture/CLI switch can shrink the set.
+    for (const deployment of deployments) assertDeployment(deployment);
+    return liveClaims.filter(
+      (id) =>
+        id !== "real-cloud-tools" ||
+        deployments.length === 0 ||
+        deployments.some((deployment) => deployment.backend !== "free"),
+    );
+  }
+  return mode === "local"
     ? [
         ...integratedClaims,
         "models-security",
@@ -72,9 +87,8 @@ export const releaseSet = (mode: Mode): readonly string[] =>
         "independent-python",
         "measurement-sensitivity",
       ]
-    : mode === "live"
-      ? liveClaims
-      : ["portable-daemon"];
+    : ["portable-daemon"];
+};
 export async function evidenceProducer(
   input: EvidenceInput,
   candidate: CandidateManifest,
@@ -177,7 +191,7 @@ export async function writeEvidence(
     { flag: "wx", mode: 0o600 },
   );
   if (
-    releaseSet(input.mode).some((id) => !ids.has(id)) ||
+    releaseSet(input.mode, identity.deployments).some((id) => !ids.has(id)) ||
     results.length === 0 ||
     results.some((row) => row.outcome !== "pass")
   )

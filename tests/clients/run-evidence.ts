@@ -962,7 +962,7 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
     });
   // Every required but unobserved claim is explicit and blocking. Scenario ports
   // are added here as implemented; a partial source checkpoint never earns gate.json.
-  for (const id of releaseSet(input.mode))
+  for (const id of releaseSet(input.mode, identity.deployments))
     if (!results.some((r) => r.id === id))
       results.push({
         id,
