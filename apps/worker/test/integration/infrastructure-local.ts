@@ -544,16 +544,27 @@ export async function localRetainedCleanupHeadroom() {
       }
     const before = await h.cp.admissions();
     assert.equal(before.application, 90);
-    const unknownQuery = await h.cp.queryExecution(raw, job.identity);
-    const unknownCancel = await h.cp.cancelExecution(raw, cancel);
+    const unknownQueryAdmission = await h.cp.queryExecutionWithAdmissions(raw, job.identity);
+    const unknownCancelAdmission = await h.cp.cancelExecutionWithAdmissions(raw, cancel);
+    const unknownQuery = unknownQueryAdmission.result;
+    const unknownCancel = unknownCancelAdmission.result;
     assert.ok(!unknownQuery.ok && !unknownCancel.ok);
     assert.equal(unknownQuery.code, "rate_limited");
     assert.equal(unknownCancel.code, "rate_limited");
-    assert.equal((await h.cp.admissions()).repair, before.repair);
+    assert.deepEqual(
+      unknownQueryAdmission.admissions,
+      { application: 0, repair: 0 },
+      "Unregistered rejected query must not spend foreground repair capacity",
+    );
+    assert.deepEqual(
+      unknownCancelAdmission.admissions,
+      { application: 0, repair: 0 },
+      "Unregistered rejected cancellation must not spend foreground repair capacity",
+    );
     assert.equal(channel.frames.filter((frame) => frame.type === "job.query").length, 0);
     assert.equal(channel.frames.filter((frame) => frame.type === "job.cancel").length, 0);
 
-    const queryPending = h.cp.queryExecution(actor, job.identity);
+    const queryPending = h.cp.queryExecutionWithAdmissions(actor, job.identity);
     const query = await channel.wait("job.query");
     assert.ok(query.type === "job.query");
     assert.deepEqual(query.payload, job.identity);
@@ -562,14 +573,19 @@ export async function localRetainedCleanupHeadroom() {
       requestId: query.requestId,
       payload: { identity: job.identity, state: "running" },
     });
-    const observation = value(await queryPending);
+    const queryAdmission = await queryPending;
+    assert.deepEqual(
+      queryAdmission.admissions,
+      { application: 0, repair: 1 },
+      "Registered foreground query must charge exactly one repair admission",
+    );
+    const observation = value(queryAdmission.result);
     assert.deepEqual(observation.identity, job.identity);
     assert.equal(observation.state, "running");
     const afterQuery = await h.cp.admissions();
     assert.equal(afterQuery.application, before.application);
-    assert.equal(afterQuery.repair, before.repair + 1);
 
-    const cancelPending = h.cp.cancelExecution(actor, cancel);
+    const cancelPending = h.cp.cancelExecutionWithAdmissions(actor, cancel);
     const cancelled = await channel.wait("job.cancel");
     assert.ok(cancelled.type === "job.cancel");
     assert.equal(cancelled.requestId, cancel.requestId);
@@ -580,10 +596,15 @@ export async function localRetainedCleanupHeadroom() {
       requestId: cancelled.requestId,
       payload: { identity: job.identity, disposition },
     });
-    assert.deepEqual(value(await cancelPending), disposition);
+    const cancelAdmission = await cancelPending;
+    assert.deepEqual(
+      cancelAdmission.admissions,
+      { application: 0, repair: 1 },
+      "Registered foreground cancellation must charge exactly one repair admission",
+    );
+    assert.deepEqual(value(cancelAdmission.result), disposition);
     const afterCancel = await h.cp.admissions();
     assert.equal(afterCancel.application, before.application);
-    assert.equal(afterCancel.repair, afterQuery.repair + 1);
     const assignmentFrames = channel.frames.filter((frame) => frame.type === "job.assign").length;
     const queryFrames = channel.frames.filter((frame) => frame.type === "job.query").length;
     const cancelFrames = channel.frames.filter((frame) => frame.type === "job.cancel").length;
@@ -596,9 +617,12 @@ export async function localRetainedCleanupHeadroom() {
       originalJobId: job.identity.jobId,
       applicationBefore: before.application,
       applicationAfter: afterCancel.application,
-      repairBefore: before.repair,
-      repairAfterQuery: afterQuery.repair,
-      repairAfterCancel: afterCancel.repair,
+      // Cumulative foreground query/cancel charges, not the alarm-inclusive
+      // totals still available from the unchanged fixture admissions() port.
+      repairBefore:
+        unknownQueryAdmission.admissions.repair + unknownCancelAdmission.admissions.repair,
+      repairAfterQuery: queryAdmission.admissions.repair,
+      repairAfterCancel: queryAdmission.admissions.repair + cancelAdmission.admissions.repair,
       unregisteredQueryCode: unknownQuery.code,
       unregisteredCancelCode: unknownCancel.code,
       queryState: observation.state,
@@ -609,7 +633,7 @@ export async function localRetainedCleanupHeadroom() {
       cancelFrames,
       sameOriginalIdentity: true,
       limitation:
-        "Real CP metering/current registration and transport exchange; synthetic executor attestations, no native-process stop, provider quota or new-ingress revocation bypass claim",
+        "Real CP metering/current registration and transport exchange; repair counts attribute only foreground query/cancel while real alarms retain their own total charges. Synthetic executor attestations, no native-process stop, provider quota or new-ingress revocation bypass claim",
     };
   } finally {
     channel?.socket.close();
