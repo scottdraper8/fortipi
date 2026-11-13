@@ -441,6 +441,7 @@ async function controlled() {
   let closeFixture: (() => Promise<void>) | undefined;
   let originalZip: Awaited<ReturnType<typeof directoryArchive>> | undefined;
   let integratedZip: Awaited<ReturnType<typeof directoryArchive>> | undefined;
+  const assertMethods = new Map<string, unknown>();
   try {
     await preparePackages();
     const f = await fixture();
@@ -870,21 +871,22 @@ async function controlled() {
     const failures: { method: string; frames: string[] }[] = [];
     for (const method of ["equal", "deepEqual", "ok"] as const) {
       const original = assert[method];
-      mock.method(assert, method, (...args: unknown[]) => {
+      assertMethods.set(method, original);
+      // Do not use mock.method here: its call history retains every assertion
+      // argument, including large package buffers from this controlled setup.
+      Reflect.set(assert, method, (...args: unknown[]) => {
         try {
           return Reflect.apply(original, assert, args);
         } catch (error) {
-          const frames =
-            error instanceof Error
-              ? [
-                  ...(error.stack ?? "").matchAll(
-                    /\/(?:verify-release-gates|application-recovery-existing|live-recovery-evidence|application-recovery-checkpoints|platform-recovery|live-infrastructure-local)\.ts:\d+:\d+/g,
-                  ),
-                ]
-                  .map((match) => match[0].slice(1))
-                  .slice(0, 4)
-              : [];
+          const frames = [
+            ...(new Error().stack ?? "").matchAll(
+              /\/(?:verify-release-gates|application-recovery-existing|live-recovery-evidence|application-recovery-checkpoints|platform-recovery|live-infrastructure-local)\.ts:\d+:\d+/g,
+            ),
+          ]
+            .map((match) => match[0].slice(1))
+            .slice(0, 4);
           failures.push({ method, frames });
+          if (failures.length > 4) failures.shift();
           throw error;
         }
       });
@@ -1083,6 +1085,7 @@ async function controlled() {
   } finally {
     process.env = ordinaryEnvironment;
     globalThis.fetch = nativeFetch;
+    for (const [method, original] of assertMethods) Reflect.set(assert, method, original);
     mock.restoreAll();
     await originalZip?.close();
     await integratedZip?.close();
