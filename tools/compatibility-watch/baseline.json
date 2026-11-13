@@ -153,20 +153,20 @@
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "51faf22a92fc307194c25e37473a2805c00dbd02",
+        "commit": "032f8c2b4a9b83970fc4b54de70790b48e3ba373",
         "version": "4.161.0",
         "paths": {
-          "packages/wrangler": "6e8a66ea26338a8e574f43cccb43625d9a0c3116eb7d82e7cd4c5d0261b4cba9",
+          "packages/wrangler": "38590b2fc2493e3a09c58e5f1e2f609bbdadc0db0bd38c82f306d8313f569a89",
           "packages/wrangler/package.json": "c877d86ad89cff48b01d169528c09ea474627cc41beaba1314d273c32ac66fba"
         },
-        "sha256": "b69306ae9601823ea3ff811a6e036fc67537e0812e6d6240d3cb180b99aa7101"
+        "sha256": "43cf0cbbf4521d51c6213ed16bb2a8e2d4c9876d97deb93fd1cfc475ca513ad3"
       },
       "pins": {
         "apps/worker/package.json#devDependencies/wrangler": "4.161.0",
         "packages/fortipi-cli/package.json#dependencies/wrangler": "4.161.0"
       },
-      "reviewedAt": "2026-11-12T17:58:35.928Z",
-      "reviewNote": "Reviewed immutable1e688ba...51faf22 primary compare and all4commits; independently verified frozen16:54:34 snapshot/path hashes and unchanged published Wrangler4.161.0/Miniflare5.20261110.2-beta SRIs, both exact workerd1.20261110.1. Only Wrangler production delta is c889551b local hot-reload GET/HEAD retry-queue drain; applicable to that dev race, not a demonstrated security fix. Fixed-source listen/fetch/close and fresh-process recovery do not prove hot-reload behavior; pinned release lacks this unpublished fix and no hot-reload clearance is claimed. Browser Run quick actions/session disconnect, Waku and remote-KV E2E changes are unused/fixture-only. Schema, ordinary prepare/deploy/login/secret/credential environments and Container image APIs unchanged. Retain installed published graph; do not adopt unpublished main. Reviewed reference only, not runtime/deployed/image/release approval; paid work deferred. Evidence: phase3/thread-8/candidate-wrangler-review.md."
+      "reviewedAt": "2026-11-13T08:07:47.213Z",
+      "reviewNote": "Reviewed immutable51faf22..032f8c2:4commits/33files. Unreleased Workflow exports settings/header and binding-side settings rejection affect unused Workflows; local Artifacts(port/error/32MiB/token semantics), Studio and codemod changes are unused. Main bumps default date2026-11-12/workerd1.20261112.1; retain explicit2026-11-10 and published graph. Official latest Wrangler4.161.0/Miniflare5.20261110.2-beta retain reviewed SRIs and exact workerd1.20261110.1. Used DO/migration, image and login/auth paths unchanged; targeted OSV queries empty, no applicable security fix identified. Prior unpublished hot-reload caveat remains. No pin adoption/new installed/deployed/security/release clearance; paid deferred. Evidence:phase3/thread-9/compatibility-wrangler-032f-build.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
