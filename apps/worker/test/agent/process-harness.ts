@@ -9,6 +9,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import type { ProcessArm, ProcessWitness } from "./runtime-worker.js";
 
 const pause = (ms: number) => new Promise<void>((accept) => setTimeout(accept, ms));
@@ -196,14 +197,72 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     };
     child.stdout?.on("data", retain);
     child.stderr?.on("data", retain);
-    for (let i = 0; i < 300; i++) {
-      assert.equal(child.exitCode, null, output);
+    const began = performance.now();
+    let attempts = 0,
+      deadlines = 0,
+      transports = 0,
+      status: number | null = null,
+      ready = false;
+    const observe = (event: "spawned" | "probe" | "ready" | "end") => {
       try {
-        if ((await fetch(`${origin}/__test/ping`, { signal: AbortSignal.timeout(300) })).ok) return;
-      } catch {}
-      await pause(50);
+        const code = child?.exitCode,
+          signal = child?.signalCode;
+        const line = JSON.stringify({
+          diagnostic: "source-recovery-start",
+          event,
+          invocation: childInvocation,
+          elapsedMs: Math.round(performance.now() - began),
+          attempts,
+          deadlines,
+          transports,
+          status,
+          exitCode:
+            typeof code === "number" && Number.isInteger(code) && Math.abs(code) <= 255
+              ? code
+              : null,
+          signal:
+            signal === null || signal === undefined
+              ? null
+              : /^SIG[A-Z0-9]{1,8}$/.test(signal)
+                ? signal
+                : "other",
+          logStage: output.includes("Ready on")
+            ? "ready-log"
+            : output.includes("Starting local server")
+              ? "starting-log"
+              : "unobserved",
+        });
+        if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+      } catch {
+        /* Never replace the original readiness result. */
+      }
+    };
+    observe("spawned");
+    try {
+      for (let i = 0; i < 300; i++) {
+        assert.equal(child.exitCode, null, "Wrangler exited before readiness");
+        assert.equal(child.signalCode, null, "Wrangler terminated by signal");
+        const signal = AbortSignal.timeout(300);
+        attempts++;
+        try {
+          const response = await fetch(`${origin}/__test/ping`, { signal });
+          status = response.status;
+          if (response.ok) {
+            ready = true;
+            return;
+          }
+        } catch {
+          status = null;
+          if (signal.aborted) deadlines++;
+          else transports++;
+        }
+        if (attempts % 25 === 0) observe("probe");
+        await pause(50);
+      }
+      assert.fail("Wrangler not ready");
+    } finally {
+      observe(ready ? "ready" : "end");
     }
-    assert.fail(`Wrangler not ready: ${output}`);
   }
   async function stop(signal: "SIGKILL" | "SIGTERM") {
     if (!child) return;
@@ -222,10 +281,18 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       );
     }
     const exited =
-      current.exitCode !== null
+      current.exitCode !== null || current.signalCode !== null
         ? Promise.resolve()
         : new Promise<void>((accept) => current.once("exit", () => accept()));
-    process.kill(-current.pid, signal);
+    try {
+      process.kill(-current.pid, signal);
+    } catch (error) {
+      if (
+        (error as NodeJS.ErrnoException).code !== "ESRCH" ||
+        (current.exitCode === null && current.signalCode === null)
+      )
+        throw error;
+    }
     await exited;
     if (signal === "SIGKILL") assert.equal(current.signalCode, signal);
     child = undefined;
