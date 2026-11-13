@@ -86,6 +86,19 @@ async function run(file: string, args: string[], cwd = root, timeout = 120000) {
         "stdout" in error && (typeof error.stdout === "string" || Buffer.isBuffer(error.stdout))
           ? Buffer.byteLength(error.stdout)
           : 0;
+      // This fixed installer runs only with onlineEnv(): no deployment,
+      // application, registry or GitHub credentials are present. Preserve its
+      // bounded tool diagnostic; signed URL queries and auth-shaped values
+      // are still removed. Other subprocess failures never emit captured text.
+      process.stderr.write(
+        stderr
+          .slice(0, 8192)
+          .replace(/https?:\/\/[^\s"'<>]+/g, "[URL removed]")
+          .replace(
+            /(?:Bearer\s+|(?:token|password|secret|authorization)\s*[=:]\s*)[^\s"',;]+/gi,
+            "[authentication removed]",
+          ),
+      );
       const condition =
         [
           "ERR_ASSERTION",
