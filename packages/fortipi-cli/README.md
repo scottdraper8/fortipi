@@ -53,6 +53,17 @@ executor, bind a host path or change local consent.
 
 `runtime` follows the shipped `Configuration` schema. Workspace, execution, routing and models are independent selections. Free/unknown defaults use the contract's conservative bounds. Paid Loader/Containers require explicit canonical capability declarations; local validation does not prove Cloudflare account entitlement. The example requires a separately registered, authorized native executor and does not grant native shell permission.
 
+Browser access is opt-in through `deployment.allowedOrigins`, for example
+`["https://app.example"]`. Omit it or use `[]` to deny cross-origin browser access.
+The list accepts at most 16 distinct exact HTTPS origins, including an explicit
+port when needed; wildcards, credentials, paths, queries and fragments are rejected.
+Preparation writes the list to `FORTIPI_ALLOWED_ORIGINS`. Prepared-directory and
+previous-directory verification check it, and deployment verification compares it
+with the selected provider version's JSON binding. `configSha256` retains its
+runtime-only meaning; the full operator receipt carries this deployment setting.
+Changing the list requires normal preparation and deployment, not editing the
+prepared assets. No development or CI origin is added automatically.
+
 Management uses an exact-origin protected application profile, selected with `--profile NAME`. Inputs to mutations are non-secret canonical DTO files. Credential issuance reserves and syncs its protected output before contacting the authority; stdout contains metadata only. A lost response leaves its request ID for recovery. Never remint blindly. Revocation may return durable `pending` and must be queried until complete.
 
 Pi OAuth uses only the public supported OpenAI, Anthropic and separate OpenAI Codex factories, in memory. Browser/copy/device instructions require an attached interactive terminal. OAuth output is write-only to the application authority; provider credentials are never saved locally. API keys are entered through pinned Wrangler, using its prompt or inherited protected stdin. Unknown existing model-auth encryption keys are preserved.

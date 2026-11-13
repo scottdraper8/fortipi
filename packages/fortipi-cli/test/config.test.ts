@@ -81,6 +81,40 @@ test("unknown secrets/budgets, schema overflow, reserved bindings and mismatched
   );
 });
 
+test("operator browser origins are opt-in exact HTTPS authorities with a closed bounded allowlist", async () => {
+  const original = await config();
+  assert.equal(operatorConfig(original).deployment.allowedOrigins, undefined);
+  const withOrigins = (allowedOrigins: unknown) => ({
+    ...original,
+    deployment: { ...original.deployment, allowedOrigins },
+  });
+  const allowed = ["https://127.0.0.1:10110", "https://app.example"];
+  assert.deepEqual(operatorConfig(withOrigins(allowed)).deployment.allowedOrigins, allowed);
+  assert.deepEqual(operatorConfig(withOrigins([])).deployment.allowedOrigins, []);
+  const maximum = Array.from({ length: 16 }, (_, index) => `https://app-${index}.example`);
+  assert.deepEqual(operatorConfig(withOrigins(maximum)).deployment.allowedOrigins, maximum);
+  for (const invalid of [
+    null,
+    allowed[0],
+    [1],
+    ["http://127.0.0.1:10110"],
+    ["https://*.example"],
+    ["https://user:password@app.example"],
+    ["https://app.example/"],
+    ["https://app.example/path"],
+    ["https://app.example?query=1"],
+    ["https://app.example#fragment"],
+    ["https://APP.example"],
+    [allowed[0], allowed[0]],
+    [...maximum, "https://overflow.example"],
+  ])
+    assert.throws(() => operatorConfig(withOrigins(invalid)), /invalid_allowed_origins/);
+  assert.throws(
+    () => operatorConfig({ ...original, deployment: { ...original.deployment, vars: {} } }),
+    /invalid_deployment/,
+  );
+});
+
 test("argv accepts only documented options, preserves TUI argv, and every command has help", () => {
   for (const command of Object.keys(commands))
     assert.equal(argv([...command.split(" "), "--help"]).command, command);

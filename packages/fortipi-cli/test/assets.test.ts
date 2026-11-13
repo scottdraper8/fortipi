@@ -8,8 +8,13 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { canonicalJson } from "fortipi-contract";
 import { dependencyPatches } from "../../../scripts/dependency-patches.ts";
+import {
+  offlineWranglerEnvironment,
+  verifyOfflineWranglerAuth,
+} from "../../../tests/clients/offline-wrangler.ts";
 import { prepare, verifyAssets, verifyPrepared } from "../dist/assets.js";
 import { deploy } from "../dist/deployment.js";
+import { wranglerBin } from "../dist/wrangler.js";
 import { packageWorkerAssets, regularFiles } from "../scripts/package-worker-assets.ts";
 import { config, temp } from "./fixtures.ts";
 
@@ -178,6 +183,92 @@ test("real prepared bytes, missing files and path escape are rejected before any
   bytes.files[0].path = "../outside";
   await writeFile(join(copy, "asset-manifest.json"), `${canonicalJson(bytes)}\n`);
   await assert.rejects(verifyAssets(copy), /incomplete_asset_manifest/);
+});
+
+test("operator origins survive normal prepare history and govern the actual Worker router", async (t) => {
+  const directory = await temp(t);
+  const input = join(directory, "operator.json");
+  const original = await config();
+  await writeFile(input, JSON.stringify(original));
+  const firstDirectory = join(directory, "default");
+  const first = await prepare(input, firstDirectory);
+  const initial = JSON.parse(await readFile(join(firstDirectory, "wrangler.json"), "utf8"));
+  assert.equal(initial.vars.FORTIPI_ALLOWED_ORIGINS, undefined);
+  const allowed = ["https://127.0.0.1:10110", "https://app.example"];
+  await verifyOfflineWranglerAuth(await wranglerBin());
+  const checkRouter = async (prepared: string, permits: boolean) => {
+    await promisify(execFile)(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { join, resolve } from 'node:path';
+          import { unstable_dev } from 'wrangler';
+          const prepared=process.argv[1], permits=process.argv[2]==='true';
+          const allowed=${JSON.stringify(allowed)};
+          const configPath=join(prepared,'wrangler.json');
+          const config=JSON.parse(await readFile(configPath,'utf8'));
+          const server=await unstable_dev(resolve(prepared,config.main),{
+            config:configPath,local:true,ip:'127.0.0.1',port:0,inspectorPort:0,
+            persist:false,logLevel:'none',
+            experimental:{forceLocal:true,disableDevRegistry:true,disableExperimentalWarning:true,watch:false}
+          });
+          try {
+            for(const origin of [...allowed,'https://127.0.0.1:10111','https://foreign.example'])
+              for(const method of ['OPTIONS','GET']) {
+                const response=await server.fetch('/health',{
+                  method, headers:{Origin:origin,...(method==='OPTIONS'?{'Access-Control-Request-Method':'GET'}:{})}
+                });
+                const accepted=permits&&allowed.includes(origin);
+                assert.equal(response.status,accepted?(method==='OPTIONS'?204:200):403);
+                assert.equal(response.headers.get('Access-Control-Allow-Origin'),accepted?origin:null);
+                await response.arrayBuffer();
+              }
+          } finally { await server.stop(); }
+        `,
+        prepared,
+        String(permits),
+      ],
+      {
+        cwd: join(root, "packages/fortipi-cli"),
+        env: offlineWranglerEnvironment(directory),
+        timeout: 30000,
+        maxBuffer: 65536,
+      },
+    );
+  };
+  await checkRouter(firstDirectory, false);
+  const optedIn = { ...original, deployment: { ...original.deployment, allowedOrigins: allowed } };
+  await writeFile(input, JSON.stringify(optedIn));
+  const secondDirectory = join(directory, "opt-in");
+  const second = await prepare(input, secondDirectory, firstDirectory);
+  const path = join(secondDirectory, "wrangler.json");
+  const bytes = await readFile(path);
+  const prepared = JSON.parse(bytes.toString());
+  assert.deepEqual(second.operator, optedIn);
+  assert.equal(second.configSha256, first.configSha256, "configSha256 remains runtime-only");
+  assert.deepEqual(prepared.vars.FORTIPI_ALLOWED_ORIGINS, allowed);
+  assert.deepEqual(prepared.vars.FORTIPI_CONFIG, original.runtime);
+  assert.deepEqual(prepared.migrations, initial.migrations);
+  assert.deepEqual((await verifyPrepared(secondDirectory)).operator, optedIn);
+  await checkRouter(secondDirectory, true);
+  prepared.vars.FORTIPI_ALLOWED_ORIGINS = ["https://foreign.example"];
+  await writeFile(path, JSON.stringify(prepared));
+  await assert.rejects(verifyPrepared(secondDirectory), /prepared_config_changed/);
+  await assert.rejects(
+    prepare(input, join(directory, "tampered-history"), secondDirectory),
+    /previous_config_changed/,
+  );
+  await writeFile(path, bytes);
+  await writeFile(input, JSON.stringify(original));
+  const restoredDirectory = join(directory, "removed");
+  await prepare(input, restoredDirectory, secondDirectory);
+  const restored = JSON.parse(await readFile(join(restoredDirectory, "wrangler.json"), "utf8"));
+  assert.equal(restored.vars.FORTIPI_ALLOWED_ORIGINS, undefined);
+  await verifyPrepared(restoredDirectory);
 });
 
 test("dry-build success requires real emitted module bytes, not only a successful subprocess exit", async (t) => {

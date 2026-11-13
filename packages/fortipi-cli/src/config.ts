@@ -1,13 +1,18 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import type { Configuration } from "fortipi-contract";
-import { effectiveLimits, freeInfrastructurePolicy, requireCapability } from "fortipi-contract";
+import {
+  effectiveLimits,
+  freeInfrastructurePolicy,
+  requireCapability,
+  validateBrowserOrigin,
+} from "fortipi-contract";
 import { CliError, check } from "./errors.js";
 import { validate } from "./validation.js";
 
 export interface OperatorConfig {
   schemaVersion: 1;
-  deployment: { name: string; origin: string; accountId?: string };
+  deployment: { name: string; origin: string; accountId?: string; allowedOrigins?: string[] };
   runtime: Configuration;
 }
 export function exactOrigin(value: string, allowLoopback = false): string {
@@ -39,7 +44,9 @@ export function operatorConfig(value: unknown): OperatorConfig {
   check(
     c.deployment &&
       typeof c.deployment === "object" &&
-      Object.keys(c.deployment).every((k) => ["name", "origin", "accountId"].includes(k)) &&
+      Object.keys(c.deployment).every((k) =>
+        ["name", "origin", "accountId", "allowedOrigins"].includes(k),
+      ) &&
       typeof c.deployment.name === "string" &&
       /^[a-z][a-z0-9-]{0,62}$/.test(c.deployment.name) &&
       typeof c.deployment.origin === "string" &&
@@ -47,6 +54,27 @@ export function operatorConfig(value: unknown): OperatorConfig {
     "invalid_deployment",
   );
   exactOrigin(c.deployment.origin);
+  const origins = c.deployment.allowedOrigins;
+  if (origins !== undefined) {
+    check(
+      Array.isArray(origins) &&
+        origins.length <= 16 &&
+        origins.every((origin) => typeof origin === "string") &&
+        new Set(origins).size === origins.length,
+      "invalid_allowed_origins",
+    );
+    for (const origin of origins) {
+      try {
+        validateBrowserOrigin(origin);
+        check(
+          new URL(origin).protocol === "https:" && !origin.includes("*"),
+          "invalid_allowed_origins",
+        );
+      } catch {
+        throw new CliError("invalid_allowed_origins", 2);
+      }
+    }
+  }
   validate("Configuration", c.runtime);
   const policy = c.runtime.infrastructure;
   if (policy.accountPlan !== "paid" || policy.profile === "free") {

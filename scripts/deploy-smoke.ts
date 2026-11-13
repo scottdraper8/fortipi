@@ -275,6 +275,21 @@ export async function observeDeployment(
     canonicalJson(config),
     "Active runtime configuration mismatch",
   );
+  const expectedOrigins = deployment.allowedOrigins ?? [];
+  assert.deepEqual(
+    object(wrangler.vars).FORTIPI_ALLOWED_ORIGINS ?? [],
+    expectedOrigins,
+    "Prepared browser Origin allowlist mismatch",
+  );
+  const origins = bindings.filter((binding) => binding.name === "FORTIPI_ALLOWED_ORIGINS");
+  assert.ok(origins.length <= 1, "Duplicate browser Origin binding");
+  if (origins.length === 0) assert.deepEqual(expectedOrigins, [], "Missing browser Origin binding");
+  else {
+    assert.equal(origins[0]?.type, "json", "Invalid browser Origin binding type");
+    const observed =
+      typeof origins[0]?.json === "string" ? JSON.parse(origins[0].json) : origins[0]?.json;
+    assert.deepEqual(observed, expectedOrigins, "Active browser Origin allowlist mismatch");
+  }
   assert.ok(bindings.some((b) => b.type === "ai" && b.name === "AI"));
   const loaders = bindings.filter((b) => b.type === "worker_loader");
   assert.equal(loaders.length, target.backend === "cloud-js" ? 1 : 0);

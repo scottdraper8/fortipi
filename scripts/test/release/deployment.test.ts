@@ -73,6 +73,7 @@ test("actual CLI prepare plus HTTP reads bind metadata while config-only Free st
     resolve(repository, "packages/fortipi-cli/templates/operator-config.example.json"),
   );
   object(object(object(operator).runtime).infrastructure).accountPlan = "free";
+  object(object(operator).deployment).allowedOrigins = ["https://127.0.0.1:10110"];
   const operatorPath = resolve(root, "operator.json");
   await writeFile(operatorPath, JSON.stringify(operator));
   const target: TargetDescriptor = {
@@ -177,6 +178,21 @@ test("actual CLI prepare plus HTTP reads bind metadata while config-only Free st
               ...durable.map((v) => ({ type: "durable_object_namespace", ...object(v) })),
               { type: "ai", name: "AI" },
               { type: "json", name: "FORTIPI_CONFIG", json: runtime },
+              ...(fault === "origins-missing"
+                ? []
+                : [
+                    {
+                      type: fault === "origins-type" ? "plain_text" : "json",
+                      name: "FORTIPI_ALLOWED_ORIGINS",
+                      json:
+                        fault === "origins-foreign"
+                          ? ["https://foreign.example"]
+                          : JSON.stringify(object(wrangler.vars).FORTIPI_ALLOWED_ORIGINS),
+                    },
+                    ...(fault === "origins-duplicate"
+                      ? [{ type: "json", name: "FORTIPI_ALLOWED_ORIGINS", json: [] }]
+                      : []),
+                  ]),
               ...(fault === "loader" ? [{ type: "worker_loader", name: "LOADER" }] : []),
             ],
           },
@@ -225,6 +241,25 @@ test("actual CLI prepare plus HTTP reads bind metadata while config-only Free st
     assert.equal(JSON.stringify(identity).includes("synthetic-"), false);
     assert.equal(JSON.stringify(identity).includes("a".repeat(32)), false);
     assert.equal(identity.accountBindingSha256, target.accountBindingSha256);
+    for (const current of [
+      "origins-missing",
+      "origins-type",
+      "origins-foreign",
+      "origins-duplicate",
+    ]) {
+      fault = current;
+      const beforeOrigins = observed.filter((row) => row.path === "/v1/admin/configuration").length;
+      await assert.rejects(observe(), /browser Origin/);
+      assert.equal(
+        observed.filter((row) => row.path === "/v1/admin/configuration").length,
+        beforeOrigins,
+        "Provider origin drift must refuse before application credential use",
+      );
+    }
+    fault = "";
+    object(object(target.operator).deployment).allowedOrigins = ["https://foreign.example"];
+    await assert.rejects(observe());
+    object(object(target.operator).deployment).allowedOrigins = ["https://127.0.0.1:10110"];
     assertObservedDeployment([identity], {
       ...identity,
       checkedAt: new Date(Date.now() + 1).toISOString(),

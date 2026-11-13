@@ -262,7 +262,12 @@ export async function composeDeployment(
     name: config.deployment.name,
     main: `./assets/${manifest.entry}`,
     ...(config.deployment.accountId ? { account_id: config.deployment.accountId } : {}),
-    vars: { FORTIPI_CONFIG: config.runtime },
+    vars: {
+      FORTIPI_CONFIG: config.runtime,
+      ...(config.deployment.allowedOrigins?.length
+        ? { FORTIPI_ALLOWED_ORIGINS: config.deployment.allowedOrigins }
+        : {}),
+    },
   };
 }
 export interface PrepareReceipt {
