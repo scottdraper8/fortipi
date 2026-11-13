@@ -2505,7 +2505,11 @@ export async function prepareImage(descriptorPath: string, downloaded: string): 
     assert.equal(matches[0]?.conclusion, "success");
   }
   const artifact = object(await request(`${base}/actions/artifacts/${artifactId}`));
-  assert.equal(artifact.name, `container-evidence-rootless-${source}-${runId}-${attempt}`);
+  assert.equal(
+    artifact.name,
+    `container-distribution-rootless-${source}-${runId}-${attempt}`,
+    "Full qualified image input artifact required",
+  );
   assert.equal(artifact.expired, false);
   assert.equal(artifact.digest, d.artifactDigest);
   assert.equal(object(artifact.workflow_run).id, runId);
@@ -2534,7 +2538,7 @@ export async function prepareImage(descriptorPath: string, downloaded: string): 
     metadataHash,
     "Image metadata differs from actual producer archive",
   );
-  const metadata = await regularBytes(resolve(downloaded, "image-metadata.json"));
+  const metadata = await regularBytes(resolve(downloaded, "image-metadata.json"), 8_000_000);
   assert.equal(sha256(metadata), metadataHash);
   const image = object(JSON.parse(metadata.toString("utf8")));
   assert.equal(image.sourceCommit, source);
@@ -2563,6 +2567,7 @@ export async function importQualifiedImageInputs(
   output: string,
 ): Promise<void> {
   assert.match(source, commitPattern);
+  assert.ok(metadata.length <= 8_000_000, "Image metadata byte bound");
   const image = object(JSON.parse(metadata.toString("utf8")));
   assert.equal(image.sourceCommit, source);
   await git("diff", "--exit-code", source, "HEAD", "--", "apps/worker/container");
