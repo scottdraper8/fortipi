@@ -67,7 +67,7 @@ export async function readInfrastructureNamespaces(
     return { binding, className, selected };
   });
   const listed = await read("/workers/durable_objects/namespaces?page=1&per_page=1000");
-  assert.ok(Array.isArray(listed) && listed.length <= 1000, "Namespace inventory unavailable");
+  assert.ok(Array.isArray(listed) && listed.length < 1000, "Namespace inventory unavailable");
   const inventory = listed.map(object);
   const namespaces = selectedBindings.map(
     ({ binding, className, selected }): InfrastructureNamespace => {

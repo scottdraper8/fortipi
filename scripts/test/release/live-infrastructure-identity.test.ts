@@ -107,6 +107,23 @@ test("namespace attribution uses the actual version and account-bound GETs, incl
     const changed = await readInfrastructureNamespaces(deployment, read);
     assert.deepEqual(changed.namespaces, expected);
     assert.notEqual(changed.metadataSha256, result.metadataSha256);
+    data.inventory.pop(); // The full first page has only one apparent match per class.
+    for (const binding of data.version.resources.bindings)
+      Reflect.deleteProperty(binding, "namespace_id");
+    while (data.inventory.length < 1000)
+      data.inventory.push({
+        id: data.inventory.length.toString(16).padStart(32, "0"),
+        script: "unrelated-worker",
+        class: "Other",
+        use_sqlite: true,
+      });
+    await assert.rejects(
+      readInfrastructureNamespaces(deployment, read),
+      /inventory/,
+      "A full result-only page cannot establish a unique namespace join",
+    );
+    data.inventory.pop();
+    assert.deepEqual((await readInfrastructureNamespaces(deployment, read)).namespaces, expected);
   } finally {
     await server.close();
   }
