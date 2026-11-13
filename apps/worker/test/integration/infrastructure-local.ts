@@ -251,17 +251,15 @@ export async function localStagingAndHistory() {
       assert.equal(refused.body.error.code, "quota_exceeded");
       stagedEdges.push({ attempted: 8193, accepted: 0, status: refused.status });
     } finally {
-      assert.equal(
-        (
-          await runtime.api(
-            `/v1/workspaces/${workspaceId}/leases/${acquired.body.leaseId}/release`,
-            { requestId: randomUUID(), lease: acquired.body, reason: "cancelled" },
-            "POST",
-            staged.token,
-          )
-        ).status,
-        200,
+      const released = await runtime.api<D.WorkspaceLeaseReleaseReceipt>(
+        `/v1/workspaces/${workspaceId}/leases/${acquired.body.leaseId}/release`,
+        { requestId: randomUUID(), lease: acquired.body, reason: "cancelled" },
+        "POST",
+        staged.token,
       );
+      assert.equal(released.status, 200);
+      assert.equal(released.body.released, true);
+      assert.equal(released.body.leaseId, acquired.body.leaseId);
     }
     const afterStaging = await canonical(runtime, staged.binding, staged.token);
     assert.equal(afterStaging, canonicalHashBefore);
