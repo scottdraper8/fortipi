@@ -32,6 +32,12 @@ function listing(bytes: Buffer, member: string): { listed: string[]; names: stri
   assert.equal(Buffer.from(text).equals(bytes), true, "Invalid ZIP name encoding");
   const listed = text.replace(/\r?\n$/, "").split(/\r?\n/);
   assert.ok(listed.length > 0 && listed.length <= 30000, "ZIP member count bound");
+  // Native listings may display controls as ^J or Unicode as #U.... Those
+  // aliases cannot be decoded safely: a literal caret name is ambiguous too.
+  assert.ok(
+    listed.every((name) => /^[A-Za-z0-9_./+@%~-]+$/.test(name)),
+    "Ambiguous or nonportable ZIP member name",
+  );
   const normalized = listed.map(namePath);
   assert.equal(
     new Set(normalized.map((name) => name.toLowerCase())).size,
@@ -82,7 +88,7 @@ try {
     foreach ($entry in $zip.Entries) {
       $name=$entry.FullName
       $local=$name.TrimEnd('/')
-      if ($local.Length -eq 0 -or $local.StartsWith('/') -or $local -match '^[A-Za-z]:' -or $local -match '[\x00-\x1f\x7f\\]' -or $local -match '(^|/)(\.|\.\.|)(/|$)') { throw 'Noncanonical ZIP path' }
+      if ($local -cnotmatch '^[A-Za-z0-9_./+@%~-]+$' -or $local.Length -eq 0 -or $local.StartsWith('/') -or $local -match '^[A-Za-z]:' -or $local -match '[\x00-\x1f\x7f\\]' -or $local -match '(^|/)(\.|\.\.|)(/|$)') { throw 'Noncanonical ZIP path' }
       if (-not $names.Add($local)) { throw 'Duplicate normalized ZIP path' }
       $type=($entry.ExternalAttributes -shr 16) -band 0xF000
       if (@(0,0x4000,0x8000) -notcontains $type -or ($entry.ExternalAttributes -band 0x440) -ne 0) { throw 'ZIP links/special members rejected' }
