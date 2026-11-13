@@ -1018,6 +1018,7 @@ export async function runLiveInfrastructureControls(input: {
       }
       await usage("before");
       await deviceCanonicalBytes(reader, workspace, request);
+      const allocationGroups = [];
       for (const resource of ["file", "snapshot", "entries"] as const) {
         const binding = await roles.call({
           operationId: "createWorkspace",
@@ -1030,10 +1031,18 @@ export async function runLiveInfrastructureControls(input: {
           workspaceIds: [binding.workspaceId],
           actions: ["workspace.write", "workspace.read", "workspaces.read"],
         });
-        for (const delta of [-1, 0, 1] as const) {
-          // Intentional quiet request window BEFORE short lease acquisition.
-          // No policy override, expired-lease replacement or same-effect retry.
-          await delay(60000);
+        allocationGroups.push({ resource, binding, client });
+      }
+      for (const delta of [-1, 0, 1] as const) {
+        // Separate principals/workspaces share this real quiet interval. Each
+        // group's preceding stage is already aborted and its lease released.
+        // Keep stages sequential so overlapping reservations do not create a
+        // different shared-pool refusal. No lease is acquired before the wait.
+        const quietFrom = Date.now();
+        await delay(60000);
+        const quietThrough = Date.now();
+        assert.ok(quietThrough - quietFrom >= 60000);
+        for (const { resource, binding, client } of allocationGroups) {
           const fixture = allocationDeclaration(resource, delta),
             operationId = randomUUID();
           const lease = await request(() =>
@@ -1121,6 +1130,7 @@ export async function runLiveInfrastructureControls(input: {
               outcome: delta <= 0 ? "opened-and-aborted" : "quota429",
               chunksDelivered: 0,
               publishedRevision: binding.revision,
+              quietWindow: { from: quietFrom, through: quietThrough },
             });
           } finally {
             await release();
@@ -1164,7 +1174,7 @@ export async function runLiveInfrastructureControls(input: {
         limitations: [
           "Allocation/declaration boundaries only; no maximum-size byte-transfer or provider/account exhaustion claim",
           "Original canary bytes are freshly read; local reduced-cap tests, SQL/CPU counters, physical reclamation and event/output maxima are not aliased into this row",
-          "Each declaration uses a real60s request window before a short lease; no quota/model-budget/configuration change",
+          "Three real60s quiet rounds cover separate declaration principals/workspaces; sequential stages avoid adding shared-pool contention, and original short leases are acquired only after each wait",
         ],
       };
     } catch (error) {
