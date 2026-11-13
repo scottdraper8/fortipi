@@ -70,9 +70,13 @@ export class RoleContext {
     this.#roles.push({ receipt: result, revokeRequestId: randomUUID() });
     return result;
   }
-  assertSanitized(value: unknown) {
+  assertSanitized(value: unknown, suppliedTokens: readonly string[] = []) {
     const bytes = JSON.stringify(value);
-    for (const token of [this.#admin, ...this.#roles.map((r) => r.receipt.token)])
+    for (const token of [
+      this.#admin,
+      ...this.#roles.map((r) => r.receipt.token),
+      ...suppliedTokens,
+    ])
       assert.ok(
         !bytes.includes(token) && !bytes.includes(JSON.stringify(token).slice(1, -1)),
         "Credential appeared in evidence",

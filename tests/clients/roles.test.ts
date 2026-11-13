@@ -22,13 +22,20 @@ test("role evidence rejects JSON-escaped synthetic credentials while allowing pu
     assert.ok(address && typeof address !== "string");
     const roles = new RoleContext(`http://127.0.0.1:${address.port}`, admin);
     const issued = await roles.issue({ requestId: "synthetic-mint", role: "client", grants: [] });
+    const secondContext = new RoleContext(`http://127.0.0.1:${address.port}`, admin);
+    secondContext.assertSanitized({ nested: { token } });
     roles.assertSanitized({ credential: issued.credential, outcome: "redacted" });
     for (const value of [
       { nested: { token } },
       { diagnostic: `prefix:${token}:suffix` },
       { admin },
-    ])
+    ]) {
       assert.throws(() => roles.assertSanitized(value), /Credential appeared in evidence/);
+      assert.throws(
+        () => secondContext.assertSanitized(value, [token]),
+        /Credential appeared in evidence/,
+      );
+    }
   } finally {
     await new Promise<void>((accept, reject) =>
       server.close((error) => (error ? reject(error) : accept())),

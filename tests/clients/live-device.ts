@@ -12,7 +12,10 @@ import {
   type CredentialRef,
   canonicalJson,
   type DurableEvent,
+  type Lease,
+  type Manifest,
   type ResourceScope,
+  type UploadStatus,
 } from "../../packages/fortipi-contract/dist/index.js";
 import type { Profile } from "../../packages/fortipi-executor/dist/index.js";
 import type { CandidateReadContext } from "../../scripts/prepare-release.ts";
@@ -65,6 +68,7 @@ export function deviceResources(seed: DeviceContinuitySeed, executor?: Device): 
           "approvals.decide",
           "workspaces.read",
           "workspace.read",
+          "workspace.write",
         ],
   };
 }
@@ -112,6 +116,7 @@ export interface DeviceContinuityA {
   jobId: string;
   executionId: string;
   receiptSha256: string;
+  oldLease: Extract<Lease, { ownerKind: "job" }>;
   eventThrough: number;
   eventPrefixSha256: string;
   localRootSha256: string;
@@ -292,6 +297,192 @@ async function canonicalBytes(
     assert.equal(hash(bytes), file.sha256);
   }
 }
+/** Submit the REAL retained A job lease, with a fresh request/commit intent,
+ * after B's successful commit. The carried client first opens a valid current
+ * stage; this is not a stale-session mint. The refusal does not isolate expiry,
+ * terminal reservation, credential mismatch or fencing as the rejecting guard. */
+export async function rejectStaleDeviceLease(input: {
+  writer: FortiPiClient;
+  reader: FortiPiClient;
+  oldLease: Extract<Lease, { ownerKind: "job" }>;
+  previous: RecoveryWorkspaceCanary;
+  current: RecoveryWorkspaceCanary;
+  request: ReturnType<typeof requests>;
+}) {
+  const { writer, reader, oldLease, previous, current, request } = input;
+  assert.equal(oldLease.ownerKind, "job");
+  assert.equal(oldLease.workspaceId, previous.binding.workspaceId);
+  assert.equal(current.binding.workspaceId, previous.binding.workspaceId);
+  assert.notEqual(current.binding.revision, oldLease.baseRevision);
+  await canonicalBytes(reader, current, request);
+  assert.deepEqual(
+    await request(() => reader.workspaces.get(current.binding.workspaceId)),
+    current.binding,
+  );
+  const currentManifest = await request(() =>
+    reader.workspaces.manifest(current.binding.workspaceId, { revision: current.binding.revision }),
+  );
+  assert.equal(currentManifest.manifestHash, current.binding.manifestHash);
+  const positiveOperationId = randomUUID();
+  const acquire = {
+    requestId: randomUUID(),
+    operationId: positiveOperationId,
+    bindingVersion: current.binding.bindingVersion,
+    baseRevision: current.binding.revision,
+    deadline: Date.now() + 120000,
+  };
+  const positiveLease = await request(() =>
+    writer.operations.acquireWorkspaceLease({
+      path: { workspaceId: current.binding.workspaceId },
+      query: {},
+      body: acquire,
+    }),
+  );
+  let positiveUploadId: string | undefined;
+  let abortConfirmation: "acknowledged" | "reconciled-public-status" | undefined;
+  const positiveBody = {
+    requestId: randomUUID(),
+    operationId: positiveOperationId,
+    commitId: randomUUID(),
+    lease: positiveLease,
+    baseRevision: current.binding.revision,
+    manifest: currentManifest.manifest,
+    manifestHash: currentManifest.manifestHash,
+    mutations: currentManifest.manifest.entries.map((entry) => {
+      assert.equal(entry.type, "file");
+      if (entry.type !== "file") throw new Error("Current device file manifest required");
+      return {
+        kind: "put" as const,
+        path: entry.path,
+        mode: entry.mode,
+        size: entry.size,
+        sha256: entry.sha256,
+      };
+    }),
+  };
+  try {
+    const positive = await request(() =>
+      writer.uploads.begin(current.binding.workspaceId, positiveBody),
+    );
+    positiveUploadId = positive.uploadId;
+  } finally {
+    try {
+      if (positiveUploadId) {
+        const uploadId = positiveUploadId;
+        try {
+          await request(() => writer.uploads.abort(current.binding.workspaceId, uploadId));
+          abortConfirmation = "acknowledged";
+        } catch {
+          const status = await request(() =>
+            writer.uploads.get(current.binding.workspaceId, uploadId),
+          );
+          assert.equal(status.uploadId, uploadId);
+          assert.equal(
+            status.state,
+            "aborted",
+            "An uncertain abort needs exact public status reconciliation",
+          );
+          abortConfirmation = "reconciled-public-status";
+        }
+      }
+    } finally {
+      const release = {
+        requestId: randomUUID(),
+        lease: positiveLease,
+        reason: "cancelled" as const,
+      };
+      const released = await request(() =>
+        writer.operations.releaseWorkspaceLease({
+          path: { workspaceId: current.binding.workspaceId, leaseId: positiveLease.leaseId },
+          query: {},
+          body: release,
+        }),
+      );
+      assert.equal(released.released, true);
+      assert.equal(released.leaseId, positiveLease.leaseId);
+    }
+  }
+  const retained = await request(() =>
+    reader.workspaces.manifest(previous.binding.workspaceId, {
+      revision: previous.binding.revision,
+    }),
+  );
+  assert.equal(retained.workspaceId, previous.binding.workspaceId);
+  assert.equal(retained.revision, previous.binding.revision);
+  assert.equal(retained.manifestHash, previous.binding.manifestHash);
+  const manifest: Manifest = retained.manifest;
+  const body = {
+    requestId: randomUUID(),
+    operationId: oldLease.operationId,
+    commitId: randomUUID(),
+    baseRevision: oldLease.baseRevision,
+    lease: oldLease,
+    manifest,
+    manifestHash: retained.manifestHash,
+    mutations: manifest.entries.map((entry) => {
+      assert.equal(entry.type, "file");
+      if (entry.type !== "file") throw new Error("Original device file manifest required");
+      return {
+        kind: "put" as const,
+        path: entry.path,
+        mode: entry.mode,
+        size: entry.size,
+        sha256: entry.sha256,
+      };
+    }),
+  };
+  let refusal: { status: number; code: string } | undefined;
+  let admitted: UploadStatus | undefined;
+  try {
+    admitted = await request(() => writer.uploads.begin(oldLease.workspaceId, body));
+  } catch (error) {
+    const observed = error as { status?: unknown; code?: unknown };
+    assert.ok(
+      (observed.status === 403 && observed.code === "unauthorized") ||
+        (observed.status === 409 &&
+          ["conflict", "workspace.conflict", "interrupted"].includes(String(observed.code))) ||
+        (observed.status === 503 && observed.code === "unavailable_executor"),
+      "A validated old-lease authority/conflict refusal is required; rate, schema, missing-route and transport failures do not qualify",
+    );
+    refusal = { status: Number(observed.status), code: String(observed.code) };
+  }
+  if (admitted) {
+    try {
+      await writer.uploads.abort(oldLease.workspaceId, admitted.uploadId);
+    } catch {
+      throw new Error(
+        "Retained A lease admitted a new upload after B ownership; cleanup remains unacknowledged",
+      );
+    }
+    throw new Error("Retained A lease admitted a new upload after B ownership");
+  }
+  assert.ok(refusal);
+  assert.deepEqual(
+    await request(() => reader.workspaces.get(current.binding.workspaceId)),
+    current.binding,
+  );
+  await canonicalBytes(reader, current, request);
+  await canonicalBytes(reader, previous, request);
+  return {
+    ...refusal,
+    leaseId: oldLease.leaseId,
+    operationId: oldLease.operationId,
+    jobId: oldLease.jobId,
+    fence: oldLease.fence,
+    expiresAt: oldLease.expiresAt,
+    originalBaseRevision: oldLease.baseRevision,
+    currentRevision: current.binding.revision,
+    positiveControl: {
+      leaseId: positiveLease.leaseId,
+      uploadId: positiveUploadId,
+      aborted: true,
+      abortConfirmation,
+      released: true,
+    },
+    limitation:
+      "Actual retained terminal A lease submitted under current B authority; expiry, terminal-state, credential and fence causes are not isolated",
+  };
+}
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 /** Exact command used by both actual installed executor phases. The external
  * start marker is created exclusively only AFTER every materialized base hash
@@ -441,7 +632,7 @@ async function setup(input: DevicePhaseInput, phase: "a" | "b", base: RecoveryWo
               : reject(new Error("Actual installed executor command failed")),
           );
         });
-        input.roles.assertSanitized(output);
+        input.roles.assertSanitized(output, [input.clientRole.token, input.executorRole.token]);
         return output;
       } finally {
         clearTimeout(timer);
@@ -483,6 +674,16 @@ async function setup(input: DevicePhaseInput, phase: "a" | "b", base: RecoveryWo
       root,
       identity,
       command,
+      async staleLease(original: DeviceContinuityA, current: RecoveryWorkspaceCanary) {
+        return rejectStaleDeviceLease({
+          writer: client,
+          reader: client,
+          oldLease: original.oldLease,
+          previous: original.workspace,
+          current,
+          request,
+        });
+      },
       async start() {
         await command(["init"]);
         await command(["policy", "--trusted-host", "--accept-daemon-user-files-and-network"]);
@@ -626,6 +827,36 @@ async function executePhase(
     if (job.state !== "completed" || job.evidence.kind !== "committed")
       throw new Error("A real changed Computer commit is required");
     assert.ok(job.execution && job.preparedResult);
+    assert.equal(job.workspaceId, base.workspaceId);
+    assert.equal(job.baseRevision, base.revision);
+    assert.equal(job.evidence.receipt.workspaceId, base.workspaceId);
+    assert.equal(job.evidence.receipt.providerKind, "computer");
+    assert.equal(job.evidence.receipt.jobId, job.jobId);
+    assert.equal(job.evidence.receipt.baseRevision, base.revision);
+    assert.equal(job.evidence.receipt.operationId, job.execution.lease.operationId);
+    assert.equal(job.evidence.receipt.commitId, job.preparedResult.commitId);
+    assert.equal(job.evidence.receipt.manifestHash, job.preparedResult.manifestHash);
+    assert.equal(job.execution.jobId, job.jobId);
+    assert.equal(job.execution.baseRevision, base.revision);
+    assert.equal(job.execution.lease.ownerKind, "job");
+    assert.equal(job.execution.lease.jobId, job.jobId);
+    assert.equal(job.execution.lease.workspaceId, base.workspaceId);
+    assert.equal(job.execution.lease.baseRevision, base.revision);
+    assert.equal(job.execution.operationDigest, job.operationDigest);
+    // Lease renewal version/expiry are observations, not new assignment IDs.
+    assert.deepEqual({ ...job.preparedResult.identity, lease: job.execution.lease }, job.execution);
+    const {
+      leaseVersion: _preparedVersion,
+      expiresAt: _preparedExpiry,
+      ...preparedLease
+    } = job.preparedResult.identity.lease;
+    const {
+      leaseVersion: _executionVersion,
+      expiresAt: _executionExpiry,
+      ...executionLease
+    } = job.execution.lease;
+    assert.deepEqual(preparedLease, executionLease);
+    if (job.receipt) assert.deepEqual(job.receipt, job.evidence.receipt);
     assert.deepEqual(job.execution.target, target);
     assert.equal(job.preparedResult.output.truncated, false);
     const output: unknown = JSON.parse(job.preparedResult.output.tail.trim());
@@ -648,6 +879,9 @@ async function executePhase(
     const binding = await request(() => client.workspaces.get(base.workspaceId));
     assert.notEqual(binding.revision, base.revision);
     assert.equal(binding.manifestHash, job.evidence.receipt.manifestHash);
+    assert.equal(binding.workspaceId, job.evidence.receipt.workspaceId);
+    assert.equal(binding.revision, job.evidence.receipt.revision);
+    assert.equal(binding.bindingVersion, base.bindingVersion);
     const workspace = { binding, files: expectedFiles(after) };
     await canonicalBytes(client, workspace, request);
     const snapshot = await request(() => client.conversations.get(input.seed.conversationId));
@@ -659,6 +893,7 @@ async function executePhase(
       jobId: job.jobId,
       executionId: job.execution.executionId,
       receiptSha256: hash(canonicalJson(job.evidence.receipt)),
+      oldLease: structuredClone(job.execution.lease),
       eventThrough: snapshot.lastEventSeq,
       eventPrefixSha256: await prefix(
         client,
@@ -717,7 +952,7 @@ export async function runDeviceContinuityA(input: DevicePhaseInput): Promise<Dev
       retirementId: retired.operationId,
       revocationId: retired.revocationId,
     };
-    input.roles.assertSanitized(record);
+    input.roles.assertSanitized(record, [input.clientRole.token, input.executorRole.token]);
     await input.installed.verifyUnchanged();
     return record;
   } finally {
@@ -766,6 +1001,14 @@ export async function runDeviceContinuityB(
       throw new Error("Original committed job must remain terminal");
     assert.equal(job.execution?.executionId, original.executionId);
     assert.equal(hash(canonicalJson(job.evidence.receipt)), original.receiptSha256);
+    assert.equal(job.workspaceId, original.workspace.binding.workspaceId);
+    assert.equal(job.evidence.receipt.workspaceId, original.workspace.binding.workspaceId);
+    assert.equal(job.evidence.receipt.revision, original.workspace.binding.revision);
+    assert.equal(job.evidence.receipt.manifestHash, original.workspace.binding.manifestHash);
+    assert.equal(job.evidence.receipt.jobId, original.jobId);
+    assert.equal(job.evidence.receipt.baseRevision, original.initialWorkspace.binding.revision);
+    assert.equal(job.evidence.receipt.operationId, original.oldLease.operationId);
+    assert.deepEqual(job.execution?.lease, original.oldLease);
     assert.equal(
       (await request(() => client.tasks.get(original.admission.taskId))).status.state,
       "completed",
@@ -809,6 +1052,7 @@ export async function runDeviceContinuityB(
       job,
       "Original completed effect is immutable",
     );
+    const staleLease = await fixture.staleLease(original, replacement.workspace);
     await fixture.destroy();
     const retired = await retire(input, input.seed.b);
     await fixture.assertRetiredSession();
@@ -828,6 +1072,7 @@ export async function runDeviceContinuityB(
         originalEventPrefixSha256: original.eventPrefixSha256,
         originalWorkspace: original.workspace,
         replacement,
+        staleLease,
         retirementId: retired.operationId,
         revocationId: retired.revocationId,
         originalStarts: 1,
@@ -843,11 +1088,12 @@ export async function runDeviceContinuityB(
       ],
       limitations: [
         "Linux hosted VM continuity only; no physical-host loss, provider eviction/runtime reset, interrupted-effect recovery or Paid backend proof",
+        "Retained A lease refusal uses the same current write-authorized client after a successful B commit; terminal/expiry/credential/fence guards are not individually isolated",
         "Parent must authenticate both actual jobs and A artifact; this data record alone is not provenance or archive authority",
         "Two model-driven dispatches use the deployed model; source compilation/local roots cannot substitute for actual live observations",
       ],
     };
-    input.roles.assertSanitized(result);
+    input.roles.assertSanitized(result, [input.clientRole.token, input.executorRole.token]);
     return result;
   } finally {
     await fixture.destroy();
