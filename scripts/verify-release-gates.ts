@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -256,7 +257,7 @@ export function freshness(time: string, hours: number, now = Date.now()): void {
     "Stale/future proof",
   );
 }
-export async function regularBytes(path: string): Promise<Buffer> {
+export async function regularBytes(path: string, maximum?: number): Promise<Buffer> {
   let parent = dirname(resolve(path));
   while (true) {
     const stat = await lstat(parent);
@@ -266,7 +267,39 @@ export async function regularBytes(path: string): Promise<Buffer> {
   }
   const stat = await lstat(path);
   assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1, "Nonregular artifact");
-  return readFile(path);
+  if (maximum === undefined) return readFile(path);
+  assert.ok(Number.isSafeInteger(maximum) && maximum >= 0);
+  assert.ok(stat.size <= maximum, "Artifact byte bound");
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const current = await handle.stat();
+    assert.ok(
+      current.isFile() &&
+        current.nlink === 1 &&
+        current.ino === stat.ino &&
+        current.dev === stat.dev,
+      "Artifact changed during open",
+    );
+    assert.ok(current.size <= maximum, "Artifact byte bound");
+    const buffer = Buffer.alloc(Math.min(256 * 1024, maximum + 1));
+    const chunks: Buffer[] = [];
+    let size = 0;
+    while (true) {
+      const { bytesRead } = await handle.read(
+        buffer,
+        0,
+        Math.min(buffer.length, maximum - size + 1),
+        null,
+      );
+      if (!bytesRead) break;
+      size += bytesRead;
+      assert.ok(size <= maximum, "Artifact byte bound");
+      chunks.push(Buffer.from(buffer.subarray(0, bytesRead)));
+    }
+    return Buffer.concat(chunks, size);
+  } finally {
+    await handle.close();
+  }
 }
 export async function readJson(path: string): Promise<unknown> {
   return JSON.parse((await regularBytes(path)).toString("utf8"));
@@ -299,7 +332,11 @@ export async function saveJson(path: string, value: unknown, exclusive = true): 
   }
   return sha256(data);
 }
-export async function inventory(root: string, prefix = ""): Promise<FileRecord[]> {
+export async function inventory(
+  root: string,
+  prefix = "",
+  bounds?: ReadonlyMap<string, number>,
+): Promise<FileRecord[]> {
   const result: FileRecord[] = [];
   const rootStat = await lstat(root);
   assert.ok(rootStat.isDirectory() && !rootStat.isSymbolicLink(), "Linked artifact directory");
@@ -308,14 +345,16 @@ export async function inventory(root: string, prefix = ""): Promise<FileRecord[]
     const absolute = resolve(root, item);
     const stat = await lstat(absolute);
     assert.ok(!stat.isSymbolicLink(), "Linked artifact entry");
-    if (stat.isDirectory()) result.push(...(await inventory(absolute, path)));
-    else
+    if (stat.isDirectory()) result.push(...(await inventory(absolute, path, bounds)));
+    else {
+      if (bounds) assert.ok(bounds.has(path), "Artifact payload differs from retained inventory");
       result.push({
         path,
         mode: stat.mode & 0o777,
         size: stat.size,
-        sha256: sha256(await regularBytes(absolute)),
+        sha256: sha256(await regularBytes(absolute, bounds?.get(path))),
       });
+    }
   }
   assert.equal(
     new Set(result.map((file) => file.path.toLowerCase())).size,
@@ -554,7 +593,9 @@ export async function verifyPayload(
   expected: FileRecord[],
   exclude: string[] = [],
 ): Promise<void> {
-  const actual = (await inventory(root)).filter((file) => !exclude.includes(file.path));
+  const bounds = new Map(expected.map((file) => [file.path, file.size]));
+  for (const path of exclude) bounds.set(path, 8_000_000);
+  const actual = (await inventory(root, "", bounds)).filter((file) => !exclude.includes(file.path));
   assert.ok(
     actual.every((file) => (file.mode & 0o022) === 0),
     "Writable artifact payload",

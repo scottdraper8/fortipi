@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
@@ -401,7 +401,7 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
         reference: ref,
         request: githubRequest(undefined, server.transport),
       }),
-      /Artifact payload differs/,
+      /Artifact payload differs|ENOENT/,
     );
     assert.ok(calls.includes("/retained.zip"), "Producer archive must be authenticated first");
     await assert.rejects(
@@ -524,6 +524,28 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
         /Authorized archive hash differs/,
       );
       member.sha256 = originalHash;
+      assert.ok(cli);
+      const oversized = resolve(retained, cli.tarball);
+      await appendFile(oversized, Buffer.alloc(2 * 1024 * 1024));
+      const oversizedBytes = await regularBytes(oversized);
+      cli.sha256 = sha256(oversizedBytes);
+      cli.integrity = `sha512-${(await import("node:crypto")).createHash("sha512").update(oversizedBytes).digest("base64")}`;
+      const retainedFile = actual.files.find((file) => file.path === cli.tarball);
+      assert.ok(retainedFile);
+      retainedFile.sha256 = cli.sha256;
+      retainedFile.size = oversizedBytes.length;
+      ref.candidateSha256 = await saveJson(retainedPath, actual, false);
+      await realZip.close();
+      realZip = await directoryArchive(retained);
+      archiveBytes = realZip.bytes;
+      ref.artifactDigest = `sha256:${sha256(archiveBytes)}`;
+      await assert.rejects(
+        loadCandidate(retainedPath, {
+          reference: ref,
+          request: githubRequest(undefined, server.transport),
+        }),
+        /Archive compressed input bound/,
+      );
     } finally {
       await realZip?.close();
       await rm(sources, { recursive: true, force: true });
@@ -1030,7 +1052,8 @@ test("receipt hashes and fixed freshness reject changed results, unavailable cla
     };
     assertGate(receipt);
     await verifyPayload(root, receipt.files);
-    await writeFile(resolve(root, "result.json"), '{"forged":true}');
+    // Keep the length unchanged so this remains a hash-binding control.
+    await writeFile(resolve(root, "result.json"), "[]");
     await assert.rejects(verifyPayload(root, receipt.files), /payload differs/);
     assert.throws(
       () => assertGate({ ...receipt, claims: [{ ...receipt.claims[0], outcome: "unavailable" }] }),

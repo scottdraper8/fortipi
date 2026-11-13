@@ -43,7 +43,7 @@ test("actual five scoped pnpm packs retain staged bytes, executable bins, legal 
       "0.1.0",
     );
     assert.equal(packed.packages.length, 5);
-    const notices: NoticeReceipt[] = [];
+    const notices: NoticeReceipt[] = packed.runtimeNotices;
     for (const p of packed.packages) {
       const path = resolve(directory, p.tarball);
       const data = await regularBytes(path);
@@ -53,24 +53,17 @@ test("actual five scoped pnpm packs retain staged bytes, executable bins, legal 
       assert.deepEqual(actual.entries, p.entries);
       assert.equal(actual.manifest.name, p.name);
       assert.equal(actual.manifest.version, "0.1.0");
-      const original = await readFile(
-        resolve(repository, "packages", p.sourceName, "THIRD_PARTY_NOTICES.md"),
-        "utf8",
-      );
-      const components = [...original.matchAll(/^## (.+@[^\s]+)$/gm)].map((m) => String(m[1]));
-      notices.push({
-        package: p.sourceName,
-        directory: `packages/${p.sourceName}`,
-        components,
-        noticeSha256: sha256(original),
-        licenseSha256: sha256(await regularBytes(resolve(repository, "LICENSE"))),
-      });
+      const legal = packed.runtimeNotices.find((notice) => notice.package === p.sourceName);
+      assert.ok(legal);
+      const entries = new Map(p.entries.map((entry) => [entry.path, entry]));
+      for (const file of legal.files) assert.deepEqual(entries.get(file.path), file);
       assert.ok(p.entries.some((e) => e.path === "THIRD_PARTY_NOTICES.md"));
       assert.equal(
         p.entries.some(
           (e) =>
-            e.path.startsWith("src/") ||
-            (e.path.endsWith(".map") && !e.path.startsWith("worker-assets/")),
+            !e.path.startsWith("node_modules/") &&
+            (e.path.startsWith("src/") ||
+              (e.path.endsWith(".map") && !e.path.startsWith("worker-assets/"))),
         ),
         false,
       );

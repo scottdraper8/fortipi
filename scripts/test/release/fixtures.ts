@@ -19,7 +19,6 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import { repository } from "../../build-workspaces.ts";
-import type { NoticeReceipt } from "../../generate-notices.ts";
 import { generateSbom, stageAndPack } from "../../prepare-release.ts";
 import {
   type CandidateManifest,
@@ -187,22 +186,7 @@ export async function actualCapsule(directory: string): Promise<string> {
   await mkdir(directory);
   const scope = "fortipi-ci-test";
   const packed = await stageAndPack(repository, resolve(directory, "packs"), scope, "0.1.0");
-  const notices: NoticeReceipt[] = [];
-  for (const p of packed.packages) {
-    const notice = await regularBytes(
-      resolve(repository, "packages", p.sourceName, "THIRD_PARTY_NOTICES.md"),
-    );
-    notices.push({
-      package: p.sourceName,
-      directory: `packages/${p.sourceName}`,
-      components: [...notice.toString("utf8").matchAll(/^## (.+@[^\s]+)$/gm)].map((m) =>
-        String(m[1]),
-      ),
-      noticeSha256: sha256(notice),
-      licenseSha256: sha256(await regularBytes(resolve(repository, "LICENSE"))),
-    });
-  }
-  await generateSbom(repository, directory, scope, "0.1.0", notices);
+  await generateSbom(repository, directory, scope, "0.1.0", packed.runtimeNotices);
   await mkdir(resolve(directory, "image"));
   for (const file of ["image-metadata.json", "sources-and-notices.tar"])
     await copyFile(
@@ -210,7 +194,7 @@ export async function actualCapsule(directory: string): Promise<string> {
       resolve(directory, "image", file),
       1,
     );
-  await mkdir(resolve(directory, "supply-chain"));
+  await mkdir(resolve(directory, "supply-chain"), { recursive: true });
   await copyFile(
     resolve(repository, "dist/supply-chain/inventory.json"),
     resolve(directory, "supply-chain/inventory.json"),

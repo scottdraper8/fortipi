@@ -22,10 +22,17 @@ import { basename, dirname, resolve, sep } from "node:path";
 import { t as listTar } from "tar";
 import { parse as parseYaml } from "yaml";
 import { packagePaths, repository } from "./build-workspaces.ts";
-import { generateNotices, type NoticeReceipt } from "./generate-notices.ts";
+import {
+  generateNotices,
+  generateRuntimeNotices,
+  type NoticeReceipt,
+  type RuntimeNoticeReceipt,
+} from "./generate-notices.ts";
 import { materializeSourceKitInventory } from "./image-source-distribution.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
 import { rewritePublishNames } from "./rewrite-publish-names.ts";
+import { collectRuntimeClosure, createRuntimeBundle } from "./runtime-closure.ts";
+import { bundledManifest, copyRuntimeMembers } from "./stage-runtime-bundle.ts";
 import {
   type ArtifactReference,
   assertCandidate,
@@ -194,9 +201,13 @@ interface ArchivePlan {
   files: ReadonlyMap<string, Readonly<FileRecord>>;
   directories: ReadonlySet<string>;
   total: number;
+  compressedLimit: number;
 }
 const archivePlans = new WeakMap<object, ArchivePlan>();
-/** Private retained authority: reached only after external producer verification. */
+const producedPackages = new WeakMap<ArchivePackage, object>();
+const producedArchives = new Map<string, object>();
+const sourcePlans = new Map<string, Promise<CandidatePackage[]>>();
+/** Private: reached only after source production or external producer verification. */
 function archiveAuthority(expected: ArchivePackage): object {
   const files = new Map<string, Readonly<FileRecord>>();
   const directories = new Set<string>();
@@ -215,25 +226,45 @@ function archiveAuthority(expected: ArchivePackage): object {
     }
   }
   const handle = Object.freeze({});
+  // Pinned pnpm emits one bounded tar header/path record per expected address.
+  // Account for header/alignment data and normal gzip framing without allowing
+  // arbitrary extra input merely because a producer authenticated its digest.
+  const headerBytes = [...files.keys(), ...directories].reduce(
+    (sum, path) => sum + 1024 + Math.ceil((path.length + 1024) / 512) * 512,
+    1024,
+  );
+  const uncompressed = total + headerBytes;
+  const compressedLimit = uncompressed + Math.ceil(uncompressed / 100) + 1024 * 1024;
+  assert.ok(Number.isSafeInteger(compressedLimit));
   archivePlans.set(handle, {
     name: expected.name,
     sourceName: expected.sourceName,
     files,
     directories,
     total,
+    compressedLimit,
   });
   return handle;
+}
+async function boundedArchive(path: string, authority: object): Promise<void> {
+  const plan = archivePlans.get(authority);
+  assert.ok(plan, "Unrecognized archive authority");
+  const info = await lstat(path);
+  assert.ok(info.isFile() && !info.isSymbolicLink() && info.nlink === 1);
+  assert.ok(info.size <= plan.compressedLimit, "Archive compressed input bound");
 }
 export async function archiveInventory(
   path: string,
   expected?: ArchivePackage,
   authority?: object,
 ): Promise<{ entries: FileRecord[]; manifest: Record<string, unknown> }> {
+  authority ??= expected ? producedPackages.get(expected) : undefined;
   const plan = authority ? archivePlans.get(authority) : undefined;
   if (authority) assert.ok(plan, "Unrecognized archive authority");
   if (plan) {
     assert.equal(expected?.name, plan.name);
     assert.equal(expected?.sourceName, plan.sourceName);
+    await boundedArchive(path, authority as object);
   }
   const byteLimit = plan?.sourceName === "fortipi-cli" ? plan.total : 200_000_000;
   // Expected inventory comes from verified staging or the retained candidate, never tar headers.
@@ -256,12 +287,14 @@ export async function archiveInventory(
   let manifest: Record<string, unknown> | undefined;
   let total = 0;
   let failure: unknown;
+  let headers = 0;
   const parser = listTar({
     strict: true,
     maxMetaEntrySize: 1024 * 1024,
     maxDecompressionRatio: 1000,
     onReadEntry(entry) {
       try {
+        assert.ok(++headers < 30000, "Archive header bound");
         assert.ok(
           entry.path.startsWith("package/") && !entry.linkpath,
           "Archive prefix/link rejected",
@@ -339,6 +372,13 @@ export async function archiveInventory(
   const timer = setTimeout(() => parser.abort(new Error("Archive verification timeout")), 120000);
   timer.unref();
   const input = createReadStream(path, { highWaterMark: 64 * 1024 });
+  let compressed = 0;
+  if (plan)
+    input.on("data", (chunk: Buffer) => {
+      compressed += chunk.length;
+      if (compressed > plan.compressedLimit)
+        parser.abort(new Error("Archive compressed input bound"));
+    });
   input.on("error", (error) => {
     failure = error;
     parser.abort(error);
@@ -367,7 +407,11 @@ export async function stageAndPack(
   output: string,
   scope: string,
   version: string,
-): Promise<{ packages: CandidatePackage[]; assetManifestSha256: string }> {
+): Promise<{
+  packages: CandidatePackage[];
+  assetManifestSha256: string;
+  runtimeNotices: RuntimeNoticeReceipt[];
+}> {
   await mkdir(output, { mode: 0o700 });
   const temporary = await mkdtemp(resolve(await realpath(tmpdir()), "fortipi-pack-"));
   try {
@@ -379,17 +423,69 @@ export async function stageAndPack(
       scope,
       version,
     });
+    const closure = await collectRuntimeClosure(root);
+    await mkdir(resolve(temporary, "runtime"));
+    await mkdir(resolve(temporary, "legal"));
     const pnpm = await pnpmExecutable();
     await verifyPnpmExecutable(pnpm, childEnvironment());
     const packages: CandidatePackage[] = [];
+    const runtimeNotices: RuntimeNoticeReceipt[] = [];
     for (const source of packageOrder) {
-      const directory = resolve(temporary, "stage", `fortipi-${source}`);
+      const sourceName = `fortipi-${source}`;
+      const directory = resolve(temporary, "stage", sourceName);
+      const bundle = await createRuntimeBundle(
+        closure,
+        sourceName,
+        resolve(temporary, "runtime", sourceName),
+      );
+      const legal = await generateRuntimeNotices(
+        root,
+        closure,
+        bundle.plan,
+        resolve(temporary, "legal", sourceName),
+      );
+      const permitted = new Map(
+        legal.conveyance.permittedBlockedFiles.map((file) => [file.path, file]),
+      );
+      const members = new Map(bundle.plan.files.map((file) => [file.path, file]));
+      for (const path of bundle.plan.blockedConveyancePaths)
+        assert.deepEqual(
+          members.get(path),
+          permitted.get(path),
+          "Unapproved dependency conveyance path",
+        );
+      await rm(resolve(directory, "licenses"), { recursive: true });
+      await mkdir(resolve(directory, "licenses"));
+      for (const file of legal.files) {
+        safePath(file.path);
+        const target = resolve(directory, file.path);
+        if (file.path === "LICENSE" || file.path === "THIRD_PARTY_NOTICES.md") await rm(target);
+        await mkdir(dirname(target), { recursive: true });
+        await copyFile(resolve(legal.directory, file.path), target, 1);
+        await chmod(target, file.mode);
+        assert.equal(sha256(await regularBytes(target)), file.sha256);
+      }
+      const manifest = bundledManifest(
+        closure,
+        bundle.plan,
+        object(await readJson(resolve(directory, "package.json"))),
+      );
+      // The pinned packer preserves this exact JSON serialization without LF.
+      await writeFile(resolve(directory, "package.json"), JSON.stringify(manifest, null, 2));
+      const own = await inventory(directory);
+      await copyRuntimeMembers(closure, bundle.plan, bundle.directory, directory);
+      const expected: FileRecord[] = [...own, ...bundle.plan.files].sort((a, b) =>
+        a.path.localeCompare(b.path, "en"),
+      );
+      const role = { name: `@${scope}/${sourceName}`, sourceName, entries: expected };
+      const authority = archiveAuthority(role);
       const result = object(
         JSON.parse(
           await checked(
             pnpm,
             [
               "--ignore-workspace",
+              "--ignore-scripts",
               "--npmrc-auth-file",
               auth,
               "pack",
@@ -398,6 +494,7 @@ export async function stageAndPack(
               output,
             ],
             directory,
+            childEnvironment({ NPM_CONFIG_USERCONFIG: auth, NPM_CONFIG_GLOBALCONFIG: auth }),
           ),
         ),
       );
@@ -410,12 +507,7 @@ export async function stageAndPack(
       );
       safePath(filename);
       const file = resolve(output, filename);
-      const expected = await inventory(directory);
-      const packed = await archiveInventory(file, {
-        name: `@${scope}/fortipi-${source}`,
-        sourceName: `fortipi-${source}`,
-        entries: expected,
-      });
+      const packed = await archiveInventory(file, role, authority);
       assert.deepEqual(
         packed.manifest,
         await readJson(resolve(directory, "package.json")),
@@ -448,7 +540,7 @@ export async function stageAndPack(
         );
       }
       const data = await regularBytes(file);
-      packages.push({
+      const pkg: CandidatePackage = {
         name: String(packed.manifest.name),
         sourceName: `fortipi-${source}`,
         version,
@@ -456,9 +548,13 @@ export async function stageAndPack(
         sha256: sha256(data),
         integrity: sha512(data),
         entries: packed.entries,
-      });
+      };
+      producedPackages.set(pkg, authority);
+      producedArchives.set(pkg.sha256, authority);
+      packages.push(pkg);
+      runtimeNotices.push(legal);
     }
-    return { packages, assetManifestSha256: stage.assetManifestSha256 };
+    return { packages, assetManifestSha256: stage.assetManifestSha256, runtimeNotices };
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -643,6 +739,42 @@ export async function generateSbom(
     for (const c of list) componentMap.set(string(c["bom-ref"]), c);
   }
   const components = [...componentMap.values()];
+  const runtimeNotices = notices.filter((notice): notice is RuntimeNoticeReceipt =>
+    Object.hasOwn(notice, "conveyance"),
+  );
+  const dispositions = new Map<string, { bundled: unknown[]; external: unknown[] }>();
+  const disposition = (id: string) => {
+    let value = dispositions.get(id);
+    if (!value) {
+      value = { bundled: [], external: [] };
+      dispositions.set(id, value);
+    }
+    return value;
+  };
+  for (const notice of runtimeNotices) {
+    for (const component of notice.conveyance.components)
+      disposition(component.archiveId).bundled.push({
+        owner: notice.package,
+        addresses: component.addresses,
+        files: component.files.length,
+        fileSetSha256: sha256(canonicalJson(component.files)),
+        planSha256: notice.conveyance.planSha256,
+      });
+    for (const component of notice.conveyance.external)
+      disposition(component.archiveId).external.push({ owner: notice.package, ...component });
+  }
+  if (runtimeNotices.length) {
+    await mkdir(resolve(destination, "supply-chain"), { recursive: true });
+    await saveJson(resolve(destination, "supply-chain/runtime-conveyance.json"), {
+      schemaVersion: 1,
+      packages: runtimeNotices.map((notice) => ({
+        package: notice.package,
+        conveyance: notice.conveyance,
+        files: notice.files,
+        texts: notice.texts,
+      })),
+    });
+  }
   const runtime = new Set(notices.flatMap((n) => n.components));
   // The actual Worker closure's original license files enumerate its bundled runtime components.
   const { verifyAssets } = await import("../packages/fortipi-cli/dist/assets.js");
@@ -716,6 +848,26 @@ export async function generateSbom(
         ],
       });
     }
+  for (const component of mapped) {
+    const member = dispositions.get(`${fullName(component)}@${component.version}`);
+    if (!member) continue;
+    const existing = Array.isArray(component.properties)
+      ? component.properties
+          .map(object)
+          .filter((property) => property.name !== "fortipi:distribution")
+      : [];
+    component.properties = [
+      ...existing,
+      {
+        name: "fortipi:distribution",
+        value: member.bundled.length
+          ? "bundled-runtime-files"
+          : "external-runtime-dependency-metadata",
+      },
+      { name: "fortipi:runtime-disposition", value: canonicalJson(member) },
+      { name: "fortipi:conveyance-evidence", value: "supply-chain/runtime-conveyance.json" },
+    ];
+  }
   const bundled = assets.manifest.files
     .filter((f) => f.kind === "worker")
     .map((f) => ({
@@ -896,7 +1048,7 @@ export async function prepareCandidate(
       options.version,
     );
     phase = "SBOM";
-    await generateSbom(root, destination, options.scope, options.version, notices);
+    await generateSbom(root, destination, options.scope, options.version, packed.runtimeNotices);
     phase = "specification and source payload";
     for (const file of [
       "openapi.yaml",
@@ -981,11 +1133,63 @@ export async function prepareCandidate(
     throw error;
   }
 }
+/** Derive expected bodies from the current clean checkout, independently of candidate entries. */
+async function sourceCandidatePlans(
+  candidate: CandidateManifest,
+): Promise<CandidatePackage[] | undefined> {
+  if (candidate.sourceCommit !== (await git("rev-parse", "HEAD"))) return undefined;
+  assert.equal(
+    await git("status", "--porcelain"),
+    "",
+    "Source archive authority requires a clean checkout",
+  );
+  const assetPath = resolve(repository, "packages/fortipi-cli/worker-assets/asset-manifest.json");
+  const assets = await regularBytes(assetPath, 8_000_000);
+  assert.equal(sha256(assets), candidate.assetManifestSha256);
+  assert.equal(object(JSON.parse(assets.toString("utf8"))).sourceCommit, candidate.sourceCommit);
+  assert.equal(
+    sha256(await regularBytes(resolve(repository, "pnpm-lock.yaml"))),
+    candidate.hashes.lock,
+  );
+  assert.equal(
+    sha256(await regularBytes(resolve(repository, "tools/unstale/supply-chain.json"))),
+    candidate.hashes.toolchainPolicy,
+  );
+  assert.equal(
+    sha256(
+      canonicalJson(
+        object(object(await readJson(resolve(repository, "package.json"))).fortipi).publishNames,
+      ),
+    ),
+    candidate.hashes.publishNames,
+  );
+  const key = `${candidate.sourceCommit}:${candidate.scope}:${candidate.version}:${candidate.assetManifestSha256}`;
+  let pending = sourcePlans.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const temporary = await mkdtemp(resolve(await realpath(tmpdir()), "fortipi-source-plan-"));
+      try {
+        return (
+          await stageAndPack(
+            repository,
+            resolve(temporary, "packs"),
+            candidate.scope,
+            candidate.version,
+          )
+        ).packages;
+      } finally {
+        await rm(temporary, { recursive: true, force: true });
+      }
+    })();
+    sourcePlans.set(key, pending);
+  }
+  return pending;
+}
 export async function loadCandidate(
   path: string,
   retained?: { reference: ArtifactReference; request: GitHubRequest },
 ): Promise<{ candidate: CandidateManifest; hash: string; directory: string }> {
-  const data = await regularBytes(path);
+  const data = await regularBytes(path, 8_000_000);
   const candidate: unknown = JSON.parse(data.toString("utf8"));
   assertCandidate(candidate);
   assert.equal(
@@ -999,15 +1203,57 @@ export async function loadCandidate(
   if (retained)
     await verifyRetainedCandidate(candidate, hash, retained.reference, retained.request);
   const directory = dirname(resolve(path));
+  const needsSource =
+    !retained &&
+    candidate.packages.some(
+      (pkg) =>
+        !producedArchives.has(pkg.sha256) &&
+        (pkg.entries.some((file) => file.path.startsWith("node_modules/")) ||
+          pkg.entries.reduce((sum, file) => sum + file.size, 0) > 200_000_000),
+    );
+  const source = needsSource ? await sourceCandidatePlans(candidate) : undefined;
+  const authorities = new Map<string, object>();
+  for (const pkg of candidate.packages) {
+    const independentlyProduced = source?.find((entry) => entry.name === pkg.name);
+    if (independentlyProduced)
+      assert.deepEqual(
+        pkg.entries,
+        independentlyProduced.entries,
+        "Retained files differ from trusted source production",
+      );
+    const authority = retained
+      ? archiveAuthority(pkg)
+      : independentlyProduced
+        ? producedPackages.get(independentlyProduced)
+        : producedArchives.get(pkg.sha256);
+    if (!authority) continue;
+    const plan = archivePlans.get(authority);
+    assert.ok(plan);
+    assert.equal(plan.name, pkg.name);
+    assert.equal(plan.sourceName, pkg.sourceName);
+    assert.deepEqual(
+      pkg.entries,
+      [...plan.files.values()].sort((a, b) => a.path.localeCompare(b.path, "en")),
+      "Candidate differs from independently produced files",
+    );
+    authorities.set(pkg.name, authority);
+    producedPackages.set(pkg, authority);
+    // Check compressed input size before verifyPayload hashes/allocates it.
+    await boundedArchive(resolve(directory, pkg.tarball), authority);
+  }
   await verifyPayload(directory, candidate.files, ["candidate.json"]);
   for (const p of candidate.packages) {
-    const bytes = await regularBytes(resolve(directory, p.tarball));
+    const authority = authorities.get(p.name);
+    const bytes = await regularBytes(
+      resolve(directory, p.tarball),
+      authority ? archivePlans.get(authority)?.compressedLimit : undefined,
+    );
     assert.equal(sha256(bytes), p.sha256);
     assert.equal(sha512(bytes), p.integrity);
     const packed = await archiveInventory(
       resolve(directory, p.tarball),
       p,
-      retained ? archiveAuthority(p) : undefined,
+      authorities.get(p.name),
     );
     assert.deepEqual(packed.entries, p.entries);
     assert.equal(packed.manifest.name, p.name);
