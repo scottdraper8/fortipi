@@ -97,6 +97,7 @@ export interface DeviceContinuityA {
   sourceCommit: string;
   candidateSha256: string;
   deploymentId: string;
+  logicalApplicationId: string;
   workerVersionId: string;
   host: DeviceHost;
   agentId: string;
@@ -350,7 +351,17 @@ async function setup(input: DevicePhaseInput, phase: "a" | "b", base: RecoveryWo
     await request(() => client.tickets.mint(input.seed.agentId, input.seed.conversationId))
   ).identity;
   assert.equal(identity.role, "client");
-  assert.equal(identity.deploymentId, input.deployment.deploymentId);
+  const protocol = await request(() => client.negotiate());
+  assert.equal(protocol.deploymentId, identity.deploymentId);
+  const configuration = await input.roles.call({
+    operationId: "getConfiguration",
+    path: {},
+    query: {},
+    body: undefined,
+  });
+  assert.equal(configuration.version, input.deployment.publicConfigurationVersion);
+  assert.equal(hash(canonicalJson(configuration)), input.deployment.runtimeConfigSha256);
+  assert.deepEqual(protocol.infrastructure, configuration.infrastructure);
   assert.deepEqual(identity.credential, input.clientRole.credential);
   const projection = await request(() => client.conversations.get(input.seed.conversationId));
   assert.equal(projection.conversation.agentId, input.seed.agentId);
@@ -374,7 +385,7 @@ async function setup(input: DevicePhaseInput, phase: "a" | "b", base: RecoveryWo
     const profile: Profile = {
       version: 1,
       origin: input.roles.endpoint,
-      deploymentId: input.deployment.deploymentId,
+      deploymentId: identity.deploymentId,
       executorId: device.executorId,
       executorGeneration: device.generation,
       credential: input.executorRole.credential,
@@ -693,6 +704,7 @@ export async function runDeviceContinuityA(input: DevicePhaseInput): Promise<Dev
       sourceCommit: input.installed.candidate.sourceCommit,
       candidateSha256: input.installed.hash,
       deploymentId: input.deployment.deploymentId,
+      logicalApplicationId: fixture.identity.deploymentId,
       workerVersionId: input.deployment.workerVersionId,
       host: fixture.observedHost,
       agentId: input.seed.agentId,
@@ -745,6 +757,7 @@ export async function runDeviceContinuityB(
     );
     assert.notEqual(hash(fixture.directory), original.localRootSha256);
     assert.deepEqual(fixture.identity.credential, original.clientCredential);
+    assert.equal(fixture.identity.deploymentId, original.logicalApplicationId);
     const { client, request } = fixture;
     const job = await request(() => client.jobs.get(original.jobId));
     assert.equal(job.taskId, original.admission.taskId);
