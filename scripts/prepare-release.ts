@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, resolve, sep } from "node:path";
 import { t as listTar } from "tar";
 import { parse as parseYaml } from "yaml";
+import type { DeviceEvidenceData } from "../tests/clients/device-observer.ts";
 import { attachApplicationRecoveryChannel } from "./application-recovery-channel.ts";
 import { packagePaths, repository } from "./build-workspaces.ts";
 import {
@@ -2111,7 +2112,9 @@ export async function runEvidence(
   out: string,
   deployment?: string,
   recovery?: EvidenceRecovery,
+  devices?: DeviceEvidenceData,
 ): Promise<void> {
+  assert.ok(mode === "live" || devices === undefined, "Device history is live-only");
   if (recovery) {
     assert.equal(mode, "live");
     assert.equal(recovery.checkpointDirectory, resolve(out, "application-recovery"));
@@ -2127,6 +2130,8 @@ export async function runEvidence(
   );
   await regularBytes(resolve(fixture));
   const env = evidenceEnvironment(expectedProducer, mode, context);
+  const devicesPath = devices ? resolve(dirname(out), `${basename(out)}.devices.json`) : undefined;
+  if (devicesPath) await saveJson(devicesPath, devices);
   let channel: ReturnType<typeof attachApplicationRecoveryChannel> | undefined;
   let childError: unknown;
   try {
@@ -2138,6 +2143,7 @@ export async function runEvidence(
         "--candidate",
         resolve(candidate),
         ...(deployment ? ["--deployment", resolve(deployment)] : []),
+        ...(devicesPath ? ["--devices", devicesPath] : []),
         "--fixture",
         resolve(fixture),
         "--out",

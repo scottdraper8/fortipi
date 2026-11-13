@@ -52,12 +52,61 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
           assert.equal(job.environment, "npm-release");
         }
         if (env.CLOUDFLARE_API_TOKEN || env.CLOUDFLARE_ACCOUNT_ID) {
-          assert.ok(["readiness", "final-readiness", "operate"].includes(name));
+          assert.ok(
+            [
+              "readiness",
+              "final-readiness",
+              "initial-installed-deployment",
+              "live-device-a",
+              "live-device-b",
+              "operate",
+            ].includes(name),
+          );
           assert.match(
             String(job.environment),
             /== 'paid-validation' && 'paid-validation' \|\| 'production'/,
           );
         }
+        if (env.FORTIPI_ADMIN_TOKEN) {
+          assert.ok(
+            [
+              "readiness",
+              "final-readiness",
+              "initial-installed-deployment",
+              "live-device-a",
+              "live-device-b",
+              "live-device-cleanup",
+              "operate",
+            ].includes(name),
+          );
+          assert.match(
+            String(job.environment),
+            /== 'paid-validation' && 'paid-validation' \|\| 'production'/,
+          );
+        }
+      }
+      if (
+        [
+          "initial-installed-deployment",
+          "live-device-a",
+          "live-device-b",
+          "live-device-cleanup",
+          "operate",
+        ].includes(name)
+      ) {
+        const installed = steps.findIndex((step) =>
+          String(step.run).includes("live-device-evidence.ts install "),
+        );
+        const exposed = steps.findIndex((step) => {
+          const env = object(step.env ?? {});
+          return Boolean(
+            env.FORTIPI_ADMIN_TOKEN || env.CLOUDFLARE_API_TOKEN || env.CLOUDFLARE_ACCOUNT_ID,
+          );
+        });
+        assert.ok(
+          installed >= 0 && exposed > installed,
+          "Own credential-free install must precede every protected device call",
+        );
       }
       if (name === "readiness" || name === "final-readiness") {
         assert.ok(object(object(job.strategy).matrix).target);
@@ -76,6 +125,47 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
   };
   assertJobs(release);
   assertJobs(deploy);
+  const assertDeviceDag = (workflow: Record<string, unknown>) => {
+    const jobs = object(workflow.jobs);
+    assert.equal(object(jobs["initial-installed-deployment"]).needs, "proofs");
+    assert.equal(object(jobs["live-device-a"]).needs, "initial-installed-deployment");
+    assert.equal(object(jobs["live-device-b"]).needs, "live-device-a");
+    assert.deepEqual(object(jobs["live-device-cleanup"]).needs, [
+      "initial-installed-deployment",
+      "live-device-a",
+      "live-device-b",
+    ]);
+    assert.match(String(object(jobs["live-device-cleanup"]).if), /always\(\)/);
+    assert.deepEqual(object(jobs.operate).needs, [
+      "proofs",
+      "initial-installed-deployment",
+      "live-device-a",
+      "live-device-b",
+      "live-device-cleanup",
+    ]);
+    for (const phase of [
+      "proofs",
+      "initial-installed-deployment",
+      "live-device-a",
+      "live-device-b",
+      "live-device-cleanup",
+    ])
+      assert.ok(String(object(jobs.operate).if).includes(`needs.${phase}.result == 'success'`));
+  };
+  assertDeviceDag(deploy);
+  const premature = structuredClone(deploy);
+  const deviceJob = object(object(premature.jobs)["live-device-a"]);
+  assert.ok(Array.isArray(deviceJob.steps));
+  object(deviceJob.steps[0]).env = { FORTIPI_ADMIN_TOKEN: "synthetic-test-value" };
+  assert.throws(() => assertJobs(premature), /credential-free install/);
+  const missingCleanup = structuredClone(deploy);
+  object(object(missingCleanup.jobs).operate).needs = [
+    "proofs",
+    "initial-installed-deployment",
+    "live-device-a",
+    "live-device-b",
+  ];
+  assert.throws(() => assertDeviceDag(missingCleanup));
   const fault = structuredClone(release);
   object(object(fault.jobs).readiness).environment = "$" + "{{ matrix.target.target.slot }}";
   assert.throws(() => assertJobs(fault), /paid-validation/);

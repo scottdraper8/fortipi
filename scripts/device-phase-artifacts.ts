@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { repository } from "./build-workspaces.ts";
@@ -605,6 +606,7 @@ async function memberSet(
   assert.deepEqual(Object.keys(contents.members).sort(), Object.keys(bounds).sort());
   for (const [name, limit] of Object.entries(bounds)) {
     const bytes = contents.members[name];
+    assert.ok(bytes);
     assert.ok(
       Buffer.isBuffer(bytes) && bytes.length > 0 && bytes.length <= limit,
       "Device member byte bound",

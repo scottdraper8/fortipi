@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from "node:crypto";
 import type { CredentialRef } from "../packages/fortipi-contract/src/generated/types.ts";
 import type { IssuedRole } from "../tests/clients/roles.ts";
@@ -156,6 +157,7 @@ export function sealLiveDeviceRole(input: {
     const issued = role(options.role, bound);
     const context = aad(bound);
     plaintext = Buffer.from(JSON.stringify(issued));
+    assert.ok(plaintext);
     assert.ok(plaintext.length > 0 && plaintext.length <= payloadBound);
     const nonce = randomBytes(12);
     const secret = options.key;
@@ -218,6 +220,7 @@ export function openLiveDeviceRole(input: {
     decipher.setAuthTag(tag);
     decrypted = decipher.update(ciphertext);
     plaintext = Buffer.concat([decrypted, decipher.final()]);
+    assert.ok(plaintext);
     assert.ok(plaintext.length > 0 && plaintext.length <= payloadBound);
     const text = plaintext.toString("utf8");
     assert.ok(Buffer.from(text).equals(plaintext));

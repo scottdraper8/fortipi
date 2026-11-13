@@ -44,6 +44,7 @@ import {
 import {
   actualCapsule,
   candidate,
+  deviceProducerJobs,
   directoryArchive,
   fact,
   httpFixture,
@@ -921,8 +922,8 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
       ],
     },
     access: { path: "access-preflight.yml", jobs: ["cloudflare", "npm"] },
-    live: { path: "deploy.yml", jobs: ["operate"] },
-    independent: { path: "deploy.yml", jobs: ["operate"] },
+    live: { path: "deploy.yml", jobs: deviceProducerJobs },
+    independent: { path: "deploy.yml", jobs: deviceProducerJobs },
     readiness: { path: "deploy.yml", jobs: ["operate"] },
   };
   const runs = new Map<
@@ -1124,6 +1125,23 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
       ),
       /required Free or paid target/,
     );
+    const originalJobs = rules.live.jobs;
+    rules.live.jobs = originalJobs.filter((name) => name !== "live-device-cleanup");
+    try {
+      await assert.rejects(
+        verifyReleaseGates(
+          c,
+          hash,
+          candidateRef,
+          proofs,
+          githubRequest(undefined, server.transport),
+          now,
+        ),
+        /Missing\/duplicate required job/,
+      );
+    } finally {
+      rules.live.jobs = originalJobs;
+    }
   } finally {
     await server.close();
     for (const packet of packets.values()) await packet.close();

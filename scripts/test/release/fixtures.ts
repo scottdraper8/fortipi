@@ -38,6 +38,13 @@ import {
 
 export const source = "a".repeat(40);
 export const workflow = "fixture workflow source\n";
+export const deviceProducerJobs = [
+  "initial-installed-deployment",
+  "live-device-a",
+  "live-device-b",
+  "live-device-cleanup",
+  "operate",
+];
 export function fact(path = "result.json", bytes: Uint8Array = Buffer.from("{}")): FileRecord {
   return { path, size: bytes.length, mode: 0o600, sha256: sha256(bytes) };
 }

@@ -38,7 +38,14 @@ import {
   saveJson,
   sha256,
 } from "../../verify-release-gates.ts";
-import { candidate, directoryArchive, discard, httpFixture, temporary } from "./fixtures.ts";
+import {
+  candidate,
+  deviceProducerJobs,
+  directoryArchive,
+  discard,
+  httpFixture,
+  temporary,
+} from "./fixtures.ts";
 
 const v0 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const v1 = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
@@ -588,17 +595,15 @@ async function retained(fault = "") {
       value = { encoding: "base64", content: workflow.toString("base64") };
     else if (route.includes("/jobs?"))
       value = {
-        total_count: 1,
-        jobs: [
-          {
-            id: 91,
-            name: "operate",
-            status: "completed",
-            conclusion: "success",
-            started_at: new Date(now - 5000).toISOString(),
-            completed_at: common.updated_at,
-          },
-        ],
+        total_count: deviceProducerJobs.length,
+        jobs: deviceProducerJobs.map((name, index) => ({
+          id: 91 + index,
+          name,
+          status: "completed",
+          conclusion: "success",
+          started_at: new Date(now - 5000).toISOString(),
+          completed_at: common.updated_at,
+        })),
       };
     else if (route.endsWith("/actions/artifacts/83"))
       value = {

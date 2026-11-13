@@ -5,6 +5,10 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { verifyPrepared } from "../packages/fortipi-cli/dist/assets.js";
 import type { WranglerPort } from "../packages/fortipi-cli/dist/wrangler.js";
+import {
+  assertDeviceEvidenceData,
+  type DeviceEvidenceData,
+} from "../tests/clients/device-observer.ts";
 import type { ApplicationRecoveryBridge } from "../tests/clients/platform-recovery.ts";
 import { validateApplicationRecoveryCheckpoints } from "./application-recovery-checkpoints.ts";
 import {
@@ -49,6 +53,7 @@ export interface LiveRecoveryEvidenceInput {
   out: string;
   deploymentPath: string;
   proofsPath: string;
+  devicesPath?: string;
 }
 export interface LiveRecoveryEvidenceResult {
   currentReceiptPath: string;
@@ -200,6 +205,7 @@ export async function runLiveRecoveryEvidence(
       "installationPath",
       "out",
       "proofsPath",
+      ...(bound.devicesPath ? ["devicesPath"] : []),
     ]);
     for (const path of Object.values(bound)) assert.ok(isAbsolute(path) && resolve(path) === path);
     for (const path of [
@@ -226,6 +232,10 @@ export async function runLiveRecoveryEvidence(
     const original = await canonicalFile(bound.deploymentPath);
     assertDeployment(original.value);
     const before = original.value;
+    const devices = bound.devicesPath
+      ? ((await canonicalFile(bound.devicesPath)).value as unknown as DeviceEvidenceData)
+      : undefined;
+    if (devices) assertDeviceEvidenceData(devices, before);
     assert.equal(before.candidateSha256, loaded.hash);
     assert.equal(before.sourceCommit, loaded.candidate.sourceCommit);
     assert.equal(before.accountBindingSha256, target.accountBindingSha256);
@@ -364,6 +374,7 @@ export async function runLiveRecoveryEvidence(
         bound.out,
         bound.deploymentPath,
         { checkpointDirectory, coordinator: { mode: "perform", bridge }, forbiddenValues },
+        devices,
       );
       assert.ok(confirmed?.status === "operation-confirmed" && qualified?.status === "qualified");
       const proofFile = await canonicalFile(
@@ -499,6 +510,7 @@ export async function runLiveRecoveryEvidence(
             },
             forbiddenValues,
           },
+          devices,
         );
         assert.ok(delivered);
         const originalRecord = originalProof.value as ApplicationRecoveryProof;

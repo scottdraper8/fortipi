@@ -26,7 +26,7 @@ import {
   saveJson,
   sha256,
 } from "../../verify-release-gates.ts";
-import { candidate, directoryArchive, httpFixture } from "./fixtures.ts";
+import { candidate, deviceProducerJobs, directoryArchive, httpFixture } from "./fixtures.ts";
 
 // Synthetic IDs/provider result test local binding only; no actual recovery claim.
 const candidateSha256 = sha256("checkpoint candidate");
@@ -263,17 +263,15 @@ async function fixture(t: TestContext, mode: "perform" | "verify-existing") {
         value = { encoding: "base64", content: workflow.toString("base64") };
       else if (url.includes("/jobs?"))
         value = {
-          total_count: 1,
-          jobs: [
-            {
-              id: 91,
-              name: "operate",
-              status: "completed",
-              conclusion: "success",
-              started_at: new Date(now - 5000).toISOString(),
-              completed_at: run.updated_at,
-            },
-          ],
+          total_count: deviceProducerJobs.length,
+          jobs: deviceProducerJobs.map((name, index) => ({
+            id: 91 + index,
+            name,
+            status: "completed",
+            conclusion: "success",
+            started_at: new Date(now - 5000).toISOString(),
+            completed_at: run.updated_at,
+          })),
         };
       else if (url.endsWith("/actions/artifacts/83"))
         value = {

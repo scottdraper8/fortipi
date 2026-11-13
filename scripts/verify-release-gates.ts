@@ -176,6 +176,13 @@ export const liveClaims = [
   "public-clients",
   "infrastructure-boundaries",
 ] as const;
+const deploymentJobs = [
+  "initial-installed-deployment",
+  "live-device-a",
+  "live-device-b",
+  "live-device-cleanup",
+  "operate",
+];
 const policy: Record<GateKind, { workflow: string; jobs: string[]; hours: number }> = {
   candidate: { workflow: "release.yml", jobs: ["candidate"], hours: 24 },
   integrated: { workflow: "ci.yml", jobs: ["policy-and-integration"], hours: 24 },
@@ -185,8 +192,16 @@ const policy: Record<GateKind, { workflow: string; jobs: string[]; hours: number
     hours: 24,
   },
   access: { workflow: "access-preflight.yml", jobs: ["cloudflare", "npm"], hours: 24 },
-  live: { workflow: "deploy.yml", jobs: ["operate"], hours: 6 },
-  independent: { workflow: "deploy.yml", jobs: ["operate"], hours: 6 },
+  live: {
+    workflow: "deploy.yml",
+    jobs: deploymentJobs,
+    hours: 6,
+  },
+  independent: {
+    workflow: "deploy.yml",
+    jobs: deploymentJobs,
+    hours: 6,
+  },
   readiness: { workflow: "deploy.yml", jobs: ["operate"], hours: 0.25 },
 };
 export function object(value: unknown): Record<string, unknown> {

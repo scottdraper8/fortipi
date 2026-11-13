@@ -557,6 +557,7 @@ export async function retainEvidence(
   kind: "live" | "independent",
   readinessOut: string,
   recovery?: { factsPath: string; currentReceiptPath: string; proofsPath: string },
+  devicesPath?: string,
 ): Promise<void> {
   const loaded = await loadWorkflowCandidate(candidatePath);
   const child = await readJson(resolve(claimsDirectory, "gate.json"));
@@ -581,6 +582,24 @@ export async function retainEvidence(
       request: githubRequest(process.env.GITHUB_TOKEN),
     });
   else assertObservedDeployment(child.deployments, deployment);
+  const devices = devicesPath
+    ? await (async () => {
+        const helpers = await import("./live-device-evidence.ts");
+        const { currentDeviceJobContext } = await import("./device-phase-artifacts.ts");
+        const result = await helpers.authenticateDeviceEvidence({
+          loaded,
+          context: currentDeviceJobContext(),
+          deployment,
+        });
+        const bytes = await regularBytes(devicesPath, 1_048_576);
+        assert.equal(bytes.toString("utf8"), `${canonicalJson(result.devices)}\n`);
+        const row = child.claims.find((claim) => claim.id === "cloud-local-portability");
+        assert.ok(row && row.outcome === "pass");
+        const record = object(await readJson(resolve(claimsDirectory, row.result.path)));
+        assert.deepEqual(object(record.observation).references, result.devices.references);
+        return { helpers, result };
+      })()
+    : undefined;
   await mkdir(out, { mode: 0o700 });
   await cp(claimsDirectory, resolve(out, "claims"), {
     recursive: true,
@@ -593,6 +612,8 @@ export async function retainEvidence(
     await cp(recovery.currentReceiptPath, resolve(out, "deployment.provider-version.json"));
     await cp(recovery.factsPath, resolve(out, "recovery-link.json"));
   }
+  if (devices)
+    await devices.helpers.retainDevicePhaseBytes(resolve(out, "device-phases"), devices.result);
   const sourceProducer = await producer(repository, true, "deploy.yml");
   const result: GateReceipt = {
     ...child,
@@ -785,6 +806,7 @@ if (import.meta.main) {
         a.previous,
       );
     else if (operation === "evidence") {
+      assert.ok(a.devices, "Actual device phase evidence is required");
       const { runLiveRecoveryEvidence } = await import("./live-recovery-evidence.ts");
       await runLiveRecoveryEvidence({
         candidatePath: resolve(string(a.candidate)),
@@ -793,8 +815,11 @@ if (import.meta.main) {
         out: resolve(string(a.out)),
         deploymentPath: resolve(string(a.deployment)),
         proofsPath: resolve(string(a.proofs)),
+        ...(a.devices ? { devicesPath: resolve(string(a.devices)) } : {}),
       });
     } else if (operation === "retain" || operation === "retain-operation") {
+      if (operation === "retain-operation")
+        assert.ok(a.devices, "Actual device phase evidence is required");
       const kind =
         operation === "retain-operation"
           ? process.env.OPERATION === "deploy"
@@ -817,6 +842,7 @@ if (import.meta.main) {
               proofsPath: resolve(string(a.proofs)),
             }
           : undefined,
+        a.devices ? resolve(string(a.devices)) : undefined,
       );
     } else if (operation === "prepare-readiness")
       await prepareReadiness(
