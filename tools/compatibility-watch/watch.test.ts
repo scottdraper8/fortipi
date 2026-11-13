@@ -81,6 +81,53 @@ test("matching reference succeeds; recursive code drift at the same version requ
   assert.match(summary(result), /runtime: review-required/);
 });
 
+test("Durable Object code-update and lifecycle policy edits independently require review", async (t) => {
+  const durable = sources.find((item) => item.id === "durable-objects-policy");
+  assert.ok(durable);
+  const policies = [
+    "src/content/docs/durable-objects/deployments/durable-objects-code-updates.mdx",
+    "src/content/docs/durable-objects/concepts/durable-object-lifecycle.mdx",
+  ];
+  const observed = (changed?: string) =>
+    observer(async (path) => {
+      if (path.includes("git/ref/heads/")) return structuredClone(fixture.head);
+      const prefix = "repos/cloudflare/cloudflare-docs/contents/";
+      assert.ok(path.startsWith(prefix));
+      const file = path.slice(prefix.length).split("?")[0];
+      assert.ok(file && durable.paths.includes(file));
+      return policies.includes(file)
+        ? { path: file, type: "file", sha: (file === changed ? "b" : "a").repeat(40) }
+        : [{ name: "limits.mdx", path: `${file}/limits.mdx`, type: "file", sha: "a".repeat(40) }];
+    });
+  const reviewed: Baseline = {
+    format: 1,
+    entries: {
+      [durable.id]: {
+        catalogSha256: hash(durable),
+        snapshot: await observed()(durable),
+        pins: {},
+        reviewedAt: "2026-11-11T00:00:00Z",
+        reviewNote: "Synthetic policy reference; no actual runtime or deployment claim.",
+      },
+    },
+  };
+  assert.equal(exitCode(await check(reviewed, observed(), pins, [durable])), 0);
+  for (const policy of policies) {
+    await t.test(policy, async () => {
+      // Only this file's identity changes; the head and the other policy paths stay fixed.
+      const result = await check(reviewed, observed(policy), pins, [durable]);
+      assert.equal(result[0]?.outcome, "review-required", policy);
+      assert.equal(result[0]?.classification, "unknown");
+      assert.equal(exitCode(result), 1);
+      assert.ok(
+        result[0]?.links.includes(
+          `https://github.com/cloudflare/cloudflare-docs/tree/${fixture.head.object.sha}/${policy}`,
+        ),
+      );
+    });
+  }
+});
+
 test("release-note edits and moved tags require review; branch targets resolve to actual tag commits", async () => {
   const release: Source = { ...source, paths: [], ref: "" };
   const observed = await observer(async (path) =>
