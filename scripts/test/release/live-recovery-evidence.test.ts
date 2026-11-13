@@ -691,7 +691,27 @@ async function controlled() {
           ],
           "Exact ec6 child path contract before any public read",
         );
-        for (const path of copiedRecords) await regularBytes(path);
+        // This in-process observer sees the frozen parent cache before IPC serialization.
+        assert.ok(
+          Object.isFrozen(result) &&
+            Object.isFrozen(result.before) &&
+            Object.isFrozen(result.after),
+        );
+        for (const [index, record] of [result.before, result.after].entries()) {
+          const bytes = await regularBytes(record.path);
+          const original = await regularBytes(
+            resolve(
+              root,
+              "proofs/original/payload/claims/application-recovery",
+              index === 0 ? "application-before.json" : "application-after.json",
+            ),
+          );
+          assert.deepEqual(bytes, original);
+          assert.equal(bytes.length, record.size);
+          assert.equal(sha256(bytes), record.sha256);
+          assert.equal((await lstat(record.path)).mode & 0o777, record.mode);
+          assert.equal(record.mode, 0o600);
+        }
       }
       const files = await inventory(out);
       const result = files[0];

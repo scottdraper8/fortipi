@@ -451,6 +451,14 @@ export async function runLiveRecoveryEvidence(
             };
           }),
         );
+        const beforeCopy = checkpointCopies[0]?.record;
+        const afterCopy = checkpointCopies[1]?.record;
+        assert.ok(beforeCopy && afterCopy);
+        const cachedReply = Object.freeze({
+          ...result,
+          before: Object.freeze(beforeCopy),
+          after: Object.freeze(afterCopy),
+        });
         const originalProof = await canonicalFile(
           resolve(proof.directory, "claims/provider-recovery", applicationRecoveryProofFile),
         );
@@ -485,10 +493,7 @@ export async function runLiveRecoveryEvidence(
                     assert.equal((await lstat(record.path)).mode & 0o777, record.mode);
                     assert.deepEqual(await regularBytes(record.path, maximum), bytes);
                   }
-                  const before = checkpointCopies[0]?.record;
-                  const after = checkpointCopies[1]?.record;
-                  assert.ok(before && after);
-                  return { ...result, before, after };
+                  return cachedReply;
                 },
               },
             },
