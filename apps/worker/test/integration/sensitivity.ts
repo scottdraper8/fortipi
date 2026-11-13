@@ -9,7 +9,11 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { parse } from "@babel/parser";
 import { build } from "esbuild";
-import { loadCandidate } from "../../../../scripts/prepare-release.ts";
+import {
+  type CandidateReadContext,
+  loadCandidate,
+  resolveCandidateReadContext,
+} from "../../../../scripts/prepare-release.ts";
 import { provision } from "./fixture-state.ts";
 import { rejectedLocalBytes } from "./local-bytes.ts";
 import { concurrentAdmissionBoundary } from "./oracles.ts";
@@ -424,8 +428,12 @@ export async function exerciseMutation(kind: Kind): Promise<MutationResult> {
     await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 }
-export async function runSensitivity(candidate: string, out: string): Promise<MutationResult[]> {
-  const loaded = await loadCandidate(candidate);
+export async function runSensitivity(
+  candidate: string,
+  out: string,
+  context?: CandidateReadContext,
+): Promise<MutationResult[]> {
+  const loaded = await loadCandidate(candidate, context);
   const git = async (...args: string[]) =>
     (await promisify(execFile)("git", args, { cwd: repository })).stdout.trim();
   assert.equal(await git("rev-parse", "HEAD"), loaded.candidate.sourceCommit);
@@ -463,7 +471,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       const candidate = at("--candidate"),
         out = at("--out");
       assert.ok(candidate && out);
-      const results = await runSensitivity(resolve(candidate), resolve(out));
+      const results = await runSensitivity(
+        resolve(candidate),
+        resolve(out),
+        await resolveCandidateReadContext(resolve(candidate)),
+      );
       if (results.length !== 5 || results.some((result) => result.outcome !== "killed"))
         process.exitCode = 1;
     })

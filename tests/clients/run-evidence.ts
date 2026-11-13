@@ -263,11 +263,13 @@ export async function runEvidence(
           runSensitivity(
             candidate: string,
             out: string,
+            context?: CandidateReadContext,
           ): Promise<{ id: string; outcome: string }[]>;
         };
         const mutations = await port.runSensitivity(
           input.candidateManifest,
           resolve(input.out, "sensitivity"),
+          context,
         );
         assert.deepEqual(
           mutations.map((row) => row.id).sort(),
