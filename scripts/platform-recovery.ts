@@ -9,7 +9,7 @@ import {
   observeDeployment,
   type TargetDescriptor,
 } from "./deploy-smoke.ts";
-import { loadCandidate } from "./prepare-release.ts";
+import { loadWorkflowCandidate } from "./prepare-release.ts";
 import {
   assertDeployment,
   canonicalJson,
@@ -137,7 +137,7 @@ async function coordinate(
   digest(input.candidateSha256);
   assertTarget(input.target);
   assertDeployment(input.before);
-  const { candidate, hash: candidateHash } = await loadCandidate(input.candidatePath);
+  const { candidate, hash: candidateHash } = await loadWorkflowCandidate(input.candidatePath);
   assert.equal(candidateHash, input.candidateSha256);
   assert.equal(
     candidate.publishable,
@@ -185,7 +185,7 @@ async function coordinate(
     await privilegedCheckout(candidate);
     equal(await verifyPrepared(prepared), config);
     assert.equal(sha256(await regularBytes(resolve(prepared, "wrangler.json"))), configSha256);
-    assert.equal((await loadCandidate(input.candidatePath)).hash, candidateHash);
+    assert.equal((await loadWorkflowCandidate(input.candidatePath)).hash, candidateHash);
   };
   const observation = async (versionId: string) =>
     observeDeployment(

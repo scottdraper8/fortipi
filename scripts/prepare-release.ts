@@ -1261,6 +1261,15 @@ export async function resolveCandidateReadContext(
   return undefined;
 }
 
+/** Workflow operation callers require an explicit authenticated artifact context.
+ * Local source qualification continues to use the independent clean-source plan. */
+export async function loadWorkflowCandidate(path: string) {
+  const context = await resolveCandidateReadContext(path);
+  if (process.env.GITHUB_ACTIONS === "true")
+    assert.ok(context, "Workflow candidate artifact reference required before payload access");
+  return loadCandidate(path, context);
+}
+
 async function authenticateCandidateRead(
   loaded: { candidate: CandidateManifest; hash: string },
   context?: CandidateReadContext,
@@ -1877,7 +1886,7 @@ export async function publishCandidate(
   readinessDirectory: string,
   priorJournal?: string,
 ): Promise<void> {
-  const { candidate, hash, directory } = await loadCandidate(path);
+  const { candidate, hash, directory } = await loadWorkflowCandidate(path);
   assert.equal(
     confirmation,
     `publish ${candidate.tag} ${candidate.sourceCommit} ${candidate.scope}`,

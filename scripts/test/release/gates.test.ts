@@ -330,6 +330,20 @@ test("only trusted candidate setup receives GitHub context and ordinary client c
   });
 });
 
+test("workflow operations refuse a missing artifact reference before opening candidate payloads", async () => {
+  const code = `
+    const {loadWorkflowCandidate}=await import(${JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href)});
+    try { await loadWorkflowCandidate('deliberately-absent-candidate.json'); process.exitCode=2; }
+    catch(error) { if(!String(error.message).includes('artifact reference required'))throw error; console.log('reference-required-before-file-read'); }`;
+  const result = await execute(process.execPath, ["--input-type=module", "-e", code], repository, {
+    PATH: process.env.PATH,
+    GITHUB_ACTIONS: "true",
+    GITHUB_JOB: "operate",
+  });
+  assert.equal(result.code, 0, result.stdout);
+  assert.equal(result.stdout.trim(), "reference-required-before-file-read");
+});
+
 test("real HTTP GitHub verification binds current attempt, paginated jobs, workflow bytes and independent archive digest", async () => {
   const c = candidate();
   const now = Date.now();
