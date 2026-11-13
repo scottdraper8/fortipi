@@ -8233,18 +8233,7 @@
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/zod@4.6.7; Sigstore transparency verification required at release"
     }
   },
-  "exemptions": {
-    "miniflare@5.20261110.2-beta": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-13T13:37:00.282Z",
-      "integrity": "sha512-vzUwcal5OtR/1nr5cmjCbZSrsR3QRA1cDnRUDVgET17HeDkdpQNG2QxeIkuHFLyszjdBqme59w8Nrrj4FkuFsQ=="
-    },
-    "wrangler@4.161.0": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-13T13:40:34.590Z",
-      "integrity": "sha512-yOHZUYEq9AP7vutWmkCADzCKAH9ynfvZdoKJRIGTzkiailf9/L+jhT7WRb+9p6jRDtuBXVFtCzLo7kGAcGw+pA=="
-    }
-  },
+  "exemptions": {},
   "advisory": {
     "checkedAt": "2026-11-12T20:41:09.172Z",
     "identities": 381,
