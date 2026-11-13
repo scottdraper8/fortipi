@@ -31,6 +31,97 @@ async function request(
   }
 }
 
+async function analyticsAccess(account: string, token: string): Promise<void> {
+  const nodes = [
+    "workersInvocationsAdaptive",
+    "durableObjectsInvocationsAdaptiveGroups",
+    "durableObjectsPeriodicGroups",
+  ] as const;
+  const query = `query FortiPiInfrastructureAccess($account: string!) {
+    viewer { accounts(filter: { accountTag: $account }) { accountTag settings {
+      workersInvocationsAdaptive { enabled }
+      durableObjectsInvocationsAdaptiveGroups { enabled }
+      durableObjectsPeriodicGroups { enabled }
+    } } }
+  }`;
+  function fail(
+    kind:
+      | "http-denied"
+      | "unavailable"
+      | "response-invalid"
+      | "response-too-large"
+      | "graphql-rejected"
+      | "field-unavailable"
+      | "account-mismatch"
+      | "dataset-disabled",
+  ): never {
+    throw new AccessError(`Infrastructure analytics: ${kind}`);
+  }
+  const object = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  try {
+    const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, variables: { account } }),
+      redirect: "error",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (response.status !== 200) {
+      void response.body?.cancel().catch(() => {});
+      fail(response.status === 401 || response.status === 403 ? "http-denied" : "unavailable");
+    }
+    if (!response.body) fail("response-invalid");
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    try {
+      for (;;) {
+        const part = await reader.read();
+        if (part.done) break;
+        length += part.value.byteLength;
+        if (length > 2_000_000) fail("response-too-large");
+        chunks.push(part.value);
+      }
+    } finally {
+      void reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(Buffer.concat(chunks, length).toString("utf8"));
+    } catch {
+      fail("response-invalid");
+    }
+    if (!object(value)) fail("response-invalid");
+    if (value.errors !== undefined && value.errors !== null) {
+      if (!Array.isArray(value.errors) || value.errors.length > 0) fail("graphql-rejected");
+    }
+    const data = value.data;
+    if (!object(data) || !object(data.viewer)) fail("field-unavailable");
+    const accounts = data.viewer.accounts;
+    if (!Array.isArray(accounts) || accounts.length !== 1 || !object(accounts[0]))
+      fail("account-mismatch");
+    const selected = accounts[0];
+    if (selected.accountTag !== account) fail("account-mismatch");
+    const settings = selected.settings;
+    if (!object(settings)) fail("field-unavailable");
+    for (const node of nodes) {
+      const setting = settings[node];
+      if (!object(setting) || typeof setting.enabled !== "boolean") fail("field-unavailable");
+      if (!setting.enabled) fail("dataset-disabled");
+    }
+  } catch (error) {
+    if (error instanceof AccessError) throw error;
+    fail("unavailable");
+  }
+  console.log("Infrastructure analytics datasets: enabled");
+}
+
 async function cloudflare(): Promise<void> {
   const account = required("CLOUDFLARE_ACCOUNT_ID");
   if (!/^[a-fA-F0-9]{32}$/.test(account)) {
@@ -53,6 +144,7 @@ async function cloudflare(): Promise<void> {
     }
     console.log(`${label}: verified`);
   }
+  await analyticsAccess(account, token);
   console.log(`Account binding SHA-256: ${createHash("sha256").update(account).digest("hex")}`);
   console.log("Write/deploy permissions will be verified by the actual deployment.");
 }
