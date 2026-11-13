@@ -399,6 +399,8 @@ test("missing asset input is explicit and deployment receipts reject ambiguous o
 });
 
 test("actual pinned Wrangler is externally resolved; child role environments exclude application/provider identities", async (t) => {
+  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(manifest.engines.node, "26.13.1");
   const root = await temp(t);
   assert.match(await wranglerBin(), /wrangler[/\\]bin[/\\]wrangler\.js$/);
   // Bin resolution verifies the installed exact package version without executing

@@ -9,7 +9,9 @@
     "workspace": { "kind": "computer" },
     "execution": { "kind": "native", "executorId": "my-device", "trust": "host" },
     "routing": { "kind": "explicit", "targetIds": ["my-device"] },
-    "models": [{ "providerId": "cloudflare", "modelId": "@cf/meta/llama-3.1-8b-instruct" }],
+    "models": [
+      { "providerId": "cloudflare", "modelId": "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }
+    ],
     "infrastructure": {
       "version": 1,
       "profile": "free",

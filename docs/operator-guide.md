@@ -10,6 +10,14 @@ The operator file is exactly `{schemaVersion:1,deployment:{name,origin,accountId
 
 Provider selections use `auth:{kind:"secretRef",secretRef:"PROVIDER_SECRET"}` for API keys, or `auth:{kind:"oauth",providerId:"openai"}` for OAuth. Workers AI uses the AI binding. OpenAI Codex is a distinct OAuth-only provider. Custom gateways require a reviewed credential-routing contract. Model usage budgets are not infrastructure policy.
 
+The example uses Workers AI's catalog-listed
+[`@cf/meta/llama-3.3-70b-instruct-fp8-fast`](https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/).
+Recheck the provider catalog when choosing a model. Local validation accepts the
+configured model ID; the deployed protocol's Workers AI `available` flag observes
+the AI binding, not catalog support or successful inference. Setup readiness uses
+that metadata. Actual account availability, model calls and tool behavior require
+separate live verification.
+
 With the packaged assets, the deployment interface is:
 
 ```sh

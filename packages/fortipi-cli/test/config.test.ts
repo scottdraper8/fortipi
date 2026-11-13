@@ -8,6 +8,9 @@ import { config, example } from "./fixtures.ts";
 
 test("emitted Configuration schema validates independent workspace/model/execution choices and canonical Free bounds", async () => {
   const c = await config();
+  assert.deepEqual(c.runtime.models, [
+    { providerId: "cloudflare", modelId: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" },
+  ]);
   assert.deepEqual(c.runtime.infrastructure, freeInfrastructurePolicy);
   c.runtime.workspace = { kind: "local", executorId: "device-B", rootBindingId: "root-B" };
   c.runtime.models = [

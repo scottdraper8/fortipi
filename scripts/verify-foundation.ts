@@ -213,7 +213,7 @@ async function metadata(root: string): Promise<void> {
     assert.equal(manifest.license, "SEE LICENSE IN LICENSE");
     assert.equal(manifest.repository.directory, path);
     assert.equal(manifest.publishConfig.access, "public");
-    assert.equal(manifest.engines?.node, ">=26.13.1");
+    assert.equal(manifest.engines?.node, path === "packages/fortipi-cli" ? "26.13.1" : ">=26.13.1");
     for (const value of Object.values(manifest.exports))
       if (typeof value === "object" && value !== null) {
         const entry = value as { types: string; import: string };

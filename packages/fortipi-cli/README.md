@@ -1,7 +1,8 @@
 # FortiPi CLI
 
 Management CLI with a build-time producer for the genuine Worker bundle, contracts,
-templates, image-source context and original notices. Node 26.13.1 is required.
+templates, image-source context and original notices. Exactly Node 26.13.1 is
+supported, matching the CLI package engine and pinned Wrangler runtime guard.
 Missing producer inputs fail packaging; modified or incomplete installed assets
 fail before preparation/deployment. Cloud deployment, actual native Windows ACLs
 and independent installed offline qualification remain separate release gates.
@@ -14,6 +15,12 @@ Start from [the canonical example](templates/operator-config.example.json), repl
 fortipi init --from operator-source.json --config operator.json --non-interactive
 fortipi config validate --config operator.json --json
 ```
+
+The example selects Workers AI
+[`@cf/meta/llama-3.3-70b-instruct-fp8-fast`](https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/).
+Check the current provider catalog before deployment. Configuration validation
+and deployed model `available` metadata check configuration/binding readiness;
+they do not prove that model is available to your account or that inference works.
 
 For guided configuration and setup from an attached terminal:
 

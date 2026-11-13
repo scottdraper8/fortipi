@@ -4,6 +4,11 @@ Use Node **26.13.1**, pnpm **12.18.0**, TypeScript **7.0.2** and Biome **2.6.6**
 
 Node [26.13.1](https://nodejs.org/en/blog/release/v26.13.1) is the [2026-11-11 security release](https://nodejs.org/en/blog/vulnerability/november-2026-security-releases) fixing HTTP/2, TLS/HTTPS and other runtime vulnerabilities. The official Darwin arm64 archive and signed SHA-256 list were verified using the active Node release key; bundled npm remains **11.20.0**, without a separate npm installation. Product minimum engines and exact build/asset/consumer guards require the patched host runtime. Historical image source-kit metadata and embedded image Node have separate recorded identities and security qualification.
 
+The management CLI advertises exactly Node **26.13.1**, matching its pinned
+Wrangler runtime guard. Other public packages retain their existing minimum
+engine policies; build, maintainer and installed-consumer checks remain exact.
+The CLI does not claim support for another Node release without qualification.
+
 The Worker uses `skipLibCheck: true`, matching [Cloudflare Agents' configuration](https://github.com/cloudflare/agents/blob/main/docs/agents/configuration.md#typescript-configuration). The pinned Pi/Computer declaration graph brings Node globals into Workers types and otherwise produces duplicate-library diagnostics. The tools project also uses this setting because the pinned schema generator's parser declarations conflict internally with `exactOptionalPropertyTypes`. This skips declaration-file internals, including any future local `.d.ts`, while TypeScript still checks maintained `.ts` implementation, generated contract source and boundary fixtures against the real imported types. Root and public package projects retain declaration checks. Keep actual runtime/bundle validation and negative consumer fixtures; this setting cannot establish that Node APIs work in Workers or validate dependency declaration internals.
 
 Release's registry verification uses Node-bundled npm **11.20.0** at its declared path/version. This is an external verification tool, not another product dependency. Reserved scope `fortipi-ci-test` is always nonpublishable: it may build/test the actual PR/feature SHA, while actual-scope release operations retain all trusted-main/tag/source/API gates. Synthetic receipts can never authorize deployment/publication.

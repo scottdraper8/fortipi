@@ -108,7 +108,7 @@ async function harness(
     agentId: "agent-first",
     name: "first-agent",
     configVersion: 1,
-    model: { providerId: "cloudflare", modelId: "@cf/meta/llama-3.1-8b-instruct" },
+    model: { providerId: "cloudflare", modelId: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" },
     status: "idle",
   };
   const protocol = (): Protocol => ({
@@ -467,7 +467,7 @@ test("interactive init uses an actual terminal; pipe/noninteractive inputs fail 
     "https://guided.example.workers.dev",
     "",
     "cloudflare",
-    "@cf/meta/llama-3.1-8b-instruct",
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     "local",
     "workspace-device",
     "workspace-root",
