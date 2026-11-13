@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import type { PrepareReceipt } from "../../../packages/fortipi-cli/dist/assets.js";
@@ -12,8 +12,14 @@ import {
   observeDeployment,
   type TargetDescriptor,
 } from "../../deploy-smoke.ts";
+import { operatorFreeDecision } from "../../operator-free-plan.ts";
 import { childEnvironment, execute } from "../../prepare-release.ts";
-import { object, readJson, sha256 } from "../../verify-release-gates.ts";
+import {
+  assertActualFreeDeployment,
+  object,
+  readJson,
+  sha256,
+} from "../../verify-release-gates.ts";
 import { candidate, discard, httpFixture, temporary } from "./fixtures.ts";
 
 test("protected metadata reader admits only the exact recovery namespace inventory and retains its request bound", async () => {
@@ -55,7 +61,7 @@ test("protected metadata reader admits only the exact recovery namespace invento
   }
 });
 
-test("actual CLI prepare plus HTTP version/rollout/configuration reads bind current Free identity and reject paid/split drift", {
+test("actual CLI prepare plus HTTP reads bind metadata while config-only Free stays unknown and paid/split drift fails", {
   timeout: 120000,
 }, async () => {
   const root = await temporary("fortipi-deployment-gate-");
@@ -66,6 +72,9 @@ test("actual CLI prepare plus HTTP version/rollout/configuration reads bind curr
   const operator = await readJson(
     resolve(repository, "packages/fortipi-cli/templates/operator-config.example.json"),
   );
+  object(object(object(operator).runtime).infrastructure).accountPlan = "free";
+  const operatorPath = resolve(root, "operator.json");
+  await writeFile(operatorPath, JSON.stringify(operator));
   const target: TargetDescriptor = {
     schemaVersion: 1,
     accountBindingSha256: sha256("a".repeat(32)),
@@ -80,7 +89,7 @@ test("actual CLI prepare plus HTTP version/rollout/configuration reads bind curr
       resolve(repository, "packages/fortipi-cli/dist/bin.js"),
       "prepare",
       "--config",
-      resolve(repository, "packages/fortipi-cli/templates/operator-config.example.json"),
+      operatorPath,
       "--directory",
       prepared,
       "--non-interactive",
@@ -205,6 +214,13 @@ test("actual CLI prepare plus HTTP version/rollout/configuration reads bind curr
     assert.equal(identity.publicConfigurationVersion, 0);
     assert.equal(identity.capabilities.loaders, false);
     assert.equal(identity.capabilities.containers, false);
+    assert.equal(
+      identity.capabilities.plan,
+      "unknown",
+      "A Free configuration is not plan provenance",
+    );
+    assert.equal(identity.planProvenance, undefined);
+    assert.throws(() => assertActualFreeDeployment(identity), /Actual Free target proof/);
     assert.equal(identity.assetManifestSha256, receipt.assetManifestSha256);
     assert.equal(JSON.stringify(identity).includes("synthetic-"), false);
     assert.equal(JSON.stringify(identity).includes("a".repeat(32)), false);
@@ -252,6 +268,36 @@ test("actual CLI prepare plus HTTP version/rollout/configuration reads bind curr
     );
     fault = "";
     assert.equal((await observe()).deploymentId, identity.deploymentId);
+    const decision = operatorFreeDecision();
+    assert.ok(decision);
+    // This branch supplies a controlled account-bound metadata port. It omits
+    // real account authentication, while retaining actual HTTP bodies/observer.
+    // The genuine hash-bound transport controls above remain unchanged.
+    const confirmed = await observeDeployment(
+      c,
+      sha256("candidate-fixture"),
+      { ...target, accountBindingSha256: decision.accountBindingSha256 },
+      prepared,
+      cli,
+      async (path) => {
+        const response = await server.transport(
+          `https://api.cloudflare.com/client/v4/accounts/controlled-account${path}`,
+          { headers: { Authorization: `Bearer ${cloudRole}` } },
+        );
+        assert.equal(response.status, 200);
+        const value = object(await response.json());
+        assert.equal(value.success, true);
+        return value.result;
+      },
+      server.transport,
+      adminRole,
+    );
+    assertActualFreeDeployment(confirmed);
+    assert.deepEqual(confirmed.planProvenance, decision);
+    assert.equal(confirmed.capabilities.plan, "free");
+    assert.equal(confirmed.workerVersionId, identity.workerVersionId);
+    assert.equal(confirmed.runtimeConfigSha256, identity.runtimeConfigSha256);
+    assert.equal(confirmed.planProvenance?.statementAt, null);
     assert.ok(observed.some((o) => o.path === "/v1/admin/configuration"));
     const saved = await readFile(resolve(prepared, "prepare-receipt.json"), "utf8");
     assert.equal(saved.includes(cloudRole), false);

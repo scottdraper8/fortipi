@@ -6,6 +6,11 @@ import { pathToFileURL } from "node:url";
 import { create as createTar } from "tar";
 import { repository } from "../../build-workspaces.ts";
 import {
+  operatorConfirmedFreePlan,
+  operatorFreeDecision,
+  operatorFreeStatement,
+} from "../../operator-free-plan.ts";
+import {
   assertEvidenceReceipt,
   evidenceProducer,
   execute,
@@ -15,6 +20,7 @@ import {
 } from "../../prepare-release.ts";
 import {
   type ArtifactReference,
+  assertActualFreeDeployment,
   assertDeployment,
   assertGate,
   assertSyntheticLocalGate,
@@ -931,12 +937,18 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
     { kind: GateKind; artifact: ArtifactReference; workflowId: number }
   >();
   runs.set(10, { kind: "candidate", artifact: candidateRef, workflowId: 1 });
+  const freeDecision = operatorFreeDecision();
+  assert.ok(freeDecision, "Intended-account Free decision must be bound before this fixture");
   const deployments: DeploymentIdentity[] = (["free", "cloud-js", "linux"] as const).map(
     (backend, index) => ({
       schemaVersion: 1,
       candidateSha256: hash,
       sourceCommit: source,
-      accountBindingSha256: sha256(`synthetic account ${index}`),
+      accountBindingSha256:
+        backend === "free"
+          ? freeDecision.accountBindingSha256
+          : sha256(`synthetic account ${index}`),
+      ...(backend === "free" ? { planProvenance: freeDecision } : {}),
       slot: index === 0 ? "production" : "paid-validation",
       workerName: `fortipi-${backend}`,
       origin: `https://fortipi-${backend}.example.workers.dev`,
@@ -1203,6 +1215,51 @@ test("receipt hashes and fixed freshness reject changed results, unavailable cla
     };
     d.versions = [{ versionId: d.workerVersionId, percentage: 100 }];
     assertDeployment(d);
+    assert.throws(() => assertActualFreeDeployment(d), /Free plan/);
+    const decision = operatorFreeDecision();
+    assert.ok(decision, "Intended-account Free decision must be bound before this fixture");
+    assert.equal(decision.statementAt, null, "Original assertion time must stay unknown");
+    assert.equal(decision.statementSha256, sha256(operatorFreeStatement));
+    const confirmed = {
+      ...d,
+      accountBindingSha256: decision.accountBindingSha256,
+      planProvenance: decision,
+    };
+    assertActualFreeDeployment(confirmed);
+    const foreign = sha256("foreign synthetic operator account");
+    assert.notEqual(foreign, decision.accountBindingSha256);
+    assert.equal(operatorConfirmedFreePlan(foreign), undefined);
+    for (const fault of [
+      "missing",
+      "foreign",
+      "superseded",
+      "statement",
+      "unknown",
+      "paid",
+    ] as const) {
+      const changed = structuredClone(confirmed);
+      if (fault === "missing") Reflect.deleteProperty(changed, "planProvenance");
+      else if (fault === "foreign") changed.accountBindingSha256 = foreign;
+      else if (fault === "superseded") changed.planProvenance.recordedAt = "2000-01-01T00:00:00Z";
+      else if (fault === "statement")
+        changed.planProvenance.statementSha256 = sha256("other statement");
+      else if (fault === "unknown") changed.capabilities.plan = "unknown";
+      else {
+        changed.backend = "cloud-js";
+        changed.capabilities = { plan: "paid", loaders: true, containers: false };
+      }
+      assert.throws(() => assertActualFreeDeployment(changed), Error, fault);
+    }
+    const returned = operatorConfirmedFreePlan(decision.accountBindingSha256);
+    assert.ok(returned);
+    returned.recordedAt = "2099-01-01T00:00:00Z";
+    assert.deepEqual(
+      operatorFreeDecision(),
+      decision,
+      "Returned data cannot change source authority",
+    );
+    assertActualFreeDeployment({ ...confirmed, checkedAt: new Date(Date.now() + 1).toISOString() });
+    assert.equal(confirmed.planProvenance.recordedAt, decision.recordedAt);
     assert.throws(
       () =>
         assertDeployment({ ...d, versions: [{ versionId: d.workerVersionId, percentage: 99 }] }),

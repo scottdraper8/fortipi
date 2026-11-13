@@ -20,6 +20,10 @@ import { assetPath } from "../packages/fortipi-cli/src/asset-manifest.ts";
 import { canonicalJson } from "../packages/fortipi-contract/dist/index.js";
 import { readArtifactZip } from "./artifact-zip.ts";
 import { repository } from "./build-workspaces.ts";
+import {
+  assertOperatorConfirmedFreePlan,
+  type OperatorConfirmedFreePlan,
+} from "./operator-free-plan.ts";
 
 export { canonicalJson };
 export const REPOSITORY = "scottdraper8/fortipi";
@@ -102,6 +106,7 @@ export interface DeploymentIdentity {
   runtimeConfigSha256: string;
   assetManifestSha256: string;
   publicConfigurationVersion: number;
+  planProvenance?: OperatorConfirmedFreePlan;
   capabilities: { plan: "unknown" | "free" | "paid"; loaders: boolean; containers: boolean };
   backend: "free" | "cloud-js" | "linux";
   imageDigest: string | null;
@@ -502,6 +507,7 @@ export function assertDeployment(value: unknown): asserts value is DeploymentIde
     "backend",
     "imageDigest",
     "checkedAt",
+    ...(Object.hasOwn(d, "planProvenance") ? ["planProvenance"] : []),
   ]);
   assert.equal(d.schemaVersion, 1);
   digest(d.candidateSha256);
@@ -525,6 +531,10 @@ export function assertDeployment(value: unknown): asserts value is DeploymentIde
   assert.ok(cap.plan === "unknown" || cap.plan === "free" || cap.plan === "paid");
   assert.equal(typeof cap.loaders, "boolean");
   assert.equal(typeof cap.containers, "boolean");
+  if (Object.hasOwn(d, "planProvenance")) {
+    assert.equal(cap.plan, "free");
+    assertOperatorConfirmedFreePlan(d.planProvenance, string(d.accountBindingSha256));
+  }
   assert.ok(["free", "cloud-js", "linux"].includes(string(d.backend)));
   if (d.backend === "free") {
     assert.equal(cap.loaders, false);
@@ -538,6 +548,13 @@ export function assertDeployment(value: unknown): asserts value is DeploymentIde
   if (d.backend === "linux") assert.match(string(d.imageDigest), /^sha256:[a-f0-9]{64}$/);
   else assert.equal(d.imageDigest, null);
   string(d.checkedAt);
+}
+/** Complements authenticated provider/workload evidence; config-only Free is insufficient. */
+export function assertActualFreeDeployment(value: DeploymentIdentity): void {
+  assertDeployment(value);
+  assert.equal(value.backend, "free");
+  assert.equal(value.capabilities.plan, "free", "Actual Free target proof remains required");
+  assertOperatorConfirmedFreePlan(value.planProvenance, value.accountBindingSha256);
 }
 export function assertGate(value: unknown): asserts value is GateReceipt {
   assertGateShape(value, true);
@@ -1034,8 +1051,7 @@ export async function verifyReleaseGates(
           assert.equal(d.sourceCommit, candidate.sourceCommit);
           assert.equal(d.assetManifestSha256, candidate.assetManifestSha256);
           if (d.backend === "linux") assert.ok(d.imageDigest, "Missing actual selected image");
-          if (d.backend === "free")
-            assert.equal(d.capabilities.plan, "free", "Actual Free target proof remains required");
+          if (d.backend === "free") assertActualFreeDeployment(d);
         }
       }
     }
@@ -1341,6 +1357,7 @@ async function currentReadinessObservation(
     assert.equal(d.candidateSha256, candidateHash);
     assert.equal(d.sourceCommit, candidate.sourceCommit);
     assert.equal(d.assetManifestSha256, candidate.assetManifestSha256);
+    if (d.backend === "free") assertActualFreeDeployment(d);
   }
   return { checkedAt, expiresAt, deployments: ready.deployments };
 }

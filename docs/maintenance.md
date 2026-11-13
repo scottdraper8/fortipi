@@ -105,3 +105,20 @@ result identity/time to release evidence. Exit 1/2 needs an explicit primary-sou
 review/disposition or repaired observation and rerun; never silently waive a
 failure or blindly replace the baseline. This standalone guard does not modify
 the release workflow or replace its pinned-lock, runtime, security or license gates.
+
+## Operator-confirmed Workers Free plan
+
+Recorded standing operator decision (normalized): **Workers Free until the user
+announces an upgrade.** Its original assertion timestamp is unknown. The private
+release record preserves that uncertainty as `statementAt: null`; `recordedAt`
+names record creation, never a provider billing observation or a refreshed
+assertion. The statement hash covers the normalized sentence in the private helper.
+
+Only the intended account's separately authenticated safe hash can activate this
+source record. A configuration/profile/backend label cannot confirm a plan or
+attest another account. On an announced upgrade, supersede/remove the record in
+trusted source before new release proofs; retain original historical artifacts
+without rewriting their hashes or times. Missing/foreign/superseded provenance
+cannot clear required Free evidence. An operator-confirmed plan still requires
+the existing authenticated provider deployment, actual workload and freshness
+proofs. No Billing permission, new secret, model budget or plan change is implied.

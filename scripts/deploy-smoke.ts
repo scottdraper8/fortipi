@@ -4,6 +4,7 @@ import { resolve, sep } from "node:path";
 import { operatorConfig } from "../packages/fortipi-cli/dist/config.js";
 import { validateRecoveryRetention } from "./application-recovery-retention.ts";
 import { repository } from "./build-workspaces.ts";
+import { operatorConfirmedFreePlan } from "./operator-free-plan.ts";
 import {
   childEnvironment,
   execute,
@@ -320,6 +321,8 @@ export async function observeDeployment(
     canonicalJson(config),
     "Current public configuration differs from prepared runtime",
   );
+  const planProvenance =
+    target.backend === "free" ? operatorConfirmedFreePlan(target.accountBindingSha256) : undefined;
   const result: DeploymentIdentity = {
     schemaVersion: 1,
     candidateSha256: candidateHash,
@@ -335,13 +338,9 @@ export async function observeDeployment(
     runtimeConfigSha256: sha256(canonicalJson(config)),
     assetManifestSha256: candidate.assetManifestSha256,
     publicConfigurationVersion: Number(publicConfig.version),
+    ...(planProvenance ? { planProvenance } : {}),
     capabilities: {
-      plan:
-        target.backend === "free"
-          ? object(config.infrastructure).accountPlan === "free"
-            ? "free"
-            : "unknown"
-          : "paid",
+      plan: target.backend === "free" ? (planProvenance ? "free" : "unknown") : "paid",
       loaders: target.backend === "cloud-js",
       containers: target.backend === "linux",
     },
