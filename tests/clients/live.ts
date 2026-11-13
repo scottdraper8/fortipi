@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { lstat, mkdir, realpath } from "node:fs/promises";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
   Conversation,
@@ -9,16 +11,32 @@ import type {
 import {
   canonicalJson,
   type DeploymentIdentity,
+  object,
+  regularBytes,
   sha256,
+  string,
 } from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
 import { publicAccess } from "./live-access.ts";
 import { publicRequestPressure } from "./live-pressure.ts";
 import { runLiveTaskControls } from "./live-task-controls.ts";
 import { runLiveWorkspace } from "./live-workspace.ts";
-import type { RecoveryWorkspaceCanary } from "./platform-recovery.ts";
+import {
+  type ApplicationRecoveryBridge,
+  type ExistingApplicationRecoveryBridge,
+  openRecoveryCanary,
+  type RecoveryWorkspaceCanary,
+  runApplicationRecovery,
+  runExistingApplicationRecovery,
+} from "./platform-recovery.ts";
 import { publicFlow } from "./public-flow.ts";
 import type { RoleContext } from "./roles.ts";
+
+/** Trusted inherited-IPC bridge only, separate from candidate read authority.
+ * This is never accepted from EvidenceInput, a descriptor or an env flag. */
+export type LiveRecoveryBridge =
+  | { mode: "perform"; bridge: ApplicationRecoveryBridge }
+  | { mode: "verify-existing"; bridge: ExistingApplicationRecoveryBridge };
 
 async function until(read: () => Promise<boolean>, timeout = 120000) {
   const end = Date.now() + timeout;
@@ -340,6 +358,140 @@ export async function liveContext(
           providerDeploymentId: deployment.deploymentId,
           authenticatedRuntimeConfigSha256: deployment.runtimeConfigSha256,
         },
+      };
+    },
+    async applicationRecovery(input: LiveRecoveryBridge, out: string) {
+      await mkdir(out, { recursive: true, mode: 0o700 });
+      const directory = await lstat(out);
+      assert.ok(directory.isDirectory() && !directory.isSymbolicLink());
+      assert.equal(directory.mode & 0o777, 0o700);
+      assert.equal(await realpath(out), out);
+      if (input.mode === "perform") {
+        assert.ok(workspaceCanary, "Actual independently verified Computer canary is required");
+        const pending = await openRecoveryCanary({
+          installed,
+          roles,
+          agentId: agent.agentId,
+          workspace: workspaceCanary,
+        });
+        const canary = await pending.seed();
+        return {
+          mode: input.mode,
+          ...(await runApplicationRecovery({
+            deployment,
+            canary,
+            client: pending.client,
+            out,
+            bridge: input.bridge,
+          })),
+        };
+      }
+      // Obtain original resource IDs only from the actual lineage bridge and
+      // hash-bound checkpoint under the agreed private directory. A new live
+      // agent's role cannot read the original canary; never widen it to '*'.
+      // The inherited protocol permits verifyExisting exactly once. Preserve
+      // that actual reply in memory for both scoping and the unchanged domain
+      // wrapper; a second transport call would fail its phase sequence.
+      const lineage = structuredClone(await input.bridge.verifyExisting());
+      assert.equal(lineage.status, "lineage-confirmed");
+      if (lineage.status !== "lineage-confirmed")
+        throw new Error("Original recovery lineage unavailable");
+      assert.deepEqual(lineage.current, deployment);
+      assert.equal(lineage.evidence.candidateSha256, installed.hash);
+      const file = lineage.before;
+      assert.equal(file.path, resolve(out, "application-before.json"));
+      assert.ok(file.mode === 0o600 && file.size > 0 && file.size <= 1048576);
+      const bytes = await regularBytes(file.path);
+      assert.equal(bytes.byteLength, file.size);
+      assert.equal((await lstat(file.path)).mode & 0o777, file.mode);
+      assert.equal(sha256(bytes), file.sha256);
+      const before = object(JSON.parse(bytes.toString()));
+      assert.equal(bytes.toString(), `${canonicalJson(before)}\n`);
+      assert.equal(before.schemaVersion, 1);
+      assert.equal(before.candidateSha256, installed.hash);
+      assert.equal(before.sourceCommit, installed.candidate.sourceCommit);
+      assert.equal(before.workerVersionId, lineage.operation.before.workerVersionId);
+      assert.equal(before.deploymentId, lineage.operation.before.deploymentId);
+      const id = (value: unknown) => {
+        const result = string(value, 128);
+        assert.notEqual(result, "*");
+        return result;
+      };
+      const originalAgent = id(before.agentId),
+        originalConversation = id(before.conversationId);
+      const workspace = object(object(before.workspace).binding),
+        workspaceId = id(workspace.workspaceId),
+        target = object(before.target);
+      assert.equal(object(workspace.config).kind, "computer");
+      const operation = object(object(before.approval).operation);
+      assert.deepEqual(operation.target, target);
+      assert.equal(operation.tool, "shell");
+      assert.ok(target.kind === "executor" || target.kind === "backend");
+      const actual = await roles.call({
+        operationId: "getConversation",
+        path: { id: originalConversation },
+        query: {},
+        body: undefined,
+      });
+      assert.equal(actual.conversation.agentId, originalAgent);
+      assert.deepEqual(
+        await roles.call({
+          operationId: "describeWorkspace",
+          path: { workspaceId },
+          query: {},
+          body: undefined,
+        }),
+        workspace,
+      );
+      const readRole = await roles.issue({
+        requestId: randomUUID(),
+        role: "client",
+        expiresAt: Date.now() + 900000,
+        grants: [
+          {
+            grantId: randomUUID(),
+            version: 1,
+            resources: {
+              agentIds: [originalAgent],
+              conversationIds: [originalConversation],
+              workspaceIds: [workspaceId],
+              executorIds: target.kind === "executor" ? [id(target.executorId)] : [],
+              backendIds: target.kind === "backend" ? [id(target.backendId)] : [],
+              tools: ["shell"],
+              actions: [
+                "conversations.read",
+                "events.read",
+                "tasks.read",
+                "jobs.read",
+                "approvals.read",
+                "workspaces.read",
+                "workspace.read",
+              ],
+            },
+          },
+        ],
+      });
+      const reader = new module.FortiPiClient({
+        endpoint: roles.endpoint,
+        credentials: async () => readRole.token,
+      });
+      let consumed = false;
+      const retainedReply: ExistingApplicationRecoveryBridge = {
+        async verifyExisting() {
+          assert.equal(consumed, false);
+          consumed = true;
+          return lineage;
+        },
+      };
+      return {
+        mode: input.mode,
+        // All domain/byte/identity assertions still run on the actual reply;
+        // this in-process handoff grants no archive/provider authority.
+        ...(await runExistingApplicationRecovery({
+          deployment,
+          client: reader,
+          bridge: retainedReply,
+        })),
       };
     },
     async authorizeConversation(id: string) {

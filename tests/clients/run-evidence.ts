@@ -51,7 +51,7 @@ import {
   type ScenarioEvidence,
   writeEvidence,
 } from "./evidence.ts";
-import { liveContext } from "./live.ts";
+import { type LiveRecoveryBridge, liveContext } from "./live.ts";
 import { runNativeDaemon } from "./native-daemon.ts";
 import { nativePlatform } from "./native-matrix.ts";
 import { publicFlow } from "./public-flow.ts";
@@ -65,8 +65,19 @@ const repository = resolve(import.meta.dirname, "../..");
 export async function runEvidence(
   input: EvidenceInput,
   context?: CandidateReadContext,
+  recovery?: LiveRecoveryBridge,
 ): Promise<ClaimResult[]> {
   assert.ok(["local", "native", "live"].includes(input.mode));
+  assert.ok(input.mode === "live" || recovery === undefined, "Recovery bridge is live-only");
+  if (recovery) {
+    if (recovery.mode === "perform") {
+      assert.equal(typeof recovery.bridge.perform, "function");
+      assert.equal(typeof recovery.bridge.finish, "function");
+    } else {
+      assert.equal(recovery.mode, "verify-existing");
+      assert.equal(typeof recovery.bridge.verifyExisting, "function");
+    }
+  }
   const fixture = resolve(input.fixture);
   assert.ok(
     fixture.startsWith(`${resolve(repository, "tests/clients/fixtures")}${sep}`) &&
@@ -763,6 +774,7 @@ export async function runEvidence(
   }
   if (input.mode === "live" && installed) {
     const deployment = identity.deployments[0]!;
+    const originalDeployments = structuredClone(identity.deployments);
     // Only the trusted coordinator reads this role; no child environment below
     // inherits it. Parent producer/deployment validation has already succeeded.
     const admin = process.env.FORTIPI_ADMIN_TOKEN;
@@ -981,6 +993,69 @@ export async function runEvidence(
         ).version,
         deployment.publicConfigurationVersion,
         "Live target configuration changed during evidence",
+      );
+      // Provider recovery is LAST. All earlier observations and the shared
+      // identity remain the original V0. Trusted9 separately observes V1 and
+      // authenticates the explicit transition before composing its final gate.
+      const recoveryContext = live;
+      const ready = recoveryContext !== undefined && results.every((row) => row.outcome === "pass");
+      if (recovery && recoveryContext && ready) {
+        await measure(
+          "platform-recovery",
+          ["application-only-checkpoints", recovery.mode, "private-inherited-IPC"],
+          recovery.mode === "perform"
+            ? "Actual distinct same-byte provider version transition preserves the original canary/task/receipt; original public continuation and both checkpoints qualify"
+            : "Authenticated original provider/run/artifact lineage and current V1 agree with fresh read-only checks of the original completed application canary",
+          () =>
+            recoveryContext.applicationRecovery(
+              recovery,
+              resolve(input.out, "application-recovery"),
+            ),
+          [
+            "Shared row/root deployment identities remain original startup identity; parent owns fresh final provider observation and qualified transition gate composition",
+            "Reset inferred from provider contract; incarnation, eviction and physical host not observed",
+            "Human-approval wait before assignment; no effectful running-task, executor-host loss, separate-host or Paid backend proof",
+            ...(recovery.mode === "verify-existing"
+              ? ["Read-only history phase; no redeploy, new interruption or repeated continuation"]
+              : []),
+          ],
+        );
+        const platform = results.find((row) => row.id === "platform-recovery");
+        if (platform?.outcome === "pass")
+          results.push({
+            ...platform,
+            id: "pi-lifecycle",
+            command: [...platform.command],
+            observation: {
+              platformRecoveryClaimId: "platform-recovery",
+              recoveryMode: recovery.mode,
+              originalStartupDeploymentId: deployment.deploymentId,
+            },
+            oracle:
+              "The actual approved controlled-recovery observation retains original durable Pi/application task, receipt, canonical event prefix and supported continuation; it does not establish executor-host loss",
+          });
+      } else {
+        results.push({
+          id: "platform-recovery",
+          outcome: "unavailable",
+          identity,
+          command,
+          observation: {
+            privateRecoveryBridgeProvided: recovery !== undefined,
+            precedingLiveObservationsPassed: !!ready,
+          },
+          oracle:
+            "Actual private bridge and passing public prerequisites are required before a provider recovery operation",
+          sensitivity: [],
+          limitations: [
+            "Missing inherited IPC/mode or failed public prerequisites cannot be replaced by an environment flag or local restart",
+          ],
+        });
+      }
+      assert.deepEqual(
+        identity.deployments,
+        originalDeployments,
+        "Recovery cannot relabel original row/root identities",
       );
       for (const row of results) roles.assertSanitized(row);
     } finally {
