@@ -22,7 +22,11 @@ import {
   ticketsAndRevoke,
 } from "../../apps/worker/test/integration/tickets-revoke.ts";
 import { workspaceAtomicBytes } from "../../apps/worker/test/integration/workspace-portability.ts";
-import { loadCandidate } from "../../scripts/prepare-release.ts";
+import {
+  type CandidateReadContext,
+  loadCandidate,
+  resolveCandidateReadContext,
+} from "../../scripts/prepare-release.ts";
 import {
   assertDeployment,
   freshness,
@@ -58,7 +62,10 @@ export type { ClaimResult, EvidenceInput } from "./evidence.ts";
 
 const repository = resolve(import.meta.dirname, "../..");
 /** No import-time I/O or test registration. Owner9 calls exactly this coordinator. */
-export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> {
+export async function runEvidence(
+  input: EvidenceInput,
+  context?: CandidateReadContext,
+): Promise<ClaimResult[]> {
   assert.ok(["local", "native", "live"].includes(input.mode));
   const fixture = resolve(input.fixture);
   assert.ok(
@@ -76,7 +83,11 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
     string(object(object(manifest.fortipi).toolchain).node),
     "Verified exact Node toolchain required",
   );
-  const loaded = await loadCandidate(input.candidateManifest);
+  assert.ok(
+    input.mode === "local" || context,
+    "Native/live trusted setup requires an explicit authenticated candidate read context before payload access",
+  );
+  const loaded = await loadCandidate(input.candidateManifest, context);
   const git = async (...args: string[]) =>
     (await promisify(execFile)("git", args, { cwd: repository })).stdout.trim();
   const sha = await git("rev-parse", "HEAD");
@@ -193,7 +204,7 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
     ["installed-five-packs", "strict-imports", "prepare", "deploy", "--dry-run"],
     "Every retained archive installs independently and together outside checkout with exact reviewed SRI/exports/bins; installed actual Worker dry-build succeeds",
     async () => {
-      installed = await install(input.candidateManifest);
+      installed = await install(input.candidateManifest, context);
       return installed.observation;
     },
     [
@@ -209,7 +220,7 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
       "supply-chain",
       ["supplyReview"],
       "Retained exact archive/SRI/license facts and both reviewed locks match the candidate's source policies and unresolved advisories remain blocking",
-      () => supplyReview(input.candidateManifest),
+      () => supplyReview(input.candidateManifest, context),
       [
         "Recorded exact graph review is time-bound; no publication provenance or future security clearance",
       ],
@@ -218,14 +229,14 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
       "compatibility-review",
       ["compatibilityReview"],
       "Every maintained watch source is reviewed and unchanged at the retained observation; current pin values match exactly",
-      () => compatibilityReview(input.candidateManifest),
+      () => compatibilityReview(input.candidateManifest, context),
       ["A later upstream change requires normal review; no moving-main adoption"],
     );
     await measure(
       "image-security",
       ["imageSourceReview", "verifySourceKit"],
       "Actual retained image metadata, source archive, signed runtime/source/security inputs, SEA and legal source kit reproduce its immutable identity",
-      () => imageSourceReview(input.candidateManifest),
+      () => imageSourceReview(input.candidateManifest, context),
       [
         "Source/security-input verification only; actual Linux image runtime proof remains separately authenticated",
       ],
@@ -697,7 +708,6 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
         },
         ["Local actual service, synthetic model; wire-peer negatives are separately classified"],
       );
-      await installed.verifyUnchanged();
       await measure(
         "public-clients",
         ["installed-node-client", "installed-browser", "installed-tui-pty", "independent-python"],
@@ -750,7 +760,6 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
         "Local real service/synthetic model; no substitute for live separate devices or paid backend proof",
       ],
     );
-    await installed.verifyUnchanged();
   }
   if (input.mode === "live" && installed) {
     const deployment = identity.deployments[0]!;
@@ -992,7 +1001,11 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
           "Required composed scenario/native job/live capability evidence is not yet available at this source checkpoint",
         ],
       });
-  assert.equal((await loadCandidate(input.candidateManifest)).hash, loaded.hash);
+  // Authentication/install belongs to trusted setup. Post-client integrity
+  // reads metadata and installed bytes; it must not acquire new archive-read
+  // authority or reconstruct the producer's packages on this native OS.
+  if (installed) await installed.verifyUnchanged();
+  else assert.equal(sha256(await regularBytes(input.candidateManifest)), loaded.hash);
   assert.equal(await git("status", "--porcelain"), "", "Evidence changed frozen source");
   assert.deepEqual(await evidenceProducer(input, loaded.candidate), producer);
   await writeEvidence(input, loaded.candidate, identity, results);
@@ -1033,7 +1046,11 @@ function argumentsFor(argv: string[]): EvidenceInput {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   void Promise.resolve()
-    .then(() => runEvidence(argumentsFor(process.argv.slice(2))))
+    .then(async () => {
+      const input = argumentsFor(process.argv.slice(2));
+      const context = await resolveCandidateReadContext(input.candidateManifest);
+      return runEvidence(input, context);
+    })
     .then((rows) => {
       process.stdout.write(
         `${JSON.stringify({

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import {
+  type CandidateReadContext,
   childEnvironment,
   execute,
   installCandidate,
@@ -12,8 +13,8 @@ import { inventory, regularBytes, sha256 } from "../../scripts/verify-release-ga
 import { runtimeImports } from "./consumer-runtime.ts";
 import { consumerTypes } from "./consumer-types.ts";
 
-export async function install(path: string) {
-  const loaded = await loadCandidate(path);
+export async function install(path: string, context?: CandidateReadContext) {
+  const loaded = await loadCandidate(path, context);
   const directory = await realpath(await mkdtemp(resolve(tmpdir(), "fortipi-evidence-installed-")));
   const home = resolve(directory, "home");
   await mkdir(home, { mode: 0o700 });
@@ -27,8 +28,20 @@ export async function install(path: string) {
   // the exact retained-scope registry, ordinary third-party SRI and copy-only,
   // protected install. Never duplicate/loosen that boundary here.
   for (const pkg of loaded.candidate.packages)
-    await installCandidate(path, resolve(directory, pkg.sourceName), [pkg.sourceName]);
-  const together = await installCandidate(path, resolve(directory, "together"), undefined, true);
+    await installCandidate(
+      path,
+      resolve(directory, pkg.sourceName),
+      [pkg.sourceName],
+      false,
+      context,
+    );
+  const together = await installCandidate(
+    path,
+    resolve(directory, "together"),
+    undefined,
+    true,
+    context,
+  );
   assert.equal(together.candidateSha256, loaded.hash);
   const ownedInventory = () =>
     Promise.all(

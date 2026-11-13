@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { imageInputs } from "../../apps/worker/container/inputs.ts";
 import { verifySourceKit } from "../../scripts/image-source-distribution.ts";
-import { loadCandidate } from "../../scripts/prepare-release.ts";
+import { type CandidateReadContext, loadCandidate } from "../../scripts/prepare-release.ts";
 import {
   freshness,
   object,
@@ -19,8 +19,8 @@ import { localPins, type Result } from "../../tools/compatibility-watch/watch.ts
 const root = resolve(import.meta.dirname, "../..");
 /** Reauthenticate retained candidate facts against its actual source policies.
  * This consumes the normal producer's fresh review, never manufactures one. */
-export async function supplyReview(path: string) {
-  const { candidate } = await loadCandidate(path),
+export async function supplyReview(path: string, context?: CandidateReadContext) {
+  const { candidate } = await loadCandidate(path, context),
     directory = dirname(resolve(path));
   const review = object(await readJson(resolve(directory, "supply-chain/advisory-review.json")));
   assert.equal(object(review.locks)["pnpm-lock.yaml"], candidate.hashes.lock);
@@ -75,8 +75,8 @@ export async function supplyReview(path: string) {
     ],
   };
 }
-export async function compatibilityReview(path: string) {
-  const { candidate } = await loadCandidate(path);
+export async function compatibilityReview(path: string, context?: CandidateReadContext) {
+  const { candidate } = await loadCandidate(path, context);
   const report = object(await readJson(resolve(dirname(resolve(path)), "compatibility.json")));
   freshness(string(report.checkedAt), 24);
   assert.ok(Array.isArray(report.results));
@@ -100,8 +100,8 @@ export async function compatibilityReview(path: string) {
     ],
   };
 }
-export async function imageSourceReview(path: string) {
-  const { candidate } = await loadCandidate(path),
+export async function imageSourceReview(path: string, context?: CandidateReadContext) {
+  const { candidate } = await loadCandidate(path, context),
     directory = dirname(resolve(path));
   const metadata = object(await readJson(resolve(directory, "image/image-metadata.json")));
   assert.equal(
