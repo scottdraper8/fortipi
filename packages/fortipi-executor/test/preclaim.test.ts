@@ -287,6 +287,22 @@ test("typed429 retry reloads consent, revocation, epoch, root and cancellation i
     const h = await preparation(),
       fault = readFault(h, "typed", 1, 3000),
       caller = new AbortController();
+    let profileAccess = Promise.resolve();
+    const withProfile = <T>(operation: () => Promise<T>): Promise<T> => {
+      const result = profileAccess.then(operation);
+      profileAccess = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result;
+    };
+    if (change === "consent") {
+      // Revalidation must read the completed fixture policy publication. Keep
+      // actual native protection/read checks, including replacement refusal.
+      const reloadProfile = h.runtime.reloadProfile;
+      assert.ok(reloadProfile);
+      h.runtime.reloadProfile = () => withProfile(reloadProfile);
+    }
     let pending: Promise<void> | undefined;
     try {
       const deadline = h.a.identity.deadline;
@@ -323,7 +339,7 @@ test("typed429 retry reloads consent, revocation, epoch, root and cancellation i
       if (change === "consent") {
         const profile = structuredClone(h.f.profile);
         profile.policy.trustedHost = false;
-        await privateWrite(h.path, JSON.stringify(profile));
+        await withProfile(() => privateWrite(h.path, JSON.stringify(profile)));
       } else if (change === "revoke") {
         await h.runtime.receive({
           type: "executor.presence",
