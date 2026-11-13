@@ -289,6 +289,43 @@ export function verifyLocalInfrastructureObservation(input: unknown, baseBoundsS
   assert.equal(headroom.reservationRows, 1);
   string(headroom.originalReservationId);
   string(headroom.limitation, 4096);
+  const cleanup = closed(headroom.retainedCleanup, [
+    "scope",
+    "originalExecutionId",
+    "originalJobId",
+    "applicationBefore",
+    "applicationAfter",
+    "repairBefore",
+    "repairAfterQuery",
+    "repairAfterCancel",
+    "unregisteredQueryCode",
+    "unregisteredCancelCode",
+    "queryState",
+    "cancelState",
+    "possibleExternalEffects",
+    "assignmentFrames",
+    "queryFrames",
+    "cancelFrames",
+    "sameOriginalIdentity",
+    "limitation",
+  ]);
+  assert.equal(cleanup.scope, "LOCAL registered-owner CP/SQLite; synthetic executor replies");
+  string(cleanup.originalExecutionId);
+  string(cleanup.originalJobId);
+  assert.equal(cleanup.applicationBefore, 90);
+  assert.equal(cleanup.applicationAfter, cleanup.applicationBefore);
+  assert.equal(count(cleanup.repairAfterQuery), count(cleanup.repairBefore) + 1);
+  assert.equal(count(cleanup.repairAfterCancel), count(cleanup.repairAfterQuery) + 1);
+  assert.equal(cleanup.unregisteredQueryCode, "rate_limited");
+  assert.equal(cleanup.unregisteredCancelCode, "rate_limited");
+  assert.equal(cleanup.queryState, "running");
+  assert.equal(cleanup.cancelState, "stopped");
+  assert.equal(cleanup.possibleExternalEffects, true);
+  assert.equal(cleanup.assignmentFrames, 1);
+  assert.equal(cleanup.queryFrames, 1);
+  assert.equal(cleanup.cancelFrames, 1);
+  assert.equal(cleanup.sameOriginalIdentity, true);
+  string(cleanup.limitation, 4096);
   const retirement = object(detail.retirement);
   assert.equal(retirement.actualComputerAndSqlite, true);
   assert.equal(retirement.realGraceMs, 60000);

@@ -3,7 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { manifestDigest } from "../../../../packages/fortipi-contract/dist/index.js";
 import { RoleContext } from "../../../../tests/clients/roles.ts";
 import type * as D from "../../src/boundary/dto.js";
-import { config, harness, request, uuid, value } from "../control/harness.ts";
+import { assignedJob } from "../control/artifact-job.ts";
+import { connected } from "../control/connection.ts";
+import type { CompletionControl } from "../control/fixtures/completion.ts";
+import { config, harness, request, scope, uuid, value } from "../control/harness.ts";
 import { type Runtime, start } from "./runtime.ts";
 import { stageWorkspace } from "./workspace-portability.ts";
 
@@ -289,9 +292,12 @@ export async function localStagingAndHistory() {
       },
     ];
   } finally {
-    const cleanup = await roles.cleanup();
-    await runtime.dispose();
-    assert.ok(cleanup.every((row) => row.state === "complete"));
+    try {
+      const cleanup = await roles.cleanup();
+      assert.ok(cleanup.every((row) => row.state === "complete"));
+    } finally {
+      await runtime.dispose();
+    }
   }
 }
 /** Existing CP reservation/repair seam, actual default30/120 meter. Only
@@ -419,16 +425,135 @@ export async function localCompletionHeadroom() {
       reservationRows,
       originalReservationId: reservation.reservationId,
       limitation:
-        "Retained completion repair path; actual revoke/cancellation behavior remains independently gated, not a shared-account exhaustion claim",
+        "Retained settlement path; retainedCleanup separately records CP query/cancel with synthetic executor replies. Revocation and full-runtime/native behavior remain independently gated, not a shared-account exhaustion claim",
     };
   } finally {
     await h.close();
   }
 }
 export async function runLocalInfrastructureDetails() {
-  const [stagingAndHistory, headroom] = await Promise.all([
+  const [stagingAndHistory, headroom, retainedCleanup] = await Promise.all([
     localStagingAndHistory(),
     localCompletionHeadroom(),
+    localRetainedCleanupHeadroom(),
   ]);
-  return { stagingAndHistory, headroom };
+  return { stagingAndHistory, headroom: { ...headroom, retainedCleanup } };
+}
+
+/** Existing registered-owner/real CP/SQLite exchange seam. Synthetic executor
+ * replies preserve possible effects; this never claims a native process stop. */
+export async function localRetainedCleanupHeadroom() {
+  const h = await harness<CompletionControl>({
+    fixturePath: "apps/worker/test/control/fixtures/completion.ts",
+  });
+  let channel: Awaited<ReturnType<typeof connected>> | undefined;
+  try {
+    const left = 60000 - (Date.now() % 60000);
+    if (left < 12000) await new Promise<void>((done) => setTimeout(done, left + 50));
+    channel = await connected(h);
+    const issued = await h.mint({
+      requestId: uuid(),
+      role: "client",
+      grants: [
+        { grantId: uuid(), version: 1, resources: scope(["jobs.dispatch", "workspace.write"]) },
+      ],
+    });
+    const raw = await h.auth(issued.token);
+    const job = await assignedJob(h, raw);
+    const actor = { ...raw, registrationId: job.reservation.registrationIds.agent };
+    const cancel: D.CancelRequest = {
+      identity: job.identity,
+      requestId: uuid(),
+      reason: "LOCAL retained cleanup headroom",
+    };
+    const principals = [raw, await h.auth()];
+    for (let i = 0; i < 3; i++) {
+      const credential = await h.mint({
+        requestId: uuid(),
+        role: "client",
+        grants: [{ grantId: uuid(), version: 1, resources: scope(["agents.list"]) }],
+      });
+      principals.push(await h.auth(credential.token));
+    }
+    for (const principal of principals)
+      for (let i = 0; i < 31; i++) {
+        const response = await h.cp.listAgents(principal, request("listAgents", undefined));
+        if (!response.ok) {
+          assert.equal(response.code, "rate_limited");
+          break;
+        }
+      }
+    const before = await h.cp.admissions();
+    assert.equal(before.application, 90);
+    const unknownQuery = await h.cp.queryExecution(raw, job.identity);
+    const unknownCancel = await h.cp.cancelExecution(raw, cancel);
+    assert.ok(!unknownQuery.ok && !unknownCancel.ok);
+    assert.equal(unknownQuery.code, "rate_limited");
+    assert.equal(unknownCancel.code, "rate_limited");
+    assert.equal((await h.cp.admissions()).repair, before.repair);
+    assert.equal(channel.frames.filter((frame) => frame.type === "job.query").length, 0);
+    assert.equal(channel.frames.filter((frame) => frame.type === "job.cancel").length, 0);
+
+    const queryPending = h.cp.queryExecution(actor, job.identity);
+    const query = await channel.wait("job.query");
+    assert.ok(query.type === "job.query");
+    assert.deepEqual(query.payload, job.identity);
+    channel.send({
+      type: "job.query_result",
+      requestId: query.requestId,
+      payload: { identity: job.identity, state: "running" },
+    });
+    const observation = value(await queryPending);
+    assert.deepEqual(observation.identity, job.identity);
+    assert.equal(observation.state, "running");
+    const afterQuery = await h.cp.admissions();
+    assert.equal(afterQuery.application, before.application);
+    assert.equal(afterQuery.repair, before.repair + 1);
+
+    const cancelPending = h.cp.cancelExecution(actor, cancel);
+    const cancelled = await channel.wait("job.cancel");
+    assert.ok(cancelled.type === "job.cancel");
+    assert.equal(cancelled.requestId, cancel.requestId);
+    assert.deepEqual(cancelled.payload.identity, job.identity);
+    const disposition: D.CancelDisposition = { state: "stopped", possibleExternalEffects: true };
+    channel.send({
+      type: "job.cancel_ack",
+      requestId: cancelled.requestId,
+      payload: { identity: job.identity, disposition },
+    });
+    assert.deepEqual(value(await cancelPending), disposition);
+    const afterCancel = await h.cp.admissions();
+    assert.equal(afterCancel.application, before.application);
+    assert.equal(afterCancel.repair, afterQuery.repair + 1);
+    const assignmentFrames = channel.frames.filter((frame) => frame.type === "job.assign").length;
+    const queryFrames = channel.frames.filter((frame) => frame.type === "job.query").length;
+    const cancelFrames = channel.frames.filter((frame) => frame.type === "job.cancel").length;
+    assert.equal(assignmentFrames, 1);
+    assert.equal(queryFrames, 1);
+    assert.equal(cancelFrames, 1);
+    return {
+      scope: "LOCAL registered-owner CP/SQLite; synthetic executor replies",
+      originalExecutionId: job.identity.executionId,
+      originalJobId: job.identity.jobId,
+      applicationBefore: before.application,
+      applicationAfter: afterCancel.application,
+      repairBefore: before.repair,
+      repairAfterQuery: afterQuery.repair,
+      repairAfterCancel: afterCancel.repair,
+      unregisteredQueryCode: unknownQuery.code,
+      unregisteredCancelCode: unknownCancel.code,
+      queryState: observation.state,
+      cancelState: disposition.state,
+      possibleExternalEffects: disposition.possibleExternalEffects,
+      assignmentFrames,
+      queryFrames,
+      cancelFrames,
+      sameOriginalIdentity: true,
+      limitation:
+        "Real CP metering/current registration and transport exchange; synthetic executor attestations, no native-process stop, provider quota or new-ingress revocation bypass claim",
+    };
+  } finally {
+    channel?.socket.close();
+    await h.close();
+  }
 }

@@ -137,6 +137,26 @@ function packet() {
           reservationRows: 1,
           originalReservationId: "controlled-original",
           limitation: "LOCAL component, not shared account",
+          retainedCleanup: {
+            scope: "LOCAL registered-owner CP/SQLite; synthetic executor replies",
+            originalExecutionId: "controlled-execution",
+            originalJobId: "controlled-job",
+            applicationBefore: 90,
+            applicationAfter: 90,
+            repairBefore: 0,
+            repairAfterQuery: 1,
+            repairAfterCancel: 2,
+            unregisteredQueryCode: "rate_limited",
+            unregisteredCancelCode: "rate_limited",
+            queryState: "running",
+            cancelState: "stopped",
+            possibleExternalEffects: true,
+            assignmentFrames: 1,
+            queryFrames: 1,
+            cancelFrames: 1,
+            sameOriginalIdentity: true,
+            limitation: "Controlled protocol packet; not executed native effects",
+          },
         },
         stagingAndHistory: [
           stageEdge("stagingBytesPerWorkspace", 8192),
@@ -240,6 +260,12 @@ test("original LOCAL result bytes, producer/candidate identity and each detailed
   });
   reject((p) => {
     p.result.observation.localInfrastructureDetails.stagingAndHistory.pop();
+  });
+  reject((p) => {
+    p.result.observation.localInfrastructureDetails.headroom.retainedCleanup.repairAfterCancel = 1;
+  });
+  reject((p) => {
+    p.result.observation.localInfrastructureDetails.headroom.retainedCleanup.possibleExternalEffects = false;
   });
   const flagged = { ...data(packet()), verified: true };
   assert.throws(() => verifyLocalInfrastructureProof(flagged, target));

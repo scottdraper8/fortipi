@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { runLocalInfrastructureDetails } from "./infrastructure-local.ts";
 
-test("LOCAL public Computer/SQLite staging/history preserve bounded bytes and refusal identity", {
+test("LOCAL public Computer staging/history and CP retained cleanup preserve bounds, identities and possible effects", {
   timeout: 90000,
 }, async () => {
   const observed = await runLocalInfrastructureDetails();
