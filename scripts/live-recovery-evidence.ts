@@ -19,6 +19,9 @@ import {
 import { createExistingApplicationRecoveryCoordinator } from "./application-recovery-existing.ts";
 import { repository } from "./build-workspaces.ts";
 import { assertTarget, cloudflareRequest, observeDeployment } from "./deploy-smoke.ts";
+import { readInfrastructureNamespaces } from "./live-infrastructure-identity.ts";
+import { createInfrastructureObserver } from "./live-infrastructure-observer.ts";
+import { createInfrastructureAnalyticsReader } from "./live-infrastructure-provider.ts";
 import type { ProviderPhaseResult } from "./platform-recovery.ts";
 import { evidenceProducer, loadWorkflowCandidate, runEvidence } from "./prepare-release.ts";
 import {
@@ -310,6 +313,29 @@ export async function runLiveRecoveryEvidence(
       );
     const initial = await observe(cli.value);
     assert.deepEqual(stable(initial), stable(before));
+    const infrastructure = (deployment: DeploymentIdentity) =>
+      deployment.backend === "free"
+        ? {
+            infrastructure: createInfrastructureObserver({
+              deployment,
+              async read(windows) {
+                // Reauthorize the current trusted attempt before acquiring a
+                // provider capability. Metadata/analytics reads do not wake the
+                // application or change the completed idle observation window.
+                const provider = await factory();
+                const namespaces = await readInfrastructureNamespaces(deployment, provider.read);
+                const reader = createInfrastructureAnalyticsReader({
+                  account,
+                  accountBindingSha256: target.accountBindingSha256,
+                  token,
+                  deployment,
+                  namespaces,
+                });
+                return { namespaces, raw: await reader.read(windows) };
+              },
+            }),
+          }
+        : {};
     const checkpointDirectory = resolve(bound.out, "application-recovery");
     const journalDirectory = resolve(bound.out, "provider-recovery");
     const currentReceiptPath = `${bound.deploymentPath}.provider-version.json`;
@@ -373,7 +399,12 @@ export async function runLiveRecoveryEvidence(
         bound.fixture,
         bound.out,
         bound.deploymentPath,
-        { checkpointDirectory, coordinator: { mode: "perform", bridge }, forbiddenValues },
+        {
+          checkpointDirectory,
+          coordinator: { mode: "perform", bridge },
+          forbiddenValues,
+          ...infrastructure(before),
+        },
         devices,
       );
       assert.ok(confirmed?.status === "operation-confirmed" && qualified?.status === "qualified");
@@ -509,6 +540,7 @@ export async function runLiveRecoveryEvidence(
               },
             },
             forbiddenValues,
+            ...infrastructure(current),
           },
           devices,
         );
