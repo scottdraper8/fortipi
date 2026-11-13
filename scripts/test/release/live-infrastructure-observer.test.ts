@@ -185,6 +185,56 @@ test("empty records stay unavailable, aggregate quantiles are not added, and err
   assert.throws(() => normalizeInfrastructure(request, namespaces, data), /errors/);
 });
 
+test("an actual returned zero aggregate covers its query window without inventing samples or memory", () => {
+  const data = raw();
+  for (const dataset of data.datasets) {
+    const row = first(dataset.idle.aggregate.records ?? []);
+    if (row.sum) for (const field of Object.keys(row.sum)) row.sum[field] = 0;
+    if (row.avg) row.avg.sampleInterval = 0;
+    dataset.idle.series = {
+      unavailable: "empty",
+      records: null,
+      recordedWindow: null,
+      recordedMinutes: null,
+    };
+  }
+  const observed = verifyInfrastructureMeasurements(
+    request,
+    normalizeInfrastructure(request, namespaces, data),
+  );
+  assert.equal(observed.idle.worker.requestsSum, 0);
+  assert.equal(observed.idle.worker.aggregateErrorsSum, 0);
+  assert.equal(observed.idle.worker.sampleInterval, null);
+  assert.deepEqual(observed.idle.worker.statuses, []);
+  assert.equal(observed.idle.worker.coverageKind, "query-window-aggregate");
+  assert.equal(observed.idle.worker.records, 1);
+  assert.deepEqual(observed.idle.worker.effectiveWindow, request.idle);
+  for (const resource of observed.idle.durableObjects) {
+    assert.equal(resource.periodic.sqlRowsWrittenSum, 0);
+    assert.equal(resource.periodic.coverageKind, "query-window-aggregate");
+    assert.equal(resource.isolateMemory.quality, "unavailable");
+    assert.equal(resource.isolateMemory.doIsolateMemoryP99Bytes, null);
+  }
+  // The same empty series with a positive aggregate must not borrow that scope.
+  const worker = first(data.datasets.filter((value) => value.kind === "worker"));
+  first(worker.idle.aggregate.records ?? []).sum = { requests: 1, errors: 0, cpuTimeUs: 1 };
+  const positive = normalizeInfrastructure(request, namespaces, data);
+  assert.ok(!("unavailable" in positive));
+  assert.equal(positive.idle.worker.quality, "unavailable");
+  assert.equal(positive.idle.worker.records, 0);
+  assert.throws(() => verifyInfrastructureMeasurements(request, positive));
+  worker.idle.aggregate = {
+    unavailable: "empty",
+    records: null,
+    recordedWindow: null,
+    recordedMinutes: null,
+  };
+  const absent = normalizeInfrastructure(request, namespaces, data);
+  assert.ok(!("unavailable" in absent));
+  assert.equal(absent.idle.worker.requestsSum, null);
+  assert.equal(absent.idle.worker.effectiveWindow, null);
+});
+
 test("foreign target, scope, windows and missing schema cannot qualify provider measurements", () => {
   for (const mutate of [
     (data: InfrastructureAnalyticsCollection) => {

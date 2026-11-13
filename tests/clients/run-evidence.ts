@@ -66,7 +66,6 @@ import {
 import { type LiveRecoveryBridge, liveContext } from "./live.ts";
 import {
   InfrastructureEvidenceUnavailable,
-  type InfrastructureMeasurements,
   type InfrastructureObserver,
 } from "./live-infrastructure-controls.ts";
 import { runNativeDaemon } from "./native-daemon.ts";
@@ -1349,7 +1348,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         infrastructure = {
           // The domain consumer validates the closed, attributed result before
           // qualifying it. IPC supplies data rather than metric authority.
-          read: async (request) => (await observations.read(request)) as InfrastructureMeasurements,
+          read: (request) => observations.read(request),
         };
       }
       const context = await resolveCandidateReadContext(input.candidateManifest);

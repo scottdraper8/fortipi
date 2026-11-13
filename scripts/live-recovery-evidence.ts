@@ -20,6 +20,7 @@ import { createExistingApplicationRecoveryCoordinator } from "./application-reco
 import { repository } from "./build-workspaces.ts";
 import { assertTarget, cloudflareRequest, observeDeployment } from "./deploy-smoke.ts";
 import { readInfrastructureNamespaces } from "./live-infrastructure-identity.ts";
+import { readLocalInfrastructureProof } from "./live-infrastructure-local.ts";
 import { createInfrastructureObserver } from "./live-infrastructure-observer.ts";
 import { createInfrastructureAnalyticsReader } from "./live-infrastructure-provider.ts";
 import type { ProviderPhaseResult } from "./platform-recovery.ts";
@@ -277,6 +278,16 @@ export async function runLiveRecoveryEvidence(
     assert.equal(preparedReceipt.assetManifestSha256, loaded.candidate.assetManifestSha256);
     assert.deepEqual(preparedReceipt.operator, target.operator);
     const wrangler = await installedWrangler(installed, loaded.candidate);
+    const localInput = {
+      candidate: loaded.candidate,
+      candidateSha256: loaded.hash,
+      proofsPath: bound.proofsPath,
+      request,
+    };
+    // Authenticate the original completed LOCAL producer/archive before any
+    // deployment or application credential access. JSON labels grant no authority.
+    const localInfrastructure =
+      before.backend === "free" ? await readLocalInfrastructureProof(localInput) : undefined;
     await authorize(loaded.candidate, request);
     assert.equal(process.env.OPERATION, operation);
     // First CF/application credential access, after all source/installation/frame guards.
@@ -313,29 +324,38 @@ export async function runLiveRecoveryEvidence(
       );
     const initial = await observe(cli.value);
     assert.deepEqual(stable(initial), stable(before));
-    const infrastructure = (deployment: DeploymentIdentity) =>
-      deployment.backend === "free"
-        ? {
-            infrastructure: createInfrastructureObserver({
-              deployment,
-              async read(windows) {
-                // Reauthorize the current trusted attempt before acquiring a
-                // provider capability. Metadata/analytics reads do not wake the
-                // application or change the completed idle observation window.
-                const provider = await factory();
-                const namespaces = await readInfrastructureNamespaces(deployment, provider.read);
-                const reader = createInfrastructureAnalyticsReader({
-                  account,
-                  accountBindingSha256: target.accountBindingSha256,
-                  token,
-                  deployment,
-                  namespaces,
-                });
-                return { namespaces, raw: await reader.read(windows) };
-              },
-            }),
-          }
-        : {};
+    const infrastructure = (deployment: DeploymentIdentity) => {
+      if (deployment.backend !== "free") return {};
+      assert.ok(localInfrastructure);
+      const observer = createInfrastructureObserver({
+        deployment,
+        async read(windows) {
+          // Reauthorize the current trusted attempt before acquiring a
+          // provider capability. Metadata/analytics reads do not wake the
+          // application or change the completed idle observation window.
+          const provider = await factory();
+          const namespaces = await readInfrastructureNamespaces(deployment, provider.read);
+          const reader = createInfrastructureAnalyticsReader({
+            account,
+            accountBindingSha256: target.accountBindingSha256,
+            token,
+            deployment,
+            namespaces,
+          });
+          return { namespaces, raw: await reader.read(windows) };
+        },
+      });
+      return {
+        infrastructure: {
+          async read(input: unknown) {
+            const measured = await observer.read(input);
+            return "unavailable" in measured
+              ? measured
+              : { ...measured, localInfrastructure: snapshot(localInfrastructure) };
+          },
+        },
+      };
+    };
     const checkpointDirectory = resolve(bound.out, "application-recovery");
     const journalDirectory = resolve(bound.out, "provider-recovery");
     const currentReceiptPath = `${bound.deploymentPath}.provider-version.json`;
@@ -561,6 +581,14 @@ export async function runLiveRecoveryEvidence(
       } finally {
         await reader.dispose();
       }
+    }
+    if (localInfrastructure) {
+      await authorize(loaded.candidate, request);
+      assert.deepEqual(
+        await readLocalInfrastructureProof(localInput),
+        localInfrastructure,
+        "Original LOCAL infrastructure predecessor changed during the child run",
+      );
     }
     assert.deepEqual(await regularBytes(bound.deploymentPath, maximum), original.bytes);
     assert.deepEqual(await regularBytes(`${bound.deploymentPath}.cli.json`, maximum), cli.bytes);

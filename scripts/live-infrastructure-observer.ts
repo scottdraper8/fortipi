@@ -105,29 +105,74 @@ function coverage(value: RawInfrastructureObservation) {
   const from = Date.parse(value.recordedWindow.start),
     through = Date.parse(value.recordedWindow.end);
   assert.ok(Number.isSafeInteger(from) && Number.isSafeInteger(through) && from < through);
-  return { records: present(value.records).length, effectiveWindow: { from, through } };
+  return {
+    coverageKind: "grouped-records" as const,
+    records: present(value.records).length,
+    effectiveWindow: { from, through },
+  };
 }
-function aggregate(dataset: InfrastructureDataset, phase: "active" | "idle") {
+function aggregate(
+  dataset: InfrastructureDataset,
+  phase: "active" | "idle",
+  window: InfrastructureReadRequest["active"],
+) {
   const value = dataset[phase];
-  if (!available(value.aggregate) || !available(value.series) || !value.series.recordedWindow)
-    return null;
+  if (!available(value.aggregate)) return null;
   const records = present(value.aggregate.records);
   assert.equal(records.length, 1);
-  return present(records[0]);
+  const row = present(records[0]);
+  if (available(value.series) && value.series.recordedWindow)
+    return { row, coverage: coverage(value.series) };
+  // Only an actual returned zero aggregate can cover an empty series. Missing,
+  // malformed, full or foreign data cannot borrow its query window.
+  if (
+    value.series.unavailable !== "empty" ||
+    value.series.records !== null ||
+    value.series.recordedWindow !== null ||
+    value.series.recordedMinutes !== null ||
+    dataset.kind === "memory"
+  )
+    return null;
+  const fields =
+    dataset.kind === "periodic"
+      ? [
+          "rowsRead",
+          "rowsWritten",
+          "cpuTime",
+          "exceededCpuErrors",
+          "exceededMemoryErrors",
+          "fatalInternalErrors",
+        ]
+      : ["requests", "errors"];
+  if (!fields.every((field) => number(row, "sum", field) === 0)) return null;
+  return {
+    row,
+    coverage: {
+      coverageKind: "query-window-aggregate" as const,
+      records: 1,
+      effectiveWindow: { ...window },
+    },
+  };
 }
-function invocations(dataset: InfrastructureDataset, phase: "active" | "idle") {
-  const row = aggregate(dataset, phase);
-  if (!row)
+function invocations(
+  dataset: InfrastructureDataset,
+  phase: "active" | "idle",
+  window: InfrastructureReadRequest["active"],
+) {
+  const observed = aggregate(dataset, phase, window);
+  if (!observed)
     return {
       quality: "unavailable" as const,
       records: 0,
       effectiveWindow: null,
       sampleInterval: null,
       requestsSum: null,
+      aggregateErrorsSum: null,
       statuses: null,
     };
+  const { row } = observed;
   const statuses = new Map<string, { status: string; requestsSum: number; errorsSum: number }>();
-  for (const record of present(dataset[phase].series.records)) {
+  for (const record of dataset[phase].series.records ?? []) {
     const status = record.dimensions?.status;
     assert.ok(typeof status === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(status));
     const current = statuses.get(status) ?? { status, requestsSum: 0, errorsSum: 0 };
@@ -143,9 +188,10 @@ function invocations(dataset: InfrastructureDataset, phase: "active" | "idle") {
   );
   return {
     quality: "adaptive-estimate" as const,
-    ...coverage(dataset[phase].series),
-    sampleInterval: number(row, "avg", "sampleInterval"),
+    ...observed.coverage,
+    sampleInterval: number(row, "avg", "sampleInterval") || null,
     requestsSum: number(row, "sum", "requests"),
+    aggregateErrorsSum: errors,
     statuses: [...statuses.values()].sort((a, b) => a.status.localeCompare(b.status)),
   };
 }
@@ -192,29 +238,31 @@ export function normalizeInfrastructure(
   };
   const output = (phase: "active" | "idle"): InfrastructureWindowMeasurements => {
     const worker = select("worker", null),
-      workerRow = aggregate(worker, phase);
+      workerRow = aggregate(worker, phase, request[phase])?.row;
     return {
       worker: {
-        ...invocations(worker, phase),
+        ...invocations(worker, phase, request[phase]),
         scope: { workerName: request.workerName, workerVersionId: request.workerVersionId },
         workerCpuSumMs: workerRow ? number(workerRow, "sum", "cpuTimeUs") / 1000 : null,
       },
       durableObjects: namespaces.namespaces.map<InfrastructureDurableObjectMeasurements>(
         (namespace) => {
           const periodic = select("periodic", namespace),
-            row = aggregate(periodic, phase);
+            periodicObservation = aggregate(periodic, phase, request[phase]),
+            row = periodicObservation?.row;
           const memory = select("memory", namespace),
-            memoryRow = aggregate(memory, phase);
+            memoryObservation = aggregate(memory, phase, request[phase]),
+            memoryRow = memoryObservation?.row;
           return {
             scope: {
               kind: "namespace",
               resource: resources[namespace.binding],
               namespaceId: namespace.namespaceId,
             },
-            invocations: invocations(select("invocations", namespace), phase),
+            invocations: invocations(select("invocations", namespace), phase, request[phase]),
             periodic: {
               quality: row ? "periodic-counter" : "unavailable",
-              ...(row ? coverage(periodic[phase].series) : { records: 0, effectiveWindow: null }),
+              ...(periodicObservation?.coverage ?? { records: 0, effectiveWindow: null }),
               sqlRowsReadSum: row ? number(row, "sum", "rowsRead") : null,
               sqlRowsWrittenSum: row ? number(row, "sum", "rowsWritten") : null,
               doCpuSumMs: row ? number(row, "sum", "cpuTime") / 1000 : null,
@@ -224,9 +272,7 @@ export function normalizeInfrastructure(
             },
             isolateMemory: {
               quality: memoryRow ? "periodic-quantile" : "unavailable",
-              ...(memoryRow
-                ? coverage(memory[phase].series)
-                : { records: 0, effectiveWindow: null }),
+              ...(memoryObservation?.coverage ?? { records: 0, effectiveWindow: null }),
               doIsolateMemoryP99Bytes: memoryRow
                 ? number(memoryRow, "quantiles", "memoryUsageBytesP99")
                 : null,

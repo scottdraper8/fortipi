@@ -34,6 +34,7 @@ import {
   type CandidateManifest,
   type DeploymentIdentity,
   type GateReceipt,
+  integratedClaims,
   inventory,
   object,
   REPOSITORY,
@@ -438,6 +439,7 @@ async function controlled() {
   const ordinaryEnvironment = process.env;
   let closeFixture: (() => Promise<void>) | undefined;
   let originalZip: Awaited<ReturnType<typeof directoryArchive>> | undefined;
+  let integratedZip: Awaited<ReturnType<typeof directoryArchive>> | undefined;
   try {
     await preparePackages();
     const f = await fixture();
@@ -503,7 +505,58 @@ async function controlled() {
     const originalBytes = await readFile(deploymentPath);
     const originalCli = await readFile(`${deploymentPath}.cli.json`);
     const workflow = await readFile(resolve(repository, ".github/workflows/deploy.yml"));
+    const ciWorkflow = await readFile(resolve(repository, ".github/workflows/ci.yml"));
     const proofsPath = resolve(root, "proofs.json");
+    // Synthetic completed CI facts exercise the real producer/ZIP reader. They
+    // deliberately do not satisfy the separate detailed infrastructure oracle.
+    const integratedDirectory = resolve(root, "proofs/integrated/payload");
+    for (const id of integratedClaims)
+      await saveJson(resolve(integratedDirectory, `claims/${id}.json`), {
+        id,
+        outcome: "pass",
+        identity: { sourceCommit, candidateSha256: manifestHash },
+        observation: { fixture: "outer source protocol only" },
+      });
+    const integratedFiles = await inventory(integratedDirectory);
+    const integratedGate: GateReceipt = {
+      schemaVersion: 1,
+      kind: "integrated",
+      candidateSha256: manifestHash,
+      sourceCommit,
+      scope: c.scope,
+      checkedAt: new Date().toISOString(),
+      producer: {
+        workflowPath: ".github/workflows/ci.yml",
+        workflowSha256: sha256(ciWorkflow),
+        workflowId: 11,
+        runId: 61,
+        runAttempt: 1,
+      },
+      platforms: [],
+      deployments: [],
+      files: integratedFiles,
+      claims: integratedClaims.map((id) => {
+        const result = integratedFiles.find((file) => file.path === `claims/${id}.json`);
+        assert.ok(result);
+        return { id, outcome: "pass", result };
+      }),
+    };
+    await saveJson(resolve(integratedDirectory, "gate.json"), integratedGate);
+    integratedZip = await directoryArchive(integratedDirectory);
+    const integratedReference: ArtifactReference = {
+      runId: 61,
+      runAttempt: 1,
+      artifactId: 63,
+      artifactName: `integrated-${sourceCommit}-${c.scope}-61-1`,
+      artifactDigest: `sha256:${sha256(integratedZip.bytes)}`,
+      candidateSha256: manifestHash,
+    };
+    await saveJson(proofsPath, {
+      schemaVersion: 1,
+      candidateArtifact: integratedReference,
+      proofs: [{ artifact: integratedReference, directory: integratedDirectory }],
+    });
+    let integratedDownloads = 0;
     let originalReference: ArtifactReference | undefined;
     let childCalls = 0;
     let childMode = "normal";
@@ -567,6 +620,12 @@ async function controlled() {
       if (url.hostname.endsWith(".workers.dev"))
         return f.ports.applicationTransport(input, options);
       if (url.hostname === "fixture.blob.core.windows.net") {
+        if (url.pathname === "/integrated.zip") {
+          assert.ok(integratedZip);
+          assert.ok(!new Headers(options?.headers).has("authorization"));
+          integratedDownloads++;
+          return new Response(Uint8Array.from(integratedZip.bytes));
+        }
         assert.ok(originalZip);
         return new Response(Uint8Array.from(originalZip.bytes));
       }
@@ -575,20 +634,32 @@ async function controlled() {
       const now = Date.now();
       const base = `/repos/${REPOSITORY}`;
       const original = path.includes("/runs/81");
-      const runId = original ? 81 : 91;
-      const producerId = original ? 71 : 21;
+      const integrated =
+        path.includes("/runs/61") ||
+        path.includes("/artifacts/63") ||
+        path.includes("/workflows/11") ||
+        path.includes("/.github/workflows/ci.yml");
+      const historical = original || integrated;
+      const runId = integrated ? 61 : original ? 81 : 91;
+      const producerId = integrated ? 11 : original ? 71 : 21;
       if (path.endsWith("/zip"))
-        return Response.redirect("https://fixture.blob.core.windows.net/original.zip", 302);
+        return Response.redirect(
+          `https://fixture.blob.core.windows.net/${integrated ? "integrated" : "original"}.zip`,
+          302,
+        );
       if (path === base) return Response.json({ id: REPOSITORY_ID, full_name: REPOSITORY });
       if (path.endsWith("/git/ref/heads/main"))
         return Response.json({ object: { sha: sourceCommit } });
       if (path.includes("/git/matching-refs/")) return Response.json([]);
       if (path.includes("/contents/"))
-        return Response.json({ encoding: "base64", content: workflow.toString("base64") });
+        return Response.json({
+          encoding: "base64",
+          content: (integrated ? ciWorkflow : workflow).toString("base64"),
+        });
       if (path.includes("/actions/workflows/"))
         return Response.json({
-          id: path.endsWith("/71") ? 71 : 21,
-          path: ".github/workflows/deploy.yml",
+          id: producerId,
+          path: integrated ? ".github/workflows/ci.yml" : ".github/workflows/deploy.yml",
           state: "active",
         });
       if (path.includes("/jobs?"))
@@ -599,13 +670,13 @@ async function controlled() {
               id: 101,
               run_id: runId,
               head_sha: sourceCommit,
-              name: "operate",
-              status: original
+              name: integrated ? "policy-and-integration" : "operate",
+              status: historical
                 ? "completed"
                 : authorityFault === "failed-job"
                   ? "completed"
                   : "in_progress",
-              conclusion: original ? "success" : null,
+              conclusion: historical ? "success" : null,
               started_at: new Date(now - 5000).toISOString(),
               completed_at: new Date(now - 1000).toISOString(),
             },
@@ -629,19 +700,36 @@ async function controlled() {
           },
         });
       }
+      if (path.endsWith("/actions/artifacts/63"))
+        return Response.json({
+          id: 63,
+          name: integratedReference.artifactName,
+          digest: integratedReference.artifactDigest,
+          expired: false,
+          created_at: new Date(now - 2000).toISOString(),
+          expires_at: new Date(now + 60000).toISOString(),
+          workflow_run: {
+            id: 61,
+            repository_id: REPOSITORY_ID,
+            head_repository_id: REPOSITORY_ID,
+            head_sha: sourceCommit,
+            head_branch: "main",
+          },
+        });
       assert.ok(path.includes("/actions/runs/"), "Unexpected controlled API route");
       return Response.json({
         id: runId,
         workflow_id: producerId,
         run_attempt: authorityFault === "superseded" ? 2 : 1,
-        head_sha: sourceCommit,
+        head_sha:
+          integrated && authorityFault === "integrated-source" ? "f".repeat(40) : sourceCommit,
         head_branch: "main",
-        event: "workflow_dispatch",
-        status: original ? "completed" : "in_progress",
-        conclusion: original ? "success" : null,
+        event: integrated ? "push" : "workflow_dispatch",
+        status: historical ? "completed" : "in_progress",
+        conclusion: historical ? "success" : null,
         repository: { id: REPOSITORY_ID },
         head_repository: { id: REPOSITORY_ID },
-        path: ".github/workflows/deploy.yml",
+        path: integrated ? ".github/workflows/ci.yml" : ".github/workflows/deploy.yml",
         run_started_at: new Date(now - 10000).toISOString(),
         updated_at: new Date(now - 1000).toISOString(),
       });
@@ -731,6 +819,12 @@ async function controlled() {
         platforms: [],
       };
       await saveJson(resolve(out, "gate.json"), gate);
+      if (childMode === "tamper-local")
+        await saveJson(resolve(integratedDirectory, "claims/infrastructure-boundaries.json"), {
+          id: "infrastructure-boundaries",
+          outcome: "pass",
+          observation: { substituted: true },
+        });
     };
     mock.module(new URL("../../prepare-release.ts", import.meta.url), {
       cache: true,
@@ -784,7 +878,7 @@ async function controlled() {
     assert.equal(cloudReads, 0);
     assert.equal(childCalls, 0);
     process.env.GITHUB_JOB = "operate";
-    for (const fault of ["superseded", "failed-job"]) {
+    for (const fault of ["superseded", "failed-job", "integrated-source"]) {
       authorityFault = fault;
       await assert.rejects(
         runLiveRecoveryEvidence({ ...common, out: resolve(root, fault) }),
@@ -817,6 +911,11 @@ async function controlled() {
     }
     const out = resolve(root, "claims");
     const result = await runLiveRecoveryEvidence({ ...common, out });
+    assert.equal(
+      integratedDownloads,
+      2,
+      "Original predecessor is authenticated before keys and again after the child",
+    );
     assert.equal(f.calls.length, 2);
     const child = (await readJson(resolve(out, "gate.json"))) as GateReceipt;
     await verifyPayload(out, child.files, ["gate.json"]);
@@ -869,7 +968,10 @@ async function controlled() {
     await saveJson(proofsPath, {
       schemaVersion: 1,
       candidateArtifact: originalReference,
-      proofs: [{ artifact: originalReference, directory: originalDirectory }],
+      proofs: [
+        { artifact: originalReference, directory: originalDirectory },
+        { artifact: integratedReference, directory: integratedDirectory },
+      ],
     });
     const verifyDeployment = resolve(root, "verify-deployment.json");
     await saveJson(verifyDeployment, link.current);
@@ -883,6 +985,7 @@ async function controlled() {
       out: resolve(root, "verify-claims"),
     });
     assert.equal(f.calls.length, 2, "Verification must have no provider effects");
+    assert.equal(integratedDownloads, 4);
     assert.equal(copiedRecords.length, 2);
     for (const path of copiedRecords) assert.equal((await lstat(path)).mode & 0o777, 0o600);
     assert.equal(privateRecords.length, 2);
@@ -897,6 +1000,25 @@ async function controlled() {
     assert.equal(verifiedLink.proofSha256, link.proofSha256);
     const verifyGate = (await readJson(resolve(root, "verify-claims/gate.json"))) as GateReceipt;
     await verifyPayload(resolve(root, "verify-claims"), verifyGate.files, ["gate.json"]);
+    const localResultPath = resolve(integratedDirectory, "claims/infrastructure-boundaries.json");
+    const localResult = await readFile(localResultPath);
+    childMode = "tamper-local";
+    try {
+      await assert.rejects(
+        runLiveRecoveryEvidence({
+          ...common,
+          deploymentPath: verifyDeployment,
+          out: resolve(root, "tampered-local"),
+        }),
+        /unavailable/,
+      );
+      assert.equal(f.calls.length, 2, "Changed predecessor cannot cause a provider write");
+      await assert.rejects(lstat(resolve(root, "tampered-local.recovery-link.json")), {
+        code: "ENOENT",
+      });
+    } finally {
+      await writeFile(localResultPath, localResult);
+    }
     process.env.OPERATION = "deploy";
     process.env.CONFIRM = frame.CONFIRM;
     childMode = "omit-phases";
@@ -917,6 +1039,7 @@ async function controlled() {
     globalThis.fetch = nativeFetch;
     mock.restoreAll();
     await originalZip?.close();
+    await integratedZip?.close();
     await closeFixture?.();
     if (root) await discard(root);
   }
