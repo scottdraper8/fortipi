@@ -75,7 +75,10 @@ export function sourceTestDiagnostic(line: string): boolean {
       line,
     ) &&
       !line.includes("../")) ||
-    recoveryDiagnostic(line)
+    recoveryDiagnostic(line) ||
+    /^# \{"diagnostic":"source-recovery-stage","point":"(?:before-submit|after-submit)","stage":"(?:submit-start|submit-return|barrier-enter|marker-start|marker-committed|snapshot-ready|notify-start|notify-ack)"\}$/.test(
+      line,
+    )
   );
 }
 

@@ -386,7 +386,9 @@ export class TestAgentSession extends AgentSession {
       const submit = current.submit.bind(current);
       current.submit = async (...input) => {
         await this.barrier("before-submit");
+        this.processStage("before-submit", "submit-start");
         const receipt = await submit(...input);
+        this.processStage("after-submit", "submit-return");
         await this.barrier("after-submit");
         return receipt;
       };
@@ -466,17 +468,38 @@ export class TestAgentSession extends AgentSession {
       totalSqlBytes: sql.databaseSize,
     });
   }
+  private processStage(
+    point: string,
+    stage:
+      | "submit-start"
+      | "submit-return"
+      | "barrier-enter"
+      | "marker-start"
+      | "marker-committed"
+      | "snapshot-ready"
+      | "notify-start"
+      | "notify-ack",
+  ) {
+    if (
+      (point === "before-submit" || point === "after-submit") &&
+      (this.env as Env & { FORTIPI_TEST_PROCESS_OBSERVER?: unknown }).FORTIPI_TEST_PROCESS_OBSERVER
+    )
+      console.log(`FORTIPI_PROCESS_STAGE ${point} ${stage}`);
+  }
   private async barrier(point: string) {
+    this.processStage(point, "barrier-enter");
     if ((await this.store.get<string>("fixture", "fault")) !== point) return;
     const observation = await this.store.get<{ point: string; observationId: string }>(
       "fixture",
       "barrier-observer",
     );
+    this.processStage(point, "marker-start");
     await this.store.transaction(async (tx) => {
       await this.store.remove("fixture", "fault", tx);
       await this.store.put("fixture", "barrier", point, tx);
       if (observation) await this.store.remove("fixture", "barrier-observer", tx);
     });
+    this.processStage(point, "marker-committed");
     if (observation) {
       const snapshot = await this.observedBarrier(
         await this.store.page<import("../../src/agent/conversations.js").Admission>(
@@ -486,6 +509,7 @@ export class TestAgentSession extends AgentSession {
       );
       if (observation.point !== point || snapshot.barrier !== point)
         throw new Error("Committed fixture barrier changed");
+      this.processStage(point, "snapshot-ready");
       const observer = (
         this.env as Env & { FORTIPI_TEST_PROCESS_OBSERVER?: { url: string; token: string } }
       ).FORTIPI_TEST_PROCESS_OBSERVER;
@@ -503,6 +527,7 @@ export class TestAgentSession extends AgentSession {
         target.hash
       )
         throw new Error("Invalid process fixture observer target");
+      this.processStage(point, "notify-start");
       const response = await fetch(target.href, {
         method: "POST",
         headers: { Authorization: `Bearer ${observer.token}`, "Content-Type": "application/json" },
@@ -515,6 +540,7 @@ export class TestAgentSession extends AgentSession {
         }),
       });
       if (response.status !== 204) throw new Error("Process fixture observation refused");
+      this.processStage(point, "notify-ack");
     }
     await new Promise<void>((accept) => setTimeout(accept, 300000));
   }

@@ -15,6 +15,15 @@ import type { ProcessBarrierSnapshot } from "./runtime-worker.js";
 const pause = (ms: number) => new Promise<void>((accept) => setTimeout(accept, ms));
 export const processBootstrap = "synthetic-process-thread5-bootstrap-000000000000";
 const requestTimeout = 20000;
+/** Reconstruct only fixed fixture enums; never forward a captured log line. */
+export function processStageDiagnostic(line: string): string | undefined {
+  const match =
+    /^FORTIPI_PROCESS_STAGE (before-submit|after-submit) (submit-start|submit-return|barrier-enter|marker-start|marker-committed|snapshot-ready|notify-start|notify-ack)$/.exec(
+      line,
+    );
+  if (!match?.[1] || !match[2]) return;
+  return JSON.stringify({ diagnostic: "source-recovery-stage", point: match[1], stage: match[2] });
+}
 export interface ProcessBarrierArm {
   readonly observationId: string;
   readonly agentId: string;
@@ -375,6 +384,14 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
   return {
     origin,
     api,
+    runtimeStages: () =>
+      output
+        .split(/\r?\n/)
+        .flatMap((line) => {
+          const stage = processStageDiagnostic(line);
+          return stage === undefined ? [] : [stage];
+        })
+        .slice(-64),
     async armBarrier(agentId: string, point: ProcessBarrierArm["point"]) {
       const arm = observer.arm(agentId, point);
       const armed = await api(`/__test/agents/${agentId}/fault`, {

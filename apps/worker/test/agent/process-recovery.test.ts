@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually } from "./harness.ts";
 import {
   createProcessBarrierObserver,
   processHarness,
   processRequestFailure,
+  processStageDiagnostic,
 } from "./process-harness.ts";
 
 interface ProbeState {
@@ -23,6 +25,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
   timeout: 90000,
 }, async (t) => {
   let phase = "initial.start";
+  let runtimeStages: (() => string[]) | undefined;
   const failure = (error: unknown): never => {
     const diagnostic: {
       phase: string;
@@ -68,12 +71,14 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
       t.diagnostic(
         JSON.stringify({ ...diagnostic, request: processRequestFailure(error) ?? null }),
       );
+      for (const record of runtimeStages?.() ?? []) t.diagnostic(record);
     } catch {
       /* Diagnostics must not replace the original thrown value. */
     }
     throw error;
   };
   const h = await processHarness().catch(failure);
+  runtimeStages = h.runtimeStages;
   try {
     phase = "agent.create";
     const agent = await h.api<D.Agent>("/v1/agents", {
@@ -202,6 +207,30 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
     phase = "cleanup";
     await h.close().catch(failure);
   }
+});
+
+test("recovery stage diagnostics reconstruct only closed nonsecret enums", () => {
+  const line = "FORTIPI_PROCESS_STAGE after-submit marker-committed";
+  const record = processStageDiagnostic(line);
+  assert.equal(
+    record,
+    '{"diagnostic":"source-recovery-stage","point":"after-submit","stage":"marker-committed"}',
+  );
+  assert.ok(record && sourceTestDiagnostic(`# ${record}`));
+  for (const changed of [
+    `${line} synthetic-private-canary`,
+    `synthetic-private-canary ${line}`,
+    line.replace("after-submit", "synthetic-private-canary"),
+    line.replace("marker-committed", "synthetic-private-canary"),
+  ])
+    assert.equal(processStageDiagnostic(changed), undefined);
+  for (const changed of [
+    `# ${record} synthetic-private-canary`,
+    `# ${record?.replace('"point":', '"private":"synthetic-private-canary","point":')}`,
+    `# ${record?.replace('"point":', '"point":"synthetic-private-canary","point":')}`,
+    `# ${record?.replace("marker-committed", "synthetic-private-canary")}`,
+  ])
+    assert.equal(sourceTestDiagnostic(changed), false);
 });
 
 test("loopback barrier notifications require the current run, agent, phase and one-use arm; no storage proof", async () => {
