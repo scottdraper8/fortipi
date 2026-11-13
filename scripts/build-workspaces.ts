@@ -1,6 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { chmod, copyFile, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import type { Readable } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
@@ -11,6 +13,49 @@ export const publicPackages = ["contract", "client", "tui", "executor", "cli"] a
 export const packagePaths = publicPackages.map((name) => `packages/fortipi-${name}`);
 export const projects = [...packagePaths, "apps/worker"];
 export const FULL_SOURCE_TEST_TIMEOUT_MS = 30 * 60_000;
+
+/** Observe only complete closed stderr records; leave execFile's capture/error handling alone. */
+export function observeCandidateDiagnostics(
+  stderr: Readable,
+  emit: (line: string) => void = (line) => {
+    process.stderr.write(line);
+  },
+): void {
+  const decoder = new StringDecoder("utf8");
+  let partial = "",
+    dropping = false;
+  const flush = () => {
+    const line = partial.endsWith("\r") ? partial.slice(0, -1) : partial;
+    const eligible = !dropping;
+    partial = "";
+    dropping = false;
+    try {
+      if (eligible && sourceTestDiagnostic(line)) emit(`${line}\n`);
+    } catch {
+      /* Diagnostics cannot replace the child result. */
+    }
+  };
+  const accept = (text: string) => {
+    for (const character of text) {
+      if (character === "\n") flush();
+      else if (!dropping) {
+        // The classifier allows512 characters; retain one possible CR terminator.
+        if (partial.length + character.length > 513) {
+          partial = "";
+          dropping = true;
+        } else partial += character;
+      }
+    }
+  };
+  stderr.on("data", (chunk: Buffer | string) =>
+    accept(typeof chunk === "string" ? chunk : decoder.write(chunk)),
+  );
+  stderr.once("end", () => {
+    accept(decoder.end());
+    flush();
+  });
+  // A close without end is not a complete final line and deliberately does not flush.
+}
 
 /** Argument arrays only. A timeout terminates the child and remains a failure. */
 export async function run(
@@ -138,7 +183,7 @@ export async function main(command: string | undefined): Promise<void> {
       const manifest = JSON.parse(await readFile(join(repository, "package.json"), "utf8")) as {
         version: string;
       };
-      const output = await promisify(execFile)(
+      const pending = promisify(execFile)(
         process.execPath,
         [
           "scripts/prepare-release.ts",
@@ -151,9 +196,11 @@ export async function main(command: string | undefined): Promise<void> {
           "fortipi-ci-test",
         ],
         // This wraps build, checks, the 30-minute test stage and packing. Keep
-        // the existing 40-minute source CI ceiling; individual stage limits remain.
+        // the existing 40-minute candidate ceiling; individual stage limits remain.
         { cwd: repository, timeout: 40 * 60_000, maxBuffer: 8_000_000 },
-      ).catch((error: unknown) => {
+      );
+      if (pending.child.stderr) observeCandidateDiagnostics(pending.child.stderr);
+      const output = await pending.catch((error: unknown) => {
         // Node may truncate a large captured test log while printing an error.
         // Surface only the fixed failure record; raw tail/argv/env stay private.
         try {
