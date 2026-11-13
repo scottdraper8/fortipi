@@ -65,7 +65,17 @@ type Stage =
   | "lock"
   | "directory"
   | "archives"
-  | "interpreter"
+  | "interpreter-path"
+  | "interpreter-realpath"
+  | "interpreter-stat"
+  | "interpreter-file"
+  | "interpreter-owner"
+  | "interpreter-mode"
+  | "interpreter-sha256"
+  | "interpreter-expected"
+  | "interpreter-version-command"
+  | "interpreter-version"
+  | "interpreter-stable-sha256"
   | "download"
   | "venv"
   | "install-build"
@@ -286,21 +296,27 @@ async function interpreter(
   lock: PrecommitLock,
   expected?: { path: string; sha256: string },
 ) {
-  stage("interpreter");
+  stage("interpreter-path");
   assert.ok(safePath(path), "Explicit Python executable required");
+  stage("interpreter-realpath");
   const canonical = await realpath(path);
+  stage("interpreter-stat");
   const stat = await lstat(canonical);
-  assert.ok(
-    stat.isFile() && (own(stat.uid) || stat.uid === 0) && (stat.mode & 0o022) === 0,
-    "Untrusted Python executable",
-  );
+  stage("interpreter-file");
+  assert.ok(stat.isFile(), "Untrusted Python executable");
+  stage("interpreter-owner");
+  assert.ok(own(stat.uid) || stat.uid === 0, "Untrusted Python executable");
+  stage("interpreter-mode");
+  assert.ok((stat.mode & 0o022) === 0, "Untrusted Python executable");
+  stage("interpreter-sha256");
   const identity = { path: canonical, sha256: sha256(await readFile(canonical)) };
+  stage("interpreter-expected");
   if (expected) assert.deepEqual(identity, expected, "Bootstrap Python changed");
-  assert.equal(
-    await run(canonical, ["-I", "-S", "--version"], directory),
-    `Python ${lock.python}`,
-    "Pinned Python required",
-  );
+  stage("interpreter-version-command");
+  const version = await run(canonical, ["-I", "-S", "--version"], directory);
+  stage("interpreter-version");
+  assert.equal(version, `Python ${lock.python}`, "Pinned Python required");
+  stage("interpreter-stable-sha256");
   assert.equal(
     sha256(await readFile(canonical)),
     identity.sha256,
