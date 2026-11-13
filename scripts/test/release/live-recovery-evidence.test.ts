@@ -32,6 +32,7 @@ import { childEnvironment, execute, generateSbom, stageAndPack } from "../../pre
 import {
   type ArtifactReference,
   type CandidateManifest,
+  canonicalJson,
   type DeploymentIdentity,
   type GateReceipt,
   integratedClaims,
@@ -823,11 +824,10 @@ async function controlled() {
       };
       await saveJson(resolve(out, "gate.json"), gate);
       if (childMode === "tamper-local")
-        await saveJson(resolve(integratedDirectory, "claims/infrastructure-boundaries.json"), {
-          id: "infrastructure-boundaries",
-          outcome: "pass",
-          observation: { substituted: true },
-        });
+        await writeFile(
+          resolve(integratedDirectory, "claims/infrastructure-boundaries.json"),
+          `${canonicalJson({ id: "infrastructure-boundaries", outcome: "pass", observation: { substituted: true } })}\n`,
+        );
     };
     mock.module(new URL("../../prepare-release.ts", import.meta.url), {
       cache: true,
@@ -865,6 +865,41 @@ async function controlled() {
       },
     });
     const { runLiveRecoveryEvidence } = await import("../../live-recovery-evidence.ts");
+    // The outer privacy boundary intentionally hides causes. In this controlled
+    // subprocess, retain only assertion method + allowlisted source locations.
+    const failures: { method: string; frames: string[] }[] = [];
+    for (const method of ["equal", "deepEqual", "ok"] as const) {
+      const original = assert[method];
+      mock.method(assert, method, (...args: unknown[]) => {
+        try {
+          return Reflect.apply(original, assert, args);
+        } catch (error) {
+          const frames =
+            error instanceof Error
+              ? [
+                  ...(error.stack ?? "").matchAll(
+                    /\/(?:verify-release-gates|application-recovery-existing|live-recovery-evidence|application-recovery-checkpoints|platform-recovery|live-infrastructure-local)\.ts:\d+:\d+/g,
+                  ),
+                ]
+                  .map((match) => match[0].slice(1))
+                  .slice(0, 4)
+              : [];
+          failures.push({ method, frames });
+          throw error;
+        }
+      });
+    }
+    const successful = async (input: Parameters<typeof runLiveRecoveryEvidence>[0]) => {
+      failures.length = 0;
+      try {
+        return await runLiveRecoveryEvidence(input);
+      } catch (error) {
+        process.stderr.write(
+          `${JSON.stringify({ diagnostic: "controlled-recovery-assertion", failures: failures.slice(-4) })}\n`,
+        );
+        throw error;
+      }
+    };
     const common = {
       candidatePath: manifestPath,
       installationPath,
@@ -913,7 +948,7 @@ async function controlled() {
       await chmod(resolve(cliRoot, "dist/wrangler.js"), 0o444);
     }
     const out = resolve(root, "claims");
-    const result = await runLiveRecoveryEvidence({ ...common, out });
+    const result = await successful({ ...common, out });
     assert.equal(
       integratedDownloads,
       2,
@@ -984,7 +1019,7 @@ async function controlled() {
     process.env.OPERATION = "verify";
     process.env.CONFIRM = `verify ${c.tag} ${sourceCommit} ${c.scope}`;
     const originalFiles = await inventory(originalDirectory);
-    const verified = await runLiveRecoveryEvidence({
+    const verified = await successful({
       ...common,
       deploymentPath: verifyDeployment,
       out: resolve(root, "verify-claims"),
@@ -1018,6 +1053,12 @@ async function controlled() {
         /unavailable/,
       );
       assert.equal(f.calls.length, 2, "Changed predecessor cannot cause a provider write");
+      assert.equal(
+        integratedDownloads,
+        6,
+        "The changed payload must be refused by post-child authentication",
+      );
+      assert.equal(object(object(await readJson(localResultPath)).observation).substituted, true);
       await assert.rejects(lstat(resolve(root, "tampered-local.recovery-link.json")), {
         code: "ENOENT",
       });
