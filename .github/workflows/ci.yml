@@ -113,9 +113,9 @@ jobs:
       - name: Bootstrap verified private pre-commit tools
         env:
           PINNED_PYTHON: ${{ steps.python.outputs.python-path }}
-        run: >-
-          node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON"
-          --directory "$RUNNER_TEMP/fortipi-precommit" --github-path "$GITHUB_PATH"
+        run: |
+          node tools/unstale/precommit-python.ts --prepare-hosted-python "$PINNED_PYTHON"
+          node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON" --directory "$RUNNER_TEMP/fortipi-precommit" --github-path "$GITHUB_PATH"
         if: github.event_name != 'workflow_dispatch'
       - run: node tools/unstale/review-precommit.ts
         if: github.event_name != 'workflow_dispatch'
