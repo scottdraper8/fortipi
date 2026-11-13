@@ -114,8 +114,9 @@ export async function assignment(
   command: string,
   jobId = randomUUID(),
   baseRevision = "r0",
+  durationMs = 60000,
 ): Promise<Assignment> {
-  const deadline = Date.now() + 60000,
+  const deadline = Date.now() + durationMs,
     target = { kind: "executor" as const, executorId: "executor", generation: 7 };
   const operation = {
     deploymentId: "deployment",

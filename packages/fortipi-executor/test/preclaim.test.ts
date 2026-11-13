@@ -24,11 +24,16 @@ import { connectExecutor, snapshotFixture } from "./fixtures/transport.ts";
 
 async function preparation(
   count = 1,
-  options: { same?: boolean; empty?: boolean; mismatchedSize?: boolean } = {},
+  options: { same?: boolean; empty?: boolean; mismatchedSize?: boolean; deadlineMs?: number } = {},
 ) {
   const f = await fixture(),
     marker = join(f.path, "actual-start"),
-    a = await assignment(nodeCommand(fixtureChild, "append", marker)),
+    a = await assignment(
+      nodeCommand(fixtureChild, "append", marker),
+      undefined,
+      undefined,
+      options.deadlineMs,
+    ),
     files = new Map<string, Buffer>(),
     manifest: Manifest = { version: 1, entries: [] };
   for (let i = 0; i < count; i++) {
@@ -194,7 +199,10 @@ async function preparing(h: Preparation) {
 }
 
 test("31 distinct snapshot blobs survive typed429 in one ongoing preparation across real lease renewals and start once", async (t) => {
-  const h = await preparation(31),
+  // This positive case includes 31 real native writes/permission checks plus
+  // a 31-second retry. Declare its whole budget before hashing the assignment;
+  // the runtime must still retain that exact deadline and renewable lease.
+  const h = await preparation(31, { deadlineMs: 180000 }),
     fault = readFault(h, "typed", 14, 31000),
     initialLeaseExpiry = h.a.identity.lease.expiresAt,
     deadline = h.a.identity.deadline,
@@ -202,8 +210,24 @@ test("31 distinct snapshot blobs survive typed429 in one ongoing preparation acr
   let pending: Promise<void> | undefined;
   try {
     pending = h.runtime.start(h.row);
-    void pending.catch(() => {});
-    await eventually(() => fault.reads.some((r) => r.status === 429), "typed429 not observed");
+    let settled = false;
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await eventually(
+      () => {
+        if (fault.reads.some((r) => r.status === 429)) return true;
+        assert.equal(settled, false, "Preparation ended before the actual typed429");
+        return false;
+      },
+      "typed429 not observed within the original job deadline",
+      Math.max(1, deadline - Date.now()),
+    );
     await preparing(h);
     const scratch = h.f.ledger.record<{ path: string }>(
       "stages",
