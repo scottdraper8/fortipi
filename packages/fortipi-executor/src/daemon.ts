@@ -808,6 +808,11 @@ export class ExecutorRuntime implements FrameHandler {
     if (value.type === "job.query") await this.currentPolicy();
     this.http.assertExecutorAuthority();
     if (value.type === "executor.registered") {
+      if (
+        value.payload.ledgerId !== this.ledger.ledgerId ||
+        value.payload.ledgerInstanceId !== this.ledger.ledgerInstanceId
+      )
+        throw new Error("registered ledger identity mismatch");
       this.connected = true;
       Object.assign(this.ledger.limits, effectiveLimits(this.ledger.limits, this.http.limits));
       this.staging.limits = this.http.limits;
@@ -1336,6 +1341,7 @@ export async function runDaemon(
           payload: {
             executorId: profile.executorId,
             generation: profile.executorGeneration,
+            ...runtime.http.ledgerIdentity(),
             protocolVersion: "1.0",
             schemaVersion: "1.0.0",
             platform: platform.platform,

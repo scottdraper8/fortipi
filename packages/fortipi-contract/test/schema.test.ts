@@ -389,7 +389,14 @@ test("tickets, generic floors and OAuth redaction/CAS", () => {
       originMode: { kind: "native" },
       ttlMs: 60000,
       ...(audience === "executor-session"
-        ? { executor: { executorId: "executor_1", generation: 4 } }
+        ? {
+            executor: {
+              executorId: "executor_1",
+              generation: 4,
+              ledgerId: "ledger",
+              ledgerInstanceId: "instance",
+            },
+          }
         : {}),
     });
   rejected("TicketInput", {
@@ -397,7 +404,12 @@ test("tickets, generic floors and OAuth redaction/CAS", () => {
     audience: "client-stream",
     resources,
     originMode: { kind: "native" },
-    executor: { executorId: "executor_1", generation: 4 },
+    executor: {
+      executorId: "executor_1",
+      generation: 4,
+      ledgerId: "ledger",
+      ledgerInstanceId: "instance",
+    },
   });
   rejected("TicketInput", {
     requestId: "request_1",
@@ -1020,6 +1032,8 @@ test("executor numeric transfer limits are required closed registration observat
   const payload = {
     executorId: "executor_1",
     generation: 4,
+    ledgerId: "ledger",
+    ledgerInstanceId: "instance",
     protocolVersion: "1.0",
     schemaVersion: "1.0.0",
     capabilities: ["workspace"],

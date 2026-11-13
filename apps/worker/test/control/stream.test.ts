@@ -264,7 +264,12 @@ test("client stream ticket scope, audience, origin and current authority fail cl
           audience: "executor-session",
           originMode: { kind: "native" },
           resources: { ...resources(), executorIds: ["executor"] },
-          executor: { executorId: "executor", generation: 1 },
+          executor: {
+            executorId: "executor",
+            generation: 1,
+            ledgerId: "fixture_ledger",
+            ledgerInstanceId: "fixture_instance",
+          },
         }),
       ),
     );

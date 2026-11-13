@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readSync } from "node:fs";
 import type { Profile } from "../dist/config.js";
+import { defaults } from "../dist/config.js";
+import { Ledger } from "../dist/ledger.js";
 import { disabledPolicy } from "../dist/policy.js";
 import { frame, HttpTransport } from "../dist/transport.js";
 
@@ -11,10 +13,11 @@ const option = (name: string) => {
   return i < 0 ? undefined : process.argv[i + 1];
 };
 const endpoint = option("--endpoint"),
-  descriptor = Number(option("--credential-fd"));
-if (!endpoint || !Number.isInteger(descriptor) || descriptor < 3)
+  descriptor = Number(option("--credential-fd")),
+  ledgerDirectory = option("--ledger-directory");
+if (!endpoint || !ledgerDirectory || !Number.isInteger(descriptor) || descriptor < 3)
   throw new Error("real endpoint and inherited --credential-fd >=3 required");
-let input: Omit<Profile, "origin" | "bindings" | "policy" | "limits" | "ledgerId" | "version">;
+let input: Omit<Profile, "origin" | "bindings" | "policy" | "limits" | "version">;
 try {
   const buffer = Buffer.alloc(65537);
   let size = 0;
@@ -38,9 +41,10 @@ const profile: Profile = {
   bindings: [],
   policy: disabledPolicy,
   limits: {},
-  ledgerId: "remote_test",
 };
 const http = new HttpTransport(profile, fetch, endpoint.startsWith("http://127.0.0.1:"));
+const ledger = await Ledger.open(ledgerDirectory, profile.ledgerId, defaults);
+http.bindLedger(ledger);
 await http.discover();
 const ticket = await http.ticket(),
   url = new URL("/v1/executor/session", profile.origin);
@@ -68,6 +72,7 @@ try {
             payload: {
               executorId: profile.executorId,
               generation: profile.executorGeneration,
+              ...http.ledgerIdentity(),
               protocolVersion: "1.0",
               schemaVersion: "1.0.0",
               capabilities: [],
@@ -91,6 +96,8 @@ try {
           assert.equal(value.requestId, requestId);
           assert.equal(value.payload.executorId, profile.executorId);
           assert.equal(value.payload.generation, profile.executorGeneration);
+          assert.equal(value.payload.ledgerId, ledger.ledgerId);
+          assert.equal(value.payload.ledgerInstanceId, ledger.ledgerInstanceId);
           clearTimeout(timer);
           resolve();
         } catch {
@@ -131,4 +138,5 @@ try {
   );
 } finally {
   socket.close(1000, "acceptance complete");
+  ledger.close();
 }

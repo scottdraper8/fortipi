@@ -347,6 +347,8 @@ test("typed429 retry reloads consent, revocation, epoch, root and cancellation i
           payload: {
             executorId: h.f.profile.executorId,
             generation: h.f.profile.executorGeneration,
+            ledgerId: h.f.ledger.ledgerId,
+            ledgerInstanceId: h.f.ledger.ledgerInstanceId,
             connectionEpoch: h.connection.session.connectionEpoch,
             state: "revoking",
             platform: h.connection.registration.payload.platform,
@@ -564,6 +566,8 @@ test("cached snapshot destinations fail closed on mid-write authority, epoch, re
           payload: {
             executorId: h.f.profile.executorId,
             generation: h.f.profile.executorGeneration,
+            ledgerId: h.f.ledger.ledgerId,
+            ledgerInstanceId: h.f.ledger.ledgerInstanceId,
             connectionEpoch: h.connection.session.connectionEpoch,
             state: "revoking",
             platform: h.connection.registration.payload.platform,

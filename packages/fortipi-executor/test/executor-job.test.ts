@@ -351,6 +351,8 @@ test("executor snapshot reads fail closed on reconnect, corrupt bytes and revoke
           payload: {
             executorId: f.profile.executorId,
             generation: f.profile.executorGeneration,
+            ledgerId: f.ledger.ledgerId,
+            ledgerInstanceId: f.ledger.ledgerInstanceId,
             state: "revoking",
             platform: connection.registration.payload.platform,
             capabilities: [],

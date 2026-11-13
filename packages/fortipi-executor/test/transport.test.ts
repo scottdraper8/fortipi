@@ -61,6 +61,7 @@ for (const mode of ["protocol", "binary", "registration", "heartbeat"] as const)
     try {
       f.profile.origin = server.origin;
       const http = new HttpTransport(f.profile, fetch, true);
+      http.bindLedger(f.ledger);
       const frames: ExecutorFrame[] = [];
       let disconnected = 0;
       const session = new SessionTransport(http, {
@@ -80,6 +81,7 @@ for (const mode of ["protocol", "binary", "registration", "heartbeat"] as const)
         payload: {
           executorId: f.profile.executorId,
           generation: f.profile.executorGeneration,
+          ...http.ledgerIdentity(),
           protocolVersion: "1.0",
           schemaVersion: "1.0.0",
           capabilities: [],
@@ -200,6 +202,7 @@ for (const mode of ["assignment", "workspace", "authority", "ack"] as const)
         payload: {
           executorId: f.profile.executorId,
           generation: f.profile.executorGeneration,
+          ...http.ledgerIdentity(),
           protocolVersion: "1.0",
           schemaVersion: "1.0.0",
           capabilities: [],
@@ -313,6 +316,7 @@ test("native reconnect replays durable deliveries and answers server queries wit
         payload: {
           executorId: f.profile.executorId,
           generation: f.profile.executorGeneration,
+          ...http.ledgerIdentity(),
           protocolVersion: "1.0",
           schemaVersion: "1.0.0",
           capabilities: [],
@@ -1129,6 +1133,7 @@ test("ticket metadata authenticates the executor transport role and credential e
         credentialExpiresAt: Date.now() + 5000,
       };
     server.setTicketIdentity(identity);
+    http.bindLedger(f.ledger);
     const ticket = await http.ticket();
     assert.ok(ticket.expiresAt > identity.credentialExpiresAt);
     assert.deepEqual(http.authority, identity);

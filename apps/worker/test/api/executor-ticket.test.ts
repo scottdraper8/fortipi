@@ -32,7 +32,12 @@ test("public ticket union permits scoped executor session and rejects client-str
         audience: "executor-session",
         resources,
         originMode: { kind: "native" },
-        executor: { executorId: "executor", generation: 1 },
+        executor: {
+          executorId: "executor",
+          generation: 1,
+          ledgerId: "fixture_ledger",
+          ledgerInstanceId: "fixture_instance",
+        },
       },
       "POST",
       issued.body.token,

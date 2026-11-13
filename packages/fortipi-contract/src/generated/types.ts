@@ -1285,6 +1285,8 @@ export type ExecutorFrame =
         rootBindingIds: Id[];
         confinement: "host" | "isolated";
         transferLimits: ExecutorTransferLimits;
+        ledgerId: Id;
+        ledgerInstanceId: Id;
       };
     }
   | {
@@ -1295,6 +1297,8 @@ export type ExecutorFrame =
         generation: number;
         connectionEpoch: number;
         heartbeatMs: 15000;
+        ledgerId: Id;
+        ledgerInstanceId: Id;
       };
     }
   | {
@@ -1832,6 +1836,8 @@ export type TicketInput =
       executor: {
         executorId: Id;
         generation: number;
+        ledgerId: Id;
+        ledgerInstanceId: Id;
       };
     };
 
@@ -2203,6 +2209,8 @@ export interface ExecutorDescription {
   rootBindingIds: Id[];
   state: "online" | "offline" | "revoking";
   transferLimits: ExecutorTransferLimits;
+  ledgerId: Id;
+  ledgerInstanceId: Id;
 }
 /**
  * Validated numeric registration observation, not remaining capacity or a future availability promise. fileBytes/artifactBytes must also fit chunkBytes*256; source8 computes all effective profile/server bounds and actors recheck before bytes.

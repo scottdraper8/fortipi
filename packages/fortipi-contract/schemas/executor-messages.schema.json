@@ -168,6 +168,12 @@
                 },
                 "transferLimits": {
                   "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits"
+                },
+                "ledgerId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "ledgerInstanceId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
                 }
               },
               "required": [
@@ -180,7 +186,9 @@
                 "caseBehavior",
                 "rootBindingIds",
                 "confinement",
-                "transferLimits"
+                "transferLimits",
+                "ledgerId",
+                "ledgerInstanceId"
               ],
               "additionalProperties": false
             }
@@ -215,9 +223,22 @@
                 },
                 "heartbeatMs": {
                   "const": 15000
+                },
+                "ledgerId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "ledgerInstanceId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
                 }
               },
-              "required": ["executorId", "generation", "connectionEpoch", "heartbeatMs"],
+              "required": [
+                "executorId",
+                "generation",
+                "connectionEpoch",
+                "heartbeatMs",
+                "ledgerId",
+                "ledgerInstanceId"
+              ],
               "additionalProperties": false
             }
           },

@@ -110,3 +110,18 @@ unavailable without replacing local metadata or exposing server diagnostics.
 Exports require explicit resource grants. `export create|backup --input PATH` returns an operation; inspect its state before `export download --id OPERATION_ID --output PROTECTED_PATH --max-bytes N`, adding `--artifact-id` when needed. Downloads verify exact length/hash and clear failed output. An unavailable local scope is reported by the authority and is not silently included.
 
 `fortipi tui --profile CLIENT_PROFILE -- ...` launches the separately installed TUI with only its own client profile and an allowlisted environment. Configure that profile using the [TUI instructions](../packages/fortipi-tui/README.md). No implicit client/executor installation or privilege inheritance occurs.
+
+For a native device, the executor credential output from guided setup or
+`credentials create --input NON_SECRET_DTO.json --output PROTECTED_ISSUED.json`
+is an issued envelope. Assemble it with the installed
+`fortipi-executor configure --credential-file PROTECTED_ISSUED.json --input DEVICE.json --profile NEW_PROFILE.json`.
+DEVICE explicitly selects expectedDeploymentId, executorId, executorGeneration,
+resources, bindings and optional lower limits; origin comes only from the envelope.
+See the executor README for the existing binding fields and private directory
+requirements. Configure performs public discovery only: actual credential/scope
+checks and immutable ledger-instance enrollment occur at start. Continue with
+explicit init, local import approval where applicable, host consent, start and
+per-job approval. Keep the actual ledger/profile; a copied profile with a fresh
+ledger cannot replace the same executor generation. Lost/legacy instance state
+requires deliberate authorized new-generation/new-ID recovery, never an automatic
+reset or replay.

@@ -59,7 +59,12 @@ export async function publicAccess(
     audience: "executor-session" as const,
     resources,
     originMode: { kind: "native" as const },
-    executor: { executorId: randomUUID(), generation: 1 },
+    executor: {
+      executorId: randomUUID(),
+      generation: 1,
+      ledgerId: "denied_ledger",
+      ledgerInstanceId: "denied_instance",
+    },
   };
   await assert.rejects(
     () => client.operations.mintConnectionTicket({ path: {}, query: {}, body: wrongAudience }),

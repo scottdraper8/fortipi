@@ -68,6 +68,7 @@ export interface Profile {
   executorGeneration: number;
   credential: CredentialRef;
   token: string;
+  credentialExpiresAt?: number;
   ledgerId: string;
   bindings: Binding[];
   resources: TransferDescriptor["consumer"];
@@ -186,7 +187,13 @@ export async function privateBytes(
   if ((await realpath(dirname(path))) !== resolve(dirname(path)))
     throw new Error("private parent alias");
   await platform.verifyProtection(path, false);
+  return readRegularBytes(path, limit);
+}
+/** Bounded coherent regular-file read for nonsecret DEVICE input; privateBytes adds secret protection. */
+export async function readRegularBytes(path: string, limit = 1048576): Promise<Buffer> {
   const before = await lstat(path);
+  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1)
+    throw new Error("input must be a regular unlinked file");
   if (before.size > limit) throw new Error("profile size");
   const fd = await open(
     path,
@@ -234,6 +241,9 @@ export async function loadProfile(
   } catch {
     throw new Error("invalid or unsafe protected executor profile");
   }
+  return validateProfile(p, path, local);
+}
+export async function validateProfile(p: Profile, path: string, local = false): Promise<Profile> {
   if (
     p.version !== 1 ||
     !/^[A-Za-z0-9_-]{1,128}$/.test(p.executorId) ||

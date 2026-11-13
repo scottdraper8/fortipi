@@ -418,12 +418,17 @@ export async function runNativeDaemon(
       );
       try {
         const row = ledger.get(run.jobId);
-        return { executionId: row?.assignment.identity.executionId, committed: !!row?.committed };
+        return {
+          executionId: row?.assignment.identity.executionId,
+          committed: !!row?.committed,
+          ledgerInstanceId: ledger.ledgerInstanceId,
+        };
       } finally {
         ledger.close();
       }
     };
     await until(retained, (row) => row.committed && row.executionId === identity.executionId);
+    const retainedInstanceId = (await retained()).ledgerInstanceId;
     await stopDaemon(true);
     await until(
       () => service.online(),
@@ -432,7 +437,11 @@ export async function runNativeDaemon(
     startDaemon();
     await until(() => service.online(), Boolean);
     assert.equal(daemon?.exitCode, null);
-    assert.deepEqual(await retained(), { executionId: identity.executionId, committed: true });
+    assert.deepEqual(await retained(), {
+      executionId: identity.executionId,
+      committed: true,
+      ledgerInstanceId: retainedInstanceId,
+    });
     const reopened = await service.job(run.jobId);
     assert.equal(reopened.state, "completed");
     assert.equal(reopened.execution?.executionId, identity.executionId);

@@ -631,6 +631,7 @@ async function setup(input: DevicePhaseInput, phase: "a" | "b", base: RecoveryWo
       await platform.protect(path, true);
     }
     const device = input.seed[phase];
+    let retainedInstance: { ledgerId: string; ledgerInstanceId: string } | undefined;
     const profile: Profile = {
       version: 1,
       origin: input.roles.endpoint,
@@ -744,6 +745,20 @@ async function setup(input: DevicePhaseInput, phase: "a" | "b", base: RecoveryWo
       },
       async start() {
         await command(["init"]);
+        const ledger = await executorModule.Ledger.open(
+          resolve(privateDirectory, profile.ledgerId),
+          profile.ledgerId,
+          executorModule.effectiveLimits(profile.limits),
+          platform,
+        );
+        try {
+          retainedInstance = {
+            ledgerId: ledger.ledgerId,
+            ledgerInstanceId: ledger.ledgerInstanceId,
+          };
+        } finally {
+          ledger.close();
+        }
         await command(["policy", "--trusted-host", "--accept-daemon-user-files-and-network"]);
         const child = spawn(process.execPath, [bin, "start", "--profile", profilePath], {
           cwd: directory,
@@ -759,6 +774,10 @@ async function setup(input: DevicePhaseInput, phase: "a" | "b", base: RecoveryWo
       },
       destroy,
       async assertRetiredSession() {
+        assert.ok(
+          retainedInstance,
+          "actual initialized ledger identity required before retirement",
+        );
         const stale = new clientModule.FortiPiClient({
           endpoint: input.roles.endpoint,
           credentials: async () => input.executorRole.token,
@@ -768,7 +787,7 @@ async function setup(input: DevicePhaseInput, phase: "a" | "b", base: RecoveryWo
           audience: "executor-session" as const,
           resources: deviceResources(input.seed, device),
           originMode: { kind: "native" as const },
-          executor: device,
+          executor: { ...device, ...retainedInstance },
         };
         await assert.rejects(
           () => stale.execute({ operationId: "mintConnectionTicket", path: {}, query: {}, body }),

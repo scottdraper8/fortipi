@@ -7,6 +7,7 @@ import { Approvals } from "./approval.js";
 import { adapter, effectiveLimits, loadProfile, privateWrite, stateHome } from "./config.js";
 import { runDaemon } from "./daemon.js";
 import { Guard, Ledger, ledgerRegistryIdentity, rootRegistry } from "./ledger.js";
+import { configureProfile, initializeProfile } from "./provision.js";
 import { HttpTransport } from "./transport.js";
 import { LocalWorkspace } from "./workspace/local.js";
 import { SafeRoot } from "./workspace/paths.js";
@@ -20,28 +21,46 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   const profilePath = value("--profile");
   if (!profilePath)
     throw new Error(
-      "Usage: fortipi-executor <init|import|start|status|resume-infrastructure|policy|approvals|approve|reject> --profile <protected-profile.json>",
+      "Usage: fortipi-executor <configure|init|import|start|status|resume-infrastructure|policy|approvals|approve|reject> --profile <protected-profile.json>",
     );
   const local = args.includes("--local-test");
-  const platform = adapter(),
-    profile = await loadProfile(resolve(profilePath), platform, local),
+  const platform = adapter();
+  if (args[0] === "configure") {
+    const flags = new Map<string, string>();
+    let localFlag = false;
+    for (let i = 1; i < args.length; i++) {
+      const name = args[i],
+        next = args[i + 1];
+      if (name === "--local-test" && !localFlag) {
+        localFlag = true;
+        continue;
+      }
+      if (
+        !name ||
+        !["--credential-file", "--input", "--profile"].includes(name) ||
+        flags.has(name) ||
+        !next ||
+        next.startsWith("--")
+      )
+        throw new Error("invalid configure arguments");
+      flags.set(name, next);
+      i++;
+    }
+    const credential = flags.get("--credential-file"),
+      input = flags.get("--input");
+    if (!credential || !input)
+      throw new Error("configure requires --credential-file, --input and a NEW --profile");
+    const configured = await configureProfile(credential, input, profilePath, platform, local);
+    process.stdout.write(
+      `${JSON.stringify({ version: 1, executorId: configured.executorId, executorGeneration: configured.executorGeneration, ledgerId: configured.ledgerId, hostConsent: false, ledgerProvisioned: false })}\n`,
+    );
+    return;
+  }
+  const profile = await loadProfile(resolve(profilePath), platform, local),
     directory = join(dirname(resolve(profilePath)), profile.ledgerId);
   const command = args[0];
   if (command === "init") {
-    const guards = await rootRegistry(
-      join(stateHome(), "roots"),
-      [],
-      platform,
-      ledgerRegistryIdentity(profile, directory, "provision"),
-    );
-    for (const guard of guards) guard.close();
-    const ledger = await Ledger.provision(
-      directory,
-      profile.ledgerId,
-      effectiveLimits(profile.limits),
-      platform,
-    );
-    ledger.close();
+    await initializeProfile(profile, directory, platform);
     process.stdout.write(
       "Executor ledger provisioned. Native shell remains disabled until trusted-host consent.\n",
     );

@@ -638,6 +638,8 @@ test("manifest disclosure rechecks actual executor revocation after asynchronous
           payload: {
             executorId: f.profile.executorId,
             generation: f.profile.executorGeneration,
+            ledgerId: f.ledger.ledgerId,
+            ledgerInstanceId: f.ledger.ledgerInstanceId,
             connectionEpoch: 1,
             platform: adapter().platform,
             caseBehavior: f.root.identity.caseBehavior,
@@ -1444,6 +1446,8 @@ test("revoking executor authority between actual filesystem effects stops an act
       payload: {
         executorId: f.profile.executorId,
         generation: f.profile.executorGeneration,
+        ledgerId: f.ledger.ledgerId,
+        ledgerInstanceId: f.ledger.ledgerInstanceId,
         connectionEpoch: 1,
         platform: adapter().platform,
         caseBehavior: f.root.identity.caseBehavior,

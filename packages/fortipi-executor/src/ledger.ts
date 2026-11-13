@@ -104,9 +104,19 @@ async function prepareDatabase(
 export class Ledger {
   db: Database;
   readonly incarnation = randomUUID();
+  readonly ledgerId: string;
+  readonly ledgerInstanceId: string;
   readonly limits: Limits;
   readonly path: string;
-  private constructor(path: string, db: Database, limits: Limits) {
+  private constructor(
+    path: string,
+    db: Database,
+    limits: Limits,
+    ledgerId: string,
+    ledgerInstanceId: string,
+  ) {
+    this.ledgerId = ledgerId;
+    this.ledgerInstanceId = ledgerInstanceId;
     this.path = path;
     this.db = db;
     this.limits = limits;
@@ -127,14 +137,22 @@ export class Ledger {
     }
     // Sentinel goes first: interruption here fails closed rather than silently allocating an empty replacement.
     await privateWrite(identityPath, canonicalJson({ version: 1, ledgerId }), platform, true);
-    return Ledger.open(directory, ledgerId, limits, platform, true);
+    return Ledger.#load(directory, ledgerId, limits, platform, true);
   }
   static async open(
     directory: string,
     ledgerId: string,
     limits: Limits,
     platform = adapter(),
-    initializing = false,
+  ): Promise<Ledger> {
+    return Ledger.#load(directory, ledgerId, limits, platform, false);
+  }
+  static async #load(
+    directory: string,
+    ledgerId: string,
+    limits: Limits,
+    platform: PlatformAdapter,
+    initializing: boolean,
   ): Promise<Ledger> {
     const identity = JSON.parse(await privateRead(join(directory, "identity.json"), platform)) as {
       ledgerId: string;
@@ -149,9 +167,8 @@ export class Ledger {
       );
       if ((db.prepare("PRAGMA quick_check").get() as { quick_check: string }).quick_check !== "ok")
         throw new Error("corrupt ledger");
-      const ledger = new Ledger(path, db, limits);
-      if (initializing)
-        db.exec(`
+      if (initializing) {
+        db.exec(`BEGIN IMMEDIATE;
         CREATE TABLE meta (key TEXT PRIMARY KEY,value TEXT NOT NULL);
         CREATE TABLE jobs (id TEXT PRIMARY KEY,body TEXT NOT NULL,state TEXT NOT NULL,data TEXT NOT NULL);
         CREATE INDEX job_state ON jobs(state,id);
@@ -162,8 +179,46 @@ export class Ledger {
         CREATE TABLE stages (id TEXT PRIMARY KEY,data TEXT NOT NULL);
         CREATE TABLE pins (root TEXT PRIMARY KEY,operation TEXT NOT NULL,quarantine INTEGER NOT NULL DEFAULT 0);
       `);
-      else db.prepare("SELECT value FROM meta LIMIT 1").all(); // Missing schema is loss, never a migration to an empty ledger.
-      return ledger;
+        db.prepare("INSERT INTO meta VALUES ('ledger_identity',?)").run(
+          canonicalJson({ version: 1, ledgerId, ledgerInstanceId: randomUUID() }),
+        );
+        db.exec("COMMIT");
+      }
+      const raw = db.prepare("SELECT value FROM meta WHERE key='ledger_identity'").get() as
+        | { value: string }
+        | undefined;
+      let saved: unknown;
+      try {
+        saved = raw ? JSON.parse(raw.value) : undefined;
+      } catch {
+        throw new Error("invalid retained ledger instance; explicit recovery required");
+      }
+      if (
+        !saved ||
+        typeof saved !== "object" ||
+        Array.isArray(saved) ||
+        Object.keys(saved).sort().join(",") !== "ledgerId,ledgerInstanceId,version" ||
+        !("version" in saved) ||
+        saved.version !== 1 ||
+        !("ledgerId" in saved) ||
+        saved.ledgerId !== ledgerId ||
+        !("ledgerInstanceId" in saved) ||
+        typeof saved.ledgerInstanceId !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+          saved.ledgerInstanceId,
+        )
+      )
+        throw new Error("missing or invalid retained ledger instance; explicit recovery required");
+      for (const query of [
+        "SELECT id,body,state,data FROM jobs LIMIT 0",
+        "SELECT id,job,sequence,kind,digest,data,acked FROM outbox LIMIT 0",
+        "SELECT id,digest,data FROM local_ops LIMIT 0",
+        "SELECT id,data FROM revisions LIMIT 0",
+        "SELECT id,data FROM stages LIMIT 0",
+        "SELECT root,operation,quarantine FROM pins LIMIT 0",
+      ])
+        db.prepare(query).all();
+      return new Ledger(path, db, limits, ledgerId, saved.ledgerInstanceId);
     } catch (error) {
       db.close();
       throw error;

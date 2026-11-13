@@ -92,6 +92,7 @@ export async function localApplyReceipt() {
         payload: {
           executorId: n.f.profile.executorId,
           generation: n.f.profile.executorGeneration,
+          ...n.runtime.http.ledgerIdentity(),
           protocolVersion: "1.0",
           schemaVersion: "1.0.0",
           platform: process.platform as "darwin" | "linux" | "win32",

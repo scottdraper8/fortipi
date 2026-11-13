@@ -31,6 +31,10 @@ export const administrationSchema = {
         transferLimits: {
           $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits",
         },
+        ledgerId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        ledgerInstanceId: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+        },
       },
       required: [
         "executorId",
@@ -43,6 +47,8 @@ export const administrationSchema = {
         "rootBindingIds",
         "state",
         "transferLimits",
+        "ledgerId",
+        "ledgerInstanceId",
       ],
       additionalProperties: false,
     },
@@ -84,8 +90,14 @@ export const administrationSchema = {
                   $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
                 },
                 generation: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+                ledgerId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
+                ledgerInstanceId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
               },
-              required: ["executorId", "generation"],
+              required: ["executorId", "generation", "ledgerId", "ledgerInstanceId"],
               additionalProperties: false,
             },
           },
@@ -3937,6 +3949,12 @@ export const executorMessagesSchema = {
                 transferLimits: {
                   $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits",
                 },
+                ledgerId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
+                ledgerInstanceId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
               },
               required: [
                 "executorId",
@@ -3949,6 +3967,8 @@ export const executorMessagesSchema = {
                 "rootBindingIds",
                 "confinement",
                 "transferLimits",
+                "ledgerId",
+                "ledgerInstanceId",
               ],
               additionalProperties: false,
             },
@@ -3970,8 +3990,21 @@ export const executorMessagesSchema = {
                 generation: { type: "integer", minimum: 0, maximum: 9007199254740991 },
                 connectionEpoch: { type: "integer", minimum: 0, maximum: 9007199254740991 },
                 heartbeatMs: { const: 15000 },
+                ledgerId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
+                ledgerInstanceId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
               },
-              required: ["executorId", "generation", "connectionEpoch", "heartbeatMs"],
+              required: [
+                "executorId",
+                "generation",
+                "connectionEpoch",
+                "heartbeatMs",
+                "ledgerId",
+                "ledgerInstanceId",
+              ],
               additionalProperties: false,
             },
           },

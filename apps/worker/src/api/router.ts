@@ -124,6 +124,7 @@ function discovery(
       "idempotent-admissions",
       "explicit-approval",
       "query-only-recovery",
+      "executor-ledger-instance-v1",
     ],
     schemas: Object.values(schemaRegistry).map((s) => ({
       name: s.$id.split("/").at(-1)!,

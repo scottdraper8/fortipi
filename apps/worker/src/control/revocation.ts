@@ -95,6 +95,7 @@ export class Revocations {
           ...e,
           generation: minimumGeneration,
           status: "revoked",
+          ledger: { kind: "unbound" },
           ...(description ? { description } : {}),
         });
         if (description)

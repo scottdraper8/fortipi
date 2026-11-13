@@ -13,9 +13,15 @@ export async function connected(
     transferLimits?: D.ExecutorTransferLimits;
     generation?: number;
     executorId?: string;
+    ledgerId?: string;
+    ledgerInstanceId?: string;
   } = {},
 ) {
   const executorId = options.executorId ?? "executor";
+  const ledger = {
+    ledgerId: options.ledgerId ?? "fixture_ledger",
+    ledgerInstanceId: options.ledgerInstanceId ?? "fixture_instance",
+  };
   const resources = {
     ...scope(),
     executorIds: [executorId],
@@ -36,7 +42,7 @@ export async function connected(
         audience: "executor-session",
         resources,
         originMode: { kind: "native" },
-        executor: { executorId, generation: options.generation ?? 1 },
+        executor: { executorId, generation: options.generation ?? 1, ...ledger },
       }),
     ),
   );
@@ -83,6 +89,7 @@ export async function connected(
     payload: {
       executorId,
       generation: options.generation ?? 1,
+      ...ledger,
       protocolVersion: "1.0",
       schemaVersion: "1.0.0",
       capabilities: ["shell"],

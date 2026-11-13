@@ -12,6 +12,7 @@ programs. Native execution defaults to disabled; `requireConfinement` rejects
 this backend on every platform.
 
 ```sh
+fortipi-executor configure --credential-file /protected/path/issued-executor.json --input device.json --profile /protected/path/profile.json
 fortipi-executor init --profile /protected/path/profile.json
 fortipi-executor import --root-binding-id ROOT --request-id IMPORT_ID --profile /protected/path/profile.json
 fortipi-executor import --root-binding-id ROOT --request-id IMPORT_ID --approve EXACT_PROPOSAL_DIGEST --profile /protected/path/profile.json
@@ -25,15 +26,53 @@ fortipi-executor reject JOB_ID --digest EXACT_LOCAL_DIGEST --profile /protected/
 fortipi-executor policy --disable --profile /protected/path/profile.json
 ```
 
-The management CLI writes the scoped credential directly to a protected profile;
-do not put tokens in argv or logs. `init` provisions a new durable identity once.
-It refuses existing identities. Missing/corrupt ledgers require explicit recovery
-and a newly authorized execution generation; restarting never recreates them.
+The management CLI delivers a protected **issued credential envelope**, not a native
+Profile. `configure` reads that envelope and a closed, nonsecret DEVICE input:
+`{expectedDeploymentId, executorId, executorGeneration, resources, bindings, limits?}`.
+Choose every resource and binding explicitly, including an explicit empty bindings
+list if no workspace is ready. Bindings use the fields below. Existing limits only
+reduce the conservative defaults. The output directory must already have the
+existing private owner/mode/ACL protection; the new file is created exclusively.
+The issued file and any existing profile remain untouched. Never put tokens in
+argv, ordinary DEVICE input or logs.
+
+Origin comes only from the issued envelope. Configure performs anonymous public
+protocol/deployment discovery and assembles a disabled version1 profile with a
+fresh `ledgerId`; it does **not** authenticate the bearer, enroll an executor,
+provision a ledger, import files, consent to host execution or start a daemon.
+The local envelope's role/expiry are metadata. Actual role, expiry, current
+credential, exact executor generation and grant scope are checked when starting.
+Generation1 is an explicit expectation for a genuinely new executor, never an
+inference from credential generation or an empty list. Existing IDs require their
+known current execution generation.
+
+`init` provisions a real durable ledger once, after the existing per-user registry
+bind. SQLite durably generates a persistent instance ID distinct from the per-open
+process incarnation. The server binds executor ID/execution generation to the
+actual ledger ID/instance at the first successful session upgrade, before advancing
+its epoch or replacing another connection. Tickets alone do not enroll. A copied
+full Profile on an empty host creates a different instance and cannot replace the
+original, even with the same `ledgerId`. A lost connection/registration reply retries
+the same retained ledger; it never provisions another.
+
+Keep the profile and actual ledger/state for recovery. Missing/corrupt/legacy
+instance data refuses instead of being reconstructed or migrated. A legacy server
+record with no enrollment marker also refuses. Explicit authorized executor revoke
+with its expected generation, followed by reissue, authorizes a new generation;
+a new executor ID is the other recovery choice. Neither recovers lost receipts or
+permits replay of an uncertain job. This identity binding is not a cryptographic
+attestation of database completeness. The coordinated protocol requires
+`executor-ledger-instance-v1`; old executor wire shapes/servers are not compatible.
+
 The profile's `ledgerId` selects its private sibling state directory. Default
 per-user state/registry locations are Application Support/FortiPi/Executor on
 macOS, XDG state/fortipi/executor on Linux, and LocalAppData/FortiPi/Executor on
-Windows. Profiles and state must be outside workspaces and checkouts. HTTPS is
-required; `--local-test` permits loopback HTTP only.
+Windows. Protected profiles stay outside checkouts; profile/state stay outside
+bound workspaces. Ordinary Git working trees are eligible workspaces, retaining
+the existing `.git`/secret and root/link exclusions. HTTPS is required;
+`--local-test` permits loopback HTTP only. After init, use the separate exact import
+proposal/digest approval (for local bindings), explicit host consent, start and
+per-job approval commands above. Configure/init grant no execution consent.
 
 `Profile` and `Binding` are exported TypeScript interfaces. A version1 profile
 contains origin/deploymentId, executorId/executorGeneration, the separate
@@ -263,9 +302,10 @@ manifest comparison, then require the independent duplicate-claim and revision
 oracles to fail. Restored baselines are rerun. Evidence is about those defects
 and environments, not test count.
 
-`test/remote.ts --endpoint ORIGIN --credential-fd 3` requires an actual endpoint
+`test/remote.ts --endpoint ORIGIN --credential-fd 3 --ledger-directory RETAINED_DIRECTORY` requires an actual endpoint
 and inherited bounded JSON containing the scoped token, executor/generation,
-deployment, credential ref and explicit resources. It performs discovery,
+deployment, credential ref, the retained ledgerId and explicit resources. It opens
+the actual retained ledger (never provisioning one) and performs discovery,
 real ticket/registration and one-use ticket rejection with native WebSocket.
 It fails when the descriptor or endpoint is absent. It does not claim all
 deployed job, revoke, transfer or device-replacement scenarios. Thread10 owns

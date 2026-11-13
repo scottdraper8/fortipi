@@ -127,6 +127,8 @@ export class HttpTransport {
     };
   }
   bindLedger(ledger: Ledger): void {
+    if (ledger.ledgerId !== this.profile.ledgerId)
+      throw new Error("transport ledger identity mismatch");
     this.ledger = ledger;
     const saved = ledger.db.prepare("SELECT value FROM meta WHERE key='https_pressure'").get() as
       | { value: string }
@@ -182,6 +184,11 @@ export class HttpTransport {
       if (previous.pressure) this.pressure = previous.pressure;
       throw error;
     }
+  }
+  ledgerIdentity(): { ledgerId: string; ledgerInstanceId: string } {
+    if (!this.ledger || this.ledger.ledgerId !== this.profile.ledgerId)
+      throw new Error("actual opened executor ledger required");
+    return { ledgerId: this.ledger.ledgerId, ledgerInstanceId: this.ledger.ledgerInstanceId };
   }
   private activeTransfers = 0;
   transferLimits(): ExecutorTransferLimits {
@@ -332,6 +339,7 @@ export class HttpTransport {
     body?: unknown,
     method = body === undefined ? "GET" : "POST",
     deadline?: number,
+    authenticated = true,
   ): Promise<unknown> {
     const init: RequestInit = { method };
     if (body !== undefined) {
@@ -340,13 +348,14 @@ export class HttpTransport {
       init.body = bytes;
       init.headers = { "Content-Type": "application/json" };
     }
-    const response = await this.request(path, init, true, deadline);
+    const response = await this.request(path, init, authenticated, deadline);
     return JSON.parse(
       Buffer.from(await readBounded(response, this.jsonBytes)).toString("utf8"),
     ) as unknown;
   }
   async discover(): Promise<void> {
-    const value = (await this.json("/v1/protocol")) as {
+    const value = (await this.json("/v1/protocol", undefined, "GET", undefined, false)) as {
+      features?: unknown;
       protocolVersion?: string;
       schemaVersion?: string;
       deploymentId?: string;
@@ -354,6 +363,8 @@ export class HttpTransport {
       limits?: { jsonBytes: number; chunkBytes: number; outputFrameBytes: number };
     };
     if (
+      !Array.isArray(value.features) ||
+      !value.features.includes("executor-ledger-instance-v1") ||
       value.protocolVersion !== "1.0" ||
       value.schemaVersion !== "1.0.0" ||
       value.deploymentId !== this.profile.deploymentId ||
@@ -390,6 +401,7 @@ export class HttpTransport {
         executor: {
           executorId: this.profile.executorId,
           generation: this.profile.executorGeneration,
+          ...this.ledgerIdentity(),
         },
       }),
     );
@@ -533,6 +545,12 @@ export class SessionTransport {
     };
     if (Buffer.byteLength(canonicalJson(frame(registration))) > this.http.jsonBytes)
       throw new Error("registration exceeds negotiated control limit");
+    const instance = this.http.ledgerIdentity();
+    if (
+      registration.payload.ledgerId !== instance.ledgerId ||
+      registration.payload.ledgerInstanceId !== instance.ledgerInstanceId
+    )
+      throw new Error("registration ledger identity mismatch");
     const ticket = await this.http.ticket();
     const url = new URL("/v1/executor/session", this.http.profile.origin);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -573,6 +591,8 @@ export class SessionTransport {
                   value.requestId !== registration.requestId ||
                   value.payload.executorId !== this.http.profile.executorId ||
                   value.payload.generation !== this.http.profile.executorGeneration ||
+                  value.payload.ledgerId !== instance.ledgerId ||
+                  value.payload.ledgerInstanceId !== instance.ledgerInstanceId ||
                   this.socket !== socket ||
                   value.payload.connectionEpoch <= this.connectionEpoch
                 )

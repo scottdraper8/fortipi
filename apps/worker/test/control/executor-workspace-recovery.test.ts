@@ -158,7 +158,12 @@ test("assigned upload and seal recover the same retained identities after accept
             audience: "executor-session",
             resources,
             originMode: { kind: "native" },
-            executor: { executorId: "executor", generation: 1 },
+            executor: {
+              executorId: "executor",
+              generation: 1,
+              ledgerId: "fixture_ledger",
+              ledgerInstanceId: "fixture_instance",
+            },
           }),
         }),
       );
@@ -184,6 +189,8 @@ test("assigned upload and seal recover the same retained identities after accept
           payload: {
             executorId: "executor",
             generation: 1,
+            ledgerId: "fixture_ledger",
+            ledgerInstanceId: "fixture_instance",
             protocolVersion: "1.0",
             schemaVersion: "1.0.0",
             capabilities: ["shell"],

@@ -180,6 +180,8 @@ export function executorRegistration(limits: ExecutorTransferLimits) {
     payload: {
       executorId: "executor_1",
       generation: 4,
+      ledgerId: "fixture_ledger",
+      ledgerInstanceId: "fixture_instance",
       protocolVersion: "1.0",
       schemaVersion: "1.0.0",
       capabilities: ["workspace"],

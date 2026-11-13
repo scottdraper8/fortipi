@@ -59,7 +59,8 @@ test("changing an actual retained artifact at reopen refuses facts and cleans up
   let changed = 0;
   t.mock.method(Ledger, "open", async (...args: Parameters<typeof Ledger.open>) => {
     const ledger = await original.apply(Ledger, args);
-    if (!args[4]) {
+    {
+      // Ordinary open never initializes; provisioning has its private creation path.
       changedDirectory = args[0];
       const artifacts = await readdir(join(args[0], "artifacts"));
       const first = artifacts[0];

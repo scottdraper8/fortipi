@@ -1,6 +1,6 @@
 import { validateBrowserOrigin } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
-import { contains, requireGrant } from "./authorization.js";
+import { contains, emptyScope, requireGrant } from "./authorization.js";
 import { valid } from "./directory.js";
 import type { Identities } from "./identity.js";
 import { check, hash, id, json, next, ref, type Store, same } from "./store.js";
@@ -15,8 +15,39 @@ export interface ExecutorState {
   generation: number;
   epoch: number;
   status: string;
+  ledger?: { kind: "unbound" } | { kind: "bound"; ledgerId: string; ledgerInstanceId: string };
   description?: D.ExecutorDescription;
   credentialId?: string;
+}
+/** Missing enrollment metadata is legacy unknown, never evidence of a fresh generation. */
+export function requireExecutorInstance(
+  state: ExecutorState | undefined,
+  executor: NonNullable<D.SocketIdentity["executor"]>,
+  allowUnbound = false,
+): asserts state is ExecutorState {
+  check(
+    state && state.status !== "revoked" && state.generation === executor.generation,
+    "conflict",
+    "Executor revoked or generation changed",
+  );
+  check(
+    valid("common", "Id", executor.ledgerId) &&
+      valid("common", "Id", executor.ledgerInstanceId) &&
+      ((allowUnbound && state.ledger?.kind === "unbound") ||
+        (state.ledger?.kind === "bound" &&
+          state.ledger.ledgerId === executor.ledgerId &&
+          state.ledger.ledgerInstanceId === executor.ledgerInstanceId)),
+    "conflict",
+    "Executor retained ledger instance mismatch; explicit recovery required",
+  );
+}
+export function requireExecutorScope(
+  ctx: D.AuthContext,
+  resources: D.ResourceScope,
+  executorId: string,
+): void {
+  requireGrant(ctx, "tickets.mint", resources);
+  requireGrant(ctx, "executors.register", { ...emptyScope(), executorIds: [executorId] });
 }
 export class Tickets {
   readonly store: Store;
@@ -121,11 +152,11 @@ export class Tickets {
         "unauthorized",
         "Executor ticket identity mismatch",
       );
-      const e = this.store.get<ExecutorState>("executor", input.executor.executorId);
-      check(
-        e && e.generation === input.executor.generation && e.status !== "revoked",
-        "conflict",
-        "Executor generation changed",
+      requireExecutorScope(ctx, input.resources, input.executor.executorId);
+      requireExecutorInstance(
+        this.store.get<ExecutorState>("executor", input.executor.executorId),
+        input.executor,
+        true,
       );
     } else {
       check(ctx.role !== "executor", "unauthorized", "Executor cannot acquire client stream");
@@ -159,7 +190,21 @@ export class Tickets {
     };
     await this.store.arm(expiresAt);
     this.store.tx(() => {
-      this.identities.current(ctx);
+      const current = this.identities.current(ctx);
+      if (input.audience === "executor-session") {
+        check(
+          current.role === "executor" && current.executorId === input.executor.executorId,
+          "unauthorized",
+          "Executor ticket identity mismatch",
+        );
+        requireExecutorScope(ctx, input.resources, input.executor.executorId);
+        requireExecutorInstance(
+          this.store.get<ExecutorState>("executor", input.executor.executorId),
+          input.executor,
+          true,
+        );
+      }
+      check(Date.now() < expiresAt, "unauthenticated", "Ticket scope expired");
       this.store.put(
         "ticket",
         digest,
@@ -254,11 +299,16 @@ export class Tickets {
           "unauthorized",
           "Ticket destination mismatch",
         );
-        const e = this.store.get<ExecutorState>("executor", t.identity.executor.executorId);
         check(
-          e && e.generation === t.identity.executor.generation && e.status !== "revoked",
-          "unauthenticated",
-          "Executor revoked",
+          c.role === "executor" && c.executorId === t.identity.executor.executorId,
+          "unauthorized",
+          "Executor ticket identity mismatch",
+        );
+        requireExecutorScope(ctx, t.identity.resources, t.identity.executor.executorId);
+        requireExecutorInstance(
+          this.store.get<ExecutorState>("executor", t.identity.executor.executorId),
+          t.identity.executor,
+          true,
         );
         registrationId = id();
       }

@@ -115,7 +115,12 @@ test("actual failed HTTP upgrade spends a ticket; CORS admits only exact configu
           audience: "executor-session",
           resources: scope(),
           originMode: { kind: "native" },
-          executor: { executorId: "executor", generation: 1 },
+          executor: {
+            executorId: "executor",
+            generation: 1,
+            ledgerId: "fixture_ledger",
+            ledgerInstanceId: "fixture_instance",
+          },
         }),
       ),
     );

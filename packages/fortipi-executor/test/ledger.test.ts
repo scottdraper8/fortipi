@@ -178,3 +178,54 @@ test("executor generation cannot replace its durable ledger by selecting another
     await f.cleanup();
   }
 });
+
+test("one-time provision retains a closed SQLite instance across reopen; missing, malformed and legacy instance metadata never regenerate", async () => {
+  const f = await fixture();
+  const first = f.ledger.ledgerInstanceId,
+    incarnation = f.ledger.incarnation;
+  let reopened: Ledger | undefined;
+  try {
+    assert.match(first, /^[0-9a-f-]{36}$/);
+    f.ledger.close();
+    reopened = await Ledger.open(f.directory, "ledger", defaults);
+    assert.equal(reopened.ledgerInstanceId, first);
+    assert.notEqual(reopened.incarnation, incarnation);
+    const record = reopened.db
+      .prepare("SELECT value FROM meta WHERE key='ledger_identity'")
+      .get() as { value: string };
+    for (const invalid of [
+      null,
+      "{}",
+      JSON.stringify({ ...JSON.parse(record.value), ledgerId: "different" }),
+      JSON.stringify({ ...JSON.parse(record.value), extra: true }),
+      JSON.stringify({ ...JSON.parse(record.value), ledgerInstanceId: "" }),
+    ]) {
+      if (invalid === null)
+        reopened.db.prepare("DELETE FROM meta WHERE key='ledger_identity'").run();
+      else
+        reopened.db
+          .prepare("INSERT OR REPLACE INTO meta VALUES ('ledger_identity',?)")
+          .run(invalid);
+      await assert.rejects(Ledger.open(f.directory, "ledger", defaults), /ledger instance/);
+      assert.equal(
+        (
+          reopened.db.prepare("SELECT value FROM meta WHERE key='ledger_identity'").get() as
+            | { value: string }
+            | undefined
+        )?.value,
+        invalid === null ? undefined : invalid,
+      );
+    }
+    reopened.db
+      .prepare("INSERT OR REPLACE INTO meta VALUES ('ledger_identity',?)")
+      .run(record.value);
+    reopened.db.exec("DROP TABLE pins");
+    await assert.rejects(Ledger.open(f.directory, "ledger", defaults), /no such table/);
+    reopened.close();
+    await assert.rejects(Ledger.provision(f.directory, "ledger", defaults), /already provisioned/);
+  } finally {
+    if (reopened?.db.isOpen) reopened.close();
+    if (f.ledger.db.isOpen) f.ledger.close();
+    await rm(f.path, { recursive: true, force: true });
+  }
+});

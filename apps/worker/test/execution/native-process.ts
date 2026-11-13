@@ -241,7 +241,12 @@ export async function nativeProcessRecovery(
             audience: "executor-session",
             resources: bootstrapScope,
             originMode: { kind: "native" },
-            executor: { executorId, generation: 1 },
+            executor: {
+              executorId,
+              generation: 1,
+              ledgerId: f.ledger.ledgerId,
+              ledgerInstanceId: f.ledger.ledgerInstanceId,
+            },
           },
           "POST",
           bootstrap.token,
@@ -331,6 +336,8 @@ export async function nativeProcessRecovery(
           payload: {
             executorId,
             generation: 1,
+            ledgerId: f.ledger.ledgerId,
+            ledgerInstanceId: f.ledger.ledgerInstanceId,
             protocolVersion: "1.0",
             schemaVersion: "1.0.0",
             platform: process.platform as "darwin" | "linux" | "win32",

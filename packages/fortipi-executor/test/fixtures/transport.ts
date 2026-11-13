@@ -26,6 +26,7 @@ export function connectExecutor(http: HttpTransport, runtime: ExecutorRuntime) {
       payload: {
         executorId: http.profile.executorId,
         generation: http.profile.executorGeneration,
+        ...http.ledgerIdentity(),
         protocolVersion: "1.0",
         schemaVersion: "1.0.0",
         capabilities: [],
@@ -80,6 +81,7 @@ export async function sessionFixture(
           protocolVersion: "1.0",
           schemaVersion: "1.0.0",
           deploymentId: profile.deploymentId,
+          features: ["executor-ledger-instance-v1"],
           infrastructure: freeInfrastructurePolicy,
           limits: { jsonBytes: 1048576, chunkBytes: 262144, outputFrameBytes: 16384 },
         }),
@@ -211,6 +213,8 @@ export async function sessionFixture(
                 payload: {
                   executorId: profile.executorId,
                   generation: profile.executorGeneration,
+                  ledgerId: value.payload.ledgerId,
+                  ledgerInstanceId: value.payload.ledgerInstanceId,
                   connectionEpoch: ++epoch,
                   heartbeatMs: 15000,
                 },

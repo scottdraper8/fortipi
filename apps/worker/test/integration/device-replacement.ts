@@ -110,7 +110,12 @@ export async function deviceReplacement() {
             audience: "executor-session",
             resources: empty,
             originMode: { kind: "native" },
-            executor: { executorId: bId, generation: 1 },
+            executor: {
+              executorId: bId,
+              generation: 1,
+              ledgerId: b.ledger.ledgerId,
+              ledgerInstanceId: b.ledger.ledgerInstanceId,
+            },
           },
           "POST",
           seed.token,
@@ -343,6 +348,8 @@ export async function deviceReplacement() {
         executor: {
           executorId: n.f.profile.executorId,
           generation: n.f.profile.executorGeneration,
+          ledgerId: n.f.ledger.ledgerId,
+          ledgerInstanceId: n.f.ledger.ledgerInstanceId,
         },
       },
       "POST",
@@ -403,6 +410,7 @@ export async function deviceReplacement() {
         payload: {
           executorId: bId,
           generation: 1,
+          ...runtimeB.http.ledgerIdentity(),
           protocolVersion: "1.0",
           schemaVersion: "1.0.0",
           platform: process.platform as "darwin" | "linux" | "win32",

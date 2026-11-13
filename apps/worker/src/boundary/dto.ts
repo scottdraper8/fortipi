@@ -108,7 +108,7 @@ export interface SocketIdentity extends T.CredentialRef {
   originMode: T.OriginMode;
   registrationId: string;
   expiresAt: number;
-  executor?: { executorId: string; generation: number };
+  executor?: { executorId: string; generation: number; ledgerId: string; ledgerInstanceId: string };
 }
 interface TargetScope {
   operationId: string;
