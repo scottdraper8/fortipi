@@ -27,6 +27,7 @@ export async function installedPackageInventory(
   }
   const actual: FileRecord[] = [];
   async function walk(path: string): Promise<void> {
+    assert.ok(files.has(path) || directories.has(path), "Unexpected installed package member");
     const absolute = resolve(root, path);
     const stat = await lstat(absolute);
     assert.ok(!stat.isSymbolicLink(), "Linked installed package entry");
@@ -34,7 +35,7 @@ export async function installedPackageInventory(
     if (stat.isDirectory()) {
       assert.ok(directories.has(path), "Unexpected installed package directory");
       for (const name of (await readdir(absolute)).sort())
-        await walk(packageEntryPath(path ? `${path}/${name}` : name));
+        await walk(path ? `${path}/${name}` : name);
     } else {
       const saved = files.get(path);
       assert.ok(saved && stat.isFile() && stat.nlink === 1, "Unexpected installed package member");

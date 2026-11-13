@@ -9,6 +9,7 @@ import { installedPackageInventory } from "./installed-inventory.ts";
 
 test("installed inventory accepts authenticated bundled dependencies while rejecting hidden or changed physical members", async () => {
   const root = await mkdtemp(resolve(await realpath(tmpdir()), "fortipi-installed-inventory-"));
+  const hardlink = `${root}.linked-member`;
   const nested = resolve(root, "node_modules/ajv");
   await mkdir(nested, { recursive: true });
   const files = [
@@ -54,10 +55,10 @@ test("installed inventory accepts authenticated bundled dependencies while rejec
     await chmod(root, 0o555);
     await assert.rejects(
       installedPackageInventory(root, expected),
-      /Unexpected installed package directory/,
+      /Unexpected installed package member/,
     );
     await chmod(root, 0o700);
-    await rm(resolve(root, "empty"));
+    await rm(resolve(root, "empty"), { recursive: true });
     await chmod(root, 0o555);
     const target = resolve(nested, "package.json");
     await chmod(target, 0o644);
@@ -68,14 +69,9 @@ test("installed inventory accepts authenticated bundled dependencies while rejec
     await chmod(target, 0o644);
     await writeFile(target, files[1].bytes);
     await chmod(target, 0o444);
-    const hardlink = resolve(root, "outside-link");
-    await chmod(root, 0o700);
     await link(target, hardlink);
-    await chmod(root, 0o555);
     await assert.rejects(installedPackageInventory(root, expected));
-    await chmod(root, 0o700);
     await rm(hardlink);
-    await chmod(root, 0o555);
     await chmod(nested, 0o700);
     await rm(target);
     await symlink(resolve(root, "package.json"), target);
@@ -87,6 +83,7 @@ test("installed inventory accepts authenticated bundled dependencies while rejec
     await chmod(nested, 0o555);
     assert.deepEqual(await installedPackageInventory(root, expected), original);
   } finally {
+    await rm(hardlink, { force: true });
     for (const directory of directories) await chmod(directory, 0o700);
     await rm(root, { recursive: true, force: true });
   }
