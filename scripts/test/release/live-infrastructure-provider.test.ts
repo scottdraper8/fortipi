@@ -256,9 +256,13 @@ async function protocol(
           assert.equal(q.variables.version, versionId);
           assert.match(q.query, /scriptVersion: \$version/);
           metrics = {
-            sum: { requests: idle ? 0 : 2, errors: 0, cpuTimeUs: 1234 },
+            sum: {
+              requests: idle ? 0 : 2,
+              errors: 0,
+              ...(q.query.includes("cpuTimeUs") ? { cpuTimeUs: 1234 } : {}),
+            },
             avg: { sampleInterval: 2.5 },
-            quantiles: { cpuTimeP99: 800.5 },
+            ...(q.query.includes("cpuTimeP99") ? { quantiles: { cpuTimeP99: 800.5 } } : {}),
           };
           Object.assign(dimensions, {
             scriptName: expectedWorkerName,
@@ -279,7 +283,7 @@ async function protocol(
               sum: {
                 rowsRead: 7,
                 rowsWritten: idle ? 0 : Number(String(q.variables.namespace)[0]),
-                cpuTime: 9001,
+                ...(/\bcpuTime\b/.test(q.query) ? { cpuTime: 9001 } : {}),
                 exceededCpuErrors: 0,
                 exceededMemoryErrors: 0,
                 fatalInternalErrors: 0,
@@ -344,6 +348,7 @@ test("private loopback collector binds fixed queries/account/version/all3 namesp
     );
     const worker = present(result.datasets.find((d) => d.kind === "worker"));
     assert.equal(worker.active.aggregate.records?.[0]?.sum?.cpuTimeUs, 1234);
+    assert.equal(worker.active.aggregate.records?.[0]?.quantiles?.cpuTimeP99, 800.5);
     assert.equal(worker.active.aggregate.recordedWindow, null);
     assert.equal(worker.idle.aggregate.records?.[0]?.sum?.requests, 0);
     assert.equal(worker.idle.series.records, null);
@@ -392,8 +397,107 @@ test("private loopback collector binds fixed queries/account/version/all3 namesp
   }
 });
 
+test("optional CPU cannot crowd out or invalidate required counters in either window", async () => {
+  const cpu = new Set(["cpuTimeUs", "cpuTimeP99", "cpuTime"]);
+  for (const mode of ["schema-absent", "not-listed", "wrong-type", "field-budget"] as const) {
+    let unsupportedQueries = 0;
+    const p = await protocol(
+      (d) => {
+        if (mode === "schema-absent" || mode === "wrong-type") {
+          for (const definition of Object.values(d.schema)) {
+            if (!Array.isArray(definition.fields)) continue;
+            if (mode === "schema-absent")
+              definition.fields = definition.fields.filter((f) => !cpu.has(f.name));
+            else for (const f of definition.fields) if (cpu.has(f.name)) f.type = ref("string");
+          }
+          if (mode === "schema-absent") {
+            const worker = present(d.schema.AccountWorkersInvocationsAdaptive);
+            worker.fields = (worker.fields as ReturnType<typeof field>[]).filter(
+              (f) => f.name !== "quantiles",
+            );
+            delete d.schema.AccountWorkersInvocationsAdaptiveQuantiles;
+          }
+        }
+        for (const config of Object.values(d.settings)) {
+          if (mode === "schema-absent" || mode === "not-listed")
+            config.availableFields = config.availableFields.filter(
+              (f) => !["sum_cpuTimeUs", "quantiles_cpuTimeP99", "sum_cpuTime"].includes(f),
+            );
+          config.availableFields.push("sum_notAReviewedMetric");
+        }
+        if (mode === "field-budget") {
+          present(d.settings.workersInvocationsAdaptive).maxNumberOfFields = 7;
+          present(d.settings.durableObjectsPeriodicGroups).maxNumberOfFields = 7;
+        }
+      },
+      (response, q) => {
+        assert.ok(!q.query.includes("notAReviewedMetric"));
+        if (
+          /^query FortiPiInfrastructure(?:worker|periodic)\(/.test(q.query) &&
+          /\b(?:cpuTimeUs|cpuTimeP99|cpuTime)\b/.test(q.query)
+        ) {
+          unsupportedQueries++;
+          return { data: null, errors: [{ message: "Unavailable optional CPU selection" }] };
+        }
+        return response;
+      },
+    );
+    try {
+      const result = await createInfrastructureAnalyticsReader(p.input).read(p.clock);
+      assert.equal(unsupportedQueries, 0, mode);
+      assert.equal(p.seen.length, 22, mode);
+      assert.ok(result.datasets.every((d) => d.active.aggregate.unavailable === null));
+      for (const phase of ["active", "idle"] as const) {
+        const worker = present(result.datasets.find((d) => d.kind === "worker"));
+        const record = present(worker[phase].aggregate.records?.[0]);
+        assert.equal(record.sum?.requests, phase === "idle" ? 0 : 2);
+        assert.equal(record.sum?.errors, 0);
+        assert.equal(record.avg?.sampleInterval, 2.5);
+        assert.equal(record.sum?.cpuTimeUs, undefined);
+        assert.equal(record.quantiles, undefined);
+        for (const [i, row] of result.datasets.filter((d) => d.kind === "periodic").entries()) {
+          const sum = present(row[phase].aggregate.records?.[0]?.sum);
+          assert.equal(sum.rowsRead, 7);
+          assert.equal(sum.rowsWritten, phase === "idle" ? 0 : i + 1);
+          assert.equal(sum.exceededCpuErrors, 0);
+          assert.equal(sum.exceededMemoryErrors, 0);
+          assert.equal(sum.fatalInternalErrors, 0);
+          assert.equal(sum.cpuTime, undefined);
+        }
+      }
+    } finally {
+      await p.close();
+    }
+  }
+});
+
 test("current schema, entitlement and settings bounds refuse affected queries before collection", async () => {
   const scenarios: { change: (d: Discovery) => void; kind: string; reason: string }[] = [
+    {
+      change: (d) => {
+        const config = present(d.settings.workersInvocationsAdaptive);
+        config.availableFields = config.availableFields.filter((f) => f !== "avg_sampleInterval");
+      },
+      kind: "worker",
+      reason: "field",
+    },
+    {
+      change: (d) => {
+        const config = present(d.settings.durableObjectsPeriodicGroups);
+        config.availableFields = config.availableFields.filter((f) => f !== "sum_rowsWritten");
+      },
+      kind: "periodic",
+      reason: "field",
+    },
+    {
+      change: (d) => {
+        const fields = present(d.schema.AccountDurableObjectsPeriodicGroupsSum)
+          .fields as ReturnType<typeof field>[];
+        present(fields.find((f) => f.name === "exceededCpuErrors")).type = ref("string");
+      },
+      kind: "periodic",
+      reason: "schema",
+    },
     {
       change: (d) => {
         present(d.settings.workersInvocationsAdaptive).enabled = false;
@@ -443,7 +547,7 @@ test("current schema, entitlement and settings bounds refuse affected queries be
         const f = present(d.schema.AccountWorkersInvocationsAdaptiveSum).fields as ReturnType<
           typeof field
         >[];
-        present(f.find((f) => f.name === "cpuTimeUs")).type = ref("string");
+        present(f.find((f) => f.name === "requests")).type = ref("string");
       },
       kind: "worker",
       reason: "schema",

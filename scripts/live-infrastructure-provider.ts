@@ -82,6 +82,7 @@ type Spec = {
   type: string;
   filter: string;
   metrics: Record<string, Record<string, string>>;
+  optional?: Record<string, Record<string, string>>;
   dimensions: Record<string, string>;
   quality: InfrastructureDataset["quality"];
   units: Record<string, string>;
@@ -96,8 +97,11 @@ const specs: Spec[] = [
     filter: "datetime",
     quality: "adaptive-estimate",
     metrics: {
-      sum: { requests: "uint64", errors: "uint64", cpuTimeUs: "uint64" },
+      sum: { requests: "uint64", errors: "uint64" },
       avg: { sampleInterval: "float64" },
+    },
+    optional: {
+      sum: { cpuTimeUs: "uint64" },
       quantiles: { cpuTimeP99: "float64" },
     },
     dimensions: {
@@ -134,12 +138,12 @@ const specs: Spec[] = [
       sum: {
         rowsRead: "uint64",
         rowsWritten: "uint64",
-        cpuTime: "uint64",
         exceededCpuErrors: "uint64",
         exceededMemoryErrors: "uint64",
         fatalInternalErrors: "uint64",
       },
     },
+    optional: { sum: { cpuTime: "uint64" } },
     dimensions: { namespaceId: "string", datetimeMinute: "Time" },
     units: {
       rowsRead: "rows",
@@ -170,7 +174,9 @@ const typeNames = [
       s.type,
       `${s.type}Filter_InputObject`,
       `${s.type}Dimensions`,
-      ...Object.keys(s.metrics).map((g) => `${s.type}${g[0]?.toUpperCase()}${g.slice(1)}`),
+      ...Object.keys({ ...s.metrics, ...s.optional }).map(
+        (g) => `${s.type}${g[0]?.toUpperCase()}${g.slice(1)}`,
+      ),
     ]),
   ]),
 ];
@@ -192,7 +198,7 @@ function selection(groups: Record<string, Record<string, string>>): string {
 }
 // Built once exclusively from the fixed table above. All runtime identities/times
 // are GraphQL variables; no URL, query, field or object-ID input is accepted.
-const queries = specs.map((s) => {
+function query(s: Spec): string {
   const scope =
     s.kind === "worker"
       ? "scriptName: $worker, scriptVersion: $version"
@@ -205,7 +211,7 @@ const queries = specs.map((s) => {
       series: ${s.node}(filter: { ${filter} }, limit: $limit) { ${metrics} dimensions { ${Object.keys(s.dimensions).join(" ")} }
     } }
   }`;
-});
+}
 class Unavailable extends Error {
   readonly reason: Reason;
   constructor(reason: Reason) {
@@ -276,7 +282,7 @@ function supported(
   settings: Record<string, unknown>,
   windows: UtcWindow[],
   now: number,
-): number {
+): { limit: number; selected: Spec } {
   scalar(schema, "account", "accountTag", "string");
   const dataset = schemaField(schema, "account", s.node);
   if (unwrapped(dataset.type).kind !== "LIST" || leaf(dataset.type).name !== s.type) fail("schema");
@@ -297,12 +303,14 @@ function supported(
   for (const suffix of ["_geq", "_lt"]) scalar(schema, inputType, s.filter + suffix, "Time", true);
   for (const name of s.kind === "worker" ? ["scriptName", "scriptVersion"] : ["namespaceId"])
     scalar(schema, inputType, name, "string", true);
-  for (const [group, fields] of Object.entries({ ...s.metrics, dimensions: s.dimensions })) {
+  const validate = (group: string, fields: Record<string, string>) => {
     const type = `${s.type}${group[0]?.toUpperCase()}${group.slice(1)}`;
     const ref = schemaField(schema, s.type, group).type;
     if (unwrapped(ref).kind !== "OBJECT" || leaf(ref).name !== type) fail("schema");
     for (const [field, expected] of Object.entries(fields)) scalar(schema, type, field, expected);
-  }
+  };
+  for (const [group, fields] of Object.entries({ ...s.metrics, dimensions: s.dimensions }))
+    validate(group, fields);
   for (const [name, expected] of Object.entries({
     enabled: "bool",
     availableFields: "string",
@@ -334,7 +342,26 @@ function supported(
     fail("window");
   const limit = Math.min(1000, Number(config.maxPageSize));
   if (limit < 2) fail("limit");
-  return limit;
+  const metrics = Object.fromEntries(Object.entries(s.metrics).map(([g, fs]) => [g, { ...fs }]));
+  for (const [group, optional] of Object.entries(s.optional ?? {})) {
+    for (const [field, expected] of Object.entries(optional)) {
+      if (
+        !fields.includes(`${group}_${field}`) ||
+        selected.length >= Number(config.maxNumberOfFields)
+      )
+        continue;
+      try {
+        validate(group, { [field]: expected });
+      } catch (error) {
+        // Only optional schema validation is contained; required checks above still fail closed.
+        if (!(error instanceof Unavailable || error instanceof assert.AssertionError)) throw error;
+        continue;
+      }
+      metrics[group] = { ...metrics[group], [field]: expected };
+      selected.push(`${group}_${field}`);
+    }
+  }
+  return { limit, selected: { ...s, metrics } };
 }
 function unavailable(why: Reason): RawInfrastructureObservation {
   return { unavailable: why, records: null, recordedWindow: null, recordedMinutes: null };
@@ -668,16 +695,23 @@ export function createInfrastructureAnalyticsReader(input: InfrastructureAnalyti
               idle: bad("schema"),
             };
             datasets.push(dataset);
-            let limit: number;
+            let limit: number, selected: Spec;
             try {
               if (!schema || !settings)
                 fail(schemaUnavailable ?? settingsUnavailable ?? "settings");
-              limit = supported(s, schema, settings, [windows.active, windows.idle], now);
+              ({ limit, selected } = supported(
+                s,
+                schema,
+                settings,
+                [windows.active, windows.idle],
+                now,
+              ));
             } catch (error) {
               dataset.active = bad(reason(error));
               dataset.idle = bad(reason(error));
               continue;
             }
+            const selectedQuery = query(selected);
             for (const phase of ["active", "idle"] as const) {
               const window = windows[phase];
               pending.push(async () => {
@@ -685,7 +719,7 @@ export function createInfrastructureAnalyticsReader(input: InfrastructureAnalyti
                   const data = accountData(
                     await post(
                       `${s.kind}:${namespace?.binding ?? "worker"}:${phase}`,
-                      present(queries[i]),
+                      selectedQuery,
                       {
                         account,
                         ...(namespace
@@ -701,14 +735,22 @@ export function createInfrastructureAnalyticsReader(input: InfrastructureAnalyti
                   dataset[phase] = {
                     aggregate: observation(
                       data.aggregate,
-                      s,
+                      selected,
                       namespace,
                       worker,
                       window,
                       limit,
                       false,
                     ),
-                    series: observation(data.series, s, namespace, worker, window, limit, true),
+                    series: observation(
+                      data.series,
+                      selected,
+                      namespace,
+                      worker,
+                      window,
+                      limit,
+                      true,
+                    ),
                   };
                 } catch (error) {
                   dataset[phase] = bad(reason(error));

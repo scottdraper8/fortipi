@@ -97,6 +97,9 @@ function number(
   assert.ok(typeof value === "number" && Number.isFinite(value) && value >= 0);
   return value;
 }
+function cpuMs(record: Record<string, Record<string, string | number>> | undefined, key: string) {
+  return record?.sum?.[key] === undefined ? null : number(record, "sum", key) / 1000;
+}
 function available(value: RawInfrastructureObservation) {
   return value.unavailable === null && value.records !== null && value.records.length > 0;
 }
@@ -138,13 +141,18 @@ function aggregate(
       ? [
           "rowsRead",
           "rowsWritten",
-          "cpuTime",
           "exceededCpuErrors",
           "exceededMemoryErrors",
           "fatalInternalErrors",
         ]
       : ["requests", "errors"];
   if (!fields.every((field) => number(row, "sum", field) === 0)) return null;
+  if (
+    dataset.kind === "periodic" &&
+    row.sum?.cpuTime !== undefined &&
+    number(row, "sum", "cpuTime") !== 0
+  )
+    return null;
   return {
     row,
     coverage: {
@@ -243,7 +251,7 @@ export function normalizeInfrastructure(
       worker: {
         ...invocations(worker, phase, request[phase]),
         scope: { workerName: request.workerName, workerVersionId: request.workerVersionId },
-        workerCpuSumMs: workerRow ? number(workerRow, "sum", "cpuTimeUs") / 1000 : null,
+        workerCpuSumMs: cpuMs(workerRow, "cpuTimeUs"),
       },
       durableObjects: namespaces.namespaces.map<InfrastructureDurableObjectMeasurements>(
         (namespace) => {
@@ -265,7 +273,7 @@ export function normalizeInfrastructure(
               ...(periodicObservation?.coverage ?? { records: 0, effectiveWindow: null }),
               sqlRowsReadSum: row ? number(row, "sum", "rowsRead") : null,
               sqlRowsWrittenSum: row ? number(row, "sum", "rowsWritten") : null,
-              doCpuSumMs: row ? number(row, "sum", "cpuTime") / 1000 : null,
+              doCpuSumMs: cpuMs(row, "cpuTime"),
               exceededCpuErrorsSum: row ? number(row, "sum", "exceededCpuErrors") : null,
               exceededMemoryErrorsSum: row ? number(row, "sum", "exceededMemoryErrors") : null,
               fatalInternalErrorsSum: row ? number(row, "sum", "fatalInternalErrors") : null,

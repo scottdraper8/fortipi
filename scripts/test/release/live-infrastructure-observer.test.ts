@@ -163,6 +163,39 @@ test("private fixed observations preserve namespace scope, CPU units, unknown la
   assert.equal(result.requestSha256, sha256(canonicalJson(request)));
 });
 
+test("unselected CPU stays unknown in both windows without losing required observations", () => {
+  const data = raw();
+  for (const dataset of data.datasets)
+    for (const phase of ["active", "idle"] as const)
+      for (const part of ["aggregate", "series"] as const)
+        for (const row of dataset[phase][part].records ?? []) {
+          if (dataset.kind === "worker") delete row.sum?.cpuTimeUs;
+          if (dataset.kind === "periodic") delete row.sum?.cpuTime;
+        }
+  const observed = verifyInfrastructureMeasurements(
+    request,
+    normalizeInfrastructure(request, namespaces, data),
+  );
+  for (const phase of ["active", "idle"] as const) {
+    assert.equal(observed[phase].worker.workerCpuSumMs, null);
+    assert.equal(observed[phase].worker.requestsSum, 2);
+    assert.equal(observed[phase].worker.aggregateErrorsSum, 0);
+    assert.equal(observed[phase].worker.sampleInterval, 1);
+    for (const row of observed[phase].durableObjects) {
+      assert.equal(row.periodic.doCpuSumMs, null);
+      assert.equal(row.periodic.quality, "periodic-counter");
+      assert.equal(row.periodic.sqlRowsWrittenSum, phase === "idle" ? 1 : 7);
+      assert.equal(row.periodic.exceededCpuErrorsSum, 0);
+      assert.equal(row.invocations.sampleInterval, 1);
+    }
+  }
+  for (const invalid of [-1, Number.NaN, "unknown"]) {
+    first(first(data.datasets.filter((d) => d.kind === "worker")).active.aggregate.records ?? [])
+      .sum!.cpuTimeUs = invalid;
+    assert.throws(() => normalizeInfrastructure(request, namespaces, data));
+  }
+});
+
 test("empty records stay unavailable, aggregate quantiles are not added, and errors cannot disappear", () => {
   const data = raw(),
     memory = first(data.datasets.filter((value) => value.kind === "memory"));
@@ -205,15 +238,38 @@ test("an actual returned zero aggregate covers its query window without inventin
   assert.equal(observed.idle.worker.requestsSum, 0);
   assert.equal(observed.idle.worker.aggregateErrorsSum, 0);
   assert.equal(observed.idle.worker.sampleInterval, null);
+  assert.equal(observed.idle.worker.workerCpuSumMs, 0);
   assert.deepEqual(observed.idle.worker.statuses, []);
   assert.equal(observed.idle.worker.coverageKind, "query-window-aggregate");
   assert.equal(observed.idle.worker.records, 1);
   assert.deepEqual(observed.idle.worker.effectiveWindow, request.idle);
   for (const resource of observed.idle.durableObjects) {
     assert.equal(resource.periodic.sqlRowsWrittenSum, 0);
+    assert.equal(resource.periodic.doCpuSumMs, 0);
     assert.equal(resource.periodic.coverageKind, "query-window-aggregate");
     assert.equal(resource.isolateMemory.quality, "unavailable");
     assert.equal(resource.isolateMemory.doIsolateMemoryP99Bytes, null);
+  }
+  const periodic = first(data.datasets.filter((dataset) => dataset.kind === "periodic"));
+  const periodicSum = first(periodic.idle.aggregate.records ?? []).sum!;
+  delete periodicSum.cpuTime;
+  const unknownCpu = verifyInfrastructureMeasurements(
+    request,
+    normalizeInfrastructure(request, namespaces, data),
+  );
+  assert.equal(first(unknownCpu.idle.durableObjects).periodic.doCpuSumMs, null);
+  assert.equal(first(unknownCpu.idle.durableObjects).periodic.sqlRowsWrittenSum, 0);
+  assert.equal(
+    first(unknownCpu.idle.durableObjects).periodic.coverageKind,
+    "query-window-aggregate",
+  );
+  for (const field of ["rowsWritten", "cpuTime"]) {
+    periodicSum[field] = 1;
+    const nonzero = normalizeInfrastructure(request, namespaces, data);
+    assert.ok(!("unavailable" in nonzero));
+    assert.equal(first(nonzero.idle.durableObjects).periodic.quality, "unavailable");
+    delete periodicSum[field];
+    if (field === "rowsWritten") periodicSum.rowsWritten = 0;
   }
   // The same empty series with a positive aggregate must not borrow that scope.
   const worker = first(data.datasets.filter((value) => value.kind === "worker"));
