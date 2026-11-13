@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { createHash, X509Certificate } from "node:crypto";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, resolve, sep } from "node:path";
 import { t as listTar } from "tar";
 import { parse as parseYaml } from "yaml";
+import { attachApplicationRecoveryChannel } from "./application-recovery-channel.ts";
 import { packagePaths, repository } from "./build-workspaces.ts";
 import {
   resolveCurrentCandidateReference,
@@ -147,14 +148,18 @@ export async function execute(
   env = childEnvironment(),
   timeout = 300_000,
   progress = false,
+  onSpawn?: (child: ChildProcess) => void,
 ): Promise<ProcessResult> {
+  if (onSpawn)
+    assert.equal(command, process.execPath, "Private IPC requires the trusted Node executable");
   return new Promise((accept, reject) => {
     const child = spawn(command, args, {
       cwd,
       env,
       windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: onSpawn ? ["ignore", "pipe", "pipe", "ipc"] : ["ignore", "pipe", "pipe"],
     });
+    assert.ok(child.stdout && child.stderr);
     let stdout = "";
     let size = 0;
     let timedOut = false;
@@ -181,6 +186,13 @@ export async function execute(
       clearTimeout(timer);
       accept({ stdout, code, timedOut });
     });
+    try {
+      onSpawn?.(child);
+    } catch {
+      clearTimeout(timer);
+      child.kill("SIGKILL");
+      reject(new Error("Trusted child channel initialization failed"));
+    }
   });
 }
 async function checked(
@@ -190,8 +202,9 @@ async function checked(
   env = childEnvironment(),
   timeout = 300_000,
   progress = false,
+  onSpawn?: (child: ChildProcess) => void,
 ): Promise<string> {
-  const result = await execute(command, args, cwd, env, timeout, progress);
+  const result = await execute(command, args, cwd, env, timeout, progress, onSpawn);
   assert.ok(
     result.code === 0 && !result.timedOut,
     `Required command failed: ${basename(command)} ${args[0] ?? ""}`,
@@ -2078,13 +2091,23 @@ export async function publishCandidate(
     await rm(scratch, { recursive: true, force: true });
   }
 }
+export interface EvidenceRecovery {
+  checkpointDirectory: string;
+  coordinator: Parameters<typeof attachApplicationRecoveryChannel>[2];
+  forbiddenValues?: readonly string[];
+}
 export async function runEvidence(
   mode: "local" | "native" | "live",
   candidate: string,
   fixture: string,
   out: string,
   deployment?: string,
+  recovery?: EvidenceRecovery,
 ): Promise<void> {
+  if (recovery) {
+    assert.equal(mode, "live");
+    assert.equal(recovery.checkpointDirectory, resolve(out, "application-recovery"));
+  }
   const context = await resolveCandidateReadContext(candidate);
   const loaded = await loadCandidate(candidate, context);
   const expectedProducer = await evidenceProducer(repository, loaded.candidate, mode);
@@ -2096,24 +2119,46 @@ export async function runEvidence(
   );
   await regularBytes(resolve(fixture));
   const env = evidenceEnvironment(expectedProducer, mode, context);
-  await checked(
-    process.execPath,
-    [
-      "tests/clients/run-evidence.ts",
-      mode,
-      "--candidate",
-      resolve(candidate),
-      ...(deployment ? ["--deployment", resolve(deployment)] : []),
-      "--fixture",
-      resolve(fixture),
-      "--out",
-      resolve(out),
-    ],
-    repository,
-    env,
-    900000,
-    true,
-  );
+  let channel: ReturnType<typeof attachApplicationRecoveryChannel> | undefined;
+  let childError: unknown;
+  try {
+    await checked(
+      process.execPath,
+      [
+        "tests/clients/run-evidence.ts",
+        mode,
+        "--candidate",
+        resolve(candidate),
+        ...(deployment ? ["--deployment", resolve(deployment)] : []),
+        "--fixture",
+        resolve(fixture),
+        "--out",
+        resolve(out),
+      ],
+      repository,
+      env,
+      900000,
+      true,
+      recovery
+        ? (child) => {
+            channel = attachApplicationRecoveryChannel(
+              child,
+              recovery.checkpointDirectory,
+              recovery.coordinator,
+              recovery.forbiddenValues,
+            );
+          }
+        : undefined,
+    );
+  } catch (error) {
+    childError = error;
+  }
+  try {
+    await channel?.settled();
+    if (childError) throw childError;
+  } finally {
+    channel?.close();
+  }
   const receipt = await readJson(resolve(out, "gate.json"));
   assertEvidenceReceipt(receipt, loaded, expectedProducer, mode);
   await verifyPayload(out, receipt.files, ["gate.json"]);

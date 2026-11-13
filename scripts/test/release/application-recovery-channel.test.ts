@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { resolve } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import type { ApplicationRecoveryBridge } from "../../../tests/clients/platform-recovery.ts";
 import { attachApplicationRecoveryChannel } from "../../application-recovery-channel.ts";
 import { repository } from "../../build-workspaces.ts";
-import { childEnvironment } from "../../prepare-release.ts";
+import { childEnvironment, execute } from "../../prepare-release.ts";
 import { sha256 } from "../../verify-release-gates.ts";
 
 const directory = resolve(repository, ".agent-docs/tmp/recovery-channel-fixture");
@@ -26,7 +24,9 @@ async function run(
   coordinator: Parameters<typeof attachApplicationRecoveryChannel>[2],
   forbidden: string[] = [],
 ) {
-  const child = spawn(
+  let channel: ReturnType<typeof attachApplicationRecoveryChannel> | undefined;
+  const errors: Buffer[] = [];
+  const result = await execute(
     process.execPath,
     [
       "--input-type=module",
@@ -36,17 +36,18 @@ async function run(
     try { ${source} } finally { process.disconnect?.(); }
   `,
     ],
-    { cwd: repository, env: childEnvironment(), stdio: ["ignore", "pipe", "pipe", "ipc"] },
+    repository,
+    childEnvironment(),
+    10000,
+    false,
+    (child) => {
+      channel = attachApplicationRecoveryChannel(child, directory, coordinator, forbidden);
+      assert.ok(child.stderr);
+      child.stderr.on("data", (bytes) => errors.push(Buffer.from(bytes)));
+    },
   );
-  const channel = attachApplicationRecoveryChannel(child, directory, coordinator, forbidden);
-  assert.ok(child.stdout && child.stderr);
-  const output: Buffer[] = [];
-  child.stdout.on("data", (bytes) => output.push(Buffer.from(bytes)));
-  const errors: Buffer[] = [];
-  child.stderr.on("data", (bytes) => errors.push(Buffer.from(bytes)));
-  const timer = setTimeout(() => child.kill("SIGKILL"), 10000);
+  assert.ok(channel);
   try {
-    const [code, signal] = await once(child, "close");
     let rejection = "";
     try {
       await channel.settled();
@@ -54,14 +55,12 @@ async function run(
       rejection = String(error);
     }
     return {
-      code,
-      signal,
-      stdout: Buffer.concat(output).toString(),
+      code: result.code,
+      stdout: result.stdout,
       stderr: Buffer.concat(errors).toString(),
       rejection,
     };
   } finally {
-    clearTimeout(timer);
     channel.close();
   }
 }
@@ -120,6 +119,22 @@ test("inherited IPC carries only the bound before/after records, in order, witho
 });
 
 test("wrong checkpoint paths and read-only channel writes fail before a trusted handler runs", async () => {
+  const unattached = await execute(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `
+    import {applicationRecoveryChannel} from ${JSON.stringify(moduleUrl)};
+    try { applicationRecoveryChannel('perform'); throw Error('No channel required'); }
+    catch(error) { if(!String(error).includes('Inherited application recovery channel required'))throw error; console.log('no-implicit-channel'); }
+  `,
+    ],
+    repository,
+    childEnvironment({ FORTIPI_RECOVERY_MODE: "perform" }),
+  );
+  assert.equal(unattached.code, 0);
+  assert.equal(unattached.stdout.trim(), "no-implicit-channel");
   let calls = 0;
   const bridge: ApplicationRecoveryBridge = {
     async perform() {
