@@ -61,6 +61,7 @@ const commands = [
 ];
 
 type Stage =
+  | "prepare-hosted-python"
   | "arguments"
   | "lock"
   | "directory"
@@ -541,51 +542,142 @@ export async function verifyPrecommit(directory: string, pythonPath: string): Pr
   return resolve(directory, process.platform === "win32" ? "venv/Scripts" : "venv/bin");
 }
 
+/** Explicit trusted hosted-Linux preparation; normal bootstrap never chmods Python. */
+export async function prepareHostedPython(path: string) {
+  stage("prepare-hosted-python");
+  assert.equal(process.platform, "linux", "Hosted Linux preparation required");
+  assert.equal(process.env.GITHUB_ACTIONS, "true", "Hosted CI preparation required");
+  assert.equal(process.env.RUNNER_ENVIRONMENT, "github-hosted", "Hosted CI preparation required");
+  assert.ok(safePath(path), "Explicit setup Python path required");
+  const lock = await precommitLock();
+  const prefix = `/opt/hostedtoolcache/Python/${lock.python}/${process.arch}/bin/`;
+  const permitted = (value: string) =>
+    value.startsWith(prefix) &&
+    ["python", "python3", "python3.15"].includes(value.slice(prefix.length));
+  assert.ok(permitted(path), "Pinned setup Python path required");
+  const canonical = await realpath(path);
+  assert.ok(permitted(canonical), "Pinned canonical setup Python path required");
+  const initial = await lstat(canonical);
+  assert.ok(
+    initial.isFile() && (own(initial.uid) || initial.uid === 0),
+    "Untrusted setup Python executable",
+  );
+  const file = await open(canonical, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const before = await file.stat();
+    const identity = (stat: typeof before) => [
+      stat.dev,
+      stat.ino,
+      stat.uid,
+      stat.gid,
+      stat.nlink,
+      stat.size,
+      stat.mtimeMs,
+    ];
+    assert.ok(
+      before.isFile() && (own(before.uid) || before.uid === 0),
+      "Untrusted setup Python executable",
+    );
+    assert.deepEqual(
+      [...identity(before), before.mode, before.ctimeMs],
+      [...identity(initial), initial.mode, initial.ctimeMs],
+      "Setup Python changed before preparation",
+    );
+    const digest = async () => {
+      const hash = createHash("sha256");
+      for await (const bytes of file.createReadStream({ start: 0, autoClose: false }))
+        hash.update(bytes);
+      return hash.digest("hex");
+    };
+    const sha256 = await digest();
+    const stable = await file.stat();
+    assert.deepEqual(
+      [...identity(stable), stable.mode, stable.ctimeMs],
+      [...identity(before), before.mode, before.ctimeMs],
+      "Setup Python changed while hashing",
+    );
+    assert.equal(await realpath(path), canonical, "Setup Python path changed");
+    const expectedMode = before.mode & ~0o022;
+    if (expectedMode !== before.mode) await file.chmod(expectedMode & 0o7777);
+    const after = await file.stat();
+    assert.deepEqual(identity(after), identity(before), "Setup Python identity changed");
+    assert.equal(after.mode, expectedMode, "Unexpected setup Python mode change");
+    assert.equal(await digest(), sha256, "Setup Python content changed");
+    const final = await file.stat();
+    const named = await lstat(canonical);
+    assert.deepEqual(
+      [...identity(final), final.mode, final.ctimeMs],
+      [...identity(after), after.mode, after.ctimeMs],
+      "Setup Python changed after preparation",
+    );
+    assert.deepEqual(
+      [...identity(named), named.mode, named.ctimeMs],
+      [...identity(final), final.mode, final.ctimeMs],
+      "Setup Python path no longer identifies opened file",
+    );
+    assert.equal(await realpath(path), canonical, "Setup Python path changed");
+    return {
+      prepared: true,
+      sha256,
+      beforeMode: before.mode & 0o7777,
+      afterMode: final.mode & 0o7777,
+    };
+  } finally {
+    await file.close();
+  }
+}
+
 if (import.meta.main) {
   try {
     const args = process.argv.slice(2);
-    const options = new Map<string, string>();
-    for (let index = 0; index < args.length; index += 2) {
-      const key = args[index],
-        value = args[index + 1];
-      assert.ok(
-        key &&
-          ["--python", "--directory", "--archives", "--verify", "--github-path"].includes(key) &&
-          value &&
-          !options.has(key),
-        "Invalid pre-commit bootstrap arguments",
-      );
-      options.set(key, value);
-    }
-    const python = options.get("--python"),
-      directory = options.get("--verify") ?? options.get("--directory");
-    assert.ok(python && directory && !(options.has("--verify") && options.has("--directory")));
-    const bin = options.has("--verify")
-      ? await verifyPrecommit(directory, python)
-      : await provisionPrecommit(python, directory, options.get("--archives"));
-    const exportFile = options.get("--github-path");
-    if (exportFile) {
-      stage("github-path");
-      assert.ok(safePath(exportFile));
-      const file = await open(
-        exportFile,
-        constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW,
-      );
-      try {
-        const stat = await file.stat();
-        assert.ok(stat.isFile() && own(stat.uid) && stat.nlink === 1);
-        await file.writeFile(`${bin}\n`);
-      } finally {
-        await file.close();
+    if (args[0] === "--prepare-hosted-python") {
+      assert.equal(args.length, 2, "Preparation is a standalone operation");
+      assert.ok(args[1]);
+      console.log(JSON.stringify(await prepareHostedPython(args[1])));
+    } else {
+      const options = new Map<string, string>();
+      for (let index = 0; index < args.length; index += 2) {
+        const key = args[index],
+          value = args[index + 1];
+        assert.ok(
+          key &&
+            ["--python", "--directory", "--archives", "--verify", "--github-path"].includes(key) &&
+            value &&
+            !options.has(key),
+          "Invalid pre-commit bootstrap arguments",
+        );
+        options.set(key, value);
       }
+      const python = options.get("--python"),
+        directory = options.get("--verify") ?? options.get("--directory");
+      assert.ok(python && directory && !(options.has("--verify") && options.has("--directory")));
+      const bin = options.has("--verify")
+        ? await verifyPrecommit(directory, python)
+        : await provisionPrecommit(python, directory, options.get("--archives"));
+      const exportFile = options.get("--github-path");
+      if (exportFile) {
+        stage("github-path");
+        assert.ok(safePath(exportFile));
+        const file = await open(
+          exportFile,
+          constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW,
+        );
+        try {
+          const stat = await file.stat();
+          assert.ok(stat.isFile() && own(stat.uid) && stat.nlink === 1);
+          await file.writeFile(`${bin}\n`);
+        } finally {
+          await file.close();
+        }
+      }
+      console.log(
+        JSON.stringify({
+          python: (await precommitLock()).python,
+          bin,
+          preCommitHome: resolve(directory, "pre-commit-home"),
+        }),
+      );
     }
-    console.log(
-      JSON.stringify({
-        python: (await precommitLock()).python,
-        bin,
-        preCommitHome: resolve(directory, "pre-commit-home"),
-      }),
-    );
   } catch (error) {
     const failure = error as { code?: unknown; signal?: unknown } | null;
     console.error(
