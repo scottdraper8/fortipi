@@ -60,6 +60,62 @@ const commands = [
   "detect-private-key",
 ];
 
+type Stage =
+  | "arguments"
+  | "lock"
+  | "directory"
+  | "archives"
+  | "interpreter"
+  | "download"
+  | "venv"
+  | "install-build"
+  | "install-runtime"
+  | "installed-metadata"
+  | "pip-check"
+  | "hook-source"
+  | "freeze"
+  | "identity"
+  | "verify"
+  | "github-path";
+let cliStage: Stage = "arguments";
+function stage(value: Stage): void {
+  if (import.meta.main) cliStage = value;
+}
+function safeCode(value: unknown): number | string {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 255)
+    return value;
+  return typeof value === "string" &&
+    /^(?:ENOENT|EACCES|EPERM|EEXIST|EINVAL|ENOTDIR|ENOSPC|EROFS|ETIMEDOUT|ENOMEM|ENOBUFS|E2BIG|ERR_ASSERTION|ERR_CHILD_PROCESS_STDIO_MAXBUFFER)$/.test(
+      value,
+    )
+    ? value
+    : "unknown";
+}
+function safeSignal(value: unknown): string | null {
+  return typeof value === "string" &&
+    /^(?:SIGTERM|SIGKILL|SIGABRT|SIGSEGV|SIGILL|SIGBUS|SIGPIPE|SIGINT)$/.test(value)
+    ? value
+    : null;
+}
+class PythonCommandFailure extends Error {
+  readonly code: number | string;
+  readonly signal: string | null;
+  readonly diagnostic: "python-shared-library-unavailable" | "command-failed";
+  constructor(code: unknown, signal: unknown, stderr: string) {
+    super("Pinned Python tool command failed");
+    this.code = safeCode(code);
+    this.signal = safeSignal(signal);
+    // Classify one fixed loader message; never return raw stderr, argv or paths.
+    this.diagnostic =
+      this.code === 127 &&
+      /error while loading shared libraries: libpython3\.15(?:t)?\.so(?:\.1\.0)?: cannot open shared object file/.test(
+        stderr.slice(0, 4096),
+      )
+        ? "python-shared-library-unavailable"
+        : "command-failed";
+  }
+}
+
 export async function precommitLock(): Promise<PrecommitLock> {
   const lock = JSON.parse(
     await readFile(resolve(policyDirectory, "precommit-python.lock.json"), "utf8"),
@@ -215,8 +271,8 @@ async function run(
         maxBuffer: 4 * 1024 * 1024,
         windowsHide: true,
       },
-      (error, stdout) => {
-        if (error) reject(new Error("Pinned Python tool command failed"));
+      (error, stdout, stderr) => {
+        if (error) reject(new PythonCommandFailure(error.code, error.signal, stderr));
         else accept(stdout.trim());
       },
     );
@@ -230,6 +286,7 @@ async function interpreter(
   lock: PrecommitLock,
   expected?: { path: string; sha256: string },
 ) {
+  stage("interpreter");
   assert.ok(safePath(path), "Explicit Python executable required");
   const canonical = await realpath(path);
   const stat = await lstat(canonical);
@@ -259,6 +316,7 @@ const pythonIn = (directory: string) =>
   );
 
 async function installed(directory: string, lock: PrecommitLock): Promise<void> {
+  stage("installed-metadata");
   const python = pythonIn(directory);
   // Stdlib introspection only. Closure, marker selection and validation stay in TypeScript.
   const facts = JSON.parse(
@@ -284,6 +342,7 @@ async function installed(directory: string, lock: PrecommitLock): Promise<void> 
     lock.packages.map((p) => [normalize(p.name), p.version]).sort(),
     "Installed Python closure differs",
   );
+  stage("pip-check");
   assert.equal(
     await run(
       python,
@@ -294,6 +353,7 @@ async function installed(directory: string, lock: PrecommitLock): Promise<void> 
   );
   const lib =
     process.platform === "win32" ? "venv/Lib/site-packages" : "venv/lib/python3.15/site-packages";
+  stage("hook-source");
   const modules: [string, string][] = [];
   const hookRoot = resolve(directory, lib, "pre_commit_hooks");
   for (const name of (await readdir(hookRoot)).sort()) {
@@ -360,16 +420,22 @@ export async function provisionPrecommit(
   directory: string,
   archives?: string,
 ): Promise<string> {
+  stage("lock");
   const lock = await precommitLock();
+  stage("directory");
   assert.ok(safePath(directory));
+  stage("archives");
   if (archives) await verifyPrecommitArchives(archives, lock); // Before interpreter/package execution.
+  stage("directory");
   await mkdir(directory, { mode: 0o700 });
   await chmod(directory, 0o700);
   for (const child of ["tmp", "cache", "pre-commit-home"])
     await mkdir(resolve(directory, child), { mode: 0o700 });
   const selected = await interpreter(pythonPath, directory, lock);
   const source = archives ?? resolve(directory, "archives");
+  stage("download");
   if (!archives) await downloadPrecommitArchives(source, lock);
+  stage("venv");
   await run(
     selected.path,
     ["-I", "-B", "-m", "venv", "--without-pip", resolve(directory, "venv")],
@@ -378,8 +444,10 @@ export async function provisionPrecommit(
   const pip = lock.packages.find((p) => p.name === "pip");
   assert.ok(pip);
   for (const stage of ["build", "runtime"] as const) {
+    if (import.meta.main) cliStage = "archives";
     await verifyPrecommitArchives(source, lock);
     const entry = stage === "build" ? [resolve(source, pip.filename, "pip")] : ["-m", "pip"];
+    if (import.meta.main) cliStage = stage === "build" ? "install-build" : "install-runtime";
     await run(
       pythonIn(directory),
       [
@@ -404,7 +472,9 @@ export async function provisionPrecommit(
     );
   }
   await installed(directory, lock);
+  stage("freeze");
   await treeHash(directory, true);
+  stage("identity");
   await writeFile(
     resolve(directory, "identity.json"),
     `${JSON.stringify({
@@ -419,6 +489,7 @@ export async function provisionPrecommit(
 }
 
 export async function verifyPrecommit(directory: string, pythonPath: string): Promise<string> {
+  stage("verify");
   const lock = await precommitLock();
   assert.ok(
     safePath(directory) && (await realpath(directory)) === directory,
@@ -448,6 +519,7 @@ export async function verifyPrecommit(directory: string, pythonPath: string): Pr
     identity.python,
     "Bootstrap Python changed",
   );
+  stage("verify");
   assert.equal(await treeHash(directory), identity.treeSha256, "Private tool environment changed");
   await installed(directory, lock);
   return resolve(directory, process.platform === "win32" ? "venv/Scripts" : "venv/bin");
@@ -477,6 +549,7 @@ if (import.meta.main) {
       : await provisionPrecommit(python, directory, options.get("--archives"));
     const exportFile = options.get("--github-path");
     if (exportFile) {
+      stage("github-path");
       assert.ok(safePath(exportFile));
       const file = await open(
         exportFile,
@@ -497,8 +570,22 @@ if (import.meta.main) {
         preCommitHome: resolve(directory, "pre-commit-home"),
       }),
     );
-  } catch {
-    console.error("Pinned pre-commit environment unavailable or changed; bootstrap/verify refused");
+  } catch (error) {
+    const failure = error as { code?: unknown; signal?: unknown } | null;
+    console.error(
+      "Pinned pre-commit environment unavailable or changed; bootstrap/verify refused",
+      JSON.stringify({
+        stage: cliStage,
+        code: safeCode(failure?.code),
+        signal: safeSignal(failure?.signal),
+        diagnostic:
+          error instanceof PythonCommandFailure
+            ? error.diagnostic
+            : error instanceof assert.AssertionError
+              ? "invariant"
+              : "unavailable",
+      }),
+    );
     process.exitCode = 1;
   }
 }
