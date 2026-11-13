@@ -109,6 +109,7 @@ export function childEnvironment(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessE
     "APPDATA",
     "LOCALAPPDATA",
     "PYTHON",
+    "PRE_COMMIT_HOME",
     "CC",
     "CXX",
     "npm_config_node_gyp",
