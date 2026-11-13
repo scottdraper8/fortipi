@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, isAbsolute, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { provision } from "../../apps/worker/test/integration/fixture-state.ts";
@@ -46,11 +46,18 @@ import { keyboardConversationTui, keyboardTui, smokeTui } from "../pty/installed
 import { browser, liveBrowserPort } from "./browser.ts";
 import { localBrowser } from "./browser-local.ts";
 import {
+  assertDeviceEvidenceData,
+  type DeviceEvidenceData,
+  runDeviceContinuation,
+} from "./device-observer.ts";
+import {
   type ClaimResult,
   type DecisionClientPort,
   type EvidenceInput,
   evidenceProducer,
   type Identity,
+  liveRecoveryReady,
+  readDeviceEvidenceData,
   releaseSet,
   type ScenarioEvidence,
   writeEvidence,
@@ -70,9 +77,18 @@ export async function runEvidence(
   input: EvidenceInput,
   context?: CandidateReadContext,
   recovery?: LiveRecoveryBridge,
+  devices?: DeviceEvidenceData,
 ): Promise<ClaimResult[]> {
   assert.ok(["local", "native", "live"].includes(input.mode));
   assert.ok(input.mode === "live" || recovery === undefined, "Recovery bridge is live-only");
+  assert.ok(
+    input.mode === "live" || (devices === undefined && input.devicesReceipt === undefined),
+    "Device evidence is live-only",
+  );
+  assert.ok(
+    devices === undefined || input.devicesReceipt === undefined,
+    "Use exactly one device data transport",
+  );
   if (recovery) {
     if (recovery.mode === "perform") {
       assert.equal(typeof recovery.bridge.perform, "function");
@@ -148,6 +164,13 @@ export async function runEvidence(
     );
   await mkdir(dirname(resolve(input.out)), { mode: 0o700, recursive: true });
   await mkdir(resolve(input.out), { mode: 0o700 });
+  if (input.mode === "live") {
+    const current = identity.deployments[0];
+    assert.ok(current);
+    if (input.devicesReceipt)
+      devices = await readDeviceEvidenceData(input.devicesReceipt, input.out, current);
+    else if (devices) assertDeviceEvidenceData(devices, current);
+  }
   const results: ClaimResult[] = [];
   const cleanup: CleanupObservation[] = [];
   const command = [
@@ -161,6 +184,7 @@ export async function runEvidence(
     "--out",
     resolve(input.out),
     ...(input.deploymentReceipt ? ["--deployment", resolve(input.deploymentReceipt)] : []),
+    ...(input.devicesReceipt ? ["--devices", input.devicesReceipt] : []),
   ];
   const invocation =
     process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.dirname, "run-evidence.ts")
@@ -787,6 +811,44 @@ export async function runEvidence(
     assert.ok(admin, "Trusted live coordinator admin role is required");
     const roles = new RoleContext(deployment.origin, admin);
     try {
+      if (devices) {
+        const history = devices;
+        const deviceInstallation = installed;
+        const limits: string[] = [],
+          sensitivity: string[] = [];
+        await measure(
+          "cloud-local-portability",
+          ["original-device-continuation", "installed-node-read-only", "authenticated-phase-data"],
+          "Fresh scoped reads retain original device A/B tasks/jobs/receipts/event prefixes and R0/R1/R2 bytes without repeating an admission, executor or effect",
+          async () => {
+            const evidence = await runDeviceContinuation({
+              installed: deviceInstallation,
+              roles,
+              deployment,
+              devices: history,
+            });
+            limits.push(...evidence.limitations);
+            sensitivity.push(...evidence.sensitivity);
+            return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
+          },
+          limits,
+          sensitivity,
+        );
+      } else {
+        results.push({
+          id: "cloud-local-portability",
+          outcome: "unavailable",
+          identity,
+          command,
+          observation: { originalDeviceHistoryProvided: false },
+          oracle:
+            "Authenticated original performed device history plus complete cleanup and fresh public reads are required",
+          limitations: [
+            "Missing data cannot be replaced by a local source case, serialized authority flag or new executor run",
+          ],
+          sensitivity: [],
+        });
+      }
       let live: Awaited<ReturnType<typeof liveContext>> | undefined;
       await measure(
         "models-security",
@@ -1004,7 +1066,8 @@ export async function runEvidence(
       // identity remain the original V0. Trusted9 separately observes V1 and
       // authenticates the explicit transition before composing its final gate.
       const recoveryContext = live;
-      const ready = recoveryContext !== undefined && results.every((row) => row.outcome === "pass");
+      const ready =
+        recoveryContext !== undefined && liveRecoveryReady(results, identity.deployments);
       if (recovery && recoveryContext && ready) {
         await measure(
           "platform-recovery",
@@ -1107,7 +1170,7 @@ export async function runEvidence(
   await writeEvidence(input, loaded.candidate, identity, results);
   return results;
 }
-function argumentsFor(argv: string[]): EvidenceInput {
+export function argumentsFor(argv: string[]): EvidenceInput {
   const [mode, ...args] = argv;
   assert.ok(
     mode === "local" || mode === "native" || mode === "live",
@@ -1119,7 +1182,7 @@ function argumentsFor(argv: string[]): EvidenceInput {
       value = args[i + 1];
     assert.ok(
       key &&
-        ["--candidate", "--fixture", "--out", "--deployment"].includes(key) &&
+        ["--candidate", "--fixture", "--out", "--deployment", "--devices"].includes(key) &&
         value &&
         !values.has(key),
       "Invalid or duplicate evidence argument",
@@ -1130,6 +1193,11 @@ function argumentsFor(argv: string[]): EvidenceInput {
     fixture = values.get("--fixture"),
     out = values.get("--out");
   assert.ok(candidateManifest && fixture && out, "Candidate, fixture and output are required");
+  const devicesReceipt = values.get("--devices");
+  if (devicesReceipt !== undefined) {
+    assert.equal(mode, "live", "Device receipt is live-only");
+    assert.ok(isAbsolute(devicesReceipt), "Device receipt path must be absolute");
+  }
   return {
     mode,
     candidateManifest: resolve(candidateManifest),
@@ -1138,6 +1206,7 @@ function argumentsFor(argv: string[]): EvidenceInput {
     ...(values.has("--deployment")
       ? { deploymentReceipt: resolve(values.get("--deployment")!) }
       : {}),
+    ...(devicesReceipt !== undefined ? { devicesReceipt } : {}),
   };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

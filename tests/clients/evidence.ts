@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, realpath, writeFile } from "node:fs/promises";
+import { isAbsolute, resolve, sep } from "node:path";
 import {
   assertDeployment,
   assertProducer,
@@ -16,12 +17,14 @@ import {
   saveJson,
   sha256,
 } from "../../scripts/verify-release-gates.ts";
+import { assertDeviceEvidenceData, type DeviceEvidenceData } from "./device-observer.ts";
 
 export type Mode = "local" | "native" | "live";
 export interface EvidenceInput {
   mode: Mode;
   candidateManifest: string;
   deploymentReceipt?: string;
+  devicesReceipt?: string;
   fixture: string;
   out: string;
 }
@@ -89,6 +92,86 @@ export const releaseSet = (
       ]
     : ["portable-daemon"];
 };
+/** A partial set of passing rows cannot authorize the final provider action.
+ * The two recovery-derived rows are produced only after this boundary. */
+export function liveRecoveryReady(
+  rows: readonly Pick<ClaimResult, "id" | "outcome">[],
+  deployments: readonly DeploymentIdentity[],
+): boolean {
+  if (!deployments.length) return false;
+  const excluded = new Set(["platform-recovery", "pi-lifecycle"]);
+  const required = releaseSet("live", deployments).filter((id) => !excluded.has(id));
+  const observed = new Map(rows.map((row) => [row.id, row.outcome]));
+  return (
+    observed.size === rows.length &&
+    required.every((id) => observed.get(id) === "pass") &&
+    rows.filter((row) => !excluded.has(row.id)).every((row) => row.outcome === "pass")
+  );
+}
+/** Fixed nonsecret data transport, never artifact/job authority. Read once
+ * after actual current-target validation; the parent owns source/API/ZIP auth. */
+export async function readDeviceEvidenceData(
+  path: string,
+  out: string,
+  current: DeploymentIdentity,
+): Promise<DeviceEvidenceData> {
+  assertDeployment(current);
+  assert.ok(
+    isAbsolute(path) && resolve(path) === path,
+    "Device receipt must be an absolute canonical path",
+  );
+  assert.equal(await realpath(path), path);
+  const output = resolve(out);
+  assert.equal(await realpath(output), output);
+  assert.ok(
+    path !== output && !path.startsWith(`${output}${sep}`),
+    "Device receipt must remain outside child output",
+  );
+  const before = await lstat(path);
+  assert.ok(
+    before.isFile() &&
+      !before.isSymbolicLink() &&
+      before.nlink === 1 &&
+      (before.mode & 0o777) === 0o600,
+  );
+  if (process.getuid) assert.equal(before.uid, process.getuid());
+  assert.ok(
+    before.size > 0 && before.size <= 1048576,
+    "Device receipt exceeds bounded metadata size",
+  );
+  const handle = await open(
+    path,
+    constants.O_RDONLY | (process.platform === "win32" ? 0 : constants.O_NOFOLLOW),
+  );
+  try {
+    const opened = await handle.stat();
+    assert.equal(opened.dev, before.dev);
+    assert.equal(opened.ino, before.ino);
+    assert.equal(opened.nlink, 1);
+    assert.equal(opened.mode & 0o777, 0o600);
+    const bytes = Buffer.alloc(before.size + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const result = await handle.read(bytes, length, bytes.length - length, length);
+      if (!result.bytesRead) break;
+      length += result.bytesRead;
+    }
+    assert.equal(length, before.size);
+    const after = await handle.stat();
+    assert.equal(after.size, before.size);
+    assert.equal(after.mtimeMs, before.mtimeMs);
+    assert.equal(after.nlink, 1);
+    assert.equal(after.mode & 0o777, 0o600);
+    const data: DeviceEvidenceData = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes.subarray(0, length)),
+    );
+    assertDeployment(data.initial.deployment);
+    assertDeviceEvidenceData(data, current);
+    return data;
+  } finally {
+    await handle.close();
+  }
+}
 export async function evidenceProducer(
   input: EvidenceInput,
   candidate: CandidateManifest,
