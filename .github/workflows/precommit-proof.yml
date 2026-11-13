@@ -1,0 +1,66 @@
+name: Pinned pre-commit Linux proof
+on:
+  push:
+    branches: ["ci/fortipi-precommit-proof-*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: precommit-proof-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  CI: "true"
+  GOTOOLCHAIN: local
+jobs:
+  bootstrap:
+    if: >-
+      github.repository == 'scottdraper8/fortipi' && !github.event.repository.fork &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/ci/fortipi-precommit-proof-')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+        with:
+          egress-policy: block
+          allowed-endpoints: >-
+            api.github.com:443 github.com:443 objects.githubusercontent.com:443
+            raw.githubusercontent.com:443 release-assets.githubusercontent.com:443
+            codeload.github.com:443 *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443 nodejs.org:443 files.pythonhosted.org:443
+            pypi.org:443 api.osv.dev:443 *.stepsecurity.io:443
+      - name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        run: /usr/bin/systemctl is-active --quiet agent.service
+        timeout-minutes: 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "26.13.1"
+          package-manager-cache: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        id: python
+        with:
+          python-version: "3.15.2"
+          check-latest: false
+      - name: Review the exact public tool inputs
+        run: node tools/unstale/review-precommit.ts
+      - name: Bootstrap verified private pre-commit tools
+        run: >-
+          node tools/unstale/precommit-python.ts --python '${{ steps.python.outputs.python-path }}'
+          --directory "$RUNNER_TEMP/fortipi-precommit" --github-path "$GITHUB_PATH"
+      - name: Verify the private environment and entry point
+        env:
+          PRE_COMMIT_HOME: ${{ runner.temp }}/fortipi-precommit/pre-commit-home
+        run: |-
+          node tools/unstale/precommit-python.ts --python '${{ steps.python.outputs.python-path }}' --verify "$RUNNER_TEMP/fortipi-precommit"
+          "$RUNNER_TEMP/fortipi-precommit/venv/bin/pre-commit" --version
+          node tools/unstale/precommit-python.ts --python '${{ steps.python.outputs.python-path }}' --verify "$RUNNER_TEMP/fortipi-precommit"
+      - name: Require Linux hardener service still active
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: /usr/bin/systemctl is-active --quiet agent.service
+        timeout-minutes: 1
