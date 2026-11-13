@@ -828,7 +828,7 @@ export async function abortInfrastructureStage(
     acknowledgment: conflictStatus === null ? "direct" : "recovered-by-current-scoped-status",
   };
 }
-export function assertKnownSnapshotRefusal(delta: -1 | 0 | 1, error: FortiPiError) {
+export function assertKnownDeclarationRefusal(delta: -1 | 0 | 1, error: FortiPiError) {
   assert.equal(error.status, 429);
   assert.equal(error.code, "quota_exceeded");
   assert.equal(error.retryable, false);
@@ -924,6 +924,8 @@ export async function seedInfrastructureWorkspace(
       () => input.client.workspaces.get(binding.workspaceId),
       lease,
     );
+    assert.equal(current.workspaceId, binding.workspaceId);
+    assert.notEqual(current.revision, binding.revision);
     assert.equal(current.revision, receipt.revision);
     assert.equal(current.manifestHash, receipt.manifestHash);
     return {
@@ -1017,6 +1019,8 @@ export async function observeComputerDeclaration(
       const status = await request(() => client.uploads.get(binding.workspaceId, uploadId), lease);
       assert.equal(status.uploadId, open.uploadId);
       assert.equal(status.state, "open");
+      assert.equal(status.manifestHash, fixture.manifestHash);
+      assert.equal(status.baseRevision, binding.revision);
       assert.deepEqual(status.receivedChunks, []);
       abort = await abortInfrastructureStage(input, lease, open.uploadId);
       open = undefined;
@@ -1027,10 +1031,7 @@ export async function observeComputerDeclaration(
       assert.equal(rejected.code, "quota_exceeded");
       assert.ok(rejected.details?.pressure);
       assertInfrastructurePressure(rejected.details.pressure);
-      pressure =
-        resource === "snapshot"
-          ? assertKnownSnapshotRefusal(delta, rejected)
-          : structuredClone(rejected.details.pressure);
+      pressure = assertKnownDeclarationRefusal(resource === "snapshot" ? delta : 1, rejected);
       await canonical();
       if (resource === "snapshot") {
         const size = 2 * 1024 * 1024;
@@ -1062,6 +1063,8 @@ export async function observeComputerDeclaration(
         );
         assert.equal(status.uploadId, open.uploadId);
         assert.equal(status.state, "open");
+        assert.equal(status.manifestHash, feasible.manifestHash);
+        assert.equal(status.baseRevision, binding.revision);
         assert.deepEqual(status.receivedChunks, []);
         abort = await abortInfrastructureStage(input, lease, open.uploadId);
         ordinary = {
