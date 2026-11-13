@@ -108,52 +108,61 @@ export async function filesBelow(path: string): Promise<string[]> {
   return result.sort();
 }
 
-async function tests(
+export async function tests(
   roots: string[],
   observeProcesses = false,
   totalTimeout?: number,
+  {
+    directory = repository,
+    execute = run,
+    now = () => performance.now(),
+  }: {
+    directory?: string;
+    execute?: typeof run;
+    now?: () => number;
+  } = {},
 ): Promise<void> {
-  const deadline = totalTimeout === undefined ? undefined : performance.now() + totalTimeout;
+  const deadline = totalTimeout === undefined ? undefined : now() + totalTimeout;
   const remainingTimeout = (): number => {
     if (deadline === undefined) return 900_000;
-    const remaining = deadline - performance.now();
+    const remaining = deadline - now();
     if (remaining <= 0) throw new Error("Full source test deadline exhausted");
     return remaining;
   };
-  const paths: string[] = [];
+  const paths = new Set<string>();
   for (const root of roots) {
     // Missing required suites fail. Never turn a partial checkout into green CI.
-    const found = (await filesBelow(join(repository, root))).filter((p) =>
+    const found = (await filesBelow(join(directory, root))).filter((p) =>
       /(?:\.test|\.spec)\.ts$/.test(p),
     );
     if (found.length === 0) throw new Error(`Required test suite has no tests: ${root}`);
-    paths.push(...found);
+    for (const path of found) paths.add(path);
   }
   // This fixture mutates the canonical AD context and replaces shared CLI assets.
   // Finish readers from every selected root before running it in its own process.
   const provenance = join(
-    repository,
+    directory,
     "packages/fortipi-cli/test/enforcer-context-provenance.test.ts",
   );
-  const parallel = paths.filter((path) => path !== provenance);
+  const gates = join(directory, "scripts/test/release/gates.test.ts");
+  const parallel = [...paths].filter((path) => path !== gates && path !== provenance);
   const diagnostics = observeProcesses
-    ? ["--require", join(repository, "scripts/source-test-processes.ts")]
+    ? ["--require", join(directory, "scripts/source-test-processes.ts")]
     : [];
   // Emit each assertion immediately, even if another file outlives the aggregate runner.
-  if (parallel.length)
-    await run(
-      process.execPath,
-      [...diagnostics, "--test", "--test-reporter=tap", ...parallel],
-      repository,
-      remainingTimeout(),
-    );
-  if (paths.includes(provenance))
-    await run(
-      process.execPath,
-      [...diagnostics, "--test", "--test-reporter=tap", provenance],
-      repository,
-      remainingTimeout(),
-    );
+  // Keep the complete native aggregation file separate; shared-context mutation stays last.
+  for (const selected of [
+    parallel,
+    paths.has(gates) ? [gates] : [],
+    paths.has(provenance) ? [provenance] : [],
+  ])
+    if (selected.length)
+      await execute(
+        process.execPath,
+        [...diagnostics, "--test", "--test-reporter=tap", ...selected],
+        directory,
+        remainingTimeout(),
+      );
 }
 
 async function compile(path: string): Promise<void> {
