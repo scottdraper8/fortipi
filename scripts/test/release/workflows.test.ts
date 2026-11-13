@@ -171,6 +171,76 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
   assert.throws(() => assertJobs(fault), /paid-validation/);
 });
 
+test("fresh deployment operate provisions pinned Chromium before credentials with reviewed egress", async () => {
+  const deploy = object(
+    parse(await readFile(resolve(repository, ".github/workflows/deploy.yml"), "utf8")),
+  );
+  const release = object(
+    parse(await readFile(resolve(repository, ".github/workflows/release.yml"), "utf8")),
+  );
+  const command = "pnpm exec playwright install --with-deps chromium";
+  const requiredEndpoints = [
+    "cdn.playwright.dev:443",
+    "playwright.download.prss.microsoft.com:443",
+    "archive.ubuntu.com:80",
+    "security.ubuntu.com:80",
+    "azure.archive.ubuntu.com:80",
+  ];
+  const assertPrerequisite = (workflow: Record<string, unknown>) => {
+    const job = object(object(workflow.jobs).operate);
+    assert.ok(Array.isArray(job.steps));
+    const steps = job.steps.map(object);
+    const frozen = steps.findIndex((step) => step.run === "node scripts/install-dependencies.ts");
+    const browser = steps.findIndex((step) => step.run === command);
+    assert.ok(frozen >= 0 && browser > frozen, "Pinned Chromium must follow frozen dependencies");
+    assert.equal(steps.filter((step) => step.run === command).length, 1);
+    assert.equal(steps[browser]?.if, undefined, "Required browser provisioning cannot be skipped");
+    assert.deepEqual(steps[browser]?.env ?? {}, {});
+    const credentials = steps.findIndex((step) => {
+      const env = object(step.env ?? {});
+      return Boolean(
+        env.CLOUDFLARE_API_TOKEN || env.CLOUDFLARE_ACCOUNT_ID || env.FORTIPI_ADMIN_TOKEN,
+      );
+    });
+    assert.ok(credentials > browser, "Chromium must be provisioned before credentials");
+    assert.match(String(steps[0]?.uses), /^step-security\/harden-runner@[a-f0-9]{40}$/);
+    const hardener = object(steps[0]?.with);
+    assert.equal(hardener["egress-policy"], "block");
+    const endpoints = String(hardener["allowed-endpoints"]).split(/\s+/);
+    assert.deepEqual(
+      endpoints.filter((endpoint) => /playwright|microsoft|ubuntu/.test(endpoint)).sort(),
+      [...requiredEndpoints].sort(),
+      "Use only reviewed provisioning endpoints",
+    );
+  };
+  const candidate = object(object(release.jobs).candidate);
+  assert.ok(Array.isArray(candidate.steps));
+  assert.ok(candidate.steps.some((step) => object(step).run === command));
+  const releaseEndpoints = String(
+    object(object(candidate.steps[0]).with)["allowed-endpoints"],
+  ).split(/\s+/);
+  for (const endpoint of requiredEndpoints) assert.ok(releaseEndpoints.includes(endpoint));
+  assertPrerequisite(deploy);
+  const missing = structuredClone(deploy);
+  const missingSteps = object(object(missing.jobs).operate).steps;
+  assert.ok(Array.isArray(missingSteps));
+  missingSteps.splice(
+    missingSteps.findIndex((step) => object(step).run === command),
+    1,
+  );
+  assert.throws(() => assertPrerequisite(missing), /Pinned Chromium/);
+  const exposed = structuredClone(deploy);
+  const exposedSteps = object(object(exposed.jobs).operate).steps;
+  assert.ok(Array.isArray(exposedSteps));
+  object(exposedSteps[0]).env = { CLOUDFLARE_API_TOKEN: "synthetic-test-value" };
+  assert.throws(() => assertPrerequisite(exposed), /before credentials/);
+  const broad = structuredClone(deploy);
+  const broadSteps = object(object(broad.jobs).operate).steps;
+  assert.ok(Array.isArray(broadSteps));
+  object(object(broadSteps[0]).with)["allowed-endpoints"] += " *.playwright.dev:443";
+  assert.throws(() => assertPrerequisite(broad), /reviewed provisioning endpoints/);
+});
+
 test("CI authenticates a retained candidate without repacking and source CI requires the qualified image port", async () => {
   const ci = object(parse(await readFile(resolve(repository, ".github/workflows/ci.yml"), "utf8")));
   const release = object(

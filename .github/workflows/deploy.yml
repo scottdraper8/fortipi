@@ -525,6 +525,8 @@ jobs:
             download.docker.com:443 auth.docker.io:443 registry-1.docker.io:443
             production.cloudflare.docker.com:443 ghcr.io:443 pkg-containers.githubusercontent.com:443
             *.cloudflare.com:443
+            cdn.playwright.dev:443 playwright.download.prss.microsoft.com:443
+            archive.ubuntu.com:80 security.ubuntu.com:80 azure.archive.ubuntu.com:80
       - run: /usr/bin/systemctl is-active --quiet agent.service
         name: Require Linux hardener service active
         if: runner.os == 'Linux'
@@ -572,6 +574,8 @@ jobs:
         run:
           node scripts/live-device-evidence.ts install --candidate "$RUNNER_TEMP/candidate/candidate.json" --target
           "$RUNNER_TEMP/target.json" --out "$RUNNER_TEMP/installation.json"
+      - name: Provision pinned Chromium for public browser evidence
+        run: pnpm exec playwright install --with-deps chromium
       - name: Observe initial current version without redeploying installed bytes
         env:
           GITHUB_TOKEN: ${{ github.token }}
