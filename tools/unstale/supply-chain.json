@@ -8234,11 +8234,6 @@
     }
   },
   "exemptions": {
-    "@cloudflare/workers-types@5.20261112.1": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-13T01:00:52.446Z",
-      "integrity": "sha512-FhkAlCQ+J/pV89nhehVaarhlvZFz+ybUsePmIDN1yfI7PMmpjwdxV663e9qu+G+oQSw9oM8u5sVmheNBFn4tnw=="
-    },
     "miniflare@5.20261110.2-beta": {
       "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
       "expires": "2026-11-13T13:37:00.282Z",
