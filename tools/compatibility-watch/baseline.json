@@ -120,22 +120,22 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "20a6e09dc60a13a3ec4988ba4d3e4b9e78c1f940",
+        "commit": "d36266e06669c6991a7c9509d1da04d18d30378d",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
-          "packages/ai": "91ed66697d7398fb0d507afeaa6b6b06f4ad4972aeae8117dbf3d8c297766235",
-          "packages/chord": "4c2f26f420b632f5a80253bd27d25e50a8031bccc05c4d16c3c89c7e5de7f5ec",
+          "packages/ai": "b458489305325e346798f525895c0c7a8cf0c64a51bb3cdf025958f903f039ee",
+          "packages/chord": "50d33c54cbf3103751045a0fe386f966063416162efd6d74db9adba4eae91ce5",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "dc87d765abc06c7764d3569f4bfc5aacb424eec3573a9aabd4197c346d5ef2fa",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
           "packages/mcp": "1f337636b01da98ca9088abb679318bdcf3b9f06ac9f14d56d63a4825b33df2a",
           "packages/schema": "1cac0355eee29b45658e037766a7b983f01a57dfa444d973e66365317f6c1752",
           "packages/telemetry": "cb8f452fda82cec5074961cc6854226cd74474490b92b3208a13e26e84ff28e7",
-          "packages/tui": "9b71a3439eb5858a0b46a15713ad41690e5ed5c6fef8d8fb38b259617530fd9f",
+          "packages/tui": "5483c0578f10b3c4346666658e4486062e9ad03707c10ded58ccf59eddf318d9",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "2b7107ebb8e4b88b4eefbb7d96cd6f2a8636cb234f7f3ba37b0bd00155978096"
+        "sha256": "d021ec09544a7c824354c809d497d9203a5f954ac355d513e71c2e992e5041d4"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-12T23:02:11.755Z",
-      "reviewNote": "Reviewed immutable6249ca27...20a6e09d:4commits/22files, complete patches; sole watched change is Chord shared-holds design.md (+157), no implementation. Chord src/tests/manifest/exports and other10 watched identities unchanged. Compared real PiHarness/Harness.open/onWake and createModels credential/auth-context factory; selected models/provider sources equal authenticated1.5.2 map sources. Latest published Pi family1.5.2 is age-eligible; archives/SRIs/manifests/pins and all3 declared installed patches (Durable9b88,Agents5071,Anthropicaa47) verified unchanged. P2 telemetry/settings are unselected; actual4c Worker has13 Chord context/SQLite/delta inputs and no P2/host/remote inputs. No new used-path defect. Reference only: future shared-hold implementation requires principal/address/release/revocation qualification. No version/config/cap adoption or blanket runtime/deployed/security/release clearance. Evidence:phase3/thread-8/pi-20a-incremental-review.md."
+      "reviewedAt": "2026-11-13T04:46:21.462Z",
+      "reviewNote": "Reviewed immutable20a6e09d..d36266e0:18commits/65files; full diff SHA4ae85c989d5a48c6e85b756b1b179d07e1a038af8409d28c39b7ec9177bc630c. Durable/agent and other watched code unchanged; Chord shared-holds drafts only. Unreleased Google custom-fetch/GenAI2.32/CONTINUATION and Qwen catalog/auth changes are outside registered CF/OpenAI/Anthropic/Codex factories; removed google-shared helper unused. TUI image-overlay fix is outside sanitized text-widget UI. Registry latest Pi family1.5.2 is mature; reviewed SRIs, installed GenAI2.21 and declared patches retained. No unpublished adoption or new provider/native/live/runtime compatibility proof. Evidence:phase3/thread-9/compatibility-refresh-build.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "e0240debf4d6a5042a02a45311b51c61d13bd0fb",
-        "version": "v1.20261112.1",
-        "sha256": "1eedcff9d8a9bbd5c5361d178b35cc2b62a16639309f564fd2f006e6fdf11742",
+        "commit": "6cd7d1ae63824aa532ab855ff7c5719c8aab9c29",
+        "version": "v1.20261113.1",
+        "sha256": "07f92772ff128a2b24f2172ae900dd310dbaf95fec2243f5d203f41f2a80e5ba",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261112.1"
       },
-      "reviewedAt": "2026-11-12T14:35:17.708Z",
-      "reviewNote": "Reviewed exact published workerd1.20261112.1/sourcee0240d and generated types5.20261112.1. Latest Wrangler4.161.0 and Miniflare5.20261110.2-beta both EXACT-pin workerd1.20261110.1: retain latest supported SDK runtime graph, no override/unpublished adoption. Upgrade only peer-compatible direct types: URL declarations move and parse/canParse accept URL values, other declarations unchanged. URL autogate, deferred cross-context actions and startup snapshot/binding clones reviewed for used URL/DO/Loader/abort boundaries; actual narrow local qualification and limits in phase3/thread-1/workerd-types-review.md. Compatibility date does not pin deployed runtime; final cloud lifecycle/abort/hibernation proof remains required. This is a reviewed reference, not deployed/new-runtime acceptance. Published SDK followup reviewed separately in phase3/thread-1/sdk-4161-followup.md; runtime/type pins remain unchanged."
+      "reviewedAt": "2026-11-13T04:46:21.462Z",
+      "reviewNote": "Reviewed immutablee0240d..6cd7d1a/v1.20261113.1:69commits/264files; full diff SHA8f3d390f6433e4f93d04e129bcd79cd74b54550db4cd4fec4e6390a284c9a915. Used-boundary review: DO RPC cancellation still needs explicit abort; orphaned cross-request awaits now reject; stream sync paths ungated. Snapshot kvData unused; SQLite sync=false is test-only/defaulttrue. URLPattern/email/Node crypto APIs unused. New workerd/types published Nov13~01:04Z are immature under1440min policy. Latest Wrangler4.161.0 and selected Miniflare5.20261110.2-beta EXACT-pin workerd1.20261110.1; retain graph/types5.20261112.1, no override. Deployed platform runtime is not pinned by compatibility_date; final live/recovery proof remains required. Reference only, no new runtime/security/release clearance. Evidence:phase3/thread-9/compatibility-refresh-build.md."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
