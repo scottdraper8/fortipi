@@ -97,6 +97,8 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run schema:check
       - run: pnpm run check:licenses
+      - name: Populate the pinned producer store before offline packaging
+        run: pnpm fetch --prod --frozen-lockfile
       - name: Stage and install the five scoped source component bundles
         run: node scripts/cli-proof.ts install
       - name: Run the installed CLI with an empty OS home and no external network

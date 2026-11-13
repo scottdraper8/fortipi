@@ -14,7 +14,7 @@ import {
 } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { basename, dirname, posix, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, posix, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { Parser } from "tar";
 import { parseAllDocuments } from "yaml";
@@ -619,11 +619,27 @@ export async function createRuntimeLayout(
     };
     const pnpm = await pnpmExecutable();
     await verifyPnpmExecutable(pnpm, env);
+    // Deployment's credential-free environment must use the same content store
+    // as the frozen source install. Host pnpm/XDG configuration is not inherited.
+    // Store metadata locates cached bytes only; inspectRuntimeLayout still
+    // authenticates every deployed member against the reviewed closure.
+    const modules = parseAllDocuments(
+      await readFile(resolve(source.root, "node_modules/.modules.yaml"), "utf8"),
+    );
+    assert.equal(modules.length, 1);
+    const document = modules[0];
+    assert.ok(document);
+    assert.equal(document.errors.length, 0);
+    const store = (document.toJSON() as { storeDir?: unknown }).storeDir;
+    assert.ok(typeof store === "string" && isAbsolute(store));
+    assert.ok((await lstat(store)).isDirectory());
     await promisify(execFile)(
       pnpm,
       [
         "--npmrc-auth-file",
         auth,
+        "--store-dir",
+        store,
         "--filter",
         sourceName,
         "--node-linker",
