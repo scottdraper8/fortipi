@@ -106,16 +106,40 @@ test("native ZIP returns exact selected bytes/names without extraction, includin
 test("real ZIP duplicate/case/path faults and actual link metadata reject before any member is returned", {
   timeout: 60000,
 }, async () => {
-  for (const fault of ["duplicate", "case", "path", "link"]) {
+  for (const fault of ["duplicate", "case", "path", "link", "control-name", "caret-name"]) {
     const f = await fixture();
     try {
       await writeFile(resolve(f.source, "first.json"), "{}");
+      const actualName =
+        fault === "control-name"
+          ? "bad\nname.json"
+          : fault === "caret-name"
+            ? "bad^Jname.json"
+            : undefined;
+      if (actualName && (!windows || fault !== "control-name"))
+        await writeFile(resolve(f.source, actualName), "actual-name-canary");
       if (fault === "path") {
         await mkdir(resolve(f.source, "level"));
         await writeFile(resolve(f.source, "level/evil.json"), "public fixture");
       } else if (fault !== "link") await writeFile(resolve(f.source, "other.json"), "{}");
       if (fault === "link" && !windows) await symlink("first.json", resolve(f.source, "link"));
       await zip(f.source, f.path, fault === "link");
+      if (fault === "control-name" && windows)
+        await powershell(`
+        [void][Reflection.Assembly]::LoadWithPartialName('System.IO.Compression.FileSystem');
+        $z=[IO.Compression.ZipFile]::Open(${psValue(f.path)},[IO.Compression.ZipArchiveMode]::Update);
+        try {$e=$z.CreateEntry(${psValue("bad\nname.json")});$s=$e.Open();try{$b=[Text.Encoding]::UTF8.GetBytes('actual-name-canary');$s.Write($b,0,$b.Length)}finally{$s.Dispose()}}finally{$z.Dispose()}`);
+      if (actualName && !windows) {
+        const actual = await execute("/usr/bin/unzip", ["-p", f.path, actualName], {
+          timeout: 30000,
+          env: { PATH: process.env.PATH, LANG: "C" },
+        });
+        assert.equal(
+          actual.stdout,
+          "actual-name-canary",
+          "Oracle must use the actual member, not its native display alias",
+        );
+      }
       if (fault === "link" && windows)
         await powershell(`
         [void][Reflection.Assembly]::LoadWithPartialName('System.IO.Compression.FileSystem');
@@ -124,7 +148,12 @@ test("real ZIP duplicate/case/path faults and actual link metadata reject before
       if (fault === "duplicate") await nameFault(f.path, "other.json", "first.json");
       if (fault === "case") await nameFault(f.path, "other.json", "FIRST.json");
       if (fault === "path") await nameFault(f.path, "level/evil.json", "../../evil.json");
-      await assert.rejects(readArtifactZip(f.path, "first.json"));
+      if (actualName && !windows)
+        await assert.rejects(
+          readArtifactZip(f.path, "first.json"),
+          /Ambiguous or nonportable ZIP member name/,
+        );
+      else await assert.rejects(readArtifactZip(f.path, "first.json"));
     } finally {
       await f.close();
     }
