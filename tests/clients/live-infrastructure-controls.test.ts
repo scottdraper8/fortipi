@@ -113,6 +113,47 @@ test("fixed provider datasets preserve unknown idle CPU/memory and sampled zeros
       (row) => !("objectId" in row.scope) && !("logicalId" in row.scope),
     ),
   );
+  const aggregateZero = structuredClone(original);
+  aggregateZero.idle.worker = {
+    ...aggregateZero.idle.worker,
+    coverageKind: "query-window-aggregate",
+    records: 1,
+    aggregateErrorsSum: 0,
+    requestsSum: 0,
+    statuses: [],
+    sampleInterval: null,
+  };
+  for (const row of aggregateZero.idle.durableObjects) {
+    row.invocations = {
+      ...row.invocations,
+      coverageKind: "query-window-aggregate",
+      records: 1,
+      aggregateErrorsSum: 0,
+      requestsSum: 0,
+      statuses: [],
+      sampleInterval: null,
+    };
+    row.periodic = { ...row.periodic, coverageKind: "query-window-aggregate", records: 1 };
+  }
+  assert.deepEqual(verifyInfrastructureMeasurements(request, aggregateZero), aggregateZero);
+  for (const change of [
+    (v: typeof aggregateZero) => {
+      v.idle.worker.records = 0;
+    },
+    (v: typeof aggregateZero) => {
+      v.idle.worker.requestsSum = 1;
+    },
+    (v: typeof aggregateZero) => {
+      delete v.idle.worker.aggregateErrorsSum;
+    },
+    (v: typeof aggregateZero) => {
+      v.idle.durableObjects[0]!.periodic.sqlRowsWrittenSum = 1;
+    },
+  ]) {
+    const value = structuredClone(aggregateZero);
+    change(value);
+    assert.throws(() => verifyInfrastructureMeasurements(request, value));
+  }
   const selectedObject = structuredClone(original);
   for (const name of ["active", "idle"] as const) {
     selectedObject[name].durableObjects[1]!.scope = {
@@ -180,14 +221,26 @@ test("fixed provider datasets preserve unknown idle CPU/memory and sampled zeros
   reject((v) => {
     v.idle.worker.effectiveWindow = { from: 180000, through: 300000 };
   });
+  const optionalAbsent = structuredClone(original);
+  optionalAbsent.active.worker.workerCpuSumMs = null;
+  for (const row of optionalAbsent.active.durableObjects) {
+    row.periodic.doCpuSumMs = null;
+    row.isolateMemory = {
+      quality: "unavailable",
+      doIsolateMemoryP99Bytes: null,
+      records: 0,
+      effectiveWindow: null,
+    };
+  }
+  assert.deepEqual(verifyInfrastructureMeasurements(request, optionalAbsent), optionalAbsent);
   reject((v) => {
-    v.active.worker.workerCpuSumMs = null;
+    v.active.worker.effectiveWindow = { from: 60000, through: 120000 };
   });
   reject((v) => {
-    v.active.durableObjects[0]!.periodic.doCpuSumMs = 0;
+    v.idle.durableObjects[0]!.periodic.effectiveWindow = { from: 240000, through: 270000 };
   });
   reject((v) => {
-    v.active.durableObjects[0]!.isolateMemory.doIsolateMemoryP99Bytes = 0;
+    for (const row of v.active.durableObjects) row.periodic.sqlRowsWrittenSum = 0;
   });
   reject((v) => {
     v.active.durableObjects[0]!.periodic.exceededMemoryErrorsSum = 1;

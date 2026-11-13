@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { Ajv } from "ajv";
 import type { FortiPiClient } from "../../packages/fortipi-client/dist/node.js";
 import {
   type AdmissionReceipt,
@@ -21,7 +22,11 @@ import {
   sha256,
 } from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
-import type { ScenarioEvidence } from "./evidence.ts";
+import type { Identity, ScenarioEvidence } from "./evidence.ts";
+import {
+  type LocalInfrastructureProofData,
+  verifyLocalInfrastructureProof,
+} from "./infrastructure-local-proof.ts";
 import { deviceCanonicalBytes, deviceReadRequests } from "./live-device.ts";
 import { publicRequestPressure } from "./live-pressure.ts";
 import type { RecoveryWorkspaceCanary } from "./platform-recovery.ts";
@@ -51,6 +56,9 @@ export interface InfrastructureReadRequest {
 export interface InfrastructureCoverage {
   effectiveWindow: { from: number; through: number } | null;
   records: number;
+  /** Actual returned rows: grouped records, or one undimensioned aggregate
+   * queried over this exact window. No absent row is converted into a zero. */
+  coverageKind?: "grouped-records" | "query-window-aggregate";
 }
 export interface InfrastructureInvocationStatus {
   status: string;
@@ -64,6 +72,7 @@ export interface InfrastructureWorkerMeasurements extends InfrastructureCoverage
   requestsSum: number | null;
   workerCpuSumMs: number | null;
   statuses: InfrastructureInvocationStatus[] | null;
+  aggregateErrorsSum?: number | null;
 }
 /** A binding-to-namespace metadata join is sufficient for namespace scope.
  * Object scope additionally requires an actual authenticated name/id mapping;
@@ -90,6 +99,7 @@ export interface InfrastructureDurableObjectMeasurements {
     sampleInterval: number | null;
     requestsSum: number | null;
     statuses: InfrastructureInvocationStatus[] | null;
+    aggregateErrorsSum?: number | null;
   };
   periodic: InfrastructureCoverage & {
     quality: "periodic-counter" | "unavailable";
@@ -120,12 +130,13 @@ export type InfrastructureMeasurements =
       // Age of the requested window at collection is computable; analytics
       // delivery/completeness lag is NOT. Keep it explicitly unknown.
       deliveryLagMs: null;
+      localInfrastructure?: LocalInfrastructureProofData | null;
       active: InfrastructureWindowMeasurements;
       idle: InfrastructureWindowMeasurements;
     }
   | { unavailable: "metrics-unavailable" | "ambiguous-resource-scope" | "incomplete-window" };
 export interface InfrastructureObserver {
-  read(input: InfrastructureReadRequest): Promise<InfrastructureMeasurements>;
+  read(input: InfrastructureReadRequest): Promise<unknown>;
 }
 export class InfrastructureEvidenceUnavailable extends Error {}
 const keys = (value: object, expected: readonly string[]) =>
@@ -134,10 +145,153 @@ const count = (value: number) => assert.ok(Number.isSafeInteger(value) && value 
 const numberOrNull = (value: number | null) =>
   assert.ok(value === null || (Number.isFinite(value) && value >= 0));
 
+const nullableNumber = { anyOf: [{ type: "number" }, { type: "null" }] };
+const coverageProperties = {
+  effectiveWindow: {
+    anyOf: [
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["from", "through"],
+        properties: { from: { type: "number" }, through: { type: "number" } },
+      },
+      { type: "null" },
+    ],
+  },
+  records: { type: "number" },
+  coverageKind: { enum: ["grouped-records", "query-window-aggregate"] },
+};
+const statusProperties = {
+  sampleInterval: nullableNumber,
+  requestsSum: nullableNumber,
+  aggregateErrorsSum: nullableNumber,
+  statuses: {
+    anyOf: [
+      {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["status", "requestsSum", "errorsSum"],
+          properties: {
+            status: { type: "string" },
+            requestsSum: { type: "number" },
+            errorsSum: { type: "number" },
+          },
+        },
+      },
+      { type: "null" },
+    ],
+  },
+};
+function dataShape(
+  properties: Record<string, unknown>,
+  optional: string[] = ["coverageKind", "aggregateErrorsSum"],
+) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: Object.keys(properties).filter((key) => !optional.includes(key)),
+    properties,
+  };
+}
+const windowShape = dataShape({
+  worker: dataShape({
+    ...coverageProperties,
+    ...statusProperties,
+    quality: { enum: ["adaptive-estimate", "unavailable"] },
+    scope: dataShape({ workerName: { type: "string" }, workerVersionId: { type: "string" } }),
+    workerCpuSumMs: nullableNumber,
+  }),
+  durableObjects: {
+    type: "array",
+    items: dataShape({
+      scope: {
+        oneOf: [
+          dataShape({
+            kind: { const: "namespace" },
+            resource: { enum: ["control-plane", "agent", "workspace"] },
+            namespaceId: { type: "string" },
+          }),
+          dataShape({
+            kind: { const: "object" },
+            resource: { enum: ["agent", "workspace"] },
+            namespaceId: { type: "string" },
+            objectId: { type: "string" },
+            logicalId: { type: "string" },
+          }),
+        ],
+      },
+      invocations: dataShape({
+        ...coverageProperties,
+        ...statusProperties,
+        quality: { enum: ["adaptive-estimate", "unavailable"] },
+      }),
+      periodic: dataShape({
+        ...coverageProperties,
+        quality: { enum: ["periodic-counter", "unavailable"] },
+        sqlRowsReadSum: nullableNumber,
+        sqlRowsWrittenSum: nullableNumber,
+        doCpuSumMs: nullableNumber,
+        exceededCpuErrorsSum: nullableNumber,
+        exceededMemoryErrorsSum: nullableNumber,
+        fatalInternalErrorsSum: nullableNumber,
+      }),
+      isolateMemory: dataShape({
+        ...coverageProperties,
+        quality: { enum: ["periodic-quantile", "unavailable"] },
+        doIsolateMemoryP99Bytes: nullableNumber,
+      }),
+    }),
+  },
+});
+const measurementShape = dataShape(
+  {
+    requestSha256: { type: "string" },
+    rawResponseSha256: { type: "string" },
+    schemaSha256: { type: "string" },
+    settingsSha256: { type: "string" },
+    attributionSha256: { type: "string" },
+    collectedAt: { type: "number" },
+    deliveryLagMs: { type: "null" },
+    localInfrastructure: {
+      anyOf: [
+        dataShape({
+          reference: dataShape({
+            runId: { type: "integer" },
+            runAttempt: { type: "integer" },
+            artifactId: { type: "integer" },
+            artifactName: { type: "string" },
+            artifactDigest: { type: "string" },
+            candidateSha256: { type: "string" },
+          }),
+          gateJson: { type: "string" },
+          resultJson: { type: "string" },
+        }),
+        { type: "null" },
+      ],
+    },
+    active: windowShape,
+    idle: windowShape,
+  },
+  ["localInfrastructure"],
+);
+const measurementData = new Ajv({ strict: true }).compile<InfrastructureMeasurements>({
+  oneOf: [
+    measurementShape,
+    dataShape({
+      unavailable: {
+        enum: ["metrics-unavailable", "ambiguous-resource-scope", "incomplete-window"],
+      },
+    }),
+  ],
+});
+
 export function verifyInfrastructureMeasurements(
   request: InfrastructureReadRequest,
-  value: InfrastructureMeasurements,
+  value: unknown,
 ) {
+  assert.ok(measurementData(value), "Invalid closed infrastructure measurement data");
   if ("unavailable" in value) {
     keys(value, ["unavailable"]);
     assert.ok(
@@ -159,6 +313,7 @@ export function verifyInfrastructureMeasurements(
     "deliveryLagMs",
     "active",
     "idle",
+    ...(Object.hasOwn(value, "localInfrastructure") ? ["localInfrastructure"] : []),
   ]);
   assert.equal(
     value.requestSha256,
@@ -191,8 +346,14 @@ export function verifyInfrastructureMeasurements(
     const observed: InfrastructureWindowMeasurements = value[name];
     keys(observed, ["worker", "durableObjects"]);
     const window = request[name];
-    function coverage(metric: InfrastructureCoverage, unavailable: boolean) {
+    function coverage(metric: InfrastructureCoverage, unavailable: boolean, fullWindow = false) {
       count(metric.records);
+      assert.ok(
+        metric.coverageKind === undefined ||
+          ["grouped-records", "query-window-aggregate"].includes(metric.coverageKind),
+      );
+      if (metric.coverageKind === "query-window-aggregate")
+        assert.equal(metric.records, 1, "One actual undimensioned aggregate row is required");
       if (unavailable) {
         assert.equal(metric.effectiveWindow, null);
         assert.equal(metric.records, 0);
@@ -203,6 +364,14 @@ export function verifyInfrastructureMeasurements(
           "Empty provider records cannot become observed zero",
         );
       keys(metric.effectiveWindow, ["from", "through"]);
+      if (
+        fullWindow &&
+        (metric.effectiveWindow.from !== window.from ||
+          metric.effectiveWindow.through !== window.through)
+      )
+        throw new InfrastructureEvidenceUnavailable(
+          "Required request/write observations must cover the requested immutable window",
+        );
       count(metric.effectiveWindow.from);
       count(metric.effectiveWindow.through);
       if (
@@ -220,7 +389,7 @@ export function verifyInfrastructureMeasurements(
         | InfrastructureDurableObjectMeasurements["invocations"],
     ) {
       assert.ok(["adaptive-estimate", "unavailable"].includes(metric.quality));
-      coverage(metric, metric.quality === "unavailable");
+      coverage(metric, metric.quality === "unavailable", true);
       numberOrNull(metric.requestsSum);
       numberOrNull(metric.sampleInterval);
       if (metric.quality === "unavailable") {
@@ -231,14 +400,22 @@ export function verifyInfrastructureMeasurements(
           "Idle/active request observations are separately required",
         );
       }
-      assert.ok(
-        metric.requestsSum !== null && metric.sampleInterval !== null && metric.sampleInterval >= 1,
-      );
-      assert.ok(
-        Array.isArray(metric.statuses) &&
-          metric.statuses.length > 0 &&
-          metric.statuses.length <= 32,
-      );
+      assert.ok(metric.requestsSum !== null);
+      assert.ok(Array.isArray(metric.statuses) && metric.statuses.length <= 32);
+      if (metric.statuses.length === 0) {
+        if (
+          metric.coverageKind !== "query-window-aggregate" ||
+          metric.requestsSum !== 0 ||
+          metric.aggregateErrorsSum !== 0
+        )
+          throw new InfrastructureEvidenceUnavailable(
+            "Only an actually returned zero request/error aggregate can accompany an empty breakdown",
+          );
+        assert.ok(metric.sampleInterval === null || metric.sampleInterval >= 1);
+        return;
+      }
+      assert.ok(metric.sampleInterval !== null && metric.sampleInterval >= 1);
+      if (Object.hasOwn(metric, "aggregateErrorsSum")) assert.equal(metric.aggregateErrorsSum, 0);
       const names = new Set<string>();
       for (const status of metric.statuses) {
         keys(status, ["status", "requestsSum", "errorsSum"]);
@@ -277,6 +454,8 @@ export function verifyInfrastructureMeasurements(
       "statuses",
       "effectiveWindow",
       "records",
+      ...(Object.hasOwn(worker, "coverageKind") ? ["coverageKind"] : []),
+      ...(Object.hasOwn(worker, "aggregateErrorsSum") ? ["aggregateErrorsSum"] : []),
     ]);
     keys(worker.scope, ["workerName", "workerVersionId"]);
     assert.deepEqual(worker.scope, {
@@ -287,11 +466,8 @@ export function verifyInfrastructureMeasurements(
     numberOrNull(worker.workerCpuSumMs);
     if (name === "active")
       assert.ok(
-        worker.workerCpuSumMs !== null &&
-          worker.workerCpuSumMs > 0 &&
-          worker.requestsSum !== null &&
-          worker.requestsSum > 0,
-        "Active Worker CPU/request samples are required",
+        worker.requestsSum !== null && worker.requestsSum > 0,
+        "The known active request workload needs a positive observation",
       );
     assert.ok(Array.isArray(observed.durableObjects) && observed.durableObjects.length === 3);
     const resources = new Set<string>();
@@ -340,6 +516,8 @@ export function verifyInfrastructureMeasurements(
         "statuses",
         "effectiveWindow",
         "records",
+        ...(Object.hasOwn(object.invocations, "coverageKind") ? ["coverageKind"] : []),
+        ...(Object.hasOwn(object.invocations, "aggregateErrorsSum") ? ["aggregateErrorsSum"] : []),
       ]);
       invocations(object.invocations);
       const periodic = object.periodic;
@@ -353,9 +531,10 @@ export function verifyInfrastructureMeasurements(
         "fatalInternalErrorsSum",
         "effectiveWindow",
         "records",
+        ...(Object.hasOwn(periodic, "coverageKind") ? ["coverageKind"] : []),
       ]);
       assert.ok(["periodic-counter", "unavailable"].includes(periodic.quality));
-      coverage(periodic, periodic.quality === "unavailable");
+      coverage(periodic, periodic.quality === "unavailable", true);
       for (const key of [
         "sqlRowsReadSum",
         "sqlRowsWrittenSum",
@@ -388,23 +567,41 @@ export function verifyInfrastructureMeasurements(
         assert.notEqual(periodic[key], null);
         assert.equal(periodic[key], 0, "Observed DO resource/internal errors block qualification");
       }
+      if (
+        periodic.coverageKind === "query-window-aggregate" &&
+        (periodic.sqlRowsReadSum !== 0 ||
+          periodic.sqlRowsWrittenSum !== 0 ||
+          (periodic.doCpuSumMs !== null && periodic.doCpuSumMs !== 0))
+      )
+        throw new InfrastructureEvidenceUnavailable(
+          "Nonzero periodic aggregate needs its grouped series; empty series cannot qualify it",
+        );
       const memory = object.isolateMemory;
-      keys(memory, ["quality", "doIsolateMemoryP99Bytes", "effectiveWindow", "records"]);
+      keys(memory, [
+        "quality",
+        "doIsolateMemoryP99Bytes",
+        "effectiveWindow",
+        "records",
+        ...(Object.hasOwn(memory, "coverageKind") ? ["coverageKind"] : []),
+      ]);
+      assert.notEqual(
+        memory.coverageKind,
+        "query-window-aggregate",
+        "An empty-population aggregate cannot supply a memory percentile sample",
+      );
       assert.ok(["periodic-quantile", "unavailable"].includes(memory.quality));
       coverage(memory, memory.quality === "unavailable");
       numberOrNull(memory.doIsolateMemoryP99Bytes);
       if (memory.quality === "unavailable") assert.equal(memory.doIsolateMemoryP99Bytes, null);
       else assert.notEqual(memory.doIsolateMemoryP99Bytes, null);
-      if (name === "active")
-        assert.ok(
-          periodic.doCpuSumMs !== null &&
-            periodic.doCpuSumMs > 0 &&
-            memory.doIsolateMemoryP99Bytes !== null &&
-            memory.doIsolateMemoryP99Bytes > 0,
-          "Active DO CPU and isolate-memory P99 samples required; idle may remain unknown",
-        );
     }
   }
+  assert.ok(
+    value.active.durableObjects.some(
+      (row) => row.periodic.sqlRowsWrittenSum !== null && row.periodic.sqlRowsWrittenSum > 0,
+    ),
+    "The known active write workload needs an attributable positive observation",
+  );
   return structuredClone(value);
 }
 
@@ -1020,6 +1217,8 @@ export async function runLiveInfrastructureControls(input: {
     };
     await installed.verifyUnchanged();
     const capturedControls = structuredClone(publicControls);
+    let localData: unknown;
+    let measuredEvidence: ScenarioEvidence | undefined;
     return {
       publicControls: structuredClone(capturedControls),
       readRequest: structuredClone(readRequest),
@@ -1032,10 +1231,15 @@ export async function runLiveInfrastructureControls(input: {
           readRequest,
           await observer.read(structuredClone(readRequest)),
         );
+        localData = observed.localInfrastructure;
+        // Retain only measurements in this supporting row. Original LOCAL JSON
+        // is consumed/hashes checked by the separate composite below.
+        const provider = { ...observed };
+        delete provider.localInfrastructure;
         const evidence: ScenarioEvidence = {
           observation: {
             publicControls: capturedControls.observation,
-            provider: observed,
+            provider,
             windows: readRequest,
             windowAgeAtCollectionMs: {
               active: observed.collectedAt - readRequest.active.through,
@@ -1045,6 +1249,16 @@ export async function runLiveInfrastructureControls(input: {
               worker: {
                 activeRequestsSum: observed.active.worker.requestsSum,
                 idleRequestsSum: observed.idle.worker.requestsSum,
+                activeDurationMs: readRequest.active.through - readRequest.active.from,
+                idleDurationMs: readRequest.idle.through - readRequest.idle.from,
+                activeRequestsPerSecond:
+                  observed.active.worker.requestsSum! /
+                  ((readRequest.active.through - readRequest.active.from) / 1000),
+                idleRequestsPerSecond:
+                  observed.idle.worker.requestsSum! /
+                  ((readRequest.idle.through - readRequest.idle.from) / 1000),
+                activeQuality: observed.active.worker.quality,
+                idleQuality: observed.idle.worker.quality,
               },
               durableObjects: observed.active.durableObjects.map((object) => {
                 const idleObject = observed.idle.durableObjects.find(
@@ -1056,33 +1270,151 @@ export async function runLiveInfrastructureControls(input: {
                   idleRequestsSum: idleObject.invocations.requestsSum,
                   activeSqlRowsWrittenSum: object.periodic.sqlRowsWrittenSum,
                   idleSqlRowsWrittenSum: idleObject.periodic.sqlRowsWrittenSum,
+                  activeDurationMs: readRequest.active.through - readRequest.active.from,
+                  idleDurationMs: readRequest.idle.through - readRequest.idle.from,
+                  activeRequestsPerSecond:
+                    object.invocations.requestsSum! /
+                    ((readRequest.active.through - readRequest.active.from) / 1000),
+                  idleRequestsPerSecond:
+                    idleObject.invocations.requestsSum! /
+                    ((readRequest.idle.through - readRequest.idle.from) / 1000),
+                  activeSqlWritesPerSecond:
+                    object.periodic.sqlRowsWrittenSum! /
+                    ((readRequest.active.through - readRequest.active.from) / 1000),
+                  idleSqlWritesPerSecond:
+                    idleObject.periodic.sqlRowsWrittenSum! /
+                    ((readRequest.idle.through - readRequest.idle.from) / 1000),
+                  quality: {
+                    requests: object.invocations.quality,
+                    sqlWrites: object.periodic.quality,
+                  },
                 };
               }),
               interpretation:
-                "Reported counts in their effective windows; unequal duration, sampling and lag prevent exact-zero or amplification clearance",
+                "Separate scoped per-second request/write observations over fully covered effective durations; sampling/lag and other traffic require disposition of unexplained recurring work, not an invented ratio or exact-zero threshold",
             },
             durableObjectCoverage: observed.active.durableObjects.every(
               (row) => row.scope.kind === "namespace",
             )
               ? "all-three-bound-namespaces"
               : "control-plane-namespace-and-selected-agent-workspace-scopes",
+            supportingMeasurements: {
+              workerCpu: {
+                unit: "milliseconds",
+                statistic: "sum",
+                active: {
+                  value: observed.active.worker.workerCpuSumMs,
+                  quality:
+                    observed.active.worker.workerCpuSumMs === null
+                      ? "unavailable"
+                      : observed.active.worker.quality,
+                },
+                idle: {
+                  value: observed.idle.worker.workerCpuSumMs,
+                  quality:
+                    observed.idle.worker.workerCpuSumMs === null
+                      ? "unavailable"
+                      : observed.idle.worker.quality,
+                },
+              },
+              durableObjects: observed.active.durableObjects.map((active) => {
+                const idle = observed.idle.durableObjects.find(
+                  (row) => row.scope.resource === active.scope.resource,
+                )!;
+                return {
+                  scope: active.scope,
+                  cpu: {
+                    unit: "milliseconds",
+                    statistic: "sum",
+                    active: {
+                      value: active.periodic.doCpuSumMs,
+                      quality:
+                        active.periodic.doCpuSumMs === null
+                          ? "unavailable"
+                          : active.periodic.quality,
+                    },
+                    idle: {
+                      value: idle.periodic.doCpuSumMs,
+                      quality:
+                        idle.periodic.doCpuSumMs === null ? "unavailable" : idle.periodic.quality,
+                    },
+                  },
+                  memory: {
+                    unit: "bytes",
+                    statistic: "p99",
+                    active: {
+                      value: active.isolateMemory.doIsolateMemoryP99Bytes,
+                      quality: active.isolateMemory.quality,
+                    },
+                    idle: {
+                      value: idle.isolateMemory.doIsolateMemoryP99Bytes,
+                      quality: idle.isolateMemory.quality,
+                    },
+                  },
+                };
+              }),
+            },
             exactIdleWriteAbsence: "not-established",
             hardCpuOrMemoryPeak: "not-established",
             sharedAccountRemaining: "unknown",
           },
           oracle:
-            "The exact target reports separate Worker/DO CPU sums and provider-calculated isolate memory P99 at explicit namespace/object scope, including ControlPlane namespace request/SQL observations; unknown idle samples stay null, and reported zero never becomes exact absence or a hard maximum",
+            "The exact target records required active/idle request and SQL-write observations at explicit namespace/object scope including ControlPlane; optional Worker/DO CPU sums and isolate-memory P99 retain unavailable nulls in either window, and reported zero never becomes exact absence or a hard maximum",
           sensitivity: [
-            "Missing required request/write or active CPU/memory observations, wrong source/target/scope/window, resource errors and unknown statuses refuse the observation port",
+            "Missing required request/write observations, wrong source/target/scope/window, resource errors and unknown statuses refuse the observation port",
           ],
           limitations: [
             ...capturedControls.limitations,
             "Adaptive estimates and periodic records have unknown delivery/completeness lag; absent records remain unavailable and observed zero does not prove exact idle-write absence",
-            "CPU is a dataset sum; memory is the provider-calculated P99 of isolate samples in the selected namespace/object scope, not added per-object percentiles or a hard maximum; idle CPU/memory may be unavailable",
+            "CPU is a dataset sum; memory is the provider-calculated P99 of isolate samples in the selected namespace/object scope, not added per-object percentiles or a hard maximum; CPU/memory may be unavailable in either window",
             "Namespace counters include all objects and other traffic/versions sharing the namespace; Worker-version attribution does not make DO counters version-specific or per-agent measurements",
             "Object scope requires a parent-authenticated logical/physical mapping; namespace scope never invents that mapping, and selected objects cannot certify whole-namespace usage",
             "Parent owns actual resource attribution, primary-schema unit normalization/raw-data custody and provider read-only transport; this callback/data never grants job/deployment/archive authority",
             "No deliberate provider exhaustion, guaranteed account remaining balance or physical storage-reclamation claim; all other approved component/release proofs remain required",
+          ],
+        };
+        roles.assertSanitized(evidence);
+        measuredEvidence = structuredClone(evidence);
+        return evidence;
+      },
+      composite(identity: Identity): ScenarioEvidence {
+        if (!measuredEvidence || !localData)
+          throw new InfrastructureEvidenceUnavailable(
+            "Authenticated detailed LOCAL predecessor and actual Free observations are both required",
+          );
+        assert.equal(
+          deployment.backend,
+          "free",
+          "This composite qualifies the actual Free target; Paid backend evidence remains separate",
+        );
+        if (measuredEvidence.observation.durableObjectCoverage !== "all-three-bound-namespaces")
+          throw new InfrastructureEvidenceUnavailable(
+            "Full Free infrastructure composition needs all three bound namespaces; selected objects remain a narrower observation",
+          );
+        assert.equal(identity.sourceCommit, deployment.sourceCommit);
+        assert.equal(identity.candidateSha256, installed.hash);
+        const local = verifyLocalInfrastructureProof(localData, {
+          ...identity,
+          scope: installed.candidate.scope,
+          baseBoundsSha256: sha256(canonicalJson(infrastructureFixtureBounds)),
+        });
+        const evidence: ScenarioEvidence = {
+          observation: {
+            local,
+            free: measuredEvidence.observation,
+            sharedAccountRemaining: "unknown",
+          },
+          oracle:
+            "Detailed original same-candidate LOCAL reduced-cap/fault/retention/reclamation observations compose with fresh actual default-policy Free public controls and scoped measurements; neither alone closes infrastructure",
+          sensitivity: [
+            ...measuredEvidence.sensitivity,
+            "Partial/mismatched/uninventoried LOCAL claims and substituted result bytes refuse composition",
+          ],
+          limitations: [
+            ...measuredEvidence.limitations,
+            ...local.limitations,
+            "Parent authenticates the completed original producer/artifact before this DATA handoff and reauthenticates it before retention; child hashes do not grant authority",
+            "LOCAL fault/exhaustion is not live provider/account exhaustion; no account draining, hard peak, exact idle zero or guaranteed headroom claim",
           ],
         };
         roles.assertSanitized(evidence);

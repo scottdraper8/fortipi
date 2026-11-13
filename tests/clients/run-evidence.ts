@@ -1138,7 +1138,7 @@ export async function runEvidence(
           await measure(
             "live-infrastructure-observations",
             ["fresh-public-controls", "trusted-read-only-provider-observer", "active-idle-windows"],
-            "Compare scoped active/idle provider request/write records with explicit quality/windows/lag; active CPU sums and isolate-memory P99 are observations, not exact absence or peaks",
+            "Compare scoped active/idle provider request/write records with explicit quality/windows/lag; optional CPU sums and isolate-memory P99 retain unknowns, not exact absence or peaks",
             async () => {
               const evidence = await qualified.qualify(infrastructure);
               limits.push(...evidence.limitations);
@@ -1149,21 +1149,28 @@ export async function runEvidence(
             sensitivity,
           );
         }
-        // This new bounded observation port cannot stand in for every approved
-        // infrastructure control. Keep the required full row explicitly open;
-        // no source-only result or analytics zero is promoted into live proof.
+        const compositeLimits: string[] = [],
+          compositeSensitivity: string[] = [];
         await measure(
           "infrastructure-boundaries",
-          ["required-full-application-infrastructure-controls"],
-          "Every approved application event/output/storage-restoration/refusal control and live observation must be present; partial telemetry cannot clear the full row",
-          async () => {
-            throw new InfrastructureEvidenceUnavailable(
-              "Full event/output and storage-restoration controls remain required",
-            );
-          },
           [
-            "Fresh public declaration/contention/rate controls and provider comparisons are separate bounded rows; full application infrastructure coverage remains unavailable",
+            "original-detailed-LOCAL-gate",
+            "actual-Free-public-controls",
+            "scoped-provider-comparison",
           ],
+          "Authenticated detailed LOCAL observations and actual unchanged Free ordinary behavior jointly satisfy infrastructure obligations without claiming live account exhaustion",
+          async () => {
+            if (!qualified)
+              throw new InfrastructureEvidenceUnavailable(
+                "Actual Free public infrastructure controls unavailable",
+              );
+            const evidence = qualified.composite(identity);
+            compositeLimits.push(...evidence.limitations);
+            compositeSensitivity.push(...evidence.sensitivity);
+            return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
+          },
+          compositeLimits,
+          compositeSensitivity,
         );
       }
       assert.equal(
