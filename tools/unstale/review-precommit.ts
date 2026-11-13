@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonicalJson } from "../../packages/fortipi-contract/dist/index.js";
+import { canonicalJson } from "../../packages/fortipi-contract/src/canonical-json.ts";
 import { precommitLock, sha256 } from "./precommit-python.ts";
 
 /** Check an existing reviewed closure, never choose versions or modify its lock. */
