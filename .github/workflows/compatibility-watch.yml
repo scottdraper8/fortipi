@@ -3,6 +3,12 @@ on:
   pull_request:
     paths:
       - "tools/compatibility-watch/**"
+      - "tools/unstale/precommit-*"
+      - "tools/unstale/private-python*"
+      - "tools/unstale/review-precommit.ts"
+      - "tools/unstale/requirements.txt"
+      - "tools/unstale/licenses/python/**"
+      - ".github/dependabot.yml"
       - ".github/workflows/compatibility-watch.yml"
       - "docs/maintenance.md"
   schedule:
@@ -25,6 +31,8 @@ jobs:
             api.github.com:443
             github.com:443
             nodejs.org:443
+            pypi.org:443
+            api.osv.dev:443
             release-assets.githubusercontent.com:443
             agent.api.stepsecurity.io:443
             prod.app-api.stepsecurity.io:443
@@ -41,6 +49,9 @@ jobs:
           node-version: "26.13.1"
           check-latest: false
           package-manager-cache: false
+      - name: Review pinned Python metadata and advisories
+        timeout-minutes: 2
+        run: node tools/unstale/review-precommit.ts
       - name: Verify review outcomes
         run: node --test tools/compatibility-watch/watch.test.ts
       - name: Review upstream identities

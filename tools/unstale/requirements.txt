@@ -1,0 +1,3 @@
+# Discovery only; the closed TypeScript bootstrap is the sole supported install path.
+-r precommit-build.txt
+-r precommit-runtime.txt
