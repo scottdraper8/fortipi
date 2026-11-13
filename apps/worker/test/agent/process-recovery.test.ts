@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually } from "./harness.ts";
 import { processCueMatches, processHarness, processRequestFailure } from "./process-harness.ts";
@@ -19,6 +20,32 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
   timeout: 90000,
 }, async (t) => {
   let phase = "initial.start";
+  const began = performance.now();
+  let entered = began;
+  const emitPhase = (event: "enter" | "abort") => {
+    try {
+      const now = performance.now();
+      const line = JSON.stringify({
+        diagnostic: "source-recovery-phase",
+        event,
+        phase,
+        elapsedMs: Math.round(now - began),
+        phaseMs: Math.round(now - entered),
+      });
+      if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+    } catch {
+      /* Diagnostics cannot replace the test result. */
+    }
+  };
+  const mark = (next: string) => {
+    phase = next;
+    entered = performance.now();
+    emitPhase("enter");
+  };
+  const onAbort = () => emitPhase("abort");
+  t.signal.addEventListener("abort", onAbort, { once: true });
+  t.after(() => t.signal.removeEventListener("abort", onAbort));
+  emitPhase("enter");
   const failure = (error: unknown): never => {
     const diagnostic: {
       phase: string;
@@ -71,7 +98,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
   };
   const h = await processHarness().catch(failure);
   try {
-    phase = "agent.create";
+    mark("agent.create");
     const agent = await h.api<D.Agent>("/v1/agents", {
       requestId: crypto.randomUUID(),
       name: "process",
@@ -80,39 +107,40 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
     assert.equal(agent.status, 201, JSON.stringify(agent.body));
     const probe = `/__test/agents/${agent.body.agentId}`;
     const canary = { nonce: crypto.randomUUID() };
-    phase = "canary.write";
+    mark("canary.write");
     assert.deepEqual((await h.api(`${probe}/canary`, canary, "PUT")).body, canary);
-    phase = "canary.crash";
+    mark("canary.crash");
     await h.crash();
-    phase = "canary.restart";
+    mark("canary.restart");
     await h.start();
-    phase = "canary.read";
+    mark("canary.read");
     assert.deepEqual(
       (await h.api(`${probe}/canary`)).body,
       canary,
       "Committed data must survive a real ungraceful process death before recovery claims",
     );
-    phase = "allocation.initial";
+    mark("allocation.initial");
     const initialPiIds = (await h.api<ProbeState>(`${probe}/state`)).body.piIds;
     const creation = { requestId: crypto.randomUUID(), title: "killed allocation" };
-    phase = "allocation.arm";
+    mark("allocation.arm");
     await h.api(`${probe}/fault`, "after-create");
     const lostCreate = h
       .api(`/v1/agents/${agent.body.agentId}/conversations`, creation)
       .catch(() => undefined);
-    phase = "allocation.wait";
+    mark("allocation.wait");
     const allocated = await eventually(
       async () => (await h.api<ProbeState>(`${probe}/state`)).body,
       (s) => s.barrier === "after-create",
     );
     assert.equal(allocated.piIds.length, initialPiIds.length + 1);
     assert.equal(allocated.creations.length, 1);
-    phase = "allocation.crash";
+    mark("allocation.crash");
     await h.crash();
+    mark("allocation.lost");
     await lostCreate;
-    phase = "allocation.restart";
+    mark("allocation.restart");
     await h.start();
-    phase = "allocation.retry";
+    mark("allocation.retry");
     const conversation = await h.api<D.Conversation>(
       `/v1/agents/${agent.body.agentId}/conversations`,
       creation,
@@ -125,7 +153,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
       "Lost allocation response must not allocate a second Pi conversation",
     );
     for (const point of ["before-submit", "after-submit"] as const) {
-      phase = `${point}.arm`;
+      mark(`${point}.arm`);
       const input = {
         clientRequestId: crypto.randomUUID(),
         content: point,
@@ -138,18 +166,20 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
       const lost = h
         .api(`/v1/conversations/${conversation.body.conversationId}/messages`, input)
         .catch(() => undefined);
-      phase = `${point}.wait`;
+      mark(`${point}.wait`);
       await eventually(async () => observation.cue(), Boolean);
-      phase = `${point}.crash`;
+      mark(`${point}.crash`);
       await h.crash();
+      mark(`${point}.lost`);
       await lost;
-      phase = `${point}.restart`;
+      mark(`${point}.restart`);
       await h.start();
+      mark(`${point}.witness`);
       const before = await h.readWitness(observation.arm);
       const identity = before.admissions.find((a) => !previous.includes(a.operationId));
       assert.ok(identity);
       assert.equal(identity.receipt, null);
-      phase = `${point}.retry`;
+      mark(`${point}.retry`);
       const accepted = await h.api<D.AdmissionReceipt>(
         `/v1/conversations/${conversation.body.conversationId}/messages`,
         input,
@@ -158,7 +188,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
       assert.equal(accepted.body.operationId, identity.operationId);
       assert.equal(accepted.body.messageId, identity.messageId);
       assert.equal(accepted.body.taskId, identity.taskId);
-      phase = `${point}.complete`;
+      mark(`${point}.complete`);
       const completed = await eventually(
         async () =>
           (
@@ -172,7 +202,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
         completed.messages.filter((m) => m.role === "user" && m.content === point).length,
         1,
       );
-      phase = `${point}.inspect`;
+      mark(`${point}.inspect`);
       const entries = (
         await h.api<{ entries: { kind: string; text: string }[] }>(
           `${probe}/inspect?cid=${conversation.body.conversationId}`,
@@ -183,7 +213,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
         1,
         "Count actual Pi input entries, not only deduplicated public projections",
       );
-      phase = `${point}.repeat`;
+      mark(`${point}.repeat`);
       const repeat = await h.api<D.AdmissionReceipt>(
         `/v1/conversations/${conversation.body.conversationId}/messages`,
         input,
@@ -193,7 +223,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
   } catch (error) {
     failure(error);
   } finally {
-    phase = "cleanup";
+    mark("cleanup");
     await h.close().catch(failure);
   }
 });
