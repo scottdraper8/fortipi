@@ -35,10 +35,10 @@ export async function nativeChecks(): Promise<void> {
   const workerRequire = createRequire(resolve(repository, "apps/worker/package.json"));
   const wranglerRequire = createRequire(workerRequire.resolve("wrangler"));
   const workerd = wranglerRequire("workerd") as { default: string; version: string };
-  assert.equal(workerd.version, "1.20261110.1");
+  assert.equal(workerd.version, "1.20261113.1");
   const binary = workerd.default;
   const workerVersion = await exec(binary, ["--version"], { timeout: 30_000 });
-  assert.match(workerVersion.stdout, /2026-11-10/);
+  assert.match(workerVersion.stdout, /2026-11-13/);
   console.log("Native probe: esbuild transform");
   const esbuild = await import("esbuild");
   assert.equal(esbuild.version, "0.28.2");

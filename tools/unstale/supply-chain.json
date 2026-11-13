@@ -1653,6 +1653,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-64@1.20261110.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workerd-darwin-64@1.20261113.1": {
+      "name": "@cloudflare/workerd-darwin-64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-UcShHyWJVZNbuI8jL3F5QZXMrJm7oScge33D5p3hAyhIIkoVj72+bior+VcUcr1SBWkh5w3Umnrx179WE7Wvpw==",
+      "published": "2026-11-13T01:00:02.439Z",
+      "reviewedAt": "2026-11-13T20:06:59.666Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "0a2f5f7e9c3768c1c86b6ad2cba7828d93322e6a0c9d21e51c997ee7680809ba",
+      "manifestSha256": "5fbc3df57751e2bb401cdac04e6792fb6a3e57089541498b7b7cc6778ea81220",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-64@1.20261113.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workerd-darwin-arm64@1.20261110.1": {
       "name": "@cloudflare/workerd-darwin-arm64",
       "version": "1.20261110.1",
@@ -1671,6 +1690,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-arm64@1.20261110.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workerd-darwin-arm64@1.20261113.1": {
+      "name": "@cloudflare/workerd-darwin-arm64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-bKfFcpueb9GOg0NZSR4x7dpEJZMsQOwCk0XzsAoXoBfG4osFRQcFxtAhrXvB1y445zXFLhrEkDJ/+LvGAMkPSg==",
+      "published": "2026-11-13T01:02:04.579Z",
+      "reviewedAt": "2026-11-13T20:07:00.204Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "b4e484a973092dd6c2d7ebb3642fd2e84a1fa258e8e52c0d3e2c02c26831f541",
+      "manifestSha256": "3c022387d2bad444f0de8d11ffb843a421fc1f6fc60f67c43302bbcbf80075e7",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-arm64@1.20261113.1; Sigstore transparency verification required at release"
     },
     "@cloudflare/workerd-linux-64@1.20261110.1": {
       "name": "@cloudflare/workerd-linux-64",
@@ -1691,6 +1729,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-64@1.20261110.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workerd-linux-64@1.20261113.1": {
+      "name": "@cloudflare/workerd-linux-64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-3VCnXzi7apwPSMwkiTIeEc5z/UWWGQXBZZNHCBBCXPlavWCR06SQ77tO0rEoKonfjBGW0MQaHNZ7U1pCPe4v3g==",
+      "published": "2026-11-13T01:01:11.748Z",
+      "reviewedAt": "2026-11-13T20:07:01.223Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "754d8e9f3e21e0bae048ed8dc2f9fe3f3ea25326ac7d8ab24436319812502f19",
+      "manifestSha256": "97b8d3d9e4c3467b419cafb0c11639e1929cca1041bc8ecd35309564cf54a033",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-64@1.20261113.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workerd-linux-arm64@1.20261110.1": {
       "name": "@cloudflare/workerd-linux-arm64",
       "version": "1.20261110.1",
@@ -1710,6 +1767,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-arm64@1.20261110.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workerd-linux-arm64@1.20261113.1": {
+      "name": "@cloudflare/workerd-linux-arm64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-phnb1686FTIVSr4qxQFOt7MyiWMotqsVUyZVnQl579/bCrqWaYUcRnikN5f6bBpDbxCk1OvOvYz0ykjT1lvYpg==",
+      "published": "2026-11-13T01:01:00.851Z",
+      "reviewedAt": "2026-11-13T20:07:01.498Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "4abc6ce84f874005b8fb33017b238f90adbc43093ee65879a8f454e31a53aedc",
+      "manifestSha256": "d4300433eae88228c230f031766e91ff1a6077e23d99ba0dd8336aba907a4d01",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-arm64@1.20261113.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workerd-windows-64@1.20261110.1": {
       "name": "@cloudflare/workerd-windows-64",
       "version": "1.20261110.1",
@@ -1728,6 +1804,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-windows-64@1.20261110.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workerd-windows-64@1.20261113.1": {
+      "name": "@cloudflare/workerd-windows-64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-WtQakCAIzUQJ6dQDPn7kIGlFJ9yjB0ooNx2WFqEHLYNAT7TLCNyaORem2WVM38TceVR8flCP5UWgYm6ht3dlIw==",
+      "published": "2026-11-13T00:59:57.201Z",
+      "reviewedAt": "2026-11-13T20:07:04.691Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "2787c56d7fe091639b7ffe5dcef341158ce42cbda1aa3b7b7b2d78a755f87305",
+      "manifestSha256": "2a348faecd1943ad719cd19f373615548638fee231ae16e862033acacef94f3b",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-windows-64@1.20261113.1; Sigstore transparency verification required at release"
     },
     "@cloudflare/workers-types@5.20261110.1": {
       "name": "@cloudflare/workers-types",
@@ -1762,6 +1857,23 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261112.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workers-types@5.20261113.1": {
+      "name": "@cloudflare/workers-types",
+      "version": "5.20261113.1",
+      "integrity": "sha512-FhF8hRtsQCr/BWZyUN7wm2x+jqAOkRIpLOW+2fJu5OQyIDOv+c3PxY8duEAkOYXuprLImxjW+PHTbvz9+Px5cw==",
+      "published": "2026-11-13T01:03:46.000Z",
+      "reviewedAt": "2026-11-13T20:07:00.790Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "cef32e75d5876601ea2b17e48f76ed9aded000984bfcf3000be9cdd71d8db5b7",
+      "manifestSha256": "7e4653713ce9b44ef842d70b3e526d5473b10d90e7d82380b9fc7cd8d8ff5234",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261113.1; Sigstore transparency verification required at release"
     },
     "@cspotcode/source-map-support@0.8.1": {
       "name": "@cspotcode/source-map-support",
@@ -6793,6 +6905,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261110.2-beta; Sigstore transparency verification required at release"
     },
+    "miniflare@5.20261113.0-beta": {
+      "name": "miniflare",
+      "version": "5.20261113.0-beta",
+      "integrity": "sha512-Kg+SarKNSn0lkhR88OHI29rIXJvmKs/c9hmxFXvEqK1J9aHu+AFl6CdaBq/k3iOTyMbm2p4h1HGLs7vXaLYMWA==",
+      "published": "2026-11-13T16:58:59.894Z",
+      "reviewedAt": "2026-11-13T20:07:02.305Z",
+      "license": "MIT",
+      "archiveSha256": "4777f56bb9e822fd249b05929dec2a82e1c9b9fc4cf5a757f7ef15cb9bd34785",
+      "manifestSha256": "31afefc4d0ccf2747ccb3478ffc41c032b47a1d62dbf2545054386c819bb837b",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "kerberos": "^2.0.0"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261113.0-beta; Sigstore transparency verification required at release"
+    },
     "minimist@1.2.8": {
       "name": "minimist",
       "version": "1.2.8",
@@ -8043,6 +8176,29 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/workerd@1.20261110.1; Sigstore transparency verification required at release"
     },
+    "workerd@1.20261113.1": {
+      "name": "workerd",
+      "version": "1.20261113.1",
+      "integrity": "sha512-FJP8Bm1jiiJTE2xpSIhT9JkMaKzU54y9Jk0q7n3BLWyWdUNsn35QGCqARcqXGwO3FGkvahhYqUEG2bJzlgcfhw==",
+      "published": "2026-11-13T01:04:23.219Z",
+      "reviewedAt": "2026-11-13T20:07:02.025Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "e52d9df647b4e15bbef09a2cc603e9fd9d1d665176c15f22ebdec56947869d90",
+      "manifestSha256": "8035c608f71c7d7df53dc1ac562bb84c150b5bb4c354101e76fa466633e6be38",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {
+        "postinstall": "node install.js"
+      },
+      "scriptFiles": {
+        "package/install.js": "08fd02b29c75d41fb3e48f2b9fd2a925becdc4e8ea40c65d0a467828e2f2bb7a"
+      },
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/workerd@1.20261113.1; Sigstore transparency verification required at release"
+    },
     "wrangler@4.160.1": {
       "name": "wrangler",
       "version": "4.160.1",
@@ -8084,6 +8240,27 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.161.0; Sigstore transparency verification required at release"
+    },
+    "wrangler@4.162.0": {
+      "name": "wrangler",
+      "version": "4.162.0",
+      "integrity": "sha512-jUnlzHKlWdW4MFXPgeYbe0+c4oTy/AAZfL/IUz921+dZBY5nJ48xjpvwff5djUR1MXoJRevzntAP/U97TUhPEw==",
+      "published": "2026-11-13T17:04:39.586Z",
+      "reviewedAt": "2026-11-13T20:07:02.654Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "bdc0366417fbeea506296931be1c5dd91c131043f8873e31601e03ed4c31956a",
+      "manifestSha256": "b3e7622a04ebd3a711993c35a29966668f11db64b55a06ecb5bf024caf6120ed",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "@cloudflare/workers-types": "^5.20261113.1"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.162.0; Sigstore transparency verification required at release"
     },
     "ws@8.21.0": {
       "name": "ws",
@@ -8233,9 +8410,55 @@
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/zod@4.6.7; Sigstore transparency verification required at release"
     }
   },
-  "exemptions": {},
+  "exemptions": {
+    "@cloudflare/workerd-darwin-64@1.20261113.1": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T01:00:02.439Z",
+      "integrity": "sha512-UcShHyWJVZNbuI8jL3F5QZXMrJm7oScge33D5p3hAyhIIkoVj72+bior+VcUcr1SBWkh5w3Umnrx179WE7Wvpw=="
+    },
+    "@cloudflare/workerd-darwin-arm64@1.20261113.1": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T01:02:04.579Z",
+      "integrity": "sha512-bKfFcpueb9GOg0NZSR4x7dpEJZMsQOwCk0XzsAoXoBfG4osFRQcFxtAhrXvB1y445zXFLhrEkDJ/+LvGAMkPSg=="
+    },
+    "@cloudflare/workerd-linux-64@1.20261113.1": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T01:01:11.748Z",
+      "integrity": "sha512-3VCnXzi7apwPSMwkiTIeEc5z/UWWGQXBZZNHCBBCXPlavWCR06SQ77tO0rEoKonfjBGW0MQaHNZ7U1pCPe4v3g=="
+    },
+    "@cloudflare/workerd-linux-arm64@1.20261113.1": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T01:01:00.851Z",
+      "integrity": "sha512-phnb1686FTIVSr4qxQFOt7MyiWMotqsVUyZVnQl579/bCrqWaYUcRnikN5f6bBpDbxCk1OvOvYz0ykjT1lvYpg=="
+    },
+    "@cloudflare/workerd-windows-64@1.20261113.1": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T00:59:57.201Z",
+      "integrity": "sha512-WtQakCAIzUQJ6dQDPn7kIGlFJ9yjB0ooNx2WFqEHLYNAT7TLCNyaORem2WVM38TceVR8flCP5UWgYm6ht3dlIw=="
+    },
+    "@cloudflare/workers-types@5.20261113.1": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T01:03:46.000Z",
+      "integrity": "sha512-FhF8hRtsQCr/BWZyUN7wm2x+jqAOkRIpLOW+2fJu5OQyIDOv+c3PxY8duEAkOYXuprLImxjW+PHTbvz9+Px5cw=="
+    },
+    "miniflare@5.20261113.0-beta": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T16:58:59.894Z",
+      "integrity": "sha512-Kg+SarKNSn0lkhR88OHI29rIXJvmKs/c9hmxFXvEqK1J9aHu+AFl6CdaBq/k3iOTyMbm2p4h1HGLs7vXaLYMWA=="
+    },
+    "workerd@1.20261113.1": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T01:04:23.219Z",
+      "integrity": "sha512-FJP8Bm1jiiJTE2xpSIhT9JkMaKzU54y9Jk0q7n3BLWyWdUNsn35QGCqARcqXGwO3FGkvahhYqUEG2bJzlgcfhw=="
+    },
+    "wrangler@4.162.0": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T17:04:39.586Z",
+      "integrity": "sha512-jUnlzHKlWdW4MFXPgeYbe0+c4oTy/AAZfL/IUz921+dZBY5nJ48xjpvwff5djUR1MXoJRevzntAP/U97TUhPEw=="
+    }
+  },
   "advisory": {
-    "checkedAt": "2026-11-12T20:41:09.172Z",
+    "checkedAt": "2026-11-13T20:53:21.337Z",
     "identities": 381,
     "findings": []
   }

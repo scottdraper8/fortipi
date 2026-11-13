@@ -5,7 +5,12 @@ import { dirname, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { archiveEntries } from "../../../tools/unstale/review-supply-chain.ts";
 import { packagePaths, repository } from "../../build-workspaces.ts";
-import { type RuntimeConveyanceMember, reviewRuntimeConveyance } from "../../check-licenses.ts";
+import {
+  assertRuntimeWasmMember,
+  checkLicenses,
+  type RuntimeConveyanceMember,
+  reviewRuntimeConveyance,
+} from "../../check-licenses.ts";
 import { generateRuntimeNotices, type RuntimeNoticeReceipt } from "../../generate-notices.ts";
 import {
   collectRuntimeClosure,
@@ -124,6 +129,29 @@ test("actual five supported packs produce source-bound staged legal files and pe
         (item) => item.archiveId === "blake3-wasm@2.1.5",
       );
       assert.equal(wasm?.files.filter((file) => file.archivePath.endsWith(".wasm")).length, 3);
+      const miniflare = receipt.conveyance.components.find(
+        (item) => item.archiveId === "miniflare@5.20261113.0-beta",
+      );
+      assert.ok(miniflare);
+      const markdown = miniflare.files.filter((file) => file.archivePath.endsWith(".wasm"));
+      assert.equal(markdown.length, 1);
+      assert.equal(markdown[0]?.archivePath, "dist/src/mdream_edge_bg.wasm");
+      assert.equal(markdown[0]?.size, 239214);
+      assert.equal(
+        markdown[0]?.sha256,
+        "db48fb63ec419083fdcd2100171bb5f40c5086164a9fe939286927727c91256b",
+      );
+      const markdownNotices = receipt.texts.filter(
+        (item) => item.archiveId === miniflare.archiveId && item.path.includes("/mdream/2.0.3/"),
+      );
+      assert.equal(markdownNotices.length, 4);
+      const rustNotices = markdownNotices.find((item) => item.path.endsWith("RUST-NOTICES.md"));
+      assert.ok(rustNotices);
+      assert.match(
+        await readFile(resolve(output, rustNotices.path), "utf8"),
+        /not asserted to be an exact compiled-code inventory/,
+      );
+      assert.match(await readFile(resolve(output, rustNotices.path), "utf8"), /UNICODE LICENSE V3/);
       const sdk = receipt.conveyance.components.find(
         (item) => item.archiveId === "@anthropic-ai/sdk@0.129.0",
       );
@@ -206,6 +234,73 @@ test("actual five supported packs produce source-bound staged legal files and pe
       packagePaths.map((path) => regularBytes(resolve(repository, path, "THIRD_PARTY_NOTICES.md"))),
     ),
     own,
+  );
+});
+
+test("the exact reviewed Markdown dependency member rejects archive, path, hash, license and attribution substitutions", async () => {
+  const source = closure.archives.find((item) => item.id === "miniflare@5.20261113.0-beta");
+  assert.ok(source);
+  const member = source.files.find((file) => file.path === "dist/src/mdream_edge_bg.wasm");
+  assert.ok(member);
+  const policy = (await readJson(resolve(facts, "tools/unstale/license-policy.json"))) as {
+    attributions: Record<string, Parameters<typeof assertRuntimeWasmMember>[4]>;
+  };
+  const attribution = policy.attributions[source.id];
+  assertRuntimeWasmMember(source.id, source.archiveSha256, member, "MIT", attribution);
+  for (const [id, archive, changed, license, legal] of [
+    ["miniflare@5.20261110.2-beta", source.archiveSha256, member, "MIT", attribution],
+    [source.id, "f".repeat(64), member, "MIT", attribution],
+    [
+      source.id,
+      source.archiveSha256,
+      { ...member, path: "dist/src/another.wasm" },
+      "MIT",
+      attribution,
+    ],
+    [source.id, source.archiveSha256, { ...member, sha256: "f".repeat(64) }, "MIT", attribution],
+    [source.id, source.archiveSha256, { ...member, size: member.size + 1 }, "MIT", attribution],
+    [source.id, source.archiveSha256, member, "Unreviewed license", attribution],
+    [source.id, source.archiveSha256, member, "MIT", undefined],
+  ] as const)
+    assert.throws(() => assertRuntimeWasmMember(id, archive, changed, license, legal));
+});
+
+test("the genuine Markdown dependency bytes remain forbidden in owned outputs even with another filename", {
+  timeout: 120000,
+}, async () => {
+  const changed = resolve(root, "owned-wasm-copy");
+  await cp(facts, changed, {
+    recursive: true,
+    force: false,
+    errorOnExist: true,
+    mode: constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE,
+  });
+  for (const directory of [
+    ...packagePaths.map((path) => `${path}/dist`),
+    "apps/worker/dist/worker",
+    "packages/fortipi-cli/worker-assets",
+  ]) {
+    await mkdir(dirname(resolve(changed, directory)), { recursive: true });
+    await cp(resolve(repository, directory), resolve(changed, directory), {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      mode: constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE,
+    });
+  }
+  const id = "miniflare@5.20261113.0-beta";
+  const entries = archiveEntries(
+    await regularBytes(resolve(facts, `dist/supply-chain/archives/${sha256(id)}.tgz`)),
+  );
+  const bytes = entries.get("package/dist/src/mdream_edge_bg.wasm");
+  assert.ok(bytes);
+  await writeFile(
+    resolve(changed, "packages/fortipi-cli/worker-assets/unexpected-asset.dat"),
+    bytes,
+  );
+  await assert.rejects(
+    checkLicenses(changed),
+    /External tool\/native bytes copied into own output/,
   );
 });
 

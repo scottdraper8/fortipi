@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     if (id.startsWith("@esbuild/")) parent = "esbuild@0.28.2";
     else if (id.startsWith("@biomejs/cli-")) parent = "@biomejs/biome@2.6.6";
     else if (id.startsWith("@rolldown/binding-")) parent = "rolldown@1.3.1";
-    else if (id.startsWith("@cloudflare/workerd-")) parent = "workerd@1.20261110.1";
+    else if (id.startsWith("@cloudflare/workerd-")) parent = "workerd@1.20261113.1";
     if (parent) {
       const source = supply.packages[parent];
       assert.ok(source);

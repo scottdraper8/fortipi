@@ -4,7 +4,16 @@ packages:
 saveExact: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
-minimumReleaseAgeExclude: []
+minimumReleaseAgeExclude:
+  - "@cloudflare/workerd-darwin-64@1.20261113.1"
+  - "@cloudflare/workerd-darwin-arm64@1.20261113.1"
+  - "@cloudflare/workerd-linux-64@1.20261113.1"
+  - "@cloudflare/workerd-linux-arm64@1.20261113.1"
+  - "@cloudflare/workerd-windows-64@1.20261113.1"
+  - "@cloudflare/workers-types@5.20261113.1"
+  - "miniflare@5.20261113.0-beta"
+  - "workerd@1.20261113.1"
+  - "wrangler@4.162.0"
 trustPolicy: no-downgrade
 trustLockfile: false
 verifyDepsBeforeRun: error
@@ -19,7 +28,7 @@ skills:
 allowBuilds:
   esbuild@0.28.2: true
   node-pty@1.1.0: true
-  workerd@1.20261110.1: false
+  workerd@1.20261113.1: false
   pnpm@12.18.0: false
   "@google/genai@2.21.0": false
   core-js-pure@3.51.0: false

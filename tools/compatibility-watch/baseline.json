@@ -162,11 +162,11 @@
         "sha256": "826a1d2dc16cf6a4c28e1213216cc8ca3a4d14ea233381dff6e333004f1d288f"
       },
       "pins": {
-        "apps/worker/package.json#devDependencies/wrangler": "4.161.0",
-        "packages/fortipi-cli/package.json#dependencies/wrangler": "4.161.0"
+        "apps/worker/package.json#devDependencies/wrangler": "4.162.0",
+        "packages/fortipi-cli/package.json#dependencies/wrangler": "4.162.0"
       },
-      "reviewedAt": "2026-11-13T19:51:19.313Z",
-      "reviewNote": "Reviewed immutablef005593c..349fc4e7:5commits; ALL8 Wrangler patches(+389/-37),1111 unchanged blobs. Unpublished Artifacts-event routing assigns one local Workflow owner; closed FortiPi templates/probes use neither binding. Release4.162.0 now publishes prior Artifacts/Workflow changes and hot-reload fix; no hosted-restart cause proved. Registry/tag79b890ab confirm exact MF5.20261113.0-beta/workerd1.20261113.1, types peer^5.20261113.1: separate Foundation review needed before final latest-pin freeze; no adoption here. Retain installed4.161.0/MF5.20261110.2-beta/workerd10.1 and types5.20261112.1; targeted OSV6 empty, not security clearance. Explicit compat date/DO/image/deploy/auth paths unchanged in this source interval. Prior hot-reload caveat remains. Reference only, no runtime/root/release clearance. Evidence:phase3/thread-9/compatibility-wrangler-349-build.md."
+      "reviewedAt": "2026-11-13T20:50:27.711Z",
+      "reviewNote": "Retain exact349fc4e7 source snapshot and prior reviewed local Artifacts-event caveat; published4.162.0 source is79b890ab, not later349 feature adoption. Coherent exact Wrangler4.162.0/Miniflare5.20261113.0-beta/workerd1.20261113.1/types5.20261113.1 graph reviewed: nine signed/SRI archives, original source licenses, denied workerd lifecycle, expiring exact age records. New mdream2.0.3 MIT WASM is exact third-party Miniflare dependency member only with complete conservative notices; owned output/hash/metafile prohibitions, three BLAKE3 members and18 exceptions retained. SDK hot-reload GET/HEAD retry fix adopted; no retry of mutating requests added. Workflows/Artifacts/Browser quickactions remain unused in FortiPi. Reference/source-local graph scope only; fullRoot/3OS/live/release evidence remains separate. Evidence:phase3/thread-9/foundation-wrangler-4162-build.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
@@ -177,10 +177,10 @@
         "paths": {}
       },
       "pins": {
-        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261112.1"
+        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261113.1"
       },
-      "reviewedAt": "2026-11-13T04:46:21.462Z",
-      "reviewNote": "Reviewed immutablee0240d..6cd7d1a/v1.20261113.1:69commits/264files; full diff SHA8f3d390f6433e4f93d04e129bcd79cd74b54550db4cd4fec4e6390a284c9a915. Used-boundary review: DO RPC cancellation still needs explicit abort; orphaned cross-request awaits now reject; stream sync paths ungated. Snapshot kvData unused; SQLite sync=false is test-only/defaulttrue. URLPattern/email/Node crypto APIs unused. New workerd/types published Nov13~01:04Z are immature under1440min policy. Latest Wrangler4.161.0 and selected Miniflare5.20261110.2-beta EXACT-pin workerd1.20261110.1; retain graph/types5.20261112.1, no override. Deployed platform runtime is not pinned by compatibility_date; final live/recovery proof remains required. Reference only, no new runtime/security/release clearance. Evidence:phase3/thread-9/compatibility-refresh-build.md."
+      "reviewedAt": "2026-11-13T20:50:27.711Z",
+      "reviewNote": "Retain reviewed6cd7d1a/v1.20261113.1 source snapshot/69-commit used-boundary assessment. Coherent published SDK now selects workerd1.20261113.1 exactly and compatible types5.20261113.1; nine archive signatures/SRI/source/lifecycle/legal/age facts reviewed. Four generated type files match immutable6cd7 source. DO RPC cancellation still needs explicit abort; orphaned cross-context waits now reject and deferred cross-context actions remain material to lifecycle. SQLite sync defaults true; false is test-only. Snapshot kvData/URLPattern/Node crypto additions unused. Workerd install.js remains denied; optional authenticated binary selected. Compatibility date does not pin deployed runtime/autogates. Source/local graph qualification is not cloud recovery or security-wide clearance. Evidence:phase3/thread-9/foundation-wrangler-4162-build.md; prior phase3/thread-9/compatibility-refresh-build.md."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",

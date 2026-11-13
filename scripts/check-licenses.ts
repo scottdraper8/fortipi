@@ -119,6 +119,43 @@ function freezeReceipt(value: unknown): void {
   }
 }
 
+/** Exact third-party dependency members, never permission for owned output conveyance. */
+export function assertRuntimeWasmMember(
+  archiveId: string,
+  archiveSha256: string,
+  member: Pick<RuntimeFileRecord, "path" | "size" | "sha256">,
+  license: string,
+  attribution?: Attribution,
+): void {
+  assert.equal(license, "MIT");
+  if (archiveId === "blake3-wasm@2.1.5") {
+    assert.match(member.path, /^dist\/wasm\/(?:browser|nodejs|web)\/blake3_js_bg\.wasm$/);
+    return;
+  }
+  assert.equal(archiveId, "miniflare@5.20261113.0-beta");
+  assert.equal(archiveSha256, "4777f56bb9e822fd249b05929dec2a82e1c9b9fc4cf5a757f7ef15cb9bd34785");
+  assert.equal(member.path, "dist/src/mdream_edge_bg.wasm");
+  assert.equal(member.size, 239214);
+  assert.equal(member.sha256, "db48fb63ec419083fdcd2100171bb5f40c5086164a9fe939286927727c91256b");
+  assert.equal(
+    attribution?.source,
+    "https://github.com/cloudflare/workers-sdk/tree/79b890ab89a62823198a0c551c44ff647c80de4d",
+  );
+  assert.ok(attribution);
+  for (const [name, digest] of [
+    ["LICENSE.md", "b5a7e0557d37c8ccf1b1cbcda1842b8c4535d217f81f97c1cbad579042269cad"],
+    ["CORE-LICENSE", "d06451530138de11ec5cee38b458f1aa4259ada5587dc5317c225196d26914d6"],
+    ["RUST-NOTICES.md", "786b5b98e134b6d2c038e1156647096a502c2732b56184c88d4af021429c5846"],
+    ["component.json", "7aa18c9e3bf3fd5cff72e87911d8d7c64f23851ef1cec84b0879a8b9ae7e6012"],
+  ]) {
+    const records: Attribution["files"] = attribution.files.filter(
+      (file) => file.path === `tools/unstale/licenses/npm/mdream/2.0.3/${name}`,
+    );
+    assert.equal(records.length, 1, "Missing exact mdream component attribution");
+    assert.equal(records[0]?.sha256, digest);
+  }
+}
+
 /** Source-only vendor surface. Existing dist/Worker/worker-assets guards stay unchanged. */
 export async function reviewRuntimeConveyance(
   root: string,
@@ -337,9 +374,15 @@ export async function reviewRuntimeConveyance(
       `Native bundle member: ${file.path}`,
     );
     if (local.endsWith(".wasm")) {
-      assert.equal(source.id, "blake3-wasm@2.1.5");
-      assert.equal(supply.packages[source.id]?.license, "MIT");
-      assert.match(local, /^dist\/wasm\/(?:browser|nodejs|web)\/blake3_js_bg\.wasm$/);
+      const review = supply.packages[source.id];
+      assert.ok(review);
+      assertRuntimeWasmMember(
+        source.id,
+        source.archiveSha256,
+        { ...file, path: local },
+        review.license,
+        policy.attributions[source.id],
+      );
     }
     if (!runtimePathIsConveyable(file.path)) {
       assert.equal(source.id, "@anthropic-ai/sdk@0.129.0", `Blocked runtime path: ${file.path}`);
@@ -425,13 +468,13 @@ export async function checkLicenses(root = repository, foundation = false): Prom
   const lock = await yaml<Lock>(root, "pnpm-lock.yaml");
   assert.equal(policy.format, 1);
   assert.deepEqual(policy.externalToolChain, [
-    "wrangler@4.161.0",
-    "miniflare@5.20261110.2-beta",
+    "wrangler@4.162.0",
+    "miniflare@5.20261113.0-beta",
     "sharp@0.35.5",
   ]);
   for (const [from, name, version] of [
-    ["wrangler@4.161.0", "miniflare", "5.20261110.2-beta"],
-    ["miniflare@5.20261110.2-beta", "sharp", "0.35.5"],
+    ["wrangler@4.162.0", "miniflare", "5.20261113.0-beta"],
+    ["miniflare@5.20261113.0-beta", "sharp", "0.35.5"],
   ]) {
     assert.ok(from && name && version);
     const nodes = Object.entries(lock.snapshots ?? {}).filter(([id]) => id.split("(")[0] === from);
@@ -524,7 +567,7 @@ export async function checkLicenses(root = repository, foundation = false): Prom
       }
     if (
       externalNative.has(id) ||
-      ["wrangler@4.161.0", "miniflare@5.20261110.2-beta", "sharp@0.35.5"].includes(id)
+      ["wrangler@4.162.0", "miniflare@5.20261113.0-beta", "sharp@0.35.5"].includes(id)
     ) {
       for (const [path, bytes] of entries)
         if (
