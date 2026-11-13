@@ -8,6 +8,7 @@ import { repository } from "../../scripts/build-workspaces.ts";
 import { checkLicenses } from "../../scripts/check-licenses.ts";
 import type { Manifest, SupplyChain } from "../../scripts/check-pins.ts";
 import { checkPins, json, manifestPaths, yaml } from "../../scripts/check-pins.ts";
+import type { DependencyPatch } from "../../scripts/dependency-patches.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "../../scripts/pnpm-executable.ts";
 import { rejectedZodAdvisory, validateRejectedZodAuthorities } from "../../scripts/run-unstale.ts";
 import {
@@ -113,6 +114,24 @@ test("Windows self-update shim selects the pinned engine instead of its older bo
   }
 });
 
+async function copyReviewedPatchInputs(root: string, installed: boolean): Promise<void> {
+  await mkdir(resolve(root, "patches"), { recursive: true });
+  await copyFile(resolve(repository, "patches/review.json"), resolve(root, "patches/review.json"));
+  const patches = await json<Record<string, DependencyPatch>>(repository, "patches/review.json");
+  for (const [id, patch] of Object.entries(patches)) {
+    const target = resolve(root, patch.path);
+    await mkdir(dirname(target), { recursive: true });
+    await copyFile(resolve(repository, patch.path), target);
+    if (!installed) continue;
+    const name = id.slice(0, id.lastIndexOf("@"));
+    for (const file of Object.keys(patch.files)) {
+      const local = `apps/worker/node_modules/${name}/${file}`;
+      await mkdir(dirname(resolve(root, local)), { recursive: true });
+      await copyFile(resolve(repository, local), resolve(root, local));
+    }
+  }
+}
+
 async function fixture(change: (root: string) => Promise<void>, rejection: RegExp): Promise<void> {
   await mkdir(resolve(repository, "dist/foundation-fixtures"), { recursive: true });
   const root = await mkdtemp(resolve(repository, "dist/foundation-fixtures/case-"));
@@ -133,6 +152,21 @@ async function fixture(change: (root: string) => Promise<void>, rejection: RegEx
       await mkdir(dirname(resolve(root, path)), { recursive: true });
       await copyFile(resolve(repository, path), resolve(root, path));
     }
+    await copyReviewedPatchInputs(root, true);
+    // These are disposable mutation fixtures, not new advisory receipts. Use
+    // the actual current parent review's observation while keeping its input
+    // files unchanged; each case must still reach its own intended rejection.
+    const policy = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+    try {
+      const current = await json<{ advisory: SupplyChain["advisory"] }>(
+        repository,
+        "dist/supply-chain/advisory-review.json",
+      );
+      policy.advisory = current.advisory;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(policy));
     await checkPins(root);
     await change(root);
     await assert.rejects(() => checkPins(root), rejection);
@@ -359,12 +393,14 @@ test("reject disallowed license before copying any archive", async () => {
   try {
     for (const path of [
       "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
       "tools/unstale/supply-chain.json",
       "tools/unstale/license-policy.json",
     ]) {
       await mkdir(dirname(resolve(root, path)), { recursive: true });
       await copyFile(resolve(repository, path), resolve(root, path));
     }
+    await copyReviewedPatchInputs(root, false);
     const state = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
     for (const r of Object.values(state.packages)) r.license = "GPL-3.0-only";
     await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(state));
