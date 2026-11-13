@@ -120,12 +120,12 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "3e23dd9f53be214006041e1279f2dd57008f61c0",
+        "commit": "b4899f59ef0fba6507c2e619fd804dcde51920ba",
         "version": "1.5.2",
         "paths": {
-          "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
+          "packages/agent": "e652db83ded3d9c94ca33424ffeb500f36c648d83bcc76c4c30c5a8a190fdced",
           "packages/ai": "b49f6b5e94704d9a40b31412eabcbf2dd33f0b914f61f00b2a158bd5e0255a87",
-          "packages/chord": "47768c80b5e46c5b093a811545103eea2e8acaac68a393e395cceaa4b48367d9",
+          "packages/chord": "126d093e96da99ffb6d00ad17d63c61795053b32feb426c14a85d9e56538cc8d",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "759478deff2efd0baf4fa4e3671414f47c7ee3a9336c4a7575bb3820a74a9ab9",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
@@ -135,7 +135,7 @@
           "packages/tui": "5483c0578f10b3c4346666658e4486062e9ad03707c10ded58ccf59eddf318d9",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "5f66b79683481174663aab463d80e0df8e926730591cb9a24e0ac28ab4f3e5a5"
+        "sha256": "4f263fb40b4cfa22afaab86f875c5dde26b9511e1991ac5359f713dcc4e88578"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-13T16:26:57.809Z",
-      "reviewNote": "Reviewed immutable4be4cb4f..3e23dd9f:6commits. Chord app-kit Sessions→SignIns renames exported types/options, contract/facet/document+field and cookie to chord-sign-in; NO migration, existing kit users must sign in again. Security hashing/expiry/revocation/bounds unchanged. FortiPi uses context/SQLite helpers and its own credentials, not Chord Node app-kit; changed app modules absent from own existing Worker metafile. Other nine watched package trees/manifest unchanged. Outside selected trees: uninstalled coding-agent large-render spread fix; P2 icon/P3 design docs. All10 npm latest/most-recent and latest release remain1.5.2; seven raw SRI/SHA archives and all three patches retained. Prior AI retry/read observations and Chord shared-hold fresh-authority caveat retained. Reference only; no unpublished adoption, security/root-canary/runtime clearance. Evidence:phase3/thread-9/compatibility-pi-3e23-build.md."
+      "reviewedAt": "2026-11-13T19:48:29.959Z",
+      "reviewNote": "Reviewed immutable3e23dd9f..b4899f59:10commits/24files. Agent-core abort now records results for all remaining batch calls, skips lookup/hooks when pre-aborted; package absent from locked FortiPi runtime, Durable has its own loop. Chord surfaces reconnect beside canRetry/base checks; one in-flight check, late no stops/closes current attempt, one immediate retry per wake. Future consumers must not use canRetry as pre-connect authorization. FortiPi uses own WS/client and Chord context/SQLite; changed modules absent from own existing Worker metafile. Other eight watched trees/manifest unchanged. P2 offline UI/P3 design docs unused. All10 npm latest/most-recent/latest release remain1.5.2; seven raw SRI/SHA archives/three patches retained. Prior AI retry/read, app-kit breaking rename and shared-hold fresh-authority caveats retained. Reference only; no unpublished adoption/security/root-canary/runtime clearance. Evidence:phase3/thread-9/compatibility-pi-b489-build.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
