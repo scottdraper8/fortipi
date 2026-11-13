@@ -45,8 +45,9 @@ export interface InfrastructureReadRequest {
   idle: { from: number; through: number };
 }
 /** Closed dataset DTOs. Field names fix the aggregation and units: CPU is a
- * separate dataset SUM in milliseconds; memory is one selected DO isolate P99
- * in bytes. Neither is a peak, and object percentiles are never added. */
+ * separate dataset SUM in milliseconds; memory is the provider-calculated P99
+ * of isolate samples for the selected namespace/object scope, in bytes. Neither
+ * is a peak, and individual object percentiles are never added. */
 export interface InfrastructureCoverage {
   effectiveWindow: { from: number; through: number } | null;
   records: number;
@@ -64,13 +65,26 @@ export interface InfrastructureWorkerMeasurements extends InfrastructureCoverage
   workerCpuSumMs: number | null;
   statuses: InfrastructureInvocationStatus[] | null;
 }
-export interface InfrastructureObjectMeasurements {
-  scope: {
-    resource: "agent" | "workspace";
-    logicalId: string;
-    namespaceId: string;
-    objectId: string;
-  };
+/** A binding-to-namespace metadata join is sufficient for namespace scope.
+ * Object scope additionally requires an actual authenticated name/id mapping;
+ * listing opaque object IDs is not such a mapping. No idFromName reconstruction
+ * or product diagnostic route is implied. ControlPlane always includes its
+ * whole namespace, covering quota/credential/revocation work. */
+export type InfrastructureDurableObjectScope =
+  | {
+      kind: "namespace";
+      resource: "control-plane" | "agent" | "workspace";
+      namespaceId: string;
+    }
+  | {
+      kind: "object";
+      resource: "agent" | "workspace";
+      namespaceId: string;
+      objectId: string;
+      logicalId: string;
+    };
+export interface InfrastructureDurableObjectMeasurements {
+  scope: InfrastructureDurableObjectScope;
   invocations: InfrastructureCoverage & {
     quality: "adaptive-estimate" | "unavailable";
     sampleInterval: number | null;
@@ -93,7 +107,7 @@ export interface InfrastructureObjectMeasurements {
 }
 export interface InfrastructureWindowMeasurements {
   worker: InfrastructureWorkerMeasurements;
-  objects: InfrastructureObjectMeasurements[];
+  durableObjects: InfrastructureDurableObjectMeasurements[];
 }
 export type InfrastructureMeasurements =
   | {
@@ -175,7 +189,7 @@ export function verifyInfrastructureMeasurements(
   assert.ok(request.active.through <= request.idle.from);
   for (const name of ["active", "idle"] as const) {
     const observed: InfrastructureWindowMeasurements = value[name];
-    keys(observed, ["worker", "objects"]);
+    keys(observed, ["worker", "durableObjects"]);
     const window = request[name];
     function coverage(metric: InfrastructureCoverage, unavailable: boolean) {
       count(metric.records);
@@ -201,7 +215,9 @@ export function verifyInfrastructureMeasurements(
         );
     }
     function invocations(
-      metric: InfrastructureWorkerMeasurements | InfrastructureObjectMeasurements["invocations"],
+      metric:
+        | InfrastructureWorkerMeasurements
+        | InfrastructureDurableObjectMeasurements["invocations"],
     ) {
       assert.ok(["adaptive-estimate", "unavailable"].includes(metric.quality));
       coverage(metric, metric.quality === "unavailable");
@@ -277,30 +293,45 @@ export function verifyInfrastructureMeasurements(
           worker.requestsSum > 0,
         "Active Worker CPU/request samples are required",
       );
-    assert.ok(Array.isArray(observed.objects) && observed.objects.length === 2);
+    assert.ok(Array.isArray(observed.durableObjects) && observed.durableObjects.length === 3);
     const resources = new Set<string>();
-    const identities = new Set<string>();
-    for (const object of observed.objects) {
+    const namespaces = new Set<string>();
+    for (const object of observed.durableObjects) {
       keys(object, ["scope", "invocations", "periodic", "isolateMemory"]);
-      keys(object.scope, ["resource", "logicalId", "namespaceId", "objectId"]);
       const scope = object.scope;
-      assert.ok(scope.resource === "agent" || scope.resource === "workspace");
-      assert.ok(!resources.has(scope.resource));
-      resources.add(scope.resource);
-      assert.equal(
-        scope.logicalId,
-        scope.resource === "agent" ? request.agentId : request.workspaceId,
+      assert.ok(["control-plane", "agent", "workspace"].includes(scope.resource));
+      assert.ok(
+        !resources.has(scope.resource),
+        "Every application binding must be represented once",
       );
-      for (const id of [scope.namespaceId, scope.objectId])
-        assert.match(id, /^[A-Za-z0-9_-]{1,128}$/);
-      const identity = `${scope.namespaceId}/${scope.objectId}`;
-      assert.ok(!identities.has(identity));
-      identities.add(identity);
+      resources.add(scope.resource);
+      assert.match(scope.namespaceId, /^[A-Za-z0-9_-]{1,128}$/);
+      assert.ok(
+        !namespaces.has(scope.namespaceId),
+        "Different application bindings must not reuse one namespace's counters",
+      );
+      namespaces.add(scope.namespaceId);
+      if (scope.kind === "namespace") {
+        keys(scope, ["kind", "resource", "namespaceId"]);
+      } else {
+        assert.equal(scope.kind, "object");
+        keys(scope, ["kind", "resource", "namespaceId", "logicalId", "objectId"]);
+        assert.ok(
+          scope.resource === "agent" || scope.resource === "workspace",
+          "ControlPlane requires its namespace, not a selected object's counters",
+        );
+        assert.equal(
+          scope.logicalId,
+          scope.resource === "agent" ? request.agentId : request.workspaceId,
+        );
+        assert.match(scope.objectId, /^[A-Za-z0-9_-]{1,128}$/);
+      }
       if (name === "idle")
         assert.deepEqual(
           scope,
-          value.active.objects.find((other) => other.scope.resource === scope.resource)?.scope,
-          "Idle and active object attribution must agree",
+          value.active.durableObjects.find((other) => other.scope.resource === scope.resource)
+            ?.scope,
+          "Idle and active namespace/object attribution must agree",
         );
       keys(object.invocations, [
         "quality",
@@ -1015,8 +1046,8 @@ export async function runLiveInfrastructureControls(input: {
                 activeRequestsSum: observed.active.worker.requestsSum,
                 idleRequestsSum: observed.idle.worker.requestsSum,
               },
-              objects: observed.active.objects.map((object) => {
-                const idleObject = observed.idle.objects.find(
+              durableObjects: observed.active.durableObjects.map((object) => {
+                const idleObject = observed.idle.durableObjects.find(
                   (row) => row.scope.resource === object.scope.resource,
                 )!;
                 return {
@@ -1030,19 +1061,26 @@ export async function runLiveInfrastructureControls(input: {
               interpretation:
                 "Reported counts in their effective windows; unequal duration, sampling and lag prevent exact-zero or amplification clearance",
             },
+            durableObjectCoverage: observed.active.durableObjects.every(
+              (row) => row.scope.kind === "namespace",
+            )
+              ? "all-three-bound-namespaces"
+              : "control-plane-namespace-and-selected-agent-workspace-scopes",
             exactIdleWriteAbsence: "not-established",
             hardCpuOrMemoryPeak: "not-established",
             sharedAccountRemaining: "unknown",
           },
           oracle:
-            "The exact target reports separate Worker/DO CPU sums and per-object isolate memory P99, plus attributable active/idle request/SQL observations; unknown idle samples stay null, and reported zero never becomes exact absence or a hard maximum",
+            "The exact target reports separate Worker/DO CPU sums and provider-calculated isolate memory P99 at explicit namespace/object scope, including ControlPlane namespace request/SQL observations; unknown idle samples stay null, and reported zero never becomes exact absence or a hard maximum",
           sensitivity: [
             "Missing required request/write or active CPU/memory observations, wrong source/target/scope/window, resource errors and unknown statuses refuse the observation port",
           ],
           limitations: [
             ...capturedControls.limitations,
             "Adaptive estimates and periodic records have unknown delivery/completeness lag; absent records remain unavailable and observed zero does not prove exact idle-write absence",
-            "CPU is a dataset sum, memory is per-selected-object isolate P99; idle CPU/memory may be unavailable, percentiles are not summed, and neither is a hard maximum",
+            "CPU is a dataset sum; memory is the provider-calculated P99 of isolate samples in the selected namespace/object scope, not added per-object percentiles or a hard maximum; idle CPU/memory may be unavailable",
+            "Namespace counters include all objects and other traffic/versions sharing the namespace; Worker-version attribution does not make DO counters version-specific or per-agent measurements",
+            "Object scope requires a parent-authenticated logical/physical mapping; namespace scope never invents that mapping, and selected objects cannot certify whole-namespace usage",
             "Parent owns actual resource attribution, primary-schema unit normalization/raw-data custody and provider read-only transport; this callback/data never grants job/deployment/archive authority",
             "No deliberate provider exhaustion, guaranteed account remaining balance or physical storage-reclamation claim; all other approved component/release proofs remain required",
           ],

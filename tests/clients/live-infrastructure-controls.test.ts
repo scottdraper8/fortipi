@@ -13,7 +13,9 @@ import {
   assertInfrastructurePressure,
   classifyInfrastructureRace,
   InfrastructureEvidenceUnavailable,
+  type InfrastructureMeasurements,
   type InfrastructureReadRequest,
+  type InfrastructureWindowMeasurements,
   verifyInfrastructureMeasurements,
 } from "./live-infrastructure-controls.ts";
 import { publicRequestPressure } from "./live-pressure.ts";
@@ -34,7 +36,7 @@ test("fixed provider datasets preserve unknown idle CPU/memory and sampled zeros
     idle: { from: 240000, through: 300000 },
   };
   const statuses = (n: number) => [{ status: "success", requestsSum: n, errorsSum: 0 }];
-  const window = (name: "active" | "idle") => ({
+  const window = (name: "active" | "idle"): InfrastructureWindowMeasurements => ({
     worker: {
       quality: "adaptive-estimate" as const,
       scope: { workerName: "controlled", workerVersionId: "worker-v0" },
@@ -45,12 +47,11 @@ test("fixed provider datasets preserve unknown idle CPU/memory and sampled zeros
       effectiveWindow: request[name],
       records: 2,
     },
-    objects: (["agent", "workspace"] as const).map((resource) => ({
+    durableObjects: (["control-plane", "agent", "workspace"] as const).map((resource) => ({
       scope: {
+        kind: "namespace",
         resource,
-        logicalId: String(resource),
         namespaceId: `namespace-${resource}`,
-        objectId: `object-${resource}`,
       },
       invocations: {
         quality: "adaptive-estimate" as const,
@@ -87,7 +88,7 @@ test("fixed provider datasets preserve unknown idle CPU/memory and sampled zeros
             },
     })),
   });
-  const original = {
+  const original: Exclude<InfrastructureMeasurements, { unavailable: string }> = {
     requestSha256: sha256(canonicalJson(request)),
     rawResponseSha256: "d".repeat(64),
     schemaSha256: "c".repeat(64),
@@ -101,11 +102,40 @@ test("fixed provider datasets preserve unknown idle CPU/memory and sampled zeros
   // These are observations, never a full infrastructure GateReceipt. Periodic
   // records can report zero writes without becoming an exact transaction ledger.
   assert.deepEqual(verifyInfrastructureMeasurements(request, original), original);
+  // The documented binding/namespace join needs no private object-name hash
+  // or fabricated physical/logical mapping. All three namespaces participate.
+  assert.deepEqual(
+    original.active.durableObjects.map((row) => row.scope.resource),
+    ["control-plane", "agent", "workspace"],
+  );
+  assert.ok(
+    original.active.durableObjects.every(
+      (row) => !("objectId" in row.scope) && !("logicalId" in row.scope),
+    ),
+  );
+  const selectedObject = structuredClone(original);
+  for (const name of ["active", "idle"] as const) {
+    selectedObject[name].durableObjects[1]!.scope = {
+      kind: "object",
+      resource: "agent",
+      logicalId: request.agentId,
+      namespaceId: "namespace-agent",
+      objectId: "controlled-authenticated-object",
+    };
+  }
+  // Controlled mapping DATA tests only; real mapping authentication remains a
+  // trusted-parent obligation. Its object scope is not namespace coverage.
+  assert.deepEqual(verifyInfrastructureMeasurements(request, selectedObject), selectedObject);
+  const foreignObject = structuredClone(selectedObject);
+  const foreignScope = foreignObject.active.durableObjects[1]!.scope;
+  assert.equal(foreignScope.kind, "object");
+  if (foreignScope.kind === "object") foreignScope.logicalId = "foreign-agent";
+  assert.throws(() => verifyInfrastructureMeasurements(request, foreignObject));
   const withObservedIdleWrite = structuredClone(original);
-  withObservedIdleWrite.idle.objects[0]!.periodic.sqlRowsWrittenSum = 1;
+  withObservedIdleWrite.idle.durableObjects[0]!.periodic.sqlRowsWrittenSum = 1;
   assert.equal(
-    verifyInfrastructureMeasurements(request, withObservedIdleWrite).idle.objects[0]?.periodic
-      .sqlRowsWrittenSum,
+    verifyInfrastructureMeasurements(request, withObservedIdleWrite).idle.durableObjects[0]
+      ?.periodic.sqlRowsWrittenSum,
     1,
   );
   const reject = (change: (value: typeof original) => void) => {
@@ -120,16 +150,32 @@ test("fixed provider datasets preserve unknown idle CPU/memory and sampled zeros
     v.active.worker.scope.workerVersionId = "foreign";
   });
   reject((v) => {
-    v.idle.objects[0]!.scope.objectId = "different-target";
+    v.idle.durableObjects[0]!.scope.namespaceId = "different-target";
   });
   reject((v) => {
-    v.active.objects[1]!.scope.logicalId = "foreign-workspace";
+    Object.assign(v.active.durableObjects[1]!.scope, { logicalId: "invented-logical-mapping" });
   });
   reject((v) => {
-    v.active.objects.pop();
+    v.active.durableObjects.splice(0, 1); // Missing ControlPlane cannot cover app usage.
   });
   reject((v) => {
-    v.idle.objects[0]!.periodic.records = 0;
+    Object.assign(v.active.durableObjects[0]!.scope, {
+      kind: "object",
+      logicalId: "logical",
+      objectId: "opaque-cp",
+    });
+  });
+  reject((v) => {
+    Object.assign(v.active.durableObjects[2]!.scope, { objectId: "invented-from-name" });
+  });
+  reject((v) => {
+    v.active.durableObjects[2]!.scope.namespaceId = v.active.durableObjects[1]!.scope.namespaceId;
+  });
+  reject((v) => {
+    v.active.durableObjects[0]!.scope.resource = "workspace"; // Duplicate drops CP.
+  });
+  reject((v) => {
+    v.idle.durableObjects[0]!.periodic.records = 0;
   });
   reject((v) => {
     v.idle.worker.effectiveWindow = { from: 180000, through: 300000 };
@@ -138,21 +184,24 @@ test("fixed provider datasets preserve unknown idle CPU/memory and sampled zeros
     v.active.worker.workerCpuSumMs = null;
   });
   reject((v) => {
-    v.active.objects[0]!.periodic.doCpuSumMs = 0;
+    v.active.durableObjects[0]!.periodic.doCpuSumMs = 0;
   });
   reject((v) => {
-    v.active.objects[0]!.isolateMemory.doIsolateMemoryP99Bytes = 0;
+    v.active.durableObjects[0]!.isolateMemory.doIsolateMemoryP99Bytes = 0;
   });
   reject((v) => {
-    v.active.objects[0]!.periodic.exceededMemoryErrorsSum = 1;
+    v.active.durableObjects[0]!.periodic.exceededMemoryErrorsSum = 1;
   });
   reject((v) => {
+    assert.ok(v.active.worker.statuses);
     v.active.worker.statuses[0]!.status = "exceededResources";
   });
   reject((v) => {
+    assert.ok(v.active.worker.statuses);
     v.active.worker.statuses[0]!.status = "newUnclassifiedOutcome";
   });
   reject((v) => {
+    assert.ok(v.active.worker.statuses);
     v.active.worker.statuses[0]!.requestsSum = 9;
   });
   reject((v) => {
