@@ -120,11 +120,11 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "b4899f59ef0fba6507c2e619fd804dcde51920ba",
+        "commit": "97d539ce4c2c7db681bf7acdbbb07ca09533400d",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "e652db83ded3d9c94ca33424ffeb500f36c648d83bcc76c4c30c5a8a190fdced",
-          "packages/ai": "b49f6b5e94704d9a40b31412eabcbf2dd33f0b914f61f00b2a158bd5e0255a87",
+          "packages/ai": "dd5216cb54ef3a58eb5678b39331ab14def178462e8d0c42194eebe12f63456f",
           "packages/chord": "126d093e96da99ffb6d00ad17d63c61795053b32feb426c14a85d9e56538cc8d",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "759478deff2efd0baf4fa4e3671414f47c7ee3a9336c4a7575bb3820a74a9ab9",
@@ -135,7 +135,7 @@
           "packages/tui": "5483c0578f10b3c4346666658e4486062e9ad03707c10ded58ccf59eddf318d9",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "4f263fb40b4cfa22afaab86f875c5dde26b9511e1991ac5359f713dcc4e88578"
+        "sha256": "8ca2c532ce434075d0c17469816095faa90546a096ba7d876c0472324d867908"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,26 +147,26 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-13T19:48:29.959Z",
-      "reviewNote": "Reviewed immutable3e23dd9f..b4899f59:10commits/24files. Agent-core abort now records results for all remaining batch calls, skips lookup/hooks when pre-aborted; package absent from locked FortiPi runtime, Durable has its own loop. Chord surfaces reconnect beside canRetry/base checks; one in-flight check, late no stops/closes current attempt, one immediate retry per wake. Future consumers must not use canRetry as pre-connect authorization. FortiPi uses own WS/client and Chord context/SQLite; changed modules absent from own existing Worker metafile. Other eight watched trees/manifest unchanged. P2 offline UI/P3 design docs unused. All10 npm latest/most-recent/latest release remain1.5.2; seven raw SRI/SHA archives/three patches retained. Prior AI retry/read, app-kit breaking rename and shared-hold fresh-authority caveats retained. Reference only; no unpublished adoption/security/root-canary/runtime clearance. Evidence:phase3/thread-9/compatibility-pi-b489-build.md."
+      "reviewedAt": "2026-11-13T22:59:52.847Z",
+      "reviewNote": "Reviewed b4899f59..97d539ce exact6commits/10files; all3 selected AI patches complete/Git-SHA authenticated,475/478 AI blobs and9other watched trees/manifest unchanged. Copilot catalog enables reasoning_effort only for advertised effort options; completions usage adds top-level reasoning_tokens fallback; two upstream cases cover both. FortiPi supports Cloudflare/OpenAI/Anthropic/Codex, not Copilot; WorkersAI has its own usage parser. No durable/replay/SQLite/cancellation/auth/export changes. Installed1.5.2 archives/three pnpm patches unchanged; later main source is NOT installed adoption. Retain prior AI retry/read, app-kit rename and shared-hold fresh-authority caveats. Reference only, no runtime/security/provider/Root clearance. Evidence:phase3/thread-9/compatibility-current-ledger-build.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "349fc4e7443aa744cbe129f84f28571bf8625155",
+        "commit": "81e56ddf3e1ba28ea2320388fac86011a68f7be4",
         "version": "4.162.0",
         "paths": {
-          "packages/wrangler": "7cee392a5bf9f63ab53b61fadb22ac957cf6f9581b0870b4fd4454f9349080d7",
+          "packages/wrangler": "f25239bc4f07bf6f29539bc367ae785d8706d1db023726e930008d65a0c8da7e",
           "packages/wrangler/package.json": "c3b2a67bdcb6ea59be3f01ad89acdff5110d607d4d70afd27fc069a08f6d6932"
         },
-        "sha256": "826a1d2dc16cf6a4c28e1213216cc8ca3a4d14ea233381dff6e333004f1d288f"
+        "sha256": "376f967bf4f18e02057bed429415b3defb546082e8e162e0fda77c93fb9a818e"
       },
       "pins": {
         "apps/worker/package.json#devDependencies/wrangler": "4.162.0",
         "packages/fortipi-cli/package.json#dependencies/wrangler": "4.162.0"
       },
-      "reviewedAt": "2026-11-13T20:50:27.711Z",
-      "reviewNote": "Retain exact349fc4e7 source snapshot and prior reviewed local Artifacts-event caveat; published4.162.0 source is79b890ab, not later349 feature adoption. Coherent exact Wrangler4.162.0/Miniflare5.20261113.0-beta/workerd1.20261113.1/types5.20261113.1 graph reviewed: nine signed/SRI archives, original source licenses, denied workerd lifecycle, expiring exact age records. New mdream2.0.3 MIT WASM is exact third-party Miniflare dependency member only with complete conservative notices; owned output/hash/metafile prohibitions, three BLAKE3 members and18 exceptions retained. SDK hot-reload GET/HEAD retry fix adopted; no retry of mutating requests added. Workflows/Artifacts/Browser quickactions remain unused in FortiPi. Reference/source-local graph scope only; fullRoot/3OS/live/release evidence remains separate. Evidence:phase3/thread-9/foundation-wrangler-4162-build.md."
+      "reviewedAt": "2026-11-13T22:59:52.847Z",
+      "reviewNote": "Reviewed349fc4e7..81e56ddf:1commit/2complete Wrangler patches plus patch changeset;1117/1119 blobs and manifest unchanged. Effective omitted max_instances20 now selects rollout[10,100]; installed4.162.0 uses100. Explicit0/1 stay100;2/20 staged. FortiPi optional Paid Linux overlay omits max_instances and retains installed single-step behavior; Free has no containers. This later main fix is NOT in installed79b890ab4.162 source or an image/runtime proof. No pin/quota/binding/auth/API change adopted. Prior local Artifacts/Workflows-unused caveat, adopted hot-reload fix, nine-archive/mdream legal review and18exceptions retained. Reference only; actual Paid rollout/runtime/final qualification pending. Evidence:phase3/thread-9/compatibility-current-ledger-build.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
