@@ -153,20 +153,20 @@
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "032f8c2b4a9b83970fc4b54de70790b48e3ba373",
+        "commit": "f005593c1ed0d1f429dafc6919c4335f4d5070c7",
         "version": "4.161.0",
         "paths": {
-          "packages/wrangler": "38590b2fc2493e3a09c58e5f1e2f609bbdadc0db0bd38c82f306d8313f569a89",
+          "packages/wrangler": "50bfb17ed56a66dce21cdaf2b825173beab296d5e613b4bbaa26e6de03323a40",
           "packages/wrangler/package.json": "c877d86ad89cff48b01d169528c09ea474627cc41beaba1314d273c32ac66fba"
         },
-        "sha256": "43cf0cbbf4521d51c6213ed16bb2a8e2d4c9876d97deb93fd1cfc475ca513ad3"
+        "sha256": "0979df07f9c17bc8f72a625d53593de16d3cc792ee0fdd572eedf26877d53854"
       },
       "pins": {
         "apps/worker/package.json#devDependencies/wrangler": "4.161.0",
         "packages/fortipi-cli/package.json#dependencies/wrangler": "4.161.0"
       },
-      "reviewedAt": "2026-11-13T08:07:47.213Z",
-      "reviewNote": "Reviewed immutable51faf22..032f8c2:4commits/33files. Unreleased Workflow exports settings/header and binding-side settings rejection affect unused Workflows; local Artifacts(port/error/32MiB/token semantics), Studio and codemod changes are unused. Main bumps default date2026-11-12/workerd1.20261112.1; retain explicit2026-11-10 and published graph. Official latest Wrangler4.161.0/Miniflare5.20261110.2-beta retain reviewed SRIs and exact workerd1.20261110.1. Used DO/migration, image and login/auth paths unchanged; targeted OSV queries empty, no applicable security fix identified. Prior unpublished hot-reload caveat remains. No pin adoption/new installed/deployed/security/release clearance; paid deferred. Evidence:phase3/thread-9/compatibility-wrangler-032f-build.md."
+      "reviewedAt": "2026-11-13T10:58:39.272Z",
+      "reviewNote": "Reviewed immutable032f8c2b..f005593c:1commit/31files (+435/-359). Unreleased Artifacts defaults dev/getPlatformProxy/Vite to local unless remote:true; removes MF v4 remote field, centralizes routing/warning-once and drops redundant Vitest shim. FortiPi closed templates/probes declare no Artifacts binding; CLI deploy/dry-run/secret/login/child-env/DO/image paths unchanged. Future Artifacts adoption needs explicit remote choice/local Git review. Retain Wrangler4.161.0/selected MF5.20261110.2-beta exact workerd1.20261110.1; SRIs/archive hashes match and targeted OSV3 empty. Known workerd13.1 remains separately reviewed/unadopted. Prior unpublished hot-reload caveat retained. Reference only: no dependency/runtime/security/root clearance. Evidence:phase3/thread-9/compatibility-wrangler-f005-build.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
