@@ -1055,12 +1055,15 @@ async function controlled() {
     await verifyPayload(resolve(root, "verify-claims"), verifyGate.files, ["gate.json"]);
     const localResultPath = resolve(integratedDirectory, "claims/infrastructure-boundaries.json");
     const localResult = await readFile(localResultPath);
+    const tamperDeployment = resolve(root, "tamper-deployment.json");
+    await copyFile(verifyDeployment, tamperDeployment);
+    await copyFile(`${verifyDeployment}.cli.json`, `${tamperDeployment}.cli.json`);
     childMode = "tamper-local";
     try {
       await assert.rejects(
         runLiveRecoveryEvidence({
           ...common,
-          deploymentPath: verifyDeployment,
+          deploymentPath: tamperDeployment,
           out: resolve(root, "tampered-local"),
         }),
         /unavailable/,
