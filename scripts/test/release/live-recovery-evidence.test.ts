@@ -633,7 +633,10 @@ async function controlled() {
       const path = url.pathname + url.search;
       const now = Date.now();
       const base = `/repos/${REPOSITORY}`;
-      const original = path.includes("/runs/81");
+      const original =
+        path.includes("/runs/81") ||
+        path.includes("/workflows/71") ||
+        path.includes("/artifacts/83");
       const integrated =
         path.includes("/runs/61") ||
         path.includes("/artifacts/63") ||
