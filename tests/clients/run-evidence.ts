@@ -474,6 +474,90 @@ export async function runEvidence(
         "Direct authenticated component allocation/retirement uses actual owner/child methods; no live account capacity inference",
       ],
     );
+    // Detailed LOCAL contributions are executed once, retaining the original
+    // replay/retirement observations. They never become a live alias or root-
+    // test-count claim. A missing qualified helper blocks the original row too.
+    await measure(
+      "local-infrastructure-details",
+      [
+        "runLocalInfrastructureDetails",
+        "runInfrastructureLocalOutput",
+        "runInfrastructureLocalRefusal",
+        "existing-retention-and-retirement",
+      ],
+      "Actual LOCAL output/pressure/SQLite/staging/history/headroom cases plus already observed retention/physical retirement complete the detailed original infrastructure claim",
+      async () => {
+        const core = object(
+          await import(
+            pathToFileURL(
+              resolve(repository, "apps/worker/test/integration/infrastructure-local.ts"),
+            ).href
+          ),
+        );
+        const runCore = core.runLocalInfrastructureDetails;
+        assert.ok(typeof runCore === "function");
+        const details = object(await runCore());
+        const helper = async (path: string, name: string) => {
+          await git("ls-files", "--error-unmatch", path);
+          const module = object(await import(pathToFileURL(resolve(repository, path)).href));
+          const fn = module[name];
+          assert.equal(typeof fn, "function");
+          assert.ok(typeof fn === "function");
+          const observed: unknown = await fn();
+          return observed;
+        };
+        const [output, refusalRestoration] = await Promise.all([
+          helper("tests/clients/infrastructure-local-output.ts", "runInfrastructureLocalOutput"),
+          helper("tests/clients/infrastructure-local-refusal.ts", "runInfrastructureLocalRefusal"),
+        ]);
+        const original = results.find((row) => row.id === "infrastructure-boundaries");
+        const replay = results.find((row) => row.id === "application-replay");
+        const retirement = results.find((row) => row.id === "sealed-store-retirement");
+        assert.ok(
+          original?.outcome === "pass" &&
+            replay?.outcome === "pass" &&
+            retirement?.outcome === "pass",
+        );
+        const { verifyLocalInfrastructureObservation } = await import(
+          "./infrastructure-local-proof.ts"
+        );
+        const { infrastructureFixtureBounds } = await import("./live-infrastructure-controls.ts");
+        const { canonicalJson } = await import("../../packages/fortipi-contract/dist/index.js");
+        const complete = {
+          ...original.observation,
+          localInfrastructureDetails: {
+            schemaVersion: 1,
+            baseBoundsSha256: sha256(canonicalJson(infrastructureFixtureBounds)),
+            retention: object(replay.observation.bounds),
+            retirement: retirement.observation,
+            output,
+            refusalRestoration,
+            ...details,
+          },
+        };
+        original.observation = verifyLocalInfrastructureObservation(
+          complete,
+          sha256(canonicalJson(infrastructureFixtureBounds)),
+        );
+        original.oracle =
+          "Detailed actual LOCAL admission, workspace bytes/staging/history, event/output retention, receiver refusal/restoration, retained completion headroom and physical retirement preserve original identities/bytes under declared local allocations/faults";
+        original.limitations.push(
+          "All detailed cases are LOCAL; controlled fault/refusal, traffic headroom and lower allocation values never certify Cloudflare account ceilings or observed provider exhaustion",
+        );
+        return {
+          originalClaim: original.id,
+          detailedCases: original.observation.localInfrastructureDetails,
+        };
+      },
+      [
+        ...localLimits,
+        "Qualified output/refusal helpers and all detailed original observations are mandatory; no synthetic replacement or missing-source skip",
+      ],
+    );
+    if (results.find((row) => row.id === "local-infrastructure-details")?.outcome !== "pass") {
+      const original = results.find((row) => row.id === "infrastructure-boundaries");
+      if (original) original.outcome = "unavailable";
+    }
     let tuiObservation: Record<string, unknown> | undefined;
     const execution = (await import(
       pathToFileURL(resolve(repository, "apps/worker/test/integration/execution.ts")).href

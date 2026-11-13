@@ -118,7 +118,30 @@ export function verifyLocalInfrastructureProof(value: unknown, target: Infrastru
   strings(result.limitations);
   string(result.oracle, 8192);
   assert.ok(Array.isArray(result.sensitivity));
-  const observation = object(result.observation);
+  const observation = verifyLocalInfrastructureObservation(
+    result.observation,
+    target.baseBoundsSha256,
+  );
+  return {
+    scope: "LOCAL reduced-allocation/fault/physical-storage component observations",
+    reference: structuredClone(reference),
+    gateSha256: sha256(input.gateJson),
+    result: claim.result,
+    producer: gate.producer,
+    command: strings(result.command),
+    observation: structuredClone(observation),
+    oracle: string(result.oracle, 8192),
+    sensitivity: result.sensitivity,
+    limitations: strings(result.limitations),
+    interpretation:
+      "Original authenticated LOCAL observations retained as LOCAL; not a live account-exhaustion or account-ceiling claim",
+  };
+}
+
+/** The LOCAL producer uses the same semantic checks before writing its claim;
+ * this function is not artifact/producer authentication. */
+export function verifyLocalInfrastructureObservation(input: unknown, baseBoundsSha256: string) {
+  const observation = object(input);
   const admissions = object(observation.admissions);
   assert.equal(admissions.contenders, 2);
   assert.equal(admissions.finalSlots, 1);
@@ -157,9 +180,10 @@ export function verifyLocalInfrastructureProof(value: unknown, target: Infrastru
     "refusalRestoration",
     "retirement",
     "stagingAndHistory",
+    "headroom",
   ]);
   assert.equal(detail.schemaVersion, 1);
-  same(detail.baseBoundsSha256, target.baseBoundsSha256);
+  same(detail.baseBoundsSha256, baseBoundsSha256);
   const retention = object(detail.retention);
   assert.ok(count(retention.lowerFixtureRetainedEvents) > 0);
   assert.ok(count(retention.retainedOriginalEvents) <= count(retention.lowerFixtureRetainedEvents));
@@ -243,11 +267,28 @@ export function verifyLocalInfrastructureProof(value: unknown, target: Infrastru
     ] as const) {
       const observed = closed(edge[name], ["attempted", "accepted", "status"]);
       assert.equal(count(observed.attempted), configured + delta);
-      assert.equal(count(observed.accepted), delta > 0 ? configured : configured + delta);
+      assert.equal(
+        count(observed.accepted),
+        delta > 0 ? (resource === "stagingBytesPerWorkspace" ? 0 : configured) : configured + delta,
+      );
       assert.equal(observed.status, delta > 0 ? 429 : 200);
     }
     same(edge.canonicalHashBefore, edge.canonicalHashAfter);
   }
+  const headroom = object(detail.headroom);
+  assert.equal(headroom.scope, "LOCAL actual CP/SQLite default request meter");
+  assert.equal(headroom.applicationLimit, 90);
+  assert.equal(headroom.repairLimit, 30);
+  assert.equal(headroom.applicationSuccesses, 90);
+  assert.equal(headroom.completionSuccesses, 30);
+  assert.equal(headroom.newAdmissionCode, "rate_limited");
+  assert.equal(headroom.unknownReservationCode, "rate_limited");
+  assert.equal(headroom.finalContenders, 2);
+  assert.equal(headroom.finalAccepted, 1);
+  assert.equal(headroom.nextRetryCode, "rate_limited");
+  assert.equal(headroom.reservationRows, 1);
+  string(headroom.originalReservationId);
+  string(headroom.limitation, 4096);
   const retirement = object(detail.retirement);
   assert.equal(retirement.actualComputerAndSqlite, true);
   assert.equal(retirement.realGraceMs, 60000);
@@ -260,18 +301,5 @@ export function verifyLocalInfrastructureProof(value: unknown, target: Infrastru
   assert.equal(retirement.tombstonePreserved, true);
   assert.equal(retirement.unreferencedPublicReadStatus, 404);
   assert.equal(retirement.publishedIndependentHashesPreserved, true);
-  return {
-    scope: "LOCAL reduced-allocation/fault/physical-storage component observations",
-    reference: structuredClone(reference),
-    gateSha256: sha256(input.gateJson),
-    result: claim.result,
-    producer: gate.producer,
-    command: strings(result.command),
-    observation: structuredClone(observation),
-    oracle: string(result.oracle, 8192),
-    sensitivity: result.sensitivity,
-    limitations: strings(result.limitations),
-    interpretation:
-      "Original authenticated LOCAL observations retained as LOCAL; not a live account-exhaustion or account-ceiling claim",
-  };
+  return structuredClone(observation);
 }

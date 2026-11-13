@@ -149,7 +149,13 @@ export async function stageWorkspace(
         token,
       );
     },
-    abort: () => runtime.api(`${upload}/abort`, undefined, "POST", token),
+    abort: () =>
+      fetch(`${runtime.endpoint}${upload}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+        redirect: "error",
+        signal: AbortSignal.timeout(20000),
+      }),
     release: () =>
       runtime.api(
         `${base}/leases/${lease.leaseId}/release`,
