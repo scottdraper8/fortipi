@@ -292,12 +292,16 @@ async function originalHistory(
   const proof = matches[0];
   assert.ok(proof);
   assert.equal(proof.artifact.candidateSha256, state.loaded.hash);
+  const gateBytes = await regularBytes(resolve(proof.directory, "gate.json"), 8_000_000);
+  assert.equal(gateBytes.toString("utf8"), `${canonicalJson(proof.receipt)}\n`);
   await verifyProducer(
     state.loaded.candidate,
     "live",
     proof.receipt.producer,
     proof.artifact,
     githubRequest(process.env.GITHUB_TOKEN),
+    Date.now(),
+    sha256(gateBytes),
   );
   await verifyPayload(proof.directory, proof.receipt.files, ["gate.json"]);
   assert.ok(proof.receipt.claims.every((claim) => claim.outcome === "pass"));
