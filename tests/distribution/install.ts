@@ -125,7 +125,9 @@ export async function install(path: string) {
       modulesBefore,
       "Evidence must preserve all read-only installed candidate bytes",
     );
-    assert.equal((await loadCandidate(path)).hash, loaded.hash);
+    // Trusted setup already authenticated archives. A client integrity check
+    // cannot acquire a new archive reader by reloading serialized metadata.
+    assert.equal(sha256(await regularBytes(path)), loaded.hash);
     for (const pkg of loaded.candidate.packages)
       for (const file of pkg.entries)
         assert.equal(

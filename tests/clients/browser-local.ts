@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { rm, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import { chromium } from "playwright";
 import { childEnvironment } from "../../scripts/prepare-release.ts";
+import { installedClientSnapshot } from "../distribution/consumer-runtime.ts";
 import type { Installed } from "../distribution/install.ts";
 import { fixtureTLS } from "./fixture-tls.ts";
 
@@ -77,6 +79,10 @@ export async function localBrowser(installed: Installed) {
   try {
     const description = resolve(tls.directory, "tls.json");
     await writeFile(description, JSON.stringify(tls), { flag: "wx", mode: 0o600 });
+    const metadata = resolve(tls.directory, "installed-client.json");
+    const data = `${JSON.stringify(await installedClientSnapshot(installed.candidate, installed.hash, installed.consumer, installed))}\n`;
+    await writeFile(metadata, data, { flag: "wx", mode: 0o600 });
+    const metadataSha256 = createHash("sha256").update(data).digest("hex");
     // Select the pinned public Playwright cache explicitly. This
     // names public tool bytes, never a user's Chromium profile or auth state.
     let revision = chromium.executablePath();
@@ -87,9 +93,8 @@ export async function localBrowser(installed: Installed) {
     const result = await browserProcess(
       [
         resolve(import.meta.dirname, "fixtures/browser-child.ts"),
-        installed.manifestPath,
-        installed.consumer,
-        installed.hash,
+        metadata,
+        metadataSha256,
         description,
       ],
       tls.directory,

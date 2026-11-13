@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile, realpath } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { provision } from "../../../apps/worker/test/integration/fixture-state.ts";
 import { start } from "../../../apps/worker/test/integration/runtime.ts";
-import { loadCandidate } from "../../../scripts/prepare-release.ts";
-import { regularBytes, sha256 } from "../../../scripts/verify-release-gates.ts";
-import { runtimeImports } from "../../distribution/consumer-runtime.ts";
+import { readInstalledClientSnapshot } from "../../distribution/consumer-runtime.ts";
 import { browser } from "../browser.ts";
 import { type FixtureTLS, verifyFixtureTLS } from "../fixture-tls.ts";
 import { RoleContext } from "../roles.ts";
@@ -41,29 +39,20 @@ export async function browserChild(argv: string[]) {
   };
   process.once("SIGTERM", stop);
   try {
-    assert.equal(argv.length, 4);
-    const [manifest, rawConsumer, expected, description] = argv;
-    assert.ok(manifest && rawConsumer && expected && description);
-    const loaded = await loadCandidate(manifest);
-    assert.equal(loaded.hash, expected);
-    const consumer = await realpath(rawConsumer),
-      root = resolve(import.meta.dirname, "../../..");
-    assert.ok(
-      !consumer.startsWith(`${root}${sep}`),
-      "Browser must consume actual external installed exports",
+    assert.equal(argv.length, 3);
+    const [metadata, expected, description] = argv;
+    assert.ok(metadata && expected && description);
+    assert.equal(
+      Object.hasOwn(process.env, "GITHUB_TOKEN"),
+      false,
+      "Application fixture inherited GitHub authority",
     );
-    for (const pkg of loaded.candidate.packages)
-      for (const file of pkg.entries)
-        assert.equal(
-          sha256(await regularBytes(resolve(consumer, "node_modules", pkg.name, file.path))),
-          file.sha256,
-        );
-    const ports = await runtimeImports(loaded.candidate, consumer);
+    const ports = await readInstalledClientSnapshot(metadata, expected);
     const tls = JSON.parse(await readFile(description, "utf8")) as FixtureTLS;
     assert.equal(process.env.NODE_EXTRA_CA_CERTS, tls.ca);
     assert.equal((await verifyFixtureTLS(tls)).leafSpki, tls.leafSpki);
     stage = "serve-https-origins";
-    web = await browser({ ...ports, consumer, candidate: loaded.candidate }, { tls });
+    web = await browser(ports, { tls });
     stage = "start-real-wrangler-https";
     runtime = await start({
       allowedOrigin: web.origin,
@@ -105,13 +94,7 @@ export async function browserChild(argv: string[]) {
       requestsPerInstallMinute: protocol.body.infrastructure.bounds.requestsPerInstallMinute,
       actualFreeAccountProof: false,
     };
-    for (const pkg of loaded.candidate.packages)
-      for (const file of pkg.entries)
-        assert.equal(
-          sha256(await regularBytes(resolve(consumer, "node_modules", pkg.name, file.path))),
-          file.sha256,
-        );
-    assert.equal((await loadCandidate(manifest)).hash, loaded.hash);
+    await ports.verifyUnchanged();
   } catch (error) {
     const known =
       error instanceof Error

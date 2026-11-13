@@ -13,7 +13,9 @@ import { type FixtureTLS, fixtureTLS, verifyFixtureTLS } from "./fixture-tls.ts"
 
 export const liveBrowserPort = 10110;
 
-type BrowserInstalled = Pick<Installed, "resolveExport" | "candidate" | "consumer">;
+type BrowserInstalled = Pick<Installed, "resolveExport" | "consumer"> & {
+  candidate: { scope: string };
+};
 export async function browser(
   installed: BrowserInstalled,
   options: { port?: number; tls?: FixtureTLS } = {},
