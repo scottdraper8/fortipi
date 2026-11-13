@@ -36,154 +36,154 @@
     },
     "@img/sharp-libvips-darwin-arm64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-darwin-x64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-arm@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-arm64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-ppc64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-riscv64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-s390x@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-x64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linuxmusl-arm64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linuxmusl-x64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-win32-arm64@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-win32-ia32@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-win32-x64@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-wasm32@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
         "Only CLI runtime -> wrangler@4.161.0 -> miniflare@5.20261110.2-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]

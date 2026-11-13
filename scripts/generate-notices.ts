@@ -6,9 +6,11 @@ import { dirname, resolve } from "node:path";
 import type { Attribution, LicensePolicy } from "../tools/unstale/review-attributions.ts";
 import { archiveEntries, hash, licenseEntries } from "../tools/unstale/review-supply-chain.ts";
 import { packagePaths, repository } from "./build-workspaces.ts";
+import { type RuntimeConveyanceReceipt, reviewRuntimeConveyance } from "./check-licenses.ts";
 import type { Lock, Manifest, Review, SupplyChain } from "./check-pins.ts";
 import { json, yaml } from "./check-pins.ts";
 import { dependencyPatches, patchStatus } from "./dependency-patches.ts";
+import type { RuntimeClosure, RuntimeFileRecord, RuntimePhysicalPlan } from "./runtime-closure.ts";
 
 interface InventoryPackage {
   id: string;
@@ -89,12 +91,14 @@ const text = (bytes: Buffer, path: string) => {
  * Worker notices remain the immutable output of CLI7's asset producer.
  * No package code executes and no network request occurs here.
  */
-export async function generateNotices(root = repository): Promise<NoticeReceipt[]> {
+async function noticeInputs(root: string) {
   root = await realpath(resolve(root));
   const patches = await dependencyPatches(root);
   const lock = await yaml<Lock>(root, "pnpm-lock.yaml");
-  const supply = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
-  const policy = await json<LicensePolicy>(root, "tools/unstale/license-policy.json");
+  const supplyBytes = await file(root, "tools/unstale/supply-chain.json");
+  const policyBytes = await file(root, "tools/unstale/license-policy.json");
+  const supply: SupplyChain = JSON.parse(supplyBytes.toString("utf8"));
+  const policy: LicensePolicy = JSON.parse(policyBytes.toString("utf8"));
   const inventory = await json<{ format: number; packages: InventoryPackage[] }>(
     root,
     "dist/supply-chain/inventory.json",
@@ -190,12 +194,15 @@ export async function generateNotices(root = repository): Promise<NoticeReceipt[
     );
     const texts: Text[] = [];
     const patch = patches[id];
-    if (patch)
+    if (patch) {
+      const bytes = text(await file(root, patch.path), patch.path);
+      assert.equal(hash(bytes), patch.sha256, `Patch text changed: ${id}`);
       texts.push({
         path: patch.path,
         source: patch.source,
-        bytes: text(await file(root, patch.path), patch.path),
+        bytes,
       });
+    }
     for (const [path, digest] of Object.entries(review.licenses).sort()) {
       const bytes = text(
         await file(root, `dist/supply-chain/licenses/${id.replaceAll("/", "__")}/${safe(path)}`),
@@ -240,6 +247,23 @@ export async function generateNotices(root = repository): Promise<NoticeReceipt[
     checked.set(id, result);
     return result;
   };
+
+  return {
+    root,
+    lock,
+    component,
+    license,
+    owned,
+    version,
+    reviewSha256: hash(supplyBytes),
+    licensePolicySha256: hash(policyBytes),
+  };
+}
+
+export async function generateNotices(root = repository): Promise<NoticeReceipt[]> {
+  const inputs = await noticeInputs(root);
+  ({ root } = inputs);
+  const { lock, component, license, owned } = inputs;
 
   const plans: { directory: string; files: Map<string, Buffer>; receipt: NoticeReceipt }[] = [];
   for (const { directory, manifest } of owned.values()) {
@@ -407,6 +431,160 @@ export async function generateNotices(root = repository): Promise<NoticeReceipt[
     await rm(stage, { recursive: true, force: true });
   }
   return plans.map((plan) => plan.receipt);
+}
+
+export interface RuntimeNoticeReceipt extends NoticeReceipt {
+  conveyance: RuntimeConveyanceReceipt;
+  /** Exact legal files to merge into the parent's independently derived package plan. */
+  files: RuntimeFileRecord[];
+  texts: {
+    archiveId: string;
+    path: string;
+    source: string;
+    kind: "license" | "patch";
+    size: number;
+    sha256: string;
+  }[];
+}
+
+/** Emits legal files to a fresh directory only; never rewrites source or vendor/Worker bytes. */
+export async function generateRuntimeNotices(
+  root: string,
+  closure: RuntimeClosure,
+  plan: RuntimePhysicalPlan,
+  destination: string,
+): Promise<RuntimeNoticeReceipt> {
+  const conveyance = await reviewRuntimeConveyance(root, closure, plan);
+  const inputs = await noticeInputs(root);
+  const owner = inputs.owned.get(plan.sourceName);
+  assert.ok(owner);
+  assert.equal(hash(inputs.license), conveyance.rootLicenseSha256);
+  assert.equal(inputs.reviewSha256, closure.inputs.reviewSha256);
+  assert.equal(inputs.licensePolicySha256, conveyance.licensePolicySha256);
+  destination = resolve(destination);
+  const parent = await realpath(dirname(destination));
+  assert.equal(parent, dirname(destination), "Linked notice destination parent");
+  assert.ok(
+    !destination.startsWith(`${inputs.root}/`) ||
+      destination.startsWith(`${inputs.root}/dist/`) ||
+      destination.startsWith(`${inputs.root}/.agent-docs/tmp/`),
+    "Runtime notices require a separate staging directory",
+  );
+  const files = new Map<string, Buffer>([["LICENSE", inputs.license]]);
+  const retainedTexts: RuntimeNoticeReceipt["texts"] = [];
+  const lines = [
+    "# Third-party notices",
+    "",
+    `${plan.sourceName}@${inputs.version}`,
+    "",
+    "FortiPi's own code is covered by the exact Sustainable Use License 1.0 text in LICENSE. Third-party terms and original notices continue to apply to third-party files.",
+    "",
+    "This staged package includes source-verified dependency files in the contexts listed below. The build receipt records every file's archive origin, size, mode and SHA256. Other runtime dependencies remain external; their metadata is not a claim that their bytes are conveyed. This notice producer copies only legal texts, never dependency code or native binaries.",
+    "",
+    `Source commit: ${conveyance.sourceCommit}`,
+    `Runtime closure SHA256: ${conveyance.closureSha256}`,
+    `Physical plan SHA256: ${conveyance.planSha256}`,
+    "",
+  ];
+  if (plan.sourceName === "fortipi-cli")
+    lines.push(
+      "The embedded Worker's separate original notices remain at [worker-assets/licenses/THIRD_PARTY_NOTICES.md](worker-assets/licenses/THIRD_PARTY_NOTICES.md). Immutable Worker/image bytes, inventories and source-delivery obligations remain separate; this producer does not rewrite or requalify them.",
+      "",
+    );
+  const ids = new Set(conveyance.components.map((item) => item.archiveId));
+  for (const row of conveyance.external) ids.add(row.archiveId);
+  for (const id of [...ids].sort()) {
+    const { fact, texts } = await inputs.component(id);
+    const bundled = conveyance.components.find((item) => item.archiveId === id);
+    lines.push(
+      `## ${id}`,
+      "",
+      `Disposition: ${bundled ? "bundled dependency files" : "external runtime dependency metadata only"}`,
+      `License expression: ${fact.license}`,
+      `Original archive SHA256: ${fact.archiveSha256}`,
+      `Archive SRI: ${fact.integrity}`,
+      "",
+      "Original published attribution:",
+      "",
+      "```json",
+      JSON.stringify(fact.credits, null, 2),
+      "```",
+      "",
+    );
+    if (bundled)
+      lines.push(
+        "Bundled contexts and exact file-inventory digest:",
+        "",
+        "```json",
+        JSON.stringify(
+          {
+            addresses: bundled.addresses,
+            filesSha256: hash(Buffer.from(JSON.stringify(bundled.files))),
+          },
+          null,
+          2,
+        ),
+        "```",
+        "",
+      );
+    if (fact.attribution)
+      lines.push(
+        "Reviewed source attribution:",
+        "",
+        "```json",
+        JSON.stringify(fact.attribution, null, 2),
+        "```",
+        "",
+      );
+    if (fact.obligations)
+      lines.push(
+        "Exact reviewed obligations:",
+        "",
+        ...fact.obligations.obligations.map((item) => `- ${item}`),
+        "",
+      );
+    for (const item of texts) {
+      const path = safe(`licenses/${encodeURIComponent(id)}/${item.path}`);
+      assert.ok(!files.has(path));
+      files.set(path, item.bytes);
+      retainedTexts.push({
+        archiveId: id,
+        path,
+        source: item.source,
+        kind: item.path === bundled?.patch?.path ? "patch" : "license",
+        size: item.bytes.length,
+        sha256: hash(item.bytes),
+      });
+      lines.push(`- [${item.path}](${path}) — SHA256 ${hash(item.bytes)}; source: ${item.source}`);
+    }
+    lines.push("");
+  }
+  const notices = Buffer.from(`${lines.join("\n")}\n`);
+  files.set("THIRD_PARTY_NOTICES.md", notices);
+  assert.deepEqual(await reviewRuntimeConveyance(root, closure, plan), conveyance);
+  // All inputs/texts validate before the exclusive destination or its files are created.
+  await mkdir(destination, { mode: 0o700 });
+  try {
+    for (const [path, bytes] of files) {
+      await mkdir(dirname(resolve(destination, path)), { recursive: true });
+      await writeFile(resolve(destination, path), bytes, { flag: "wx", mode: 0o644 });
+    }
+  } catch (error) {
+    await rm(destination, { recursive: true, force: true });
+    throw error;
+  }
+  return {
+    package: plan.sourceName,
+    directory: destination,
+    components: [...ids].sort(),
+    noticeSha256: hash(notices),
+    licenseSha256: hash(inputs.license),
+    conveyance,
+    texts: retainedTexts,
+    files: [...files]
+      .map(([path, bytes]) => ({ path, size: bytes.length, mode: 0o644, sha256: hash(bytes) }))
+      .sort((a, b) => a.path.localeCompare(b.path, "en")),
+  };
 }
 
 if (import.meta.main) {
