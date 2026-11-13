@@ -23,6 +23,10 @@ import { t as listTar } from "tar";
 import { parse as parseYaml } from "yaml";
 import { packagePaths, repository } from "./build-workspaces.ts";
 import {
+  resolveCurrentCandidateReference,
+  verifyCurrentCandidateRead,
+} from "./current-candidate-read.ts";
+import {
   generateNotices,
   generateRuntimeNotices,
   type NoticeReceipt,
@@ -574,6 +578,7 @@ export async function producer(
   root: string,
   publishable: boolean,
   workflowName: "release.yml" | "deploy.yml" = "release.yml",
+  request = githubRequest(process.env.GITHUB_TOKEN),
 ): Promise<Producer> {
   const path = `.github/workflows/${workflowName}`;
   const result: Producer = {
@@ -583,16 +588,20 @@ export async function producer(
     runId: Number(process.env.GITHUB_RUN_ID ?? 0),
     runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT ?? 0),
   };
-  if (publishable) {
+  const currentCandidateJob =
+    process.env.GITHUB_ACTIONS === "true" &&
+    process.env.GITHUB_JOB === "candidate" &&
+    process.env.GITHUB_WORKFLOW_REF ===
+      `${REPOSITORY}/.github/workflows/release.yml@refs/heads/main` &&
+    process.env.OPERATION === "candidate";
+  // A reserved-scope validation artifact still has an actual Actions producer.
+  // Recording that lineage never changes its publication eligibility.
+  if (publishable || currentCandidateJob) {
     assert.equal(process.env.GITHUB_REPOSITORY, REPOSITORY);
     assert.equal(process.env.GITHUB_REF, "refs/heads/main");
     assert.equal(process.env.GITHUB_EVENT_NAME, "workflow_dispatch");
     result.workflowId = integer(
-      object(
-        await githubRequest(process.env.GITHUB_TOKEN)(
-          `/repos/${REPOSITORY}/actions/workflows/${workflowName}`,
-        ),
-      ).id,
+      object(await request(`/repos/${REPOSITORY}/actions/workflows/${workflowName}`)).id,
     );
     integer(result.runId);
     integer(result.runAttempt);
@@ -646,7 +655,9 @@ export async function evidenceProducer(
       "Evidence workflow/job/mode mismatch",
     );
     assert.equal(event, "workflow_dispatch");
-    assert.equal(candidate.publishable, true);
+    if (workflow === "release" && job === "native")
+      assert.equal(candidate.publishable, candidate.scope !== SYNTHETIC_SCOPE);
+    else assert.equal(candidate.publishable, true);
   }
   if (event === "workflow_dispatch") assert.equal(process.env.GITHUB_REF, "refs/heads/main");
   else if (event === "push") assert.equal(process.env.GITHUB_REF, "refs/heads/main");
@@ -664,10 +675,26 @@ export async function evidenceProducer(
   assertProducer(result);
   return result;
 }
-export function evidenceEnvironment(producer: Producer, mode: "local" | "native" | "live") {
+export function evidenceEnvironment(
+  producer: Producer,
+  mode: "local" | "native" | "live",
+  context?: CandidateReadContext,
+) {
   return childEnvironment({
     FORTIPI_EVIDENCE_PRODUCER: canonicalJson(producer),
     ...(mode === "live" ? { FORTIPI_ADMIN_TOKEN: process.env.FORTIPI_ADMIN_TOKEN } : {}),
+    ...(context
+      ? {
+          GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+          FORTIPI_CANDIDATE_REFERENCE: canonicalJson(context.reference),
+          OPERATION: process.env.OPERATION,
+          SOURCE_SHA: process.env.SOURCE_SHA,
+          RELEASE_VERSION: process.env.RELEASE_VERSION,
+          RELEASE_SCOPE: process.env.RELEASE_SCOPE,
+          EXPECTED_TAG: process.env.EXPECTED_TAG,
+          CONFIRM: process.env.CONFIRM,
+        }
+      : {}),
   });
 }
 export function assertEvidenceReceipt(
@@ -1185,9 +1212,13 @@ async function sourceCandidatePlans(
   }
   return pending;
 }
-export async function loadCandidate(
+export type CandidateReadContext =
+  | { kind: "current" | "retained"; reference: ArtifactReference; request: GitHubRequest }
+  | { kind?: undefined; reference: ArtifactReference; request: GitHubRequest };
+
+/** Metadata is data only; this function grants no package archive authority. */
+async function candidateMetadata(
   path: string,
-  retained?: { reference: ArtifactReference; request: GitHubRequest },
 ): Promise<{ candidate: CandidateManifest; hash: string; directory: string }> {
   const data = await regularBytes(path, 8_000_000);
   const candidate: unknown = JSON.parse(data.toString("utf8"));
@@ -1198,13 +1229,78 @@ export async function loadCandidate(
     "Noncanonical candidate bytes",
   );
   const hash = sha256(data);
+  return { candidate, hash, directory: dirname(resolve(path)) };
+}
+
+/** Only trusted setup callers construct a live API request; serialized references are data. */
+export async function resolveCandidateReadContext(
+  path: string,
+): Promise<CandidateReadContext | undefined> {
+  if (
+    process.env.GITHUB_ACTIONS === "true" &&
+    (process.env.GITHUB_JOB === "native" || process.env.GITHUB_JOB === "native-receipt")
+  ) {
+    const { candidate, hash } = await candidateMetadata(path);
+    const request = githubRequest(process.env.GITHUB_TOKEN);
+    return {
+      kind: "current",
+      reference: await resolveCurrentCandidateReference(candidate, hash, request),
+      request,
+    };
+  }
+  if (process.env.FORTIPI_CANDIDATE_REFERENCE) {
+    assert.equal(process.env.GITHUB_ACTIONS, "true");
+    return {
+      kind: "retained",
+      reference: object(
+        JSON.parse(string(process.env.FORTIPI_CANDIDATE_REFERENCE, 60000)),
+      ) as unknown as ArtifactReference,
+      request: githubRequest(process.env.GITHUB_TOKEN),
+    };
+  }
+  return undefined;
+}
+
+/** Workflow operation callers require an explicit authenticated artifact context.
+ * Local source qualification continues to use the independent clean-source plan. */
+export async function loadWorkflowCandidate(path: string) {
+  const context = await resolveCandidateReadContext(path);
+  if (process.env.GITHUB_ACTIONS === "true")
+    assert.ok(context, "Workflow candidate artifact reference required before payload access");
+  return loadCandidate(path, context);
+}
+
+async function authenticateCandidateRead(
+  loaded: { candidate: CandidateManifest; hash: string },
+  context?: CandidateReadContext,
+): Promise<void> {
+  if (context?.kind === "current")
+    await verifyCurrentCandidateRead(
+      loaded.candidate,
+      loaded.hash,
+      context.reference,
+      context.request,
+    );
+  else if (context)
+    await verifyRetainedCandidate(
+      loaded.candidate,
+      loaded.hash,
+      context.reference,
+      context.request,
+    );
+}
+
+export async function loadCandidate(
+  path: string,
+  context?: CandidateReadContext,
+): Promise<{ candidate: CandidateManifest; hash: string; directory: string }> {
+  const loaded = await candidateMetadata(path);
+  const { candidate, hash, directory } = loaded;
   // Authenticate metadata through the actual producer archive before touching payloads.
   // A candidate's inventory is data, never its own source of producer authority.
-  if (retained)
-    await verifyRetainedCandidate(candidate, hash, retained.reference, retained.request);
-  const directory = dirname(resolve(path));
+  await authenticateCandidateRead(loaded, context);
   const needsSource =
-    !retained &&
+    !context &&
     candidate.packages.some(
       (pkg) =>
         !producedArchives.has(pkg.sha256) &&
@@ -1221,7 +1317,7 @@ export async function loadCandidate(
         independentlyProduced.entries,
         "Retained files differ from trusted source production",
       );
-    const authority = retained
+    const authority = context
       ? archiveAuthority(pkg)
       : independentlyProduced
         ? producedPackages.get(independentlyProduced)
@@ -1790,7 +1886,7 @@ export async function publishCandidate(
   readinessDirectory: string,
   priorJournal?: string,
 ): Promise<void> {
-  const { candidate, hash, directory } = await loadCandidate(path);
+  const { candidate, hash, directory } = await loadWorkflowCandidate(path);
   assert.equal(
     confirmation,
     `publish ${candidate.tag} ${candidate.sourceCommit} ${candidate.scope}`,
@@ -1989,7 +2085,8 @@ export async function runEvidence(
   out: string,
   deployment?: string,
 ): Promise<void> {
-  const loaded = await loadCandidate(candidate);
+  const context = await resolveCandidateReadContext(candidate);
+  const loaded = await loadCandidate(candidate, context);
   const expectedProducer = await evidenceProducer(repository, loaded.candidate, mode);
   await regularBytes(resolve(repository, "tests/clients/run-evidence.ts"));
   assert.ok(
@@ -1998,7 +2095,7 @@ export async function runEvidence(
     "Evidence fixture must be a trusted source descriptor",
   );
   await regularBytes(resolve(fixture));
-  const env = evidenceEnvironment(expectedProducer, mode);
+  const env = evidenceEnvironment(expectedProducer, mode, context);
   await checked(
     process.execPath,
     [
@@ -2113,8 +2210,9 @@ export async function installCandidate(
   destination: string,
   selection: string[] = packageOrder.map((p) => `fortipi-${p}`),
   verificationTools = false,
+  context?: CandidateReadContext,
 ): Promise<{ consumer: string; cliBin: string; candidateSha256: string }> {
-  const { candidate, hash, directory } = await loadCandidate(path);
+  const { candidate, hash, directory } = await loadCandidate(path, context);
   await mkdir(destination, { mode: 0o700 });
   assert.ok(
     !destination.startsWith(`${repository}${sep}`),
@@ -2454,7 +2552,11 @@ export async function aggregateNative(
   input: string,
   out: string,
 ): Promise<void> {
-  const loaded = await loadCandidate(candidatePath);
+  // Aggregation consumes only bounded identity metadata and small native result
+  // files. Parsing or reconstructing package archives here adds no evidence.
+  const loaded = await candidateMetadata(candidatePath);
+  const context = await resolveCandidateReadContext(candidatePath);
+  await authenticateCandidateRead(loaded, context);
   await mkdir(out, { mode: 0o700 });
   const claims: GateReceipt["claims"] = [];
   const platforms: GateReceipt["platforms"] = [];

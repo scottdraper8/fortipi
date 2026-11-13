@@ -14,6 +14,11 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
     parse(await readFile(resolve(repository, ".github/workflows/deploy.yml"), "utf8")),
   );
   const jobs = object(release.jobs);
+  assert.equal(
+    object(release.env).FORTIPI_CANDIDATE_REFERENCE,
+    "$" + "{{ inputs.operation == 'publish' && inputs.candidate || '' }}",
+  );
+  assert.equal(object(deploy.env).FORTIPI_CANDIDATE_REFERENCE, "$" + "{{ inputs.candidate }}");
   const finalSteps = object(jobs.finalize).steps;
   assert.ok(Array.isArray(finalSteps));
   assert.ok(
@@ -62,6 +67,7 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
           install >= 0 && protectedCall > install,
           "Retained distribution must install before credentials are exposed",
         );
+        assert.equal(object(steps[install]?.env).GITHUB_TOKEN, "$" + "{{ github.token }}");
         const upload = steps.find((s) => String(s.uses).startsWith("actions/upload-artifact"));
         assert.ok(upload);
         assert.match(String(object(upload.with).name), /matrix.target.target.backend/);

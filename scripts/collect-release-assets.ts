@@ -4,7 +4,7 @@ import { repository } from "./build-workspaces.ts";
 import {
   childEnvironment,
   execute,
-  loadCandidate,
+  loadWorkflowCandidate,
   type PublicationJournal,
   verifyProvenance,
 } from "./prepare-release.ts";
@@ -49,7 +49,7 @@ export async function collectReleaseAssets(
   request: GitHubRequest = githubRequest(process.env.GITHUB_TOKEN),
   transport: typeof fetch = fetch,
 ): Promise<void> {
-  const { candidate, hash, directory } = await loadCandidate(candidatePath);
+  const { candidate, hash, directory } = await loadWorkflowCandidate(candidatePath);
   assert.equal(
     confirmation,
     `finalize ${candidate.tag} ${candidate.sourceCommit} ${candidate.scope}`,

@@ -7,8 +7,9 @@ import {
   childEnvironment,
   execute,
   installCandidate,
-  loadCandidate,
+  loadWorkflowCandidate,
   producer,
+  resolveCandidateReadContext,
   runEvidence,
 } from "./prepare-release.ts";
 import {
@@ -357,11 +358,17 @@ export async function installDeployment(
   directory: string,
   out: string,
 ): Promise<void> {
-  const { candidate } = await loadCandidate(candidatePath);
+  const { candidate } = await loadWorkflowCandidate(candidatePath);
   assert.ok(candidate.publishable, "Synthetic artifacts cannot deploy");
   const target = await readJson(targetPath);
   assertTarget(target);
-  const installed = await installCandidate(candidatePath, directory, ["fortipi-cli"]);
+  const installed = await installCandidate(
+    candidatePath,
+    directory,
+    ["fortipi-cli"],
+    false,
+    await resolveCandidateReadContext(candidatePath),
+  );
   const config = resolve(directory, "operator.json");
   await saveJson(config, target.operator);
   const prepared = resolve(directory, "prepared");
@@ -402,7 +409,7 @@ export async function operateDeployment(
 ): Promise<void> {
   const installed = object(await readJson(installationPath));
   const candidatePath = string(installed.candidatePath);
-  const { candidate, hash } = await loadCandidate(candidatePath);
+  const { candidate, hash } = await loadWorkflowCandidate(candidatePath);
   assert.equal(hash, installed.candidateSha256);
   await privilegedCheckout(candidate);
   await trustedMain(candidate, githubRequest(process.env.GITHUB_TOKEN));
@@ -531,7 +538,7 @@ export async function retainEvidence(
   kind: "live" | "independent",
   readinessOut: string,
 ): Promise<void> {
-  const loaded = await loadCandidate(candidatePath);
+  const loaded = await loadWorkflowCandidate(candidatePath);
   const child = await readJson(resolve(claimsDirectory, "gate.json"));
   assertGate(child);
   assert.equal(child.candidateSha256, loaded.hash);
@@ -592,7 +599,7 @@ export async function prepareReadiness(
   directory: string,
   out: string,
 ): Promise<void> {
-  const loaded = await loadCandidate(candidatePath);
+  const loaded = await loadWorkflowCandidate(candidatePath);
   const bundle = object(await readJson(proofsPath));
   assert.ok(Array.isArray(bundle.proofs));
   const descriptors = await readJson(targetsPath);
@@ -633,7 +640,7 @@ export async function prepareReadiness(
 }
 export async function refreshReadiness(contextPath: string, out: string): Promise<void> {
   const context = object(await readJson(contextPath));
-  const loaded = await loadCandidate(string(context.candidatePath));
+  const loaded = await loadWorkflowCandidate(string(context.candidatePath));
   assert.equal(context.candidateSha256, loaded.hash);
   assert.ok(Array.isArray(context.installations));
   const deployments: DeploymentIdentity[] = [];
@@ -699,7 +706,7 @@ if (import.meta.main) {
       }
     } else if (operation === "observe-installed") {
       const installed = object(await readJson(string(a.installation)));
-      const loaded = await loadCandidate(string(installed.candidatePath));
+      const loaded = await loadWorkflowCandidate(string(installed.candidatePath));
       await privilegedCheckout(loaded.candidate);
       await trustedMain(loaded.candidate, githubRequest(process.env.GITHUB_TOKEN));
       const target = installed.target;

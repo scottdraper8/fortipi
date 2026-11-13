@@ -53,6 +53,7 @@ env:
   RELEASE_SCOPE: ${{ inputs.scope }}
   EXPECTED_TAG: ${{ inputs.expected_tag }}
   SOURCE_SHA: ${{ inputs.commit_sha }}
+  FORTIPI_CANDIDATE_REFERENCE: ${{ inputs.candidate }}
   CONFIRM: ${{ inputs.confirm }}
   FORTIPI_EVIDENCE_FIXTURE: ${{ vars.FORTIPI_EVIDENCE_FIXTURE }}
 jobs:
@@ -185,6 +186,8 @@ jobs:
           TARGET_REFERENCE: ${{ inputs.target }}
         run: node scripts/prepare-release.ts descriptor --out "$RUNNER_TEMP/target.json" --kind target
       - name: Install real candidate before deployment credentials enter any process
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run:
           node scripts/deploy-smoke.ts install --candidate "$RUNNER_TEMP/candidate/candidate.json" --target
           "$RUNNER_TEMP/target.json" --directory "$RUNNER_TEMP/installed" --out "$RUNNER_TEMP/installation.json"

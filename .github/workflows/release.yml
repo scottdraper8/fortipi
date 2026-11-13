@@ -60,6 +60,7 @@ env:
   RELEASE_SCOPE: ${{ inputs.scope }}
   EXPECTED_TAG: ${{ inputs.expected_tag }}
   SOURCE_SHA: ${{ inputs.commit_sha }}
+  FORTIPI_CANDIDATE_REFERENCE: ${{ inputs.operation == 'publish' && inputs.candidate || '' }}
   CONFIRM: ${{ inputs.confirm }}
   FORTIPI_EVIDENCE_FIXTURE: tests/clients/fixtures/local.json
 jobs:
@@ -205,6 +206,7 @@ jobs:
       - run: node scripts/install-dependencies.ts
       - run: node node_modules/typescript/bin/tsc -p packages/fortipi-contract/tsconfig.json
       - run: node scripts/verify-foundation.ts --native
+      - run: node scripts/build-workspaces.ts build:evidence
       - run: node scripts/verify-foundation.ts --egress
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
@@ -504,6 +506,8 @@ jobs:
           TARGETS_REFERENCE: ${{ format('[{0}]', toJSON(matrix.target)) }}
         run: node scripts/prepare-release.ts descriptor --kind targets --out "$RUNNER_TEMP/targets.json"
       - name: Install and prepare retained CLI before deployment credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run:
           node scripts/deploy-smoke.ts prepare-readiness --candidate "$RUNNER_TEMP/candidate/candidate.json" --proofs
           "$RUNNER_TEMP/proofs.json" --targets "$RUNNER_TEMP/targets.json" --directory "$RUNNER_TEMP/installed-target"
@@ -589,6 +593,8 @@ jobs:
           TARGETS_REFERENCE: ${{ format('[{0}]', toJSON(matrix.target)) }}
         run: node scripts/prepare-release.ts descriptor --kind targets --out "$RUNNER_TEMP/targets.json"
       - name: Install and prepare retained CLI before deployment credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run:
           node scripts/deploy-smoke.ts prepare-readiness --candidate "$RUNNER_TEMP/candidate/candidate.json" --proofs
           "$RUNNER_TEMP/proofs.json" --targets "$RUNNER_TEMP/targets.json" --directory "$RUNNER_TEMP/installed-target"
