@@ -595,7 +595,7 @@ export async function producer(
   root: string,
   publishable: boolean,
   workflowName: "release.yml" | "deploy.yml" = "release.yml",
-  request = githubRequest(process.env.GITHUB_TOKEN),
+  request: GitHubRequest = githubRequest(process.env.GITHUB_TOKEN),
 ): Promise<Producer> {
   const path = `.github/workflows/${workflowName}`;
   const result: Producer = {
@@ -630,7 +630,7 @@ export async function evidenceProducer(
   root: string,
   candidate: CandidateManifest,
   mode: "local" | "native" | "live",
-  request = githubRequest(process.env.GITHUB_TOKEN),
+  request: GitHubRequest = githubRequest(process.env.GITHUB_TOKEN),
 ): Promise<Producer> {
   if (process.env.GITHUB_ACTIONS !== "true") {
     assert.equal(mode, "local");

@@ -616,12 +616,24 @@ export type GitHubRequest = ((
 ) => Promise<unknown>) & {
   verifyArtifact: (artifact: ArtifactReference, member?: string) => Promise<Buffer | undefined>;
 };
+/** Trusted setup only: exact finite members from one digest-checked archive.
+ * This transport conveys bytes, never producer/job or candidate authority. */
+export type BoundedGitHubRequest = GitHubRequest & {
+  verifyArtifactMembers(
+    artifact: ArtifactReference,
+    bounds: Readonly<Record<string, number>>,
+  ): Promise<{ names: readonly string[]; members: Readonly<Record<string, Buffer>> }>;
+};
 export async function remoteHash(
   url: string,
   headers: Record<string, string>,
   transport: typeof fetch = fetch,
   destination?: string,
+  maximumBytes = 1_500_000_000,
 ): Promise<string> {
+  assert.ok(
+    Number.isSafeInteger(maximumBytes) && maximumBytes > 0 && maximumBytes <= 1_500_000_000,
+  );
   let response = await transport(url, {
     headers,
     redirect: "manual",
@@ -651,7 +663,7 @@ export async function remoteHash(
   try {
     for await (const chunk of response.body) {
       size += chunk.length;
-      assert.ok(size <= 1_500_000_000, "Artifact download byte bound");
+      assert.ok(size <= maximumBytes, "Artifact download byte bound");
       hash.update(chunk);
       if (output) await output.writeFile(chunk);
     }
@@ -665,9 +677,9 @@ export async function remoteHash(
 export function githubRequest(
   token: string | undefined,
   transport: typeof fetch = fetch,
-): GitHubRequest {
+): BoundedGitHubRequest {
   let count = 0;
-  const request: GitHubRequest = Object.assign(
+  const request: BoundedGitHubRequest = Object.assign(
     async (path: string, method: "GET" | "POST" | "PATCH" = "GET", body?: unknown) => {
       assert.ok(
         path.startsWith(`/repos/${REPOSITORY}`) && !path.includes("..") && ++count <= 256,
@@ -691,6 +703,51 @@ export function githubRequest(
       return JSON.parse(data);
     },
     {
+      verifyArtifactMembers: async (
+        artifact: ArtifactReference,
+        bounds: Readonly<Record<string, number>>,
+      ) => {
+        const artifactId = integer(artifact.artifactId);
+        const expectedDigest = artifact.artifactDigest;
+        assert.match(expectedDigest, /^sha256:[a-f0-9]{64}$/);
+        assert.ok(bounds && [Object.prototype, null].includes(Object.getPrototypeOf(bounds)));
+        const entries = Object.entries(Object.getOwnPropertyDescriptors(bounds));
+        assert.equal(Reflect.ownKeys(bounds).length, entries.length);
+        assert.ok(entries.length > 0 && entries.length <= 16);
+        let total = 0;
+        for (const [name, descriptor] of entries) {
+          safePath(name);
+          assert.ok("value" in descriptor && Number.isSafeInteger(descriptor.value));
+          assert.ok(descriptor.value > 0 && descriptor.value <= 8_000_000);
+          total += descriptor.value;
+        }
+        assert.ok(total <= 8_000_000, "Finite artifact member byte bound");
+        const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const directory = await mkdtemp(resolve(await realpath(tmpdir()), "fortipi-artifact-"));
+        try {
+          const path = resolve(directory, "artifact.zip");
+          assert.equal(
+            `sha256:${await remoteHash(`https://api.github.com/repos/${REPOSITORY}/actions/artifacts/${artifactId}/zip`, headers, transport, path, total + 65_536)}`,
+            expectedDigest,
+            "GitHub archive digest mismatch",
+          );
+          const members: Record<string, Buffer> = Object.create(null);
+          let names: string[] | undefined;
+          for (const [name, descriptor] of entries) {
+            const selected = await readArtifactZip(path, name);
+            assert.deepEqual([...selected.names].sort(), entries.map(([key]) => key).sort());
+            if (names) assert.deepEqual(selected.names, names);
+            names = selected.names;
+            assert.ok(selected.bytes.length > 0 && selected.bytes.length <= descriptor.value);
+            members[name] = selected.bytes;
+          }
+          assert.ok(names);
+          return { names, members };
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
       verifyArtifact: async (artifact: ArtifactReference, member?: string) => {
         integer(artifact.artifactId);
         const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
