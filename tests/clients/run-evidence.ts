@@ -23,6 +23,10 @@ import {
 } from "../../apps/worker/test/integration/tickets-revoke.ts";
 import { workspaceAtomicBytes } from "../../apps/worker/test/integration/workspace-portability.ts";
 import {
+  applicationRecoveryChannel,
+  discoverApplicationRecoveryMode,
+} from "../../scripts/application-recovery-channel.ts";
+import {
   type CandidateReadContext,
   loadCandidate,
   resolveCandidateReadContext,
@@ -1140,8 +1144,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   void Promise.resolve()
     .then(async () => {
       const input = argumentsFor(process.argv.slice(2));
+      let recovery: LiveRecoveryBridge | undefined;
+      if (process.send && process.connected) {
+        assert.equal(input.mode, "live", "Recovery bridge is live-only");
+        const mode = await discoverApplicationRecoveryMode();
+        recovery =
+          mode === "perform"
+            ? { mode, bridge: applicationRecoveryChannel("perform") }
+            : { mode, bridge: applicationRecoveryChannel("verify-existing") };
+      }
       const context = await resolveCandidateReadContext(input.candidateManifest);
-      return runEvidence(input, context);
+      return runEvidence(input, context, recovery);
     })
     .then((rows) => {
       process.stdout.write(

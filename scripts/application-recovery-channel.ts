@@ -65,6 +65,8 @@ export function attachApplicationRecoveryChannel(
   forbidden: readonly string[] = [],
 ) {
   assert.ok(isAbsolute(directory) && child.connected && child.send);
+  assert.ok(coordinator.mode === "perform" || coordinator.mode === "verify-existing");
+  let discovered = false;
   let accepted = 0;
   let completed = 0;
   let failure: Error | undefined;
@@ -84,6 +86,14 @@ export function attachApplicationRecoveryChannel(
       const request = closed(value, ["protocol", "id", "method", "checkpoint"]);
       id = request.id;
       assert.equal(request.protocol, protocol);
+      if (request.method === "discover") {
+        assert.equal(request.id, 0);
+        assert.equal(request.checkpoint, null);
+        assert.ok(!discovered && !failure && accepted === 0 && completed === 0);
+        discovered = true;
+        send({ protocol, id: 0, ok: true, mode: coordinator.mode });
+        return;
+      }
       assert.equal(request.id, accepted + 1);
       assert.equal(accepted, completed, "Prior recovery phase still pending");
       assert.ok(!failure);
@@ -129,6 +139,71 @@ export function attachApplicationRecoveryChannel(
   };
 }
 
+function exchange<T>(
+  request: Record<string, unknown>,
+  read: (response: Record<string, unknown>) => T,
+  timeout = 300_000,
+): Promise<T> {
+  safeMessage(request);
+  return new Promise<T>((accept, reject) => {
+    let done = false;
+    const finish = (outcome: { error: Error } | { value: T }) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      process.off("message", message);
+      process.off("disconnect", disconnected);
+      if ("error" in outcome) reject(outcome.error);
+      else accept(outcome.value);
+    };
+    const disconnected = () =>
+      finish({ error: new Error("Application recovery channel unavailable") });
+    const message = (value: unknown) => {
+      try {
+        safeMessage(value);
+        const response = object(value);
+        assert.equal(response.protocol, protocol);
+        assert.equal(response.id, request.id);
+        assert.equal(typeof response.ok, "boolean");
+        if (!response.ok) {
+          closed(response, ["protocol", "id", "ok"]);
+          throw new Error("Application recovery unavailable");
+        }
+        finish({ value: read(response) });
+      } catch {
+        finish({ error: new Error("Application recovery response rejected") });
+      }
+    };
+    const timer = setTimeout(disconnected, timeout);
+    process.on("message", message);
+    process.once("disconnect", disconnected);
+    try {
+      process.send?.(request, (error) => {
+        if (error) disconnected();
+      });
+    } catch {
+      disconnected();
+    }
+  });
+}
+
+let discoveryStarted = false;
+/** One-shot discovery from the attached trusted parent, never environment/argv authority. */
+export async function discoverApplicationRecoveryMode(): Promise<"perform" | "verify-existing"> {
+  assert.ok(process.send && process.connected, "Inherited application recovery channel required");
+  assert.ok(!discoveryStarted, "Application recovery discovery already requested");
+  discoveryStarted = true;
+  return exchange(
+    { protocol, id: 0, method: "discover", checkpoint: null },
+    (response) => {
+      closed(response, ["protocol", "id", "ok", "mode"]);
+      assert.ok(response.mode === "perform" || response.mode === "verify-existing");
+      return response.mode;
+    },
+    30_000,
+  );
+}
+
 export function applicationRecoveryChannel(mode: "perform"): ApplicationRecoveryBridge;
 export function applicationRecoveryChannel(
   mode: "verify-existing",
@@ -144,52 +219,18 @@ export function applicationRecoveryChannel(mode: Coordinator["mode"]) {
     const id = ++sequence;
     try {
       const request = { protocol, id, method, checkpoint: file };
-      safeMessage(request);
-      return await new Promise<Reply[M]>((accept, reject) => {
-        const finish = (error?: Error, value?: Reply[M]) => {
-          clearTimeout(timer);
-          process.off("message", message);
-          process.off("disconnect", disconnected);
-          if (error) reject(error);
-          else {
-            assert.ok(value);
-            accept(value);
-          }
-        };
-        const disconnected = () => finish(new Error("Application recovery channel unavailable"));
-        const message = (value: unknown) => {
-          try {
-            safeMessage(value);
-            const response = object(value);
-            assert.equal(response.protocol, protocol);
-            assert.equal(response.id, id);
-            assert.equal(typeof response.ok, "boolean");
-            closed(
-              response,
-              response.ok ? ["protocol", "id", "ok", "value"] : ["protocol", "id", "ok"],
-            );
-            if (!response.ok) throw new Error("Application recovery unavailable");
-            const result = object(response.value);
-            const status =
-              method === "perform"
-                ? "operation-confirmed"
-                : method === "finish"
-                  ? "qualified"
-                  : "lineage-confirmed";
-            assert.ok(result.status === status || result.status === "unavailable");
-            // Domain wrappers verify the actual identities/checkpoints. This is
-            // only the typed reply from the prebound trusted process, not proof.
-            finish(undefined, result as Reply[M]);
-          } catch {
-            finish(new Error("Application recovery response rejected"));
-          }
-        };
-        const timer = setTimeout(disconnected, 300_000);
-        process.on("message", message);
-        process.once("disconnect", disconnected);
-        process.send?.(request, (error) => {
-          if (error) disconnected();
-        });
+      return await exchange(request, (response) => {
+        closed(response, ["protocol", "id", "ok", "value"]);
+        const result = object(response.value);
+        const status =
+          method === "perform"
+            ? "operation-confirmed"
+            : method === "finish"
+              ? "qualified"
+              : "lineage-confirmed";
+        assert.ok(result.status === status || result.status === "unavailable");
+        // Domain wrappers verify identities/checkpoints; a typed reply alone is not proof.
+        return result as Reply[M];
       });
     } catch (error) {
       failed = true;

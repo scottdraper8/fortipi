@@ -32,7 +32,7 @@ async function run(
       "--input-type=module",
       "-e",
       `
-    import {applicationRecoveryChannel} from ${JSON.stringify(moduleUrl)};
+    import {applicationRecoveryChannel,discoverApplicationRecoveryMode} from ${JSON.stringify(moduleUrl)};
     try { ${source} } finally { process.disconnect?.(); }
   `,
     ],
@@ -125,9 +125,11 @@ test("wrong checkpoint paths and read-only channel writes fail before a trusted 
       "--input-type=module",
       "-e",
       `
-    import {applicationRecoveryChannel} from ${JSON.stringify(moduleUrl)};
+    import {applicationRecoveryChannel,discoverApplicationRecoveryMode} from ${JSON.stringify(moduleUrl)};
     try { applicationRecoveryChannel('perform'); throw Error('No channel required'); }
     catch(error) { if(!String(error).includes('Inherited application recovery channel required'))throw error; console.log('no-implicit-channel'); }
+    try { await discoverApplicationRecoveryMode(); throw Error('Discovered without IPC'); }
+    catch(error) { if(!String(error).includes('Inherited application recovery channel required'))throw error; }
   `,
     ],
     repository,
@@ -173,6 +175,243 @@ test("wrong checkpoint paths and read-only channel writes fail before a trusted 
   assert.equal(readonly.code, 0, readonly.stderr);
   assert.match(readonly.rejection, /channel rejected/);
   assert.equal(calls, 0);
+});
+
+test("one-shot discovery selects only the attached parent's mode and leaves phase IDs unchanged", async () => {
+  const calls: string[] = [];
+  const perform = await run(
+    `
+    process.env.FORTIPI_RECOVERY_MODE='verify-existing';
+    const mode=await discoverApplicationRecoveryMode();
+    if(mode!=='perform')throw Error('Wrong attached mode');
+    const bridge=applicationRecoveryChannel(mode);
+    await bridge.perform(${JSON.stringify(before)});await bridge.finish(${JSON.stringify(after)});
+    try { await discoverApplicationRecoveryMode(); throw Error('Repeated discovery'); }
+    catch(error) { if(!String(error).includes('discovery already requested'))throw error; }
+    console.log(mode);
+  `,
+    {
+      mode: "perform",
+      bridge: {
+        async perform(file) {
+          assert.deepEqual(file, before);
+          calls.push("before");
+          return { status: "unavailable", reason: "Transport fixture" };
+        },
+        async finish(file) {
+          assert.deepEqual(file, after);
+          calls.push("after");
+          return { status: "unavailable", reason: "Transport fixture" };
+        },
+      },
+    },
+  );
+  assert.equal(perform.code, 0, perform.stderr);
+  assert.equal(perform.rejection, "");
+  assert.equal(perform.stdout.trim(), "perform");
+  const readonly = await run(
+    `
+    process.env.FORTIPI_RECOVERY_MODE='perform';
+    const mode=await discoverApplicationRecoveryMode();
+    if(mode!=='verify-existing')throw Error('Wrong attached mode');
+    await applicationRecoveryChannel(mode).verifyExisting();console.log(mode);
+  `,
+    {
+      mode: "verify-existing",
+      bridge: {
+        async verifyExisting() {
+          calls.push("read-only");
+          return { status: "unavailable", reason: "Transport fixture" };
+        },
+      },
+    },
+  );
+  assert.equal(readonly.code, 0, readonly.stderr);
+  assert.equal(readonly.rejection, "");
+  assert.equal(readonly.stdout.trim(), "verify-existing");
+  assert.deepEqual(calls, ["before", "after", "read-only"]);
+});
+
+test("forged, replayed and late discovery or a mismatched bridge cannot change parent authority", async () => {
+  const discovery = {
+    protocol: "fortipi-application-recovery-v1",
+    id: 0,
+    method: "discover",
+    checkpoint: null,
+  };
+  for (const fault of ["forged", "replay", "late", "mismatch"]) {
+    let calls = 0;
+    const coordinator: Parameters<typeof attachApplicationRecoveryChannel>[2] =
+      fault === "late"
+        ? {
+            mode: "perform",
+            bridge: {
+              async perform() {
+                calls++;
+                return { status: "unavailable", reason: "Transport fixture" };
+              },
+              async finish() {
+                calls++;
+                throw Error("Unexpected finish");
+              },
+            },
+          }
+        : {
+            mode: "verify-existing",
+            bridge: {
+              async verifyExisting() {
+                calls++;
+                throw Error("Unexpected handler");
+              },
+            },
+          };
+    const result = await run(
+      `
+      const fault=${JSON.stringify(fault)};
+      if(fault==='replay'||fault==='mismatch')await discoverApplicationRecoveryMode();
+      if(fault==='late')await applicationRecoveryChannel('perform').perform(${JSON.stringify(before)});
+      if(fault==='mismatch'){
+        try { await applicationRecoveryChannel('perform').perform(${JSON.stringify(before)});throw Error('Accepted mismatched mode'); }
+        catch(error){if(!String(error).includes('response rejected'))throw error;}
+      }else{
+        const request=${JSON.stringify(discovery)};
+        if(fault==='forged')request.mode='perform';
+        const response=await new Promise(accept=>{process.once('message',accept);process.send(request);});
+        if(response.ok!==false||response.id!==0)throw Error('Accepted invalid discovery');
+      }
+      console.log('rejected');
+    `,
+      coordinator,
+    );
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout.trim(), "rejected");
+    assert.match(result.rejection, /channel rejected/);
+    assert.equal(calls, fault === "late" ? 1 : 0);
+  }
+});
+
+test("discovery rejects malformed parent replies and cleans its listeners and timer", async () => {
+  const valid = { protocol: "fortipi-application-recovery-v1", id: 0, ok: true, mode: "perform" };
+  for (const response of [
+    { ...valid, protocol: "forged" },
+    { ...valid, id: 1 },
+    { ...valid, mode: "local" },
+    { ...valid, authority: true },
+  ]) {
+    let request: unknown;
+    const result = await execute(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `
+      import {discoverApplicationRecoveryMode}from ${JSON.stringify(moduleUrl)};
+      const counts=()=>[process.listenerCount('message'),process.listenerCount('disconnect')];const baseline=JSON.stringify(counts());
+      try{await discoverApplicationRecoveryMode();throw Error('Accepted malformed discovery');}
+      catch(error){if(!String(error).includes('response rejected'))throw error;}
+      if(JSON.stringify(counts())!==baseline)throw Error('Discovery listeners leaked');
+      console.log('rejected-and-clean');process.disconnect();
+    `,
+      ],
+      repository,
+      childEnvironment(),
+      10000,
+      false,
+      (child) => {
+        child.once("message", (value) => {
+          request = value;
+          child.send?.(response);
+        });
+      },
+    );
+    assert.equal(result.code, 0);
+    assert.equal(result.timedOut, false);
+    assert.equal(result.stdout.trim(), "rejected-and-clean");
+    assert.deepEqual(request, {
+      protocol: "fortipi-application-recovery-v1",
+      id: 0,
+      method: "discover",
+      checkpoint: null,
+    });
+  }
+});
+
+test("actual live CLI discovers inherited recovery before candidate setup without skipping authentication", {
+  timeout: 30000,
+}, async () => {
+  const out = resolve(repository, ".agent-docs/tmp/recovery-mode-cli-fixture");
+  for (const mode of ["perform", "verify-existing"] as const) {
+    let discoveries = 0,
+      calls = 0;
+    let channel: ReturnType<typeof attachApplicationRecoveryChannel> | undefined;
+    const result = await execute(
+      process.execPath,
+      [
+        "tests/clients/run-evidence.ts",
+        "live",
+        "--candidate",
+        resolve(out, "missing-candidate.json"),
+        "--fixture",
+        resolve(repository, "tests/clients/fixtures/local.json"),
+        "--out",
+        out,
+      ],
+      repository,
+      childEnvironment(),
+      10000,
+      false,
+      (child) => {
+        const coordinator: Parameters<typeof attachApplicationRecoveryChannel>[2] =
+          mode === "perform"
+            ? {
+                mode,
+                bridge: {
+                  async perform() {
+                    calls++;
+                    throw Error("Candidate authentication must precede effects");
+                  },
+                  async finish() {
+                    calls++;
+                    throw Error("Unexpected finish");
+                  },
+                },
+              }
+            : {
+                mode,
+                bridge: {
+                  async verifyExisting() {
+                    calls++;
+                    throw Error("Candidate authentication must precede reads");
+                  },
+                },
+              };
+        channel = attachApplicationRecoveryChannel(
+          child,
+          resolve(out, "application-recovery"),
+          coordinator,
+        );
+        child.on("message", (value) => {
+          if (
+            value &&
+            typeof value === "object" &&
+            "method" in value &&
+            value.method === "discover"
+          )
+            discoveries++;
+        });
+      },
+    );
+    assert.ok(channel);
+    try {
+      assert.equal(result.code, 1);
+      assert.equal(result.timedOut, false);
+      assert.equal(discoveries, 1);
+      assert.equal(calls, 0);
+      await assert.rejects(channel.settled(), /Application recovery incomplete/);
+    } finally {
+      channel.close();
+    }
+  }
 });
 
 test("provider errors and accidentally credential-bearing replies stay in the trusted process", async () => {
