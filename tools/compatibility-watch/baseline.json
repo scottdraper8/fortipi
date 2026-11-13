@@ -4,51 +4,51 @@
     "workers-policy": {
       "catalogSha256": "3e27f68e18881bb254fdd75a7f41dc27ad4cb5d25b2715de4643393f2187d6c0",
       "snapshot": {
-        "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
+        "commit": "b6fe0684a64aa04753d3163311afae1c13a0d0d1",
         "version": null,
         "paths": {
-          "src/content/docs/workers/platform": "38cccd166d6ce5f2dba9bdc5061349acff703f29ed61c56151c5a518167298e4",
+          "src/content/docs/workers/platform": "be4cf0aba128663edd51400496659790e76508766e0042161d54a431d8e0556a",
           "src/content/partials/workers/outbound-request-body-limits.mdx": "18f851260038816761c8963e98fbb0ff7afa76ce583d3295d55ce0e90dad69f1",
           "src/content/partials/workers/wall-time-limits.mdx": "49cc77460a529360532c1ba86132dc745dda113a063661481a99135104ad6336",
           "src/content/partials/workers/compute-per-request.mdx": "2feb35882f85b440a0b31921823e8dfc26cccf137f100dc6e2c86ebe9457f331"
         },
-        "sha256": "7f934dbe641db95e97834523b4b7f3ca415b79187b49c2354ea48f48db7efb5b"
+        "sha256": "b0d0f4aab07d421b418efdd7a12d6cf71b9a462c5e8084eaa6cb65b7567b600c"
       },
       "pins": {},
-      "reviewedAt": "2026-11-11T09:06:45.504Z",
-      "reviewNote": "Reviewed primary limits/pricing: Free 100000 daily requests, 10ms CPU and 128MB isolate memory; paid plan is distinct from zone plans. Retain conservative bounds; no account-wide headroom or deployed-fit claim."
+      "reviewedAt": "2026-11-13T16:33:15.028Z",
+      "reviewNote": "Reviewed primary limits/pricing: Free 100000 daily requests, 10ms CPU and 128MB isolate memory; paid plan is distinct from zone plans. Retain conservative bounds; no account-wide headroom or deployed-fit claim. Reviewed exact cd05cefb3c3e3c9cdb43f3e2513650f0375331ff...b6fe0684a64aa04753d3163311afae1c13a0d0d1: limits/pricing link new spend-management.mdx covering optional account-wide request/CPU spending caps after included usage, separate from Free resource limits and other products. New invocations may be blocked; error1103 is not uniquely diagnostic, reporting/enforcement lag prevents a hard invoice ceiling, subscription excluded. Resume/billing-period reset is not a daily Free reset. All three watched partials/numeric limits unchanged; preserve conservative policy and unknown account headroom, no new budget feature or billing change. Evidence: phase3/thread-9/compatibility-cloudflare-b6fe-build.md."
     },
     "durable-objects-policy": {
       "catalogSha256": "e52b1c5413be096047c376cb5ace58a42ad00fd5fdcdbd6e67e812921b23c586",
       "snapshot": {
-        "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
+        "commit": "b6fe0684a64aa04753d3163311afae1c13a0d0d1",
         "version": null,
         "paths": {
-          "src/content/docs/durable-objects/platform": "7215c4c012c036406fa3be35249d42067abddac481a1e3acd10437dcd5ba1912",
+          "src/content/docs/durable-objects/platform": "468f540990d0b15e5b893f26e97671d7db4b1855f2cf400d7981a38cb3f8855d",
           "src/content/partials/durable-objects": "3620e4f9c29ad6c846400340d294214758d06c97b305673c48933c3f8470f2a4",
           "src/content/docs/durable-objects/deployments/durable-objects-code-updates.mdx": "41ed62a336bf4421e146934d0e341fe4f5b95d9e769f109cdc092b06e0e3c726",
           "src/content/docs/durable-objects/concepts/durable-object-lifecycle.mdx": "c023ab316f92ccf6e8a9e225d963289e53ba9395784975e462365713d64c7247"
         },
-        "sha256": "1c7c0b38a5d96280181a129b87165b590c16311102701b8526bf8921fc5b8b2b"
+        "sha256": "ac3f9a304821bf97450c115101a7fed52ab990e059214b44da4268d5bacc8e97"
       },
       "pins": {},
-      "reviewedAt": "2026-11-12T21:07:58.766Z",
-      "reviewNote": "Reviewed SQLite/SQL limits and shared pricing partials: Free storage is 5GB per account, operations over a Free allowance fail, daily allowances reset at 00:00 UTC. Retain durable exhaustion holds and explicit recovery; no account quota guarantee. Added authenticated code-update/lifecycle MDX review at the retained commit, unchanged at 0728ae0669f85d5c5d7cc8e365e78513f3038f76: default deferred max_delay 300s, immediate override for one deployment; deployment completes immediately, active objects may serve old code until hibernation/delay. Deferral is best effort; runtime restarts remain possible, storage access during shutdown errors and WebSockets terminate. Preserve incremental persistence and explicit recovery; no product configuration change or runtime guarantee."
+      "reviewedAt": "2026-11-13T16:33:15.028Z",
+      "reviewNote": "Reviewed cd05cefb3c3e3c9cdb43f3e2513650f0375331ff...b6fe0684a64aa04753d3163311afae1c13a0d0d1. Free5GB/account, allowance failures/daily00:00UTC and numeric SQL limits unchanged. Partials/code-update/lifecycle unchanged: default deferred300s, one-deploy immediate override, deploy completes immediately; active old code until hibernation/delay; best-effort deferral, runtime restarts, shutdown storage errors/WS closure require incremental persistence/explicit recovery. New optional account caps count requests/duration/SQL/KV after included usage, exclude stored data/subscription. Stub/SQL/growth/new alarms can block; open WS/in-flight work/legacy KV can continue, so lag/no hard invoice ceiling. Held alarms older than7d can be deleted: reschedule if still needed after service returns; billing-period expiry is not Free daily reset. No quota/pin/config/budget change, automatic long-pause recovery or available-headroom claim. Evidence: phase3/thread-9/compatibility-cloudflare-b6fe-build.md."
     },
     "containers-policy": {
       "catalogSha256": "5efd8e57a15eefe48dc59f02503378485bd81a151367e1aadb31aa0b324a2979",
       "snapshot": {
-        "commit": "ecde2c87beaaa8d26e4925d959d7192d07fe1218",
+        "commit": "b6fe0684a64aa04753d3163311afae1c13a0d0d1",
         "version": null,
         "paths": {
-          "src/content/docs/containers/platform": "6dd9b0e2e407766395a4f0101d1a5dc0f73e2213f13a667095fc85a1b764bb7d",
+          "src/content/docs/containers/platform": "524590e3a98cddb818fd13e899af552107057193b66f84985ebaca61490cfac7",
           "src/content/partials/containers/instance-types.mdx": "7e09d9fe486ca468c253bcf5ec953f9cc820bd1b2e88613d1100847076600974"
         },
-        "sha256": "e4ed0ec0415bf28995e98388ce5de6fab2619f322abf9c8dfb525ac6240dcf54"
+        "sha256": "0e692b042230c6e99ccbc33b431b0524f2bff834e8f10bbb0634cb768d50fc42"
       },
       "pins": {},
-      "reviewedAt": "2026-11-12T12:24:11.387Z",
-      "reviewNote": "Reviewed primary cd05cefb...ecde2c87 diff: only default account concurrent memory/vCPU/disk rise 6->60TiB,1500->15000,30->300TB; instance sizes, image storage, paid-only availability and billing unchanged. Retain FortiPi conservative Free bounds, explicit paid gates and zero capability/cap increases. Account defaults are not available headroom or deployment proof. Evidence: phase3/thread-8/release-compatibility-review.md."
+      "reviewedAt": "2026-11-13T16:33:15.028Z",
+      "reviewNote": "Reviewed primary cd05cefb...ecde2c87 diff: only default account concurrent memory/vCPU/disk rise 6->60TiB,1500->15000,30->300TB; instance sizes, image storage, paid-only availability and billing unchanged. Retain FortiPi conservative Free bounds, explicit paid gates and zero capability/cap increases. Account defaults are not available headroom or deployment proof. Evidence: phase3/thread-8/release-compatibility-review.md. Reviewed exact ecde2c87beaaa8d26e4925d959d7192d07fe1218...b6fe0684a64aa04753d3163311afae1c13a0d0d1: only platform/pricing.mdx adds no-charge Container snapshots during public beta, GA pricing unspecified; instance-types partial and all other selected platform entries unchanged. No numeric limits/rates, paid gates, FortiPi workspace snapshots or image/runtime changes. Evidence: phase3/thread-9/compatibility-cloudflare-b6fe-build.md."
     },
     "dynamic-workers-policy": {
       "catalogSha256": "8ea79c98cb02f0ca69e9b025f886f3b99c5d5da2bbb95fb07b31d37f9da980cc",
