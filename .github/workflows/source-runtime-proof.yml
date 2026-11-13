@@ -63,12 +63,11 @@ jobs:
       - run: node tools/unstale/review-supply-chain.ts --locks --check
       - run: node scripts/check-licenses.ts --foundation
       - run: node scripts/build-workspaces.ts build:evidence
-      - name: Observe three actual source test processes directly
+      - name: Prove executor ledger continuity and profile provisioning
         run: >-
           node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
-          apps/worker/test/agent/admin-file-bearing.test.ts
-          apps/worker/test/agent/process-recovery.test.ts
-          apps/worker/test/api/stream-boundaries.test.ts
+          apps/worker/test/execution/executor-ledger.test.ts
+          packages/fortipi-executor/test/provision.test.ts
       - name: Require Linux hardener service still active
         if: always() && runner.os == 'Linux'
         shell: bash
