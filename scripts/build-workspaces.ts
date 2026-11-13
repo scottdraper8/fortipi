@@ -4,6 +4,7 @@ import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "no
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
+import { sourceTestDiagnostic } from "./source-test-processes.ts";
 
 export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const publicPackages = ["contract", "client", "tui", "executor", "cli"] as const;
@@ -61,7 +62,7 @@ export async function filesBelow(path: string): Promise<string[]> {
   return result.sort();
 }
 
-async function tests(roots: string[]): Promise<void> {
+async function tests(roots: string[], observeProcesses = false): Promise<void> {
   const paths: string[] = [];
   for (const root of roots) {
     // Missing required suites fail. Never turn a partial checkout into green CI.
@@ -78,16 +79,24 @@ async function tests(roots: string[]): Promise<void> {
     "packages/fortipi-cli/test/enforcer-context-provenance.test.ts",
   );
   const parallel = paths.filter((path) => path !== provenance);
+  const diagnostics = observeProcesses
+    ? ["--require", join(repository, "scripts/source-test-processes.ts")]
+    : [];
   // Emit each assertion immediately, even if another file outlives the aggregate runner.
   if (parallel.length)
     await run(
       process.execPath,
-      ["--test", "--test-reporter=tap", ...parallel],
+      [...diagnostics, "--test", "--test-reporter=tap", ...parallel],
       repository,
       900_000,
     );
   if (paths.includes(provenance))
-    await run(process.execPath, ["--test", "--test-reporter=tap", provenance], repository, 900_000);
+    await run(
+      process.execPath,
+      [...diagnostics, "--test", "--test-reporter=tap", provenance],
+      repository,
+      900_000,
+    );
 }
 
 async function compile(path: string): Promise<void> {
@@ -141,6 +150,8 @@ export async function main(command: string | undefined): Promise<void> {
               ? Object.getOwnPropertyDescriptor(error, "stderr")?.value
               : undefined;
           if (typeof stderr === "string") {
+            for (const line of stderr.split("\n").filter(sourceTestDiagnostic).slice(-1028))
+              process.stderr.write(`${line}\n`);
             const records = stderr
               .slice(-8192)
               .split("\n")
@@ -247,12 +258,15 @@ export async function main(command: string | undefined): Promise<void> {
       await typecheck(["packages/fortipi-contract", "packages/fortipi-executor"]);
       return;
     case "test":
-      await tests([
-        ...packagePaths.map((p) => `${p}/test`),
-        "apps/worker/test",
-        "scripts/test/release",
-        "tests/clients",
-      ]);
+      await tests(
+        [
+          ...packagePaths.map((p) => `${p}/test`),
+          "apps/worker/test",
+          "scripts/test/release",
+          "tests/clients",
+        ],
+        true,
+      );
       return;
     case "test:executor":
       await tests(["packages/fortipi-executor/test"]);
