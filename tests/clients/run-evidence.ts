@@ -791,6 +791,21 @@ export async function runEvidence(input: EvidenceInput): Promise<ClaimResult[]> 
           workspaceLimits,
           workspaceSensitivity,
         );
+        const controlLimits: string[] = [],
+          controlSensitivity: string[] = [];
+        await measure(
+          "live-pending-task-controls",
+          ["runLiveTaskControls", "installed-node-export", "public-cancel", "seed1010"],
+          "Actual model dispatch waits without assignment; scoped cancellation retains the original conservative receipt and late approval cannot resurrect the cancelled job",
+          async () => {
+            const evidence = await context.pendingTaskControls();
+            controlLimits.push(...evidence.limitations);
+            controlSensitivity.push(...evidence.sensitivity);
+            return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
+          },
+          controlLimits,
+          controlSensitivity,
+        );
         let access: Record<string, unknown> | undefined;
         await measure(
           "ticket-grants-revoke",

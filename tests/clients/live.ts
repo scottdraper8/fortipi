@@ -13,7 +13,9 @@ import {
 } from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
 import { publicAccess } from "./live-access.ts";
+import { runLiveTaskControls } from "./live-task-controls.ts";
 import { runLiveWorkspace } from "./live-workspace.ts";
+import type { RecoveryWorkspaceCanary } from "./platform-recovery.ts";
 import { publicFlow } from "./public-flow.ts";
 import type { RoleContext } from "./roles.ts";
 
@@ -121,6 +123,7 @@ export async function liveContext(
   )) as typeof import("../../packages/fortipi-client/dist/node.js");
   const client = () =>
     new module.FortiPiClient({ endpoint: roles.endpoint, credentials: async () => role.token });
+  let workspaceCanary: RecoveryWorkspaceCanary | undefined;
   return {
     role,
     agent,
@@ -266,6 +269,31 @@ export async function liveContext(
           publicConfigurationVersion: configuration.version,
         },
       });
+      const workspaceId = evidence.observation.workspaceId;
+      const files = evidence.observation.files;
+      assert.equal(typeof workspaceId, "string");
+      assert.ok(typeof workspaceId === "string" && Array.isArray(files) && files.length === 3);
+      const binding = await roles.call({
+        operationId: "describeWorkspace",
+        path: { workspaceId },
+        query: {},
+        body: undefined,
+      });
+      assert.equal(binding.config.kind, "computer");
+      assert.equal(binding.revision, evidence.observation.publishedRevision);
+      workspaceCanary = {
+        binding,
+        files: files.map((file: unknown) => {
+          assert.ok(file && typeof file === "object");
+          const item = file as { path?: unknown; size?: unknown; sha256?: unknown };
+          assert.ok(typeof item.path === "string" && typeof item.sha256 === "string");
+          assert.match(item.sha256, /^[0-9a-f]{64}$/);
+          assert.ok(
+            typeof item.size === "number" && Number.isSafeInteger(item.size) && item.size >= 0,
+          );
+          return { path: item.path, size: item.size, sha256: item.sha256 };
+        }),
+      };
       return {
         ...evidence,
         observation: {
@@ -274,6 +302,24 @@ export async function liveContext(
           logicalApplicationId: protocol.deploymentId,
           authenticatedRuntimeConfigSha256: deployment.runtimeConfigSha256,
           helperIdentityView: "public-protocol",
+        },
+      };
+    },
+    async pendingTaskControls() {
+      assert.ok(workspaceCanary, "Actual independently verified Computer canary is required");
+      const evidence = await runLiveTaskControls({
+        installed,
+        roles,
+        agentId: agent.agentId,
+        workspace: workspaceCanary,
+        deployment,
+      });
+      return {
+        ...evidence,
+        observation: {
+          ...evidence.observation,
+          providerDeploymentId: deployment.deploymentId,
+          authenticatedRuntimeConfigSha256: deployment.runtimeConfigSha256,
         },
       };
     },
