@@ -43,7 +43,7 @@ async function until(read: () => boolean) {
 /** Public application flow only. Local qualification may supply a synthetic
  * paid capability backed by a real local Loader; that never establishes an
  * actual Paid account/deployment or substitutes for the live wrapper below. */
-export async function openPublicCloudTool(input: CloudToolInput) {
+async function openPublicCloudOperation(input: CloudToolInput, cancellation: boolean) {
   const observe = (phase: string) => input.observe?.(phase);
   observe("configuration-capability");
   const { roles, installed, agent, workspace, target } = input;
@@ -129,9 +129,11 @@ export async function openPublicCloudTool(input: CloudToolInput) {
             "messages.submit",
             "events.read",
             "tasks.read",
+            "tasks.cancel",
             "tickets.mint",
             "jobs.dispatch",
             "jobs.read",
+            "jobs.reconcile",
             "approvals.read",
             "approvals.decide",
             "workspaces.read",
@@ -152,8 +154,8 @@ export async function openPublicCloudTool(input: CloudToolInput) {
     content = `${nonce}\n`;
   const source =
     backend.kind === "cloud-js"
-      ? `import {writeFile} from 'node:fs/promises'; export default async function () { await writeFile(${JSON.stringify(`/workspace/${path}`)}, ${JSON.stringify(content)}, {flag:'wx',mode:420}); console.log('seed1010-committed-marker'); }`
-      : `set -eu\ntest ! -e '/workspace/${path}'\nprintf '%s\\n' '${nonce}' > '/workspace/${path}'\nprintf 'seed1010-committed-marker\\n'\n`;
+      ? `import {writeFile} from 'node:fs/promises'; export default async function () { await writeFile(${JSON.stringify(`/workspace/${path}`)}, ${JSON.stringify(content)}, {flag:'wx',mode:420}); ${cancellation ? "await new Promise(resolve => setTimeout(resolve, 30000));" : ""} console.log('seed1010-committed-marker'); }`
+      : `set -eu\ntest ! -e '/workspace/${path}'\nprintf '%s\\n' '${nonce}' > '/workspace/${path}'\n${cancellation ? "sleep 30\n" : ""}printf 'seed1010-committed-marker\\n'\n`;
   const dispatch = {
     tool,
     arguments: { source },
@@ -226,6 +228,120 @@ export async function openPublicCloudTool(input: CloudToolInput) {
           operationDigest: approval.operation.operationDigest,
           decision: "approve",
         });
+        if (cancellation) {
+          // This is a public backend acknowledgement, not an observation of a
+          // physical process start. The long body leaves a bounded window for
+          // cancellation without adding a production scheduling/fault seam.
+          await until(() =>
+            events.some(
+              (event) =>
+                event.type === "job.state.changed" &&
+                event.jobId === approval.jobId &&
+                (event.payload as unknown as Job).state === "running",
+            ),
+          );
+          const assigned = await client.jobs.get(approval.jobId);
+          assert.equal(assigned.state, "running");
+          assert.ok(assigned.execution);
+          assert.deepEqual(assigned.execution.target, target);
+          observe("cancel-acknowledged-assignment");
+          const cancel = { requestId: randomUUID(), reason: "seed1010-public-cancellation" };
+          const [receipt, duplicate] = await Promise.all([
+            client.tasks.cancel(admission.taskId, cancel),
+            client.tasks.cancel(admission.taskId, cancel),
+          ]);
+          assert.deepEqual(duplicate, receipt);
+          assert.equal(receipt.durableIntent, true);
+          assert.deepEqual(receipt.disposition, {
+            state: "unknown",
+            possibleExternalEffects: true,
+          });
+          await until(() =>
+            events.some(
+              (event) =>
+                event.type === "job.state.changed" &&
+                event.jobId === approval.jobId &&
+                (event.payload as unknown as Job).state === "requires_reconciliation",
+            ),
+          );
+          const uncertain = await client.jobs.get(approval.jobId);
+          assert.equal(uncertain.state, "requires_reconciliation");
+          assert.deepEqual(uncertain.execution, assigned.execution);
+          assert.equal(uncertain.receipt, undefined);
+          const acknowledge = {
+            requestId: randomUUID(),
+            expectedVersion: uncertain.version,
+            reason: "Record uncertainty without asserting effects absent or retrying execution",
+            action: { kind: "acknowledge-unknown" as const },
+          };
+          observe("uncertain-effects-cannot-be-relabeled-failed");
+          await assert.rejects(
+            () =>
+              client.jobs.reconcile(uncertain.jobId, {
+                ...acknowledge,
+                requestId: randomUUID(),
+                action: { kind: "acknowledge-failed" },
+              }),
+            (error: unknown) => error instanceof module.FortiPiError && error.status === 409,
+          );
+          observe("public-unknown-acknowledgement");
+          const reconciliation = await client.jobs.reconcile(uncertain.jobId, acknowledge);
+          assert.equal(reconciliation.durableIntent, true);
+          assert.equal(reconciliation.disposition, "unknown-acknowledged");
+          assert.equal(reconciliation.newJobId, undefined);
+          assert.deepEqual(
+            await client.jobs.reconcile(uncertain.jobId, acknowledge),
+            reconciliation,
+          );
+          assert.deepEqual(await client.tasks.cancel(admission.taskId, cancel), receipt);
+          assert.deepEqual(await intent.send(), admission);
+          const retained = await client.jobs.get(uncertain.jobId);
+          assert.equal(retained.state, "requires_reconciliation");
+          assert.deepEqual(retained.execution, assigned.execution);
+          assert.equal(retained.receipt, undefined);
+          assert.deepEqual(
+            await client.workspaces.get(workspace.binding.workspaceId),
+            workspace.binding,
+          );
+          for (const file of workspace.files) {
+            const bytes = await client.workspaces.read(workspace.binding.workspaceId, {
+              revision: workspace.binding.revision,
+              path: file.path,
+            });
+            assert.equal(bytes.byteLength, file.size);
+            assert.equal(sha256(bytes), file.sha256);
+          }
+          const evidence: ScenarioEvidence = {
+            observation: {
+              backend: backend.kind,
+              target,
+              originalTaskId: admission.taskId,
+              originalJobId: assigned.jobId,
+              acknowledgedExecution: assigned.execution,
+              cancellation: receipt,
+              duplicateCancellationRetained: true,
+              reconciliation,
+              uncertainJobStateRetained: retained.state,
+              originalAdmissionRetained: true,
+              noNewJobRequested: true,
+              failedRelabelStatus: 409,
+              canonicalBindingAndOriginalHashesRetained: workspace.files,
+              logicalApplicationId: protocol.deploymentId,
+            },
+            oracle:
+              "Cancellation after public backend acknowledgement persists one reusable control receipt with possible effects; uncertain work cannot be relabeled failed, publish success, or acquire a replacement job when the same admission/control/reconciliation is retried",
+            sensitivity: [
+              "Public acknowledge-failed of the actual uncertain job rejects409; acknowledge-unknown preserves uncertainty and original execution",
+            ],
+            limitations: [
+              "The running acknowledgement does not establish a physical process-start boundary",
+              "Unpublished scratch effects remain possible; acknowledgement neither erases them nor authorizes replay",
+              "Backend process-tree termination, runtime loss, separate hosts, egress, Linux FUSE/image identity and actual Paid account remain separate required proofs",
+            ],
+          };
+          roles.assertSanitized(evidence);
+          return evidence;
+        }
         await until(() =>
           events.some(
             (event) => event.type === "task.completed" && event.taskId === admission.taskId,
@@ -334,14 +450,21 @@ export async function openPublicCloudTool(input: CloudToolInput) {
   };
 }
 
+export function openPublicCloudTool(input: CloudToolInput) {
+  return openPublicCloudOperation(input, false);
+}
+
+/** Shared public dispatch/approval oracle; no fixture endpoint is called here. */
+export function openPublicCloudCancellation(input: CloudToolInput) {
+  return openPublicCloudOperation(input, true);
+}
+
 export async function runPublicCloudTool(input: CloudToolInput): Promise<ScenarioEvidence> {
   return (await openPublicCloudTool(input)).run();
 }
 
 /** Never called locally with a fabricated deployment receipt. */
-export async function runLiveCloudTools(
-  input: CloudToolInput & { deployment: DeploymentIdentity },
-): Promise<ScenarioEvidence> {
+async function assertLiveCloudInput(input: CloudToolInput & { deployment: DeploymentIdentity }) {
   assertDeployment(input.deployment);
   assert.equal(input.deployment.origin, input.roles.endpoint);
   assert.notEqual(
@@ -363,7 +486,14 @@ export async function runLiveCloudTools(
     assert.equal(configuration.execution.imageDigest, input.deployment.imageDigest);
     assert.equal(input.deployment.imageDigest, input.installed.candidate.image.builtManifestDigest);
   } else assert.equal(input.deployment.capabilities.loaders, true);
-  const evidence = await runPublicCloudTool(input);
+}
+
+async function liveCloudEvidence(
+  input: CloudToolInput & { deployment: DeploymentIdentity },
+  cancellation: boolean,
+): Promise<ScenarioEvidence> {
+  await assertLiveCloudInput(input);
+  const evidence = await (await openPublicCloudOperation(input, cancellation)).run();
   return {
     ...evidence,
     observation: {
@@ -372,4 +502,14 @@ export async function runLiveCloudTools(
       authenticatedRuntimeConfigSha256: input.deployment.runtimeConfigSha256,
     },
   };
+}
+
+export function runLiveCloudTools(input: CloudToolInput & { deployment: DeploymentIdentity }) {
+  return liveCloudEvidence(input, false);
+}
+
+export function runLiveCloudCancellation(
+  input: CloudToolInput & { deployment: DeploymentIdentity },
+) {
+  return liveCloudEvidence(input, true);
 }
