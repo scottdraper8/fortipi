@@ -46,7 +46,14 @@ import {
   sha256,
   verifyPayload,
 } from "../../verify-release-gates.ts";
-import { candidate, directoryArchive, discard, httpFixture, temporary } from "./fixtures.ts";
+import {
+  candidate,
+  deviceProducerJobs,
+  directoryArchive,
+  discard,
+  httpFixture,
+  temporary,
+} from "./fixtures.ts";
 
 const v0 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const v1 = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
@@ -667,26 +674,30 @@ async function controlled() {
           path: integrated ? ".github/workflows/ci.yml" : ".github/workflows/deploy.yml",
           state: "active",
         });
-      if (path.includes("/jobs?"))
+      if (path.includes("/jobs?")) {
+        const names = integrated
+          ? ["policy-and-integration"]
+          : original
+            ? deviceProducerJobs
+            : ["operate"];
         return Response.json({
-          total_count: 1,
-          jobs: [
-            {
-              id: 101,
-              run_id: runId,
-              head_sha: sourceCommit,
-              name: integrated ? "policy-and-integration" : "operate",
-              status: historical
+          total_count: names.length,
+          jobs: names.map((name, index) => ({
+            id: 101 + index,
+            run_id: runId,
+            head_sha: sourceCommit,
+            name,
+            status: historical
+              ? "completed"
+              : authorityFault === "failed-job"
                 ? "completed"
-                : authorityFault === "failed-job"
-                  ? "completed"
-                  : "in_progress",
-              conclusion: historical ? "success" : null,
-              started_at: new Date(now - 5000).toISOString(),
-              completed_at: new Date(now - 1000).toISOString(),
-            },
-          ],
+                : "in_progress",
+            conclusion: historical ? "success" : null,
+            started_at: new Date(now - 5000).toISOString(),
+            completed_at: new Date(now - 1000).toISOString(),
+          })),
         });
+      }
       if (path.endsWith("/actions/artifacts/83")) {
         assert.ok(originalReference);
         return Response.json({
