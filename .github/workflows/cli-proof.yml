@@ -107,6 +107,10 @@ jobs:
         env:
           FORTIPI_CLI_PROOF_PNPM_BIN: ${{ steps.pnpm.outputs.bin_dest }}
         run: node scripts/cli-proof.ts offline
+      - name: Prove real per-host setup and reload on a fresh Linux identity
+        env:
+          FORTIPI_CLI_PROOF_PNPM_BIN: ${{ steps.pnpm.outputs.bin_dest }}
+        run: node scripts/test/release/live-device-installation-linux.ts --distribution "$RUNNER_TEMP/fortipi-cli-distribution"
       - name: Require hardener still active
         if: always()
         timeout-minutes: 1
@@ -115,6 +119,8 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cli-proof-${{ env.SOURCE_SHA }}
-          path: dist/cli-proof/evidence.json
+          path: |
+            dist/cli-proof/evidence.json
+            dist/cli-proof/device-installation.json
           if-no-files-found: error
           retention-days: 7
