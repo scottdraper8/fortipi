@@ -6,6 +6,7 @@ import type { PrepareReceipt } from "../../../packages/fortipi-cli/dist/assets.j
 import { deploymentReceipt } from "../../../packages/fortipi-cli/dist/deployment.js";
 import { repository } from "../../build-workspaces.ts";
 import {
+  assertObservedDeployment,
   assertTarget,
   cloudflareRequest,
   observeDeployment,
@@ -208,6 +209,21 @@ test("actual CLI prepare plus HTTP version/rollout/configuration reads bind curr
     assert.equal(JSON.stringify(identity).includes("synthetic-"), false);
     assert.equal(JSON.stringify(identity).includes("a".repeat(32)), false);
     assert.equal(identity.accountBindingSha256, target.accountBindingSha256);
+    assertObservedDeployment([identity], {
+      ...identity,
+      checkedAt: new Date(Date.now() + 1).toISOString(),
+    });
+    const unrelatedVersion = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+    assert.throws(
+      () =>
+        assertObservedDeployment([identity], {
+          ...identity,
+          workerVersionId: unrelatedVersion,
+          versions: [{ versionId: unrelatedVersion, percentage: 100 }],
+        }),
+      /target changed without authenticated recovery/,
+    );
+    assert.throws(() => assertObservedDeployment([], identity), /One actual application target/);
     const before = observed.length;
     assert.throws(
       () =>

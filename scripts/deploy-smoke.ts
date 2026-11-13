@@ -528,6 +528,25 @@ export async function operateDeployment(
   );
   await saveJson(out, identity);
 }
+/** A fresh observation may refresh time, never silently replace the target on
+ * which application claims were observed. Recovery needs its explicit lineage. */
+export function assertObservedDeployment(
+  observations: DeploymentIdentity[],
+  deployment: DeploymentIdentity,
+): void {
+  assert.equal(observations.length, 1, "One actual application target required");
+  const original = observations[0];
+  assert.ok(original);
+  assertDeployment(original);
+  assertDeployment(deployment);
+  const stable = ({ checkedAt: _time, ...identity }: DeploymentIdentity) => identity;
+  assert.deepEqual(
+    stable(original),
+    stable(deployment),
+    "Evidence target changed without authenticated recovery",
+  );
+}
+
 /** Bind owner10's detailed results to owner9's actual installed deployment observation. */
 export async function retainEvidence(
   candidatePath: string,
@@ -548,6 +567,7 @@ export async function retainEvidence(
   assertDeployment(deployment);
   assert.equal(deployment.candidateSha256, loaded.hash);
   freshness(deployment.checkedAt, 0.25);
+  assertObservedDeployment(child.deployments, deployment);
   await mkdir(out, { mode: 0o700 });
   await cp(claimsDirectory, resolve(out, "claims"), {
     recursive: true,
