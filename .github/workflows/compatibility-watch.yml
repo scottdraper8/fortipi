@@ -6,6 +6,7 @@ on:
       - "tools/unstale/precommit-*"
       - "tools/unstale/private-python*"
       - "tools/unstale/review-precommit.ts"
+      - "packages/fortipi-contract/src/canonical-json.ts"
       - "tools/unstale/requirements.txt"
       - "tools/unstale/licenses/python/**"
       - ".github/dependabot.yml"

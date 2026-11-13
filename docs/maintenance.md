@@ -33,7 +33,21 @@ Requests are GET-only to `api.github.com`, without redirects or retries: at most
 512 KiB per response. Empty, malformed, missing or potentially truncated responses
 cannot turn green. GitHub rate limits/outages fail explicitly. The separate
 workflow retains existing Action/version pins and StepSecurity block egress;
-allowed hosts serve GitHub public reads/checkout, Node setup and StepSecurity.
+allowed hosts serve GitHub public reads/checkout, Node setup, StepSecurity,
+PyPI metadata and OSV advisories.
+
+Before checking upstream identities, the workflow reviews the exact Python
+build/runtime inputs used by pre-commit. Changed artifact metadata or advisory
+fingerprints stop the check. The shared canonical JSON implementation also runs
+from a cold checkout, without installing packages or emitting the contract.
+See [the pinned tool review](../tools/unstale/precommit-python-review.md) for its
+archive, license, bundled-component assessment and private bootstrap commands.
+
+Dependabot discovers the hashed Python inputs through
+`tools/unstale/requirements.txt`; its version-update PR limit remains zero, so
+only security updates can create PRs. Proposed changes still require the matching
+lock, archive and license review. Installation uses the TypeScript bootstrap and
+its verified private environment; the discovery file is not a second installer.
 
 | Outcome                                           | Meaning and action                                                                                                                                         |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
