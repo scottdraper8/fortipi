@@ -1086,11 +1086,6 @@ export async function prepareCandidate(
       180000,
     );
     await saveJson(resolve(destination, "compatibility.json"), JSON.parse(compatibility.stdout));
-    assert.equal(
-      compatibility.code,
-      0,
-      "Compatibility watch requires review at this candidate SHA",
-    );
     phase = "notices";
     await generateNotices(root);
     for (const args of [
@@ -1107,6 +1102,12 @@ export async function prepareCandidate(
     }
     phase = "pre-commit checks";
     await checked("pre-commit", ["run", "--all-files"], root, childEnvironment(), 600000, true);
+    phase = "compatibility review";
+    assert.equal(
+      compatibility.code,
+      0,
+      "Compatibility watch requires review at this candidate SHA",
+    );
     phase = "package archives";
     const packed = await stageAndPack(
       root,
