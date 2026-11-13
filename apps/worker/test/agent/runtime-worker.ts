@@ -478,7 +478,12 @@ export class TestAgentSession extends AgentSession {
       | "marker-committed"
       | "snapshot-ready"
       | "notify-start"
-      | "notify-ack",
+      | "notify-ack"
+      | `notify-status-${number}`
+      | "notify-status-other"
+      | "notify-throw-abort"
+      | "notify-throw-type"
+      | "notify-throw-other",
   ) {
     if (
       (point === "before-submit" || point === "after-submit") &&
@@ -528,17 +533,40 @@ export class TestAgentSession extends AgentSession {
       )
         throw new Error("Invalid process fixture observer target");
       this.processStage(point, "notify-start");
-      const response = await fetch(target.href, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${observer.token}`, "Content-Type": "application/json" },
-        redirect: "manual",
-        signal: AbortSignal.timeout(20000),
-        body: JSON.stringify({
-          observationId: observation.observationId,
-          agentId: this.agentId,
-          ...snapshot,
-        }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(target.href, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${observer.token}`,
+            "Content-Type": "application/json",
+          },
+          redirect: "manual",
+          signal: AbortSignal.timeout(20000),
+          body: JSON.stringify({
+            observationId: observation.observationId,
+            agentId: this.agentId,
+            ...snapshot,
+          }),
+        });
+      } catch (error) {
+        this.processStage(
+          point,
+          error instanceof DOMException &&
+            (error.name === "AbortError" || error.name === "TimeoutError")
+            ? "notify-throw-abort"
+            : error instanceof TypeError
+              ? "notify-throw-type"
+              : "notify-throw-other",
+        );
+        throw error;
+      }
+      this.processStage(
+        point,
+        Number.isInteger(response.status) && response.status >= 100 && response.status <= 599
+          ? `notify-status-${response.status}`
+          : "notify-status-other",
+      );
       if (response.status !== 204) throw new Error("Process fixture observation refused");
       this.processStage(point, "notify-ack");
     }

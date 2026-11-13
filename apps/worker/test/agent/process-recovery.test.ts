@@ -217,11 +217,18 @@ test("recovery stage diagnostics reconstruct only closed nonsecret enums", () =>
     '{"diagnostic":"source-recovery-stage","point":"after-submit","stage":"marker-committed"}',
   );
   assert.ok(record && sourceTestDiagnostic(`# ${record}`));
+  for (const stage of ["notify-status-204", "notify-status-409", "notify-throw-type"]) {
+    const status = processStageDiagnostic(line.replace("marker-committed", stage));
+    assert.ok(status && sourceTestDiagnostic(`# ${status}`));
+  }
   for (const changed of [
     `${line} synthetic-private-canary`,
     `synthetic-private-canary ${line}`,
     line.replace("after-submit", "synthetic-private-canary"),
     line.replace("marker-committed", "synthetic-private-canary"),
+    line.replace("marker-committed", "notify-status-099"),
+    line.replace("marker-committed", "notify-status-600"),
+    line.replace("marker-committed", "notify-throw-synthetic-private-canary"),
   ])
     assert.equal(processStageDiagnostic(changed), undefined);
   for (const changed of [
@@ -260,11 +267,13 @@ test("loopback barrier notifications require the current run, agent, phase and o
       admissions: [],
     };
     assert.equal(await send(JSON.stringify(notice), foreign.token), 403);
+    assert.ok(observer.diagnostics().some((line) => line.includes('"receiver-headers-refused"')));
     for (const changed of [
       { ...notice, agentId: "foreign-agent" },
       { ...notice, barrier: "after-submit" },
     ])
       assert.equal(await send(JSON.stringify(changed)), 409);
+    assert.ok(observer.diagnostics().some((line) => line.includes('"receiver-binding-refused"')));
     assert.equal(
       await send(JSON.stringify({ ...notice, rawBody: "synthetic-private-canary" })),
       400,
@@ -274,8 +283,16 @@ test("loopback barrier notifications require the current run, agent, phase and o
       400,
     );
     assert.notEqual(await send("x".repeat(65537)), 204);
+    assert.ok(
+      observer.diagnostics().some((line) => line.includes('"receiver-validation-refused"')),
+    );
+    assert.ok(observer.diagnostics().some((line) => line.includes('"receiver-body-refused"')));
+    assert.ok(observer.diagnostics().length <= 64);
+    assert.ok(observer.diagnostics().every((line) => sourceTestDiagnostic(`# ${line}`)));
+    assert.ok(observer.diagnostics().every((line) => !line.includes("synthetic-private-canary")));
     assert.deepEqual(observer.snapshot(arm), { barrier: null, admissions: [] });
     const current = observer.arm(arm.agentId, "after-submit");
+    assert.equal(observer.diagnostics().length, 1);
     assert.equal(await send(JSON.stringify(notice)), 409);
     assert.throws(() => observer.snapshot(arm));
     const row = {
@@ -306,9 +323,11 @@ test("loopback barrier notifications require the current run, agent, phase and o
       400,
     );
     assert.equal(await send(JSON.stringify(accepted)), 204);
+    assert.ok(observer.diagnostics().some((line) => line.includes('"receiver-204-emitted"')));
     assert.deepEqual(observer.snapshot(current), { barrier: current.point, admissions: [row] });
     assert.equal(await send(JSON.stringify(accepted)), 409);
     observer.invalidate();
+    assert.deepEqual(observer.diagnostics(), []);
     assert.equal(await send(JSON.stringify(accepted)), 409);
   } finally {
     await observer.close();

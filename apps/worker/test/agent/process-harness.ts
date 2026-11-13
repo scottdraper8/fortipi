@@ -18,7 +18,7 @@ const requestTimeout = 20000;
 /** Reconstruct only fixed fixture enums; never forward a captured log line. */
 export function processStageDiagnostic(line: string): string | undefined {
   const match =
-    /^FORTIPI_PROCESS_STAGE (before-submit|after-submit) (submit-start|submit-return|barrier-enter|marker-start|marker-committed|snapshot-ready|notify-start|notify-ack)$/.exec(
+    /^FORTIPI_PROCESS_STAGE (before-submit|after-submit) (submit-start|submit-return|barrier-enter|marker-start|marker-committed|snapshot-ready|notify-start|notify-ack|notify-status-(?:[1-5][0-9]{2}|other)|notify-throw-(?:abort|type|other))$/.exec(
       line,
     );
   if (!match?.[1] || !match[2]) return;
@@ -42,6 +42,28 @@ export async function createProcessBarrierObserver() {
     }
   >();
   let closed = false;
+  let diagnosticArm: ProcessBarrierArm | undefined;
+  const diagnostics: string[] = [];
+  const note = (
+    stage:
+      | "receiver-armed"
+      | "receiver-entry"
+      | "receiver-headers-refused"
+      | "receiver-body-read"
+      | "receiver-body-refused"
+      | "receiver-validation-refused"
+      | "receiver-binding-refused"
+      | "receiver-accepted"
+      | "receiver-204-emitted"
+      | "receiver-closed-early",
+    arm: ProcessBarrierArm | undefined,
+  ) => {
+    if (!arm || arm !== diagnosticArm) return;
+    diagnostics.push(
+      JSON.stringify({ diagnostic: "source-recovery-stage", point: arm.point, stage }),
+    );
+    if (diagnostics.length > 64) diagnostics.shift();
+  };
   const keys = (value: unknown, expected: string): value is Record<string, unknown> =>
     value !== null &&
     typeof value === "object" &&
@@ -50,6 +72,10 @@ export async function createProcessBarrierObserver() {
   const id = (value: unknown): value is string =>
     typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
   const server = createObserverServer(async (request, response) => {
+    let bodyRead = false;
+    const arm = diagnosticArm;
+    const outcome = (stage: Parameters<typeof note>[0]) => note(stage, arm);
+    outcome("receiver-entry");
     try {
       if (
         closed ||
@@ -58,6 +84,7 @@ export async function createProcessBarrierObserver() {
         request.headers["content-type"] !== "application/json" ||
         request.headers.authorization !== `Bearer ${token}`
       ) {
+        outcome("receiver-headers-refused");
         response.writeHead(403, { Connection: "close" }).end();
         return;
       }
@@ -68,6 +95,8 @@ export async function createProcessBarrierObserver() {
         assert.ok(size <= 65536);
         chunks.push(Buffer.from(chunk));
       }
+      bodyRead = true;
+      outcome("receiver-body-read");
       const raw = Buffer.concat(chunks).toString("utf8"),
         value: unknown = JSON.parse(raw);
       assert.ok(keys(value, "admissions,agentId,barrier,observationId"));
@@ -81,6 +110,7 @@ export async function createProcessBarrierObserver() {
         value.agentId !== record.arm.agentId ||
         value.barrier !== record.arm.point
       ) {
+        outcome("receiver-binding-refused");
         response.writeHead(409).end();
         return;
       }
@@ -104,19 +134,26 @@ export async function createProcessBarrierObserver() {
         }
       }
       record.receiving = true;
+      outcome("receiver-accepted");
       const snapshot = {
         barrier: value.barrier,
         admissions: value.admissions,
       } as ProcessBarrierSnapshot;
       response.once("finish", () => {
-        if (response.statusCode === 204) record.snapshot = snapshot;
-        else record.failed = true;
+        if (response.statusCode === 204) {
+          record.snapshot = snapshot;
+          outcome("receiver-204-emitted");
+        } else record.failed = true;
       });
       response.once("close", () => {
-        if (!response.writableFinished) record.failed = true;
+        if (!response.writableFinished) {
+          record.failed = true;
+          outcome("receiver-closed-early");
+        }
       });
       response.writeHead(204).end();
     } catch {
+      outcome(bodyRead ? "receiver-validation-refused" : "receiver-body-refused");
       // Neither rejected payloads nor errors can disclose credentials/body data.
       if (!response.destroyed && !response.writableEnded)
         response.writeHead(400, { Connection: "close" }).end();
@@ -133,12 +170,17 @@ export async function createProcessBarrierObserver() {
   return {
     url: `http://127.0.0.1:${address.port}/barriers`,
     token,
+    diagnostics: () => [...diagnostics],
     arm(agentId: string, point: ProcessBarrierArm["point"]): ProcessBarrierArm {
       assert.ok(!closed && id(agentId));
       assert.ok(point === "before-submit" || point === "after-submit");
       for (const [key, record] of records) if (record.arm.agentId === agentId) records.delete(key);
       const arm = Object.freeze({ observationId: randomUUID(), agentId, point });
       records.set(arm.observationId, { arm });
+      // Context is the current local arm, never an identity inferred from a packet.
+      diagnostics.length = 0;
+      diagnosticArm = arm;
+      note("receiver-armed", arm);
       return arm;
     },
     snapshot(arm: ProcessBarrierArm): ProcessBarrierSnapshot {
@@ -150,6 +192,8 @@ export async function createProcessBarrierObserver() {
     },
     invalidate() {
       records.clear();
+      diagnosticArm = undefined;
+      diagnostics.length = 0;
     },
     async close() {
       if (closed) return;
@@ -391,6 +435,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
           const stage = processStageDiagnostic(line);
           return stage === undefined ? [] : [stage];
         })
+        .concat(observer.diagnostics())
         .slice(-64),
     async armBarrier(agentId: string, point: ProcessBarrierArm["point"]) {
       const arm = observer.arm(agentId, point);

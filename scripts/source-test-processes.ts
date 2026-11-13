@@ -76,7 +76,7 @@ export function sourceTestDiagnostic(line: string): boolean {
     ) &&
       !line.includes("../")) ||
     recoveryDiagnostic(line) ||
-    /^# \{"diagnostic":"source-recovery-stage","point":"(?:before-submit|after-submit)","stage":"(?:submit-start|submit-return|barrier-enter|marker-start|marker-committed|snapshot-ready|notify-start|notify-ack)"\}$/.test(
+    /^# \{"diagnostic":"source-recovery-stage","point":"(?:before-submit|after-submit)","stage":"(?:submit-start|submit-return|barrier-enter|marker-start|marker-committed|snapshot-ready|notify-start|notify-ack|notify-status-(?:[1-5][0-9]{2}|other)|notify-throw-(?:abort|type|other)|receiver-(?:armed|entry|headers-refused|body-read|body-refused|validation-refused|binding-refused|accepted|204-emitted|closed-early))"\}$/.test(
       line,
     )
   );
