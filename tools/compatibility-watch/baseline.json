@@ -120,12 +120,12 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "d36266e06669c6991a7c9509d1da04d18d30378d",
+        "commit": "47e9d74f9186de37e700693fac0f6e56a499657a",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
           "packages/ai": "b458489305325e346798f525895c0c7a8cf0c64a51bb3cdf025958f903f039ee",
-          "packages/chord": "50d33c54cbf3103751045a0fe386f966063416162efd6d74db9adba4eae91ce5",
+          "packages/chord": "a8c64bf158206f9987ed0d90c5e6ecc3ccf2e24f9d73c25cc7d4d9a039e01215",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "dc87d765abc06c7764d3569f4bfc5aacb424eec3573a9aabd4197c346d5ef2fa",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
@@ -135,7 +135,7 @@
           "packages/tui": "5483c0578f10b3c4346666658e4486062e9ad03707c10ded58ccf59eddf318d9",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "d021ec09544a7c824354c809d497d9203a5f954ac355d513e71c2e992e5041d4"
+        "sha256": "1fec295eef3bbd3fc165c932baa27d72d194ba0546831407f1f990b5adabe739"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-13T04:46:21.462Z",
-      "reviewNote": "Reviewed immutable20a6e09d..d36266e0:18commits/65files; full diff SHA4ae85c989d5a48c6e85b756b1b179d07e1a038af8409d28c39b7ec9177bc630c. Durable/agent and other watched code unchanged; Chord shared-holds drafts only. Unreleased Google custom-fetch/GenAI2.32/CONTINUATION and Qwen catalog/auth changes are outside registered CF/OpenAI/Anthropic/Codex factories; removed google-shared helper unused. TUI image-overlay fix is outside sanitized text-widget UI. Registry latest Pi family1.5.2 is mature; reviewed SRIs, installed GenAI2.21 and declared patches retained. No unpublished adoption or new provider/native/live/runtime compatibility proof. Evidence:phase3/thread-9/compatibility-refresh-build.md."
+      "reviewedAt": "2026-11-13T09:48:52.736Z",
+      "reviewNote": "Reviewed immutable d36266e0..47e9d74f:2 commits/42 files. Chord now implements unreleased v2 shared remote holds (caller JSON/incarnation, per-binding cancellation, unseen values/private retry); joiners skip renewed provider/relay admission, requiring future adoption review. Actual pinned Worker import inventory contains none of the 15 changed Chord modules. P2 Ghostty1.0.1 is outside pi-tui. Other9 watched package trees/all10 manifests and changelogs unchanged, including Durable task replay/cancel/SQLite and AI auth; existing Lifecycle/wait/schema patches retained. Official latest release/all10 npm family packages remain mature1.5.2; seven installed archive SRIs/digests match reviewed pins. Reference only: no unpublished adoption, runtime/security clearance or diagnosis of root canary. Evidence:phase3/thread-9/compatibility-pi-47e9-build.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
