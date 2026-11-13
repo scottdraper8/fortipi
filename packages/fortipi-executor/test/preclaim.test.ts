@@ -282,16 +282,43 @@ test("31 distinct snapshot blobs survive typed429 in one ongoing preparation acr
   }
 });
 
-test("typed429 retry reloads consent, revocation, epoch, root and cancellation instead of starting a child", async () => {
+test("typed429 retry reloads consent, revocation, epoch, root and cancellation instead of starting a child", async (t) => {
   for (const change of ["consent", "revoke", "epoch", "root", "cancel", "stop", "abort"] as const) {
     const h = await preparation(),
       fault = readFault(h, "typed", 1, 3000),
       caller = new AbortController();
     let pending: Promise<void> | undefined;
     try {
+      const deadline = h.a.identity.deadline;
+      let settled = false;
       pending = h.runtime.start(h.row, caller.signal);
-      void pending.catch(() => {});
-      await eventually(() => fault.reads.length === 1, "retry wait not reached");
+      void pending.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      // Native preparation precedes the first blob GET. Observe its typed429
+      // within the already-hashed job deadline, not an unrelated 10s cutoff.
+      await eventually(
+        () => {
+          assert.equal(settled, false, `Preparation ended before typed429 (${change})`);
+          return fault.reads.length === 1 && fault.reads[0]?.status === 429;
+        },
+        `retry wait not reached before the original job deadline (${change})`,
+        Math.max(1, deadline - Date.now()),
+      );
+      t.diagnostic(
+        JSON.stringify({
+          change,
+          retryAt: fault.retryAt,
+          observedAt: Date.now(),
+          deadline,
+          leaseExpiresAt: h.a.identity.lease.expiresAt,
+        }),
+      );
       await preparing(h);
       if (change === "consent") {
         const profile = structuredClone(h.f.profile);
@@ -343,6 +370,7 @@ test("typed429 retry reloads consent, revocation, epoch, root and cancellation i
       assert.equal(h.runtime.children.size, 0);
       await assert.rejects(readFile(h.marker), { code: "ENOENT" });
       assert.equal(h.f.ledger.get(h.a.identity.jobId)?.state, "closed");
+      assert.equal(h.a.identity.deadline, deadline);
       await assert.rejects(h.runtime.snapshots.materialize(h.a), /query-only/);
     } finally {
       await h.close(pending);
