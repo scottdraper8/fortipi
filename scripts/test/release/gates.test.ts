@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
+import { create as createTar } from "tar";
 import { repository } from "../../build-workspaces.ts";
 import {
   assertEvidenceReceipt,
   evidenceProducer,
   execute,
   loadCandidate,
+  producer as packingProducer,
   verifyRetainedCandidate,
 } from "../../prepare-release.ts";
 import {
@@ -29,6 +31,7 @@ import {
   REPOSITORY,
   REPOSITORY_ID,
   readJson,
+  regularBytes,
   SYNTHETIC_SCOPE,
   saveJson,
   sha256,
@@ -53,6 +56,7 @@ import {
 
 test("evidence origin binds the actual workflow/job and synthetic observations cannot authorize a privileged gate", async () => {
   const keys = [
+    "OPERATION",
     "GITHUB_ACTIONS",
     "GITHUB_REPOSITORY",
     "GITHUB_REPOSITORY_ID",
@@ -173,6 +177,31 @@ test("evidence origin binds the actual workflow/job and synthetic observations c
         44,
       );
     }
+    Object.assign(process.env, {
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_JOB: "native",
+      GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/release.yml@refs/heads/main`,
+      OPERATION: "candidate",
+    });
+    assert.equal(
+      (await evidenceProducer(repository, c, "native", githubRequest(undefined, server.transport)))
+        .workflowId,
+      44,
+    );
+    process.env.GITHUB_JOB = "candidate";
+    assert.equal(
+      (
+        await packingProducer(
+          repository,
+          false,
+          "release.yml",
+          githubRequest(undefined, server.transport),
+        )
+      ).workflowId,
+      44,
+    );
+    assert.equal(c.publishable, false);
     delete process.env.GITHUB_ACTIONS;
     const local = await evidenceProducer(repository, c, "local");
     const gate = receipt(local);
@@ -264,6 +293,43 @@ test("actual evidence child environment carries producer metadata and only the l
   );
 });
 
+test("only trusted candidate setup receives GitHub context and ordinary client children strip it", async () => {
+  const c = candidate();
+  const reference: ArtifactReference = {
+    runId: c.producer.runId,
+    runAttempt: c.producer.runAttempt,
+    artifactId: 1,
+    artifactName: "candidate-fixture",
+    artifactDigest: `sha256:${sha256("fixture")}`,
+    candidateSha256: sha256("candidate"),
+  };
+  const code = `
+    const {evidenceEnvironment,childEnvironment,execute}=await import(${JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href)});
+    const trusted=evidenceEnvironment(${JSON.stringify(c.producer)},'native',{
+      kind:'current',reference:${JSON.stringify(reference)},request:()=>{throw Error('No API call in environment test')}
+    });
+    const result=await execute(process.execPath,['--input-type=module','-e',
+      "const {childEnvironment,execute}=await import("+${JSON.stringify(JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href))}+"); const result=await execute(process.execPath,['-e', 'console.log(JSON.stringify({github:!!process.env.GITHUB_TOKEN,reference:!!process.env.FORTIPI_CANDIDATE_REFERENCE,admin:!!process.env.FORTIPI_ADMIN_TOKEN,cf:!!process.env.CLOUDFLARE_API_TOKEN,npm:!!process.env.NPM_TOKEN,model:!!process.env.OPENAI_API_KEY}))'],process.cwd(),childEnvironment());if(result.code!==0)throw Error('client failed');console.log(JSON.stringify({trustedGithub:!!process.env.GITHUB_TOKEN,operation:process.env.OPERATION,reference:JSON.parse(process.env.FORTIPI_CANDIDATE_REFERENCE),client:JSON.parse(result.stdout)}));"
+    ],${JSON.stringify(repository)},trusted);
+    if(result.code!==0)throw Error('trusted setup failed');process.stdout.write(result.stdout);`;
+  const result = await execute(process.execPath, ["--input-type=module", "-e", code], repository, {
+    PATH: process.env.PATH,
+    GITHUB_TOKEN: "synthetic-github-role",
+    CLOUDFLARE_API_TOKEN: "synthetic-cloudflare-role",
+    NPM_TOKEN: "synthetic-npm-role",
+    OPENAI_API_KEY: "synthetic-model-role",
+    FORTIPI_ADMIN_TOKEN: "synthetic-admin-role",
+    OPERATION: "candidate",
+  });
+  assert.equal(result.code, 0, result.stdout);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    trustedGithub: true,
+    operation: "candidate",
+    reference,
+    client: { github: false, reference: false, admin: false, cf: false, npm: false, model: false },
+  });
+});
+
 test("real HTTP GitHub verification binds current attempt, paginated jobs, workflow bytes and independent archive digest", async () => {
   const c = candidate();
   const now = Date.now();
@@ -271,6 +337,7 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
   const calls: string[] = [];
   let leaked = false;
   const packet = await metadataArchive(c);
+  let archiveBytes = packet.bytes;
   const substituted = await metadataArchive({ ...c, producer: { ...c.producer, runId: 11 } });
   const ref: ArtifactReference = {
     runId: 10,
@@ -311,7 +378,7 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
           ? Buffer.from("changed")
           : mutate === "substitute"
             ? substituted.bytes
-            : packet.bytes,
+            : archiveBytes,
       );
       return;
     }
@@ -398,9 +465,23 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
         reference: ref,
         request: githubRequest(undefined, server.transport),
       }),
-      /Artifact payload differs/,
+      /Artifact payload differs|ENOENT/,
     );
     assert.ok(calls.includes("/retained.zip"), "Producer archive must be authenticated first");
+    const beforeDenied = calls.length;
+    await assert.rejects(
+      loadCandidate(retainedPath, {
+        kind: "current",
+        reference: ref,
+        request: githubRequest(undefined, server.transport),
+      }),
+      (error: unknown) => error instanceof Error && !/ENOENT/.test(error.message),
+    );
+    assert.equal(
+      calls.length,
+      beforeDenied,
+      "Denied current context must not fall back to source or payload",
+    );
     await assert.rejects(
       verifyRetainedCandidate(c, sha256("different retained candidate"), ref, api),
       /Retained candidate hash mismatch/,
@@ -457,6 +538,96 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
       ),
       /Candidate bytes differ/,
     );
+    // A synthetic successful producer over actual small package archives tests
+    // the reader protocol; this fixture is not source/license approval.
+    mutate = "";
+    const actual = structuredClone(c);
+    const sources = await temporary("fortipi-reader-pack-source-");
+    let realZip: Awaited<ReturnType<typeof directoryArchive>> | undefined;
+    try {
+      for (const pkg of actual.packages) {
+        const sourceRoot = resolve(sources, pkg.sourceName);
+        const files: Record<string, Buffer> = {
+          "package.json": Buffer.from(JSON.stringify({ name: pkg.name, version: pkg.version })),
+        };
+        if (pkg.sourceName === "fortipi-cli") {
+          files["worker-assets/asset-manifest.json"] = Buffer.from("assets");
+          files["node_modules/reader-fixture/index.js"] = Buffer.from("export const value = 1;\n");
+        }
+        pkg.entries = [];
+        for (const [path, bytes] of Object.entries(files)) {
+          const destination = resolve(sourceRoot, "package", path);
+          await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o700 });
+          await writeFile(destination, bytes, { mode: 0o600 });
+          pkg.entries.push({ path, size: bytes.length, mode: 0o600, sha256: sha256(bytes) });
+        }
+        pkg.entries.sort((a, b) => a.path.localeCompare(b.path, "en"));
+        const tarball = resolve(retained, pkg.tarball);
+        await mkdir(resolve(tarball, ".."), { recursive: true });
+        await createTar({ cwd: sourceRoot, file: tarball, gzip: true }, ["package"]);
+        const bytes = await regularBytes(tarball);
+        pkg.sha256 = sha256(bytes);
+        pkg.integrity = `sha512-${(await import("node:crypto")).createHash("sha512").update(bytes).digest("base64")}`;
+      }
+      await mkdir(resolve(retained, "image"), { recursive: true });
+      await writeFile(resolve(retained, "sbom.json"), "{}");
+      await writeFile(resolve(retained, "image/sources-and-notices.tar"), "sourcekit");
+      await rm(retainedPath);
+      actual.files = await inventory(retained);
+      ref.candidateSha256 = await saveJson(retainedPath, actual);
+      realZip = await directoryArchive(retained);
+      archiveBytes = realZip.bytes;
+      ref.artifactDigest = `sha256:${sha256(archiveBytes)}`;
+      const loaded = await loadCandidate(retainedPath, {
+        reference: ref,
+        request: githubRequest(undefined, server.transport),
+      });
+      assert.deepEqual(loaded.candidate, actual);
+      await assert.rejects(loadCandidate(retainedPath), /Unsafe artifact path/);
+      const cli = actual.packages.find((pkg) => pkg.sourceName === "fortipi-cli");
+      const member = cli?.entries.find((entry) => entry.path.startsWith("node_modules/"));
+      assert.ok(member);
+      const originalHash = member.sha256;
+      member.sha256 = sha256("wrong producer member hash");
+      ref.candidateSha256 = await saveJson(retainedPath, actual, false);
+      await realZip.close();
+      realZip = await directoryArchive(retained);
+      archiveBytes = realZip.bytes;
+      ref.artifactDigest = `sha256:${sha256(archiveBytes)}`;
+      await assert.rejects(
+        loadCandidate(retainedPath, {
+          reference: ref,
+          request: githubRequest(undefined, server.transport),
+        }),
+        /Authorized archive hash differs/,
+      );
+      member.sha256 = originalHash;
+      assert.ok(cli);
+      const oversized = resolve(retained, cli.tarball);
+      await appendFile(oversized, Buffer.alloc(2 * 1024 * 1024));
+      const oversizedBytes = await regularBytes(oversized);
+      cli.sha256 = sha256(oversizedBytes);
+      cli.integrity = `sha512-${(await import("node:crypto")).createHash("sha512").update(oversizedBytes).digest("base64")}`;
+      const retainedFile = actual.files.find((file) => file.path === cli.tarball);
+      assert.ok(retainedFile);
+      retainedFile.sha256 = cli.sha256;
+      retainedFile.size = oversizedBytes.length;
+      ref.candidateSha256 = await saveJson(retainedPath, actual, false);
+      await realZip.close();
+      realZip = await directoryArchive(retained);
+      archiveBytes = realZip.bytes;
+      ref.artifactDigest = `sha256:${sha256(archiveBytes)}`;
+      await assert.rejects(
+        loadCandidate(retainedPath, {
+          reference: ref,
+          request: githubRequest(undefined, server.transport),
+        }),
+        /Archive compressed input bound/,
+      );
+    } finally {
+      await realZip?.close();
+      await rm(sources, { recursive: true, force: true });
+    }
   } finally {
     await server.close();
     await packet.close();
@@ -959,7 +1130,8 @@ test("receipt hashes and fixed freshness reject changed results, unavailable cla
     };
     assertGate(receipt);
     await verifyPayload(root, receipt.files);
-    await writeFile(resolve(root, "result.json"), '{"forged":true}');
+    // Keep the length unchanged so this remains a hash-binding control.
+    await writeFile(resolve(root, "result.json"), "[]");
     await assert.rejects(verifyPayload(root, receipt.files), /payload differs/);
     assert.throws(
       () => assertGate({ ...receipt, claims: [{ ...receipt.claims[0], outcome: "unavailable" }] }),

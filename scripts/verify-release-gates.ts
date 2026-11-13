@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -17,6 +18,7 @@ import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import { assetPath } from "../packages/fortipi-cli/src/asset-manifest.ts";
 import { canonicalJson } from "../packages/fortipi-contract/dist/index.js";
+import { readArtifactZip } from "./artifact-zip.ts";
 import { repository } from "./build-workspaces.ts";
 
 export { canonicalJson };
@@ -226,6 +228,29 @@ export function safePath(path: string): string {
   );
   return path;
 }
+/** Metadata shape only. Actual bundled bytes require independently authenticated authority. */
+export function packageEntryPath(path: string): string {
+  if (!path.startsWith("node_modules/")) return safePath(path);
+  assert.ok(assetPath(path), "Unsafe package entry path");
+  assert.ok(
+    !/\.(?:node(?:\.wasm)?|dylib|dll|so(?:\.\d+)*|exe)$/i.test(path),
+    "Native dependency entry rejected",
+  );
+  const code =
+    /(?:^|\/)node_modules\/@anthropic-ai\/sdk\/(?:src\/)?lib\/credentials\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:[cm]?[jt]s|[cm]?[jt]s\.map)$/.test(
+      path,
+    );
+  const shape = path.replace(/(^|\/)node_modules\//g, "$1");
+  safePath(
+    code
+      ? shape.replace(
+          /(^|\/)@anthropic-ai\/sdk\/((?:src\/)?lib)\/credentials\//g,
+          "$1@anthropic-ai/sdk/$2/reviewed-code/",
+        )
+      : shape,
+  );
+  return path;
+}
 export function freshness(time: string, hours: number, now = Date.now()): void {
   const age = now - Date.parse(time);
   assert.ok(
@@ -233,7 +258,7 @@ export function freshness(time: string, hours: number, now = Date.now()): void {
     "Stale/future proof",
   );
 }
-export async function regularBytes(path: string): Promise<Buffer> {
+export async function regularBytes(path: string, maximum?: number): Promise<Buffer> {
   let parent = dirname(resolve(path));
   while (true) {
     const stat = await lstat(parent);
@@ -243,7 +268,39 @@ export async function regularBytes(path: string): Promise<Buffer> {
   }
   const stat = await lstat(path);
   assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1, "Nonregular artifact");
-  return readFile(path);
+  if (maximum === undefined) return readFile(path);
+  assert.ok(Number.isSafeInteger(maximum) && maximum >= 0);
+  assert.ok(stat.size <= maximum, "Artifact byte bound");
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const current = await handle.stat();
+    assert.ok(
+      current.isFile() &&
+        current.nlink === 1 &&
+        current.ino === stat.ino &&
+        current.dev === stat.dev,
+      "Artifact changed during open",
+    );
+    assert.ok(current.size <= maximum, "Artifact byte bound");
+    const buffer = Buffer.alloc(Math.min(256 * 1024, maximum + 1));
+    const chunks: Buffer[] = [];
+    let size = 0;
+    while (true) {
+      const { bytesRead } = await handle.read(
+        buffer,
+        0,
+        Math.min(buffer.length, maximum - size + 1),
+        null,
+      );
+      if (!bytesRead) break;
+      size += bytesRead;
+      assert.ok(size <= maximum, "Artifact byte bound");
+      chunks.push(Buffer.from(buffer.subarray(0, bytesRead)));
+    }
+    return Buffer.concat(chunks, size);
+  } finally {
+    await handle.close();
+  }
 }
 export async function readJson(path: string): Promise<unknown> {
   return JSON.parse((await regularBytes(path)).toString("utf8"));
@@ -276,7 +333,11 @@ export async function saveJson(path: string, value: unknown, exclusive = true): 
   }
   return sha256(data);
 }
-export async function inventory(root: string, prefix = ""): Promise<FileRecord[]> {
+export async function inventory(
+  root: string,
+  prefix = "",
+  bounds?: ReadonlyMap<string, number>,
+): Promise<FileRecord[]> {
   const result: FileRecord[] = [];
   const rootStat = await lstat(root);
   assert.ok(rootStat.isDirectory() && !rootStat.isSymbolicLink(), "Linked artifact directory");
@@ -285,14 +346,16 @@ export async function inventory(root: string, prefix = ""): Promise<FileRecord[]
     const absolute = resolve(root, item);
     const stat = await lstat(absolute);
     assert.ok(!stat.isSymbolicLink(), "Linked artifact entry");
-    if (stat.isDirectory()) result.push(...(await inventory(absolute, path)));
-    else
+    if (stat.isDirectory()) result.push(...(await inventory(absolute, path, bounds)));
+    else {
+      if (bounds) assert.ok(bounds.has(path), "Artifact payload differs from retained inventory");
       result.push({
         path,
         mode: stat.mode & 0o777,
         size: stat.size,
-        sha256: sha256(await regularBytes(absolute)),
+        sha256: sha256(await regularBytes(absolute, bounds?.get(path))),
       });
+    }
   }
   assert.equal(
     new Set(result.map((file) => file.path.toLowerCase())).size,
@@ -301,7 +364,10 @@ export async function inventory(root: string, prefix = ""): Promise<FileRecord[]
   );
   return result.sort((a, b) => a.path.localeCompare(b.path, "en"));
 }
-export function records(value: unknown): asserts value is FileRecord[] {
+export function records(
+  value: unknown,
+  pathShape: (path: string) => string = safePath,
+): asserts value is FileRecord[] {
   assert.ok(
     Array.isArray(value) && value.length > 0 && value.length < 30000,
     "Missing artifact inventory",
@@ -310,7 +376,7 @@ export function records(value: unknown): asserts value is FileRecord[] {
   for (const row of value) {
     const f = object(row);
     closed(f, ["path", "size", "mode", "sha256"]);
-    const path = safePath(string(f.path));
+    const path = pathShape(string(f.path));
     assert.ok(!seen.has(path.toLowerCase()), "Duplicate artifact path");
     seen.add(path.toLowerCase());
     digest(f.sha256);
@@ -374,7 +440,7 @@ export function assertCandidate(value: unknown): asserts value is CandidateManif
     safePath(string(p.tarball));
     digest(p.sha256);
     assert.match(string(p.integrity), /^sha512-[A-Za-z0-9+/]{86}==$/);
-    records(p.entries);
+    records(p.entries, packageEntryPath);
   }
   records(c.files);
   const all = c.files as FileRecord[];
@@ -528,7 +594,9 @@ export async function verifyPayload(
   expected: FileRecord[],
   exclude: string[] = [],
 ): Promise<void> {
-  const actual = (await inventory(root)).filter((file) => !exclude.includes(file.path));
+  const bounds = new Map(expected.map((file) => [file.path, file.size]));
+  for (const path of exclude) bounds.set(path, 8_000_000);
+  const actual = (await inventory(root, "", bounds)).filter((file) => !exclude.includes(file.path));
   assert.ok(
     actual.every((file) => (file.mode & 0o022) === 0),
     "Writable artifact payload",
@@ -636,45 +704,8 @@ export function githubRequest(
             "GitHub archive digest mismatch",
           );
           if (!member || !path) return undefined;
-          const unzip = "/usr/bin/unzip";
-          const stat = await lstat(unzip);
-          assert.ok(
-            stat.isFile() &&
-              !stat.isSymbolicLink() &&
-              stat.uid === 0 &&
-              (stat.mode & 0o022) === 0 &&
-              (stat.mode & 0o111) !== 0,
-            "Trusted native ZIP reader unavailable",
-          );
-          const execute = promisify(execFile);
-          const listed = (
-            await execute(unzip, ["-Z1", path], {
-              timeout: 30000,
-              maxBuffer: 4_000_000,
-              env: { PATH: process.env.PATH, LANG: "C" },
-            })
-          ).stdout
-            .trim()
-            .split(/\r?\n/);
-          assert.ok(listed.length > 0 && listed.length <= 30000);
-          const names = listed.filter((name) => !name.endsWith("/"));
-          listed.forEach((name) => {
-            safePath(name.replace(/\/$/, ""));
-          });
-          assert.equal(
-            new Set(names.map((name) => name.toLowerCase())).size,
-            names.length,
-            "Duplicate normalized ZIP path",
-          );
-          assert.ok(names.includes(safePath(member)), "Metadata missing from actual archive");
-          const data = (
-            await execute(unzip, ["-p", path, member], {
-              timeout: 30000,
-              maxBuffer: 8_000_000,
-              encoding: "buffer",
-              env: { PATH: process.env.PATH, LANG: "C" },
-            })
-          ).stdout;
+          const { names, bytes: data } = await readArtifactZip(path, safePath(member));
+          for (const name of names) safePath(name);
           const metadata = object(JSON.parse(data.toString("utf8")));
           if (member === "candidate.json" || member === "gate.json") {
             records(metadata.files);

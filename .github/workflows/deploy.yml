@@ -211,6 +211,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+          FORTIPI_CANDIDATE_REFERENCE: ${{ inputs.candidate }}
         run:
           node scripts/deploy-smoke.ts evidence --candidate "$RUNNER_TEMP/candidate/candidate.json" --fixture
           "$FORTIPI_EVIDENCE_FIXTURE" --out "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json"
