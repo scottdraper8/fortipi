@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -8,9 +9,31 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import type { ProcessArm, ProcessWitness } from "./runtime-worker.js";
 
 const pause = (ms: number) => new Promise<void>((accept) => setTimeout(accept, ms));
 export const processBootstrap = "synthetic-process-thread5-bootstrap-000000000000";
+/** A private scheduling cue, never evidence that its transaction committed. */
+export function processCueMatches(line: string, arm: ProcessArm): boolean {
+  const prefix = "FORTIPI_PROCESS_CUE ";
+  if (line.length > 512 || !line.startsWith(prefix)) return false;
+  try {
+    const raw = line.slice(prefix.length),
+      value: unknown = JSON.parse(raw);
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value).join(",") === "runId,agentId,point,armId,generation" &&
+      raw === JSON.stringify(value) &&
+      Object.entries(arm).every(
+        ([key, expected]) => (value as Record<string, unknown>)[key] === expected,
+      )
+    );
+  } catch {
+    return false;
+  }
+}
 interface RequestFailure {
   operation: "state" | "barrier" | "submission" | "other";
   stage: "response" | "body";
@@ -35,6 +58,7 @@ async function freePort() {
 }
 /** A real standalone Wrangler/workerd process. createTestHarness cannot persist. */
 export async function processHarness(main = resolve("apps/worker/test/agent/runtime-worker.ts")) {
+  const runId = randomUUID();
   const directory = await mkdtemp(join(tmpdir(), "fortipi-process-"));
   const port = await freePort(),
     inspector = await freePort();
@@ -72,6 +96,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
   );
   let child: ChildProcess | undefined,
     output = "";
+  let childInvocation = 0;
   const origin = `http://127.0.0.1:${port}`;
   const api = async <T>(
     path: string,
@@ -136,6 +161,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
   };
   async function start() {
     assert.ok(!child, "Previous process must be stopped");
+    childInvocation++;
     output = "";
     child = spawn(
       process.execPath,
@@ -164,12 +190,12 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
         },
       },
     );
-    child.stdout?.on("data", (data) => {
-      output = (output + String(data)).slice(-12000);
-    });
-    child.stderr?.on("data", (data) => {
-      output = (output + String(data)).slice(-12000);
-    });
+    const current = child;
+    const retain = (data: Buffer) => {
+      if (child === current) output = (output + String(data)).slice(-12000);
+    };
+    child.stdout?.on("data", retain);
+    child.stderr?.on("data", retain);
     for (let i = 0; i < 300; i++) {
       assert.equal(child.exitCode, null, output);
       try {
@@ -214,6 +240,58 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
   return {
     origin,
     api,
+    async armBarrier(agentId: string, point: ProcessArm["point"], fault?: "hold" | "reject") {
+      const current = child,
+        invocation = childInvocation;
+      assert.ok(current);
+      const armId = randomUUID();
+      const response = await api<ProcessArm>(`/__test/agents/${agentId}/fault`, {
+        runId,
+        armId,
+        point,
+        ...(fault ? { fault } : {}),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(child, current);
+      assert.equal(
+        Object.keys(response.body).sort().join(","),
+        "agentId,armId,generation,point,runId",
+      );
+      const { generation } = response.body;
+      assert.ok(typeof generation === "string" && /^[a-f0-9-]{36}$/.test(generation));
+      const arm = Object.freeze({ runId, agentId, point, armId, generation });
+      assert.deepEqual(response.body, arm);
+      let consumed = false;
+      return {
+        arm,
+        cue: () => {
+          if (consumed || child !== current || childInvocation !== invocation) return false;
+          consumed = output.split(/\r?\n/).some((line) => processCueMatches(line, arm));
+          return consumed;
+        },
+      };
+    },
+    async readWitness(arm: ProcessArm): Promise<ProcessWitness> {
+      const response = await api<{ generation: string; witness: ProcessWitness | null }>(
+        `/__test/agents/${arm.agentId}/barrier?arm=${arm.armId}&generation=${arm.generation}`,
+      );
+      assert.equal(response.status, 200);
+      assert.notEqual(
+        response.body.generation,
+        arm.generation,
+        "Historical proof must be read by a replacement actor",
+      );
+      const witness = response.body.witness;
+      assert.ok(witness, "Missing committed historical marker");
+      const { admissions, ...identity } = witness;
+      assert.deepEqual(
+        identity,
+        arm,
+        "Historical marker belongs to the killed actor and exact arm",
+      );
+      assert.ok(Array.isArray(admissions) && admissions.length <= 100);
+      return witness;
+    },
     crash: () => stop("SIGKILL"),
     start,
     close: async () => {

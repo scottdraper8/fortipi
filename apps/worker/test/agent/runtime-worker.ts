@@ -26,6 +26,22 @@ import { samplingOracle } from "./sampling-oracle.js";
 export { WorkspaceProxy } from "@cloudflare/computer";
 export { LinuxContainerHost } from "../../src/container/linux-container-host.js";
 export { StorageGuardProbe } from "./storage-guard-worker.js";
+export interface ProcessArm {
+  runId: string;
+  agentId: string;
+  point: "before-submit" | "after-submit";
+  armId: string;
+  generation: string;
+}
+export interface ProcessWitness extends ProcessArm {
+  admissions: {
+    operationId: string;
+    messageId: string;
+    taskId: string;
+    receipt: D.AdmissionReceipt | null;
+  }[];
+}
+type ProcessFault = ProcessArm & { fault?: "hold" | "reject" };
 export class ControlPlane extends RealControlPlane {
   private readonly calls: Record<string, number> = {};
   private count(name: string) {
@@ -293,6 +309,7 @@ export class ControlPlane extends RealControlPlane {
 export { WorkspaceObject } from "../../src/workspace/workspace-object.js";
 
 export class TestAgentSession extends AgentSession {
+  private readonly processGeneration = crypto.randomUUID();
   #resultDelivery: { accepted: boolean; code?: D.ErrorCode } | undefined;
   override async receiveExecutorResult(ctx: D.AuthContext, input: D.ResultDelivery) {
     const result = await super.receiveExecutorResult(ctx, input);
@@ -458,12 +475,78 @@ export class TestAgentSession extends AgentSession {
     });
   }
   private async barrier(point: string) {
-    if ((await this.store.get<string>("fixture", "fault")) !== point) return;
+    const fault = await this.store.get<string | ProcessFault>("fixture", "fault");
+    if (typeof fault === "string") {
+      if (fault !== point) return;
+      await this.store.transaction(async (tx) => {
+        await this.store.remove("fixture", "fault", tx);
+        await this.store.put("fixture", "barrier", point, tx);
+      });
+      await new Promise<void>((accept) => setTimeout(accept, 300000));
+      return;
+    }
+    if (
+      !fault ||
+      fault.point !== point ||
+      fault.agentId !== this.agentId ||
+      fault.generation !== this.processGeneration
+    )
+      return;
+    let witness: ProcessWitness | undefined;
     await this.store.transaction(async (tx) => {
+      const current = await this.store.get<string | ProcessFault>("fixture", "fault", tx);
+      if (
+        !current ||
+        typeof current === "string" ||
+        current.armId !== fault.armId ||
+        current.runId !== fault.runId ||
+        current.agentId !== this.agentId ||
+        current.point !== point ||
+        current.generation !== this.processGeneration
+      )
+        return;
+      const old = await this.store.get<string | ProcessWitness>("fixture", "barrier", tx);
+      if (typeof old === "object" && old.armId === current.armId)
+        throw new Error("Fixture witness already consumed");
+      const rows = await tx.all<{ data: string }>(
+        "SELECT data FROM fp_records_v1 WHERE kind=? ORDER BY id LIMIT ?",
+        "admission",
+        101,
+      );
+      if (rows.length > 100) throw new Error("Fixture witness admission bound");
+      witness = {
+        runId: current.runId,
+        agentId: current.agentId,
+        point: current.point,
+        armId: current.armId,
+        generation: current.generation,
+        admissions: rows.map(({ data }) => {
+          const row = JSON.parse(data) as import("../../src/agent/conversations.js").Admission;
+          return {
+            operationId: row.operationId,
+            messageId: row.messageId,
+            taskId: row.taskId,
+            receipt: row.receipt ?? null,
+          };
+        }),
+      };
       await this.store.remove("fixture", "fault", tx);
-      await this.store.put("fixture", "barrier", point, tx);
+      await this.store.put("fixture", "barrier", witness, tx);
+      // Negative controls deliberately cue before this actual transaction settles.
+      if (current.fault) {
+        this.processCue(current);
+        if (current.fault === "reject") throw new Error("Rejected fixture marker transaction");
+        await new Promise<void>((accept) => setTimeout(accept, 300000));
+      }
     });
+    if (!witness) return;
+    this.processCue(witness);
     await new Promise<void>((accept) => setTimeout(accept, 300000));
+  }
+  private processCue(arm: ProcessArm) {
+    console.log(
+      `FORTIPI_PROCESS_CUE ${JSON.stringify({ runId: arm.runId, agentId: arm.agentId, point: arm.point, armId: arm.armId, generation: arm.generation })}`,
+    );
   }
   override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -477,16 +560,70 @@ export class TestAgentSession extends AgentSession {
         return Response.json((await this.store.get("fixture", "canary")) ?? null);
       }
       if (action === "fault") {
+        const input: unknown = await request.json();
+        if (input && typeof input === "object" && !Array.isArray(input)) {
+          const value = input as Record<string, unknown>;
+          if (
+            !["armId,point,runId", "armId,fault,point,runId"].includes(
+              Object.keys(value).sort().join(","),
+            ) ||
+            (value.point !== "before-submit" && value.point !== "after-submit") ||
+            ![value.armId, value.runId].every(
+              (id) => typeof id === "string" && /^[a-f0-9-]{36}$/.test(id),
+            ) ||
+            (value.fault !== undefined && value.fault !== "hold" && value.fault !== "reject")
+          )
+            return Response.json(null, { status: 400 });
+          const arm: ProcessArm = {
+            runId: value.runId as string,
+            agentId: this.agentId,
+            point: value.point,
+            armId: value.armId as string,
+            generation: this.processGeneration,
+          };
+          const armed = await this.store.transaction(async (tx) => {
+            const fault = await this.store.get<string | ProcessFault>("fixture", "fault", tx);
+            const witness = await this.store.get<string | ProcessWitness>("fixture", "barrier", tx);
+            if (
+              (typeof fault === "object" && fault.armId === arm.armId) ||
+              (typeof witness === "object" && witness.armId === arm.armId)
+            )
+              return false;
+            await this.store.put(
+              "fixture",
+              "fault",
+              { ...arm, ...(value.fault ? { fault: value.fault } : {}) },
+              tx,
+            );
+            return true;
+          });
+          return armed ? Response.json(arm) : Response.json(null, { status: 409 });
+        }
+        if (typeof input !== "string") return new Response(null, { status: 400 });
         await this.store.remove("fixture", "barrier");
-        await this.store.put("fixture", "fault", await request.json());
+        await this.store.put("fixture", "fault", input);
         return Response.json({ armed: true });
       }
       if (action === "state" || action === "barrier") {
+        if (action === "barrier" && url.searchParams.has("arm")) {
+          const witness = await this.store.get<string | ProcessWitness>("fixture", "barrier");
+          return Response.json({
+            generation: this.processGeneration,
+            witness:
+              typeof witness === "object" &&
+              witness.armId === url.searchParams.get("arm") &&
+              witness.generation === url.searchParams.get("generation")
+                ? witness
+                : null,
+          });
+        }
         const admissions = await this.store.page<
           import("../../src/agent/conversations.js").Admission
         >("admission", 100);
         const observed = async () => ({
-          barrier: (await this.store.get("fixture", "barrier")) ?? null,
+          barrier: await this.store
+            .get<string | ProcessWitness>("fixture", "barrier")
+            .then((marker) => (typeof marker === "string" ? marker : (marker?.point ?? null))),
           admissions: admissions.map((row) => ({
             operationId: row.value.operationId,
             messageId: row.value.messageId,
