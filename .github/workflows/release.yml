@@ -107,6 +107,7 @@ jobs:
           run_install: false
           cache: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        id: python
         with:
           python-version: 3.15.2
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
@@ -136,7 +137,17 @@ jobs:
           "$RUNNER_TEMP/qualified-image"
       - run: node tools/unstale/review-supply-chain.ts --locks --check
       - run: node tools/unstale/provision-docker.ts
-      - run: python -m pip install pre-commit==4.7.0
+      - name: Bootstrap verified private pre-commit tools
+        env:
+          PINNED_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: >-
+          node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON"
+          --directory "$RUNNER_TEMP/fortipi-precommit" --github-path "$GITHUB_PATH"
+      - run: node tools/unstale/review-precommit.ts
+      - name: Prove cold pinned Python hooks and artifact refusals
+        env:
+          FORTIPI_PRECOMMIT_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: node --test tools/unstale/precommit-python.test.ts
       - run: pnpm exec playwright install --with-deps chromium
       - name: Build immutable candidate
         env:
@@ -146,7 +157,13 @@ jobs:
           "$RELEASE_SCOPE" > "$RUNNER_TEMP/candidate-receipt.json"
       - id: output
         run: node scripts/prepare-release.ts outputs --receipt "$RUNNER_TEMP/candidate-receipt.json"
-      - run: pre-commit run --all-files
+      - name: Run verified private hooks
+        env:
+          PINNED_PYTHON: ${{ steps.python.outputs.python-path }}
+          PRE_COMMIT_HOME: ${{ runner.temp }}/fortipi-precommit/pre-commit-home
+        run: |
+          node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON" --verify "$RUNNER_TEMP/fortipi-precommit"
+          "$RUNNER_TEMP/fortipi-precommit/venv/bin/pre-commit" run --all-files
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ${{ steps.output.outputs.artifact }}
