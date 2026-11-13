@@ -26,6 +26,15 @@ import { samplingOracle } from "./sampling-oracle.js";
 export { WorkspaceProxy } from "@cloudflare/computer";
 export { LinuxContainerHost } from "../../src/container/linux-container-host.js";
 export { StorageGuardProbe } from "./storage-guard-worker.js";
+export interface ProcessBarrierSnapshot {
+  barrier: string | null;
+  admissions: {
+    operationId: string;
+    messageId: string;
+    taskId: string;
+    receipt: D.AdmissionReceipt | null;
+  }[];
+}
 export class ControlPlane extends RealControlPlane {
   private readonly calls: Record<string, number> = {};
   private count(name: string) {
@@ -459,11 +468,68 @@ export class TestAgentSession extends AgentSession {
   }
   private async barrier(point: string) {
     if ((await this.store.get<string>("fixture", "fault")) !== point) return;
+    const observation = await this.store.get<{ point: string; observationId: string }>(
+      "fixture",
+      "barrier-observer",
+    );
     await this.store.transaction(async (tx) => {
       await this.store.remove("fixture", "fault", tx);
       await this.store.put("fixture", "barrier", point, tx);
+      if (observation) await this.store.remove("fixture", "barrier-observer", tx);
     });
+    if (observation) {
+      const snapshot = await this.observedBarrier(
+        await this.store.page<import("../../src/agent/conversations.js").Admission>(
+          "admission",
+          100,
+        ),
+      );
+      if (observation.point !== point || snapshot.barrier !== point)
+        throw new Error("Committed fixture barrier changed");
+      const observer = (
+        this.env as Env & { FORTIPI_TEST_PROCESS_OBSERVER?: { url: string; token: string } }
+      ).FORTIPI_TEST_PROCESS_OBSERVER;
+      if (!observer || typeof observer.token !== "string" || observer.token.length < 32)
+        throw new Error("Missing process fixture observer");
+      const target = new URL(observer.url);
+      if (
+        target.protocol !== "http:" ||
+        target.hostname !== "127.0.0.1" ||
+        !target.port ||
+        target.pathname !== "/barriers" ||
+        target.username ||
+        target.password ||
+        target.search ||
+        target.hash
+      )
+        throw new Error("Invalid process fixture observer target");
+      const response = await fetch(target.href, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${observer.token}`, "Content-Type": "application/json" },
+        redirect: "manual",
+        signal: AbortSignal.timeout(20000),
+        body: JSON.stringify({
+          observationId: observation.observationId,
+          agentId: this.agentId,
+          ...snapshot,
+        }),
+      });
+      if (response.status !== 204) throw new Error("Process fixture observation refused");
+    }
     await new Promise<void>((accept) => setTimeout(accept, 300000));
+  }
+  private async observedBarrier(
+    admissions: { value: import("../../src/agent/conversations.js").Admission }[],
+  ): Promise<ProcessBarrierSnapshot> {
+    return {
+      barrier: (await this.store.get("fixture", "barrier")) ?? null,
+      admissions: admissions.map((row) => ({
+        operationId: row.value.operationId,
+        messageId: row.value.messageId,
+        taskId: row.value.taskId,
+        receipt: row.value.receipt ?? null,
+      })),
+    };
   }
   override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -477,25 +543,32 @@ export class TestAgentSession extends AgentSession {
         return Response.json((await this.store.get("fixture", "canary")) ?? null);
       }
       if (action === "fault") {
+        const input: unknown = await request.json();
+        const arm =
+          input !== null && typeof input === "object" && !Array.isArray(input)
+            ? (input as Record<string, unknown>)
+            : undefined;
+        if (
+          arm &&
+          (Object.keys(arm).sort().join(",") !== "observationId,point" ||
+            (arm.point !== "before-submit" && arm.point !== "after-submit") ||
+            typeof arm.observationId !== "string" ||
+            !/^[a-f0-9-]{36}$/.test(arm.observationId))
+        )
+          return new Response(null, { status: 400 });
+        if (!arm && typeof input !== "string") return new Response(null, { status: 400 });
         await this.store.remove("fixture", "barrier");
-        await this.store.put("fixture", "fault", await request.json());
+        await this.store.put("fixture", "fault", arm?.point ?? input);
+        if (arm) await this.store.put("fixture", "barrier-observer", arm);
+        else await this.store.remove("fixture", "barrier-observer");
         return Response.json({ armed: true });
       }
       if (action === "state" || action === "barrier") {
         const admissions = await this.store.page<
           import("../../src/agent/conversations.js").Admission
         >("admission", 100);
-        const observed = async () => ({
-          barrier: (await this.store.get("fixture", "barrier")) ?? null,
-          admissions: admissions.map((row) => ({
-            operationId: row.value.operationId,
-            messageId: row.value.messageId,
-            taskId: row.value.taskId,
-            receipt: row.value.receipt ?? null,
-          })),
-        });
         // Observe a committed fault boundary without joining Pi's execution line.
-        if (action === "barrier") return Response.json(await observed());
+        if (action === "barrier") return Response.json(await this.observedBarrier(admissions));
         const creations = await this.store.page<
           import("../../src/agent/conversations.js").CreationIntent
         >("creation", 100);
@@ -508,7 +581,7 @@ export class TestAgentSession extends AgentSession {
           BACKGROUND_CONTEXT,
         );
         return Response.json({
-          ...(await observed()),
+          ...(await this.observedBarrier(admissions)),
           admissionIntents: admissionIntents.map(({ value }) => ({
             operationId: value.operationId,
             messageId: value.messageId,

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually } from "./harness.ts";
-import { processHarness, processRequestFailure } from "./process-harness.ts";
+import {
+  createProcessBarrierObserver,
+  processHarness,
+  processRequestFailure,
+} from "./process-harness.ts";
 
 interface ProbeState {
   barrier: string | null;
@@ -124,7 +128,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
       allocated.piIds,
       "Lost allocation response must not allocate a second Pi conversation",
     );
-    for (const point of ["before-submit", "after-submit"]) {
+    for (const point of ["before-submit", "after-submit"] as const) {
       phase = `${point}.arm`;
       const input = {
         clientRequestId: crypto.randomUUID(),
@@ -134,14 +138,13 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
       const previous = (await h.api<ProbeState>(`${probe}/state`)).body.admissions.map(
         (a) => a.operationId,
       );
-      await h.api(`${probe}/fault`, point);
+      const observation = await h.armBarrier(agent.body.agentId, point);
       const lost = h
         .api(`/v1/conversations/${conversation.body.conversationId}/messages`, input)
         .catch(() => undefined);
       phase = `${point}.wait`;
       const before = await eventually(
-        async () =>
-          (await h.api<Pick<ProbeState, "barrier" | "admissions">>(`${probe}/barrier`)).body,
+        async () => observation.snapshot(),
         (s) => s.barrier === point,
       );
       const identity = before.admissions.find((a) => !previous.includes(a.operationId));
@@ -198,5 +201,89 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
   } finally {
     phase = "cleanup";
     await h.close().catch(failure);
+  }
+});
+
+test("loopback barrier notifications require the current run, agent, phase and one-use arm; no storage proof", async () => {
+  const observer = await createProcessBarrierObserver();
+  const foreign = await createProcessBarrierObserver();
+  const send = async (body: string, token = observer.token) => {
+    try {
+      const response = await fetch(observer.url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(20000),
+      });
+      assert.equal(await response.text(), "");
+      return response.status;
+    } catch (error) {
+      if (error instanceof TypeError) return 0;
+      throw error;
+    }
+  };
+  try {
+    const arm = observer.arm("agent-local", "before-submit");
+    const notice = {
+      observationId: arm.observationId,
+      agentId: arm.agentId,
+      barrier: arm.point,
+      admissions: [],
+    };
+    assert.equal(await send(JSON.stringify(notice), foreign.token), 403);
+    for (const changed of [
+      { ...notice, agentId: "foreign-agent" },
+      { ...notice, barrier: "after-submit" },
+    ])
+      assert.equal(await send(JSON.stringify(changed)), 409);
+    assert.equal(
+      await send(JSON.stringify({ ...notice, rawBody: "synthetic-private-canary" })),
+      400,
+    );
+    assert.equal(
+      await send(`{"observationId":"synthetic-private-canary",${JSON.stringify(notice).slice(1)}`),
+      400,
+    );
+    assert.notEqual(await send("x".repeat(65537)), 204);
+    assert.deepEqual(observer.snapshot(arm), { barrier: null, admissions: [] });
+    const current = observer.arm(arm.agentId, "after-submit");
+    assert.equal(await send(JSON.stringify(notice)), 409);
+    assert.throws(() => observer.snapshot(arm));
+    const row = {
+      operationId: "operation",
+      messageId: "message",
+      taskId: "task",
+      receipt: {
+        operationId: "operation",
+        messageId: "message",
+        taskId: "task",
+        revision: "revision",
+        eventSeq: 1,
+      },
+    };
+    const accepted = {
+      ...notice,
+      observationId: current.observationId,
+      barrier: current.point,
+      admissions: [row],
+    };
+    assert.equal(
+      await send(
+        JSON.stringify({
+          ...accepted,
+          admissions: [{ ...row, receipt: { ...row.receipt, revision: 0 } }],
+        }),
+      ),
+      400,
+    );
+    assert.equal(await send(JSON.stringify(accepted)), 204);
+    assert.deepEqual(observer.snapshot(current), { barrier: current.point, admissions: [row] });
+    assert.equal(await send(JSON.stringify(accepted)), 409);
+    observer.invalidate();
+    assert.equal(await send(JSON.stringify(accepted)), 409);
+  } finally {
+    await observer.close();
+    await observer.close();
+    await foreign.close();
   }
 });
