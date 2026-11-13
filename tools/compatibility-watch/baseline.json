@@ -19,19 +19,21 @@
       "reviewNote": "Reviewed primary limits/pricing: Free 100000 daily requests, 10ms CPU and 128MB isolate memory; paid plan is distinct from zone plans. Retain conservative bounds; no account-wide headroom or deployed-fit claim."
     },
     "durable-objects-policy": {
-      "catalogSha256": "5cd8d1e065a2ed7926a4a6003a88ce78cea067a5dde560d9cca913ae5ebde8eb",
+      "catalogSha256": "e52b1c5413be096047c376cb5ace58a42ad00fd5fdcdbd6e67e812921b23c586",
       "snapshot": {
         "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
         "version": null,
         "paths": {
           "src/content/docs/durable-objects/platform": "7215c4c012c036406fa3be35249d42067abddac481a1e3acd10437dcd5ba1912",
-          "src/content/partials/durable-objects": "3620e4f9c29ad6c846400340d294214758d06c97b305673c48933c3f8470f2a4"
+          "src/content/partials/durable-objects": "3620e4f9c29ad6c846400340d294214758d06c97b305673c48933c3f8470f2a4",
+          "src/content/docs/durable-objects/deployments/durable-objects-code-updates.mdx": "41ed62a336bf4421e146934d0e341fe4f5b95d9e769f109cdc092b06e0e3c726",
+          "src/content/docs/durable-objects/concepts/durable-object-lifecycle.mdx": "c023ab316f92ccf6e8a9e225d963289e53ba9395784975e462365713d64c7247"
         },
-        "sha256": "5fa701e3b0912e5d13d2aa40865e5caf7a6c0b7cab64dd1408d4e364700766fc"
+        "sha256": "1c7c0b38a5d96280181a129b87165b590c16311102701b8526bf8921fc5b8b2b"
       },
       "pins": {},
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed SQLite/SQL limits and shared pricing partials: Free storage is 5GB per account, operations over a Free allowance fail, daily allowances reset at 00:00 UTC. Retain durable exhaustion holds and explicit recovery; no account quota guarantee."
+      "reviewedAt": "2026-11-12T21:07:58.766Z",
+      "reviewNote": "Reviewed SQLite/SQL limits and shared pricing partials: Free storage is 5GB per account, operations over a Free allowance fail, daily allowances reset at 00:00 UTC. Retain durable exhaustion holds and explicit recovery; no account quota guarantee. Added authenticated code-update/lifecycle MDX review at the retained commit, unchanged at 0728ae0669f85d5c5d7cc8e365e78513f3038f76: default deferred max_delay 300s, immediate override for one deployment; deployment completes immediately, active objects may serve old code until hibernation/delay. Deferral is best effort; runtime restarts remain possible, storage access during shutdown errors and WebSockets terminate. Preserve incremental persistence and explicit recovery; no product configuration change or runtime guarantee."
     },
     "containers-policy": {
       "catalogSha256": "5efd8e57a15eefe48dc59f02503378485bd81a151367e1aadb31aa0b324a2979",
@@ -118,12 +120,12 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "6249ca27d2230a93d2fd44c3ceb3a651bc2baaec",
+        "commit": "20a6e09dc60a13a3ec4988ba4d3e4b9e78c1f940",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "237c04e13f3cb06b3eb4975f526b767f46af2222c80876ac6e60f21cfc03027b",
           "packages/ai": "91ed66697d7398fb0d507afeaa6b6b06f4ad4972aeae8117dbf3d8c297766235",
-          "packages/chord": "8d858c33303e1f6c1c5ee27fab8f3a8a5b692c657c4cd71ddecffda62f962fc8",
+          "packages/chord": "4c2f26f420b632f5a80253bd27d25e50a8031bccc05c4d16c3c89c7e5de7f5ec",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "dc87d765abc06c7764d3569f4bfc5aacb424eec3573a9aabd4197c346d5ef2fa",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
@@ -133,7 +135,7 @@
           "packages/tui": "9b71a3439eb5858a0b46a15713ad41690e5ed5c6fef8d8fb38b259617530fd9f",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "54d099f8c8955360ea98d37f62ce90212574c8a553e74189a12f9a22c24d3b9c"
+        "sha256": "2b7107ebb8e4b88b4eefbb7d96cd6f2a8636cb234f7f3ba37b0bd00155978096"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -145,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-12T19:21:44.963Z",
-      "reviewNote": "Reviewed immutable2443c687...6249ca27:5commits/41files,8watchedChord files. Changes add telemetry-ingest export and required admit(principal) for optional app/page telemetry; FortiPi uses its own HTTP/WS and does not instantiate this facet/app kit. Actual51a Worker has13 Chord inputs (context,SQLite,delta,JSON/watch/output); their upstream recursive tree/blob identities are unchanged, as are contracts/host/data/store/core telemetry. All other watched Pi paths and1.5.2 pins unchanged. Preserve accepted a360 Anthropic aa47 repair (schema HOLD resolved), Durable9b88 and Agents5071 declared patches; hashes verified. Future ingest/main adoption needs explicit admission migration. Reference acknowledgment only: no dependency/code/version adoption, budget/cap change or runtime/deployed blanket clearance. Evidence:phase3/thread-8/candidate-chord-incremental-review.md."
+      "reviewedAt": "2026-11-12T23:02:11.755Z",
+      "reviewNote": "Reviewed immutable6249ca27...20a6e09d:4commits/22files, complete patches; sole watched change is Chord shared-holds design.md (+157), no implementation. Chord src/tests/manifest/exports and other10 watched identities unchanged. Compared real PiHarness/Harness.open/onWake and createModels credential/auth-context factory; selected models/provider sources equal authenticated1.5.2 map sources. Latest published Pi family1.5.2 is age-eligible; archives/SRIs/manifests/pins and all3 declared installed patches (Durable9b88,Agents5071,Anthropicaa47) verified unchanged. P2 telemetry/settings are unselected; actual4c Worker has13 Chord context/SQLite/delta inputs and no P2/host/remote inputs. No new used-path defect. Reference only: future shared-hold implementation requires principal/address/release/revocation qualification. No version/config/cap adoption or blanket runtime/deployed/security/release clearance. Evidence:phase3/thread-8/pi-20a-incremental-review.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",

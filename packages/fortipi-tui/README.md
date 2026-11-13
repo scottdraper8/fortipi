@@ -26,6 +26,10 @@ Profiles live outside the checkout at:
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/fortipi/profiles.json`
 - Windows: `%LOCALAPPDATA%/FortiPi/profiles.json`
 
+Use `--profiles-file /absolute/protected/profiles.json` to select a different file.
+Profile selections and conversation updates are saved to that same file. All
+directory, file, and credential permission checks apply to the selected path.
+
 Create a protected directory/profile file through operator tooling or an editor
 that preserves restrictive permissions. Each credential file is independently
 scoped to its normalized deployment origin:

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, X509Certificate } from "node:crypto";
 import { once } from "node:events";
+import { createReadStream } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -209,8 +210,7 @@ export async function archiveInventory(
   let manifest: Record<string, unknown> | undefined;
   let total = 0;
   let failure: unknown;
-  await listTar({
-    file: path,
+  const parser = listTar({
     strict: true,
     onReadEntry(entry) {
       try {
@@ -262,14 +262,30 @@ export async function archiveInventory(
             if (chunks) manifest = object(JSON.parse(Buffer.concat(chunks).toString("utf8")));
           } catch (error) {
             failure = error;
+            parser.abort(error instanceof Error ? error : new Error("Archive rejected"));
           }
         });
       } catch (error) {
         failure = error;
-        entry.resume();
+        parser.abort(error instanceof Error ? error : new Error("Archive rejected"));
       }
     },
   });
+  const finished = once(parser, "end");
+  const input = createReadStream(path, { highWaterMark: 64 * 1024 });
+  input.on("error", (error) => {
+    failure = error;
+    parser.abort(error);
+  });
+  parser.once("error", () => input.destroy());
+  try {
+    input.pipe(parser);
+    await finished;
+  } catch (error) {
+    throw failure ?? error;
+  } finally {
+    input.destroy();
+  }
   if (failure) throw failure;
   assert.ok(manifest, "Missing package manifest");
   if (expected) assert.equal(manifest.name, expected.name, "Archive package role differs");
@@ -896,6 +912,7 @@ export async function prepareCandidate(
 }
 export async function loadCandidate(
   path: string,
+  retained?: { reference: ArtifactReference; request: GitHubRequest },
 ): Promise<{ candidate: CandidateManifest; hash: string; directory: string }> {
   const data = await regularBytes(path);
   const candidate: unknown = JSON.parse(data.toString("utf8"));
@@ -905,6 +922,11 @@ export async function loadCandidate(
     `${canonicalJson(candidate)}\n`,
     "Noncanonical candidate bytes",
   );
+  const hash = sha256(data);
+  // Authenticate metadata through the actual producer archive before touching payloads.
+  // A candidate's inventory is data, never its own source of producer authority.
+  if (retained)
+    await verifyRetainedCandidate(candidate, hash, retained.reference, retained.request);
   const directory = dirname(resolve(path));
   await verifyPayload(directory, candidate.files, ["candidate.json"]);
   for (const p of candidate.packages) {
@@ -929,7 +951,7 @@ export async function loadCandidate(
         candidate.assetManifestSha256,
       );
   }
-  return { candidate, hash: sha256(data), directory };
+  return { candidate, hash, directory };
 }
 export type PublicationState =
   | "never-attempted"
@@ -2207,15 +2229,12 @@ if (import.meta.main) {
       assert.equal(process.env.GITHUB_ACTIONS, "true");
       assert.equal(process.env.GITHUB_EVENT_NAME, "workflow_dispatch");
       assert.equal(process.env.GITHUB_REF, "refs/heads/main");
-      const loaded = await loadCandidate(string(args.candidate));
+      const loaded = await loadCandidate(string(args.candidate), {
+        reference: object(await readJson(string(args.reference))) as unknown as ArtifactReference,
+        request: githubRequest(process.env.GITHUB_TOKEN),
+      });
       assert.equal(process.env.GITHUB_SHA, loaded.candidate.sourceCommit);
       await privilegedCheckout(loaded.candidate);
-      await verifyRetainedCandidate(
-        loaded.candidate,
-        loaded.hash,
-        object(await readJson(string(args.reference))) as unknown as ArtifactReference,
-        githubRequest(process.env.GITHUB_TOKEN),
-      );
       const current = await evidenceProducer(repository, loaded.candidate, "local");
       assert.equal(current.workflowPath, ".github/workflows/ci.yml");
       await writeFile(
