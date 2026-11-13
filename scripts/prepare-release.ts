@@ -33,7 +33,11 @@ import {
   type NoticeReceipt,
   type RuntimeNoticeReceipt,
 } from "./generate-notices.ts";
-import { materializeSourceKitInventory } from "./image-source-distribution.ts";
+import {
+  hashFile,
+  materializeSourceKitInventory,
+  verifySourceKit,
+} from "./image-source-distribution.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
 import { rewritePublishNames } from "./rewrite-publish-names.ts";
 import { collectRuntimeClosure, createRuntimeBundle } from "./runtime-closure.ts";
@@ -2447,7 +2451,7 @@ export async function installCandidate(
     );
   }
 }
-/** Recreate the qualified source context using the actual image producer's source, never relabel its runtime. */
+/** Import authenticated image inputs without rebuilding or relabeling their runtime. */
 export async function prepareImage(descriptorPath: string, downloaded: string): Promise<void> {
   const d = object(await readJson(descriptorPath));
   const source = string(d.sourceCommit);
@@ -2539,56 +2543,105 @@ export async function prepareImage(descriptorPath: string, downloaded: string): 
     "Image source must be an accepted ancestor",
   );
   await git("diff", "--exit-code", source, "HEAD", "--", "apps/worker/container");
+  await importQualifiedImageInputs(
+    downloaded,
+    source,
+    metadata,
+    resolve(repository, "apps/worker/dist/container"),
+  );
+}
+
+/** Metadata must first be authenticated to its completed image producer by the
+ * caller. This port verifies local input bytes; it creates no runtime proof. */
+export async function importQualifiedImageInputs(
+  downloaded: string,
+  source: string,
+  metadata: Buffer,
+  output: string,
+): Promise<void> {
+  assert.match(source, commitPattern);
+  const image = object(JSON.parse(metadata.toString("utf8")));
+  assert.equal(image.sourceCommit, source);
+  await git("diff", "--exit-code", source, "HEAD", "--", "apps/worker/container");
   const temporary = await mkdtemp(resolve(await realpath(tmpdir()), "fortipi-image-context-"));
-  const checkout = resolve(temporary, "source");
-  await git("worktree", "add", "--detach", checkout, source);
   try {
-    await checked(
-      process.execPath,
-      ["scripts/install-dependencies.ts"],
-      checkout,
-      childEnvironment(),
-      600000,
-      true,
+    const kitPath = resolve(downloaded, "sources-and-notices.tar");
+    const kit = await verifySourceKit(
+      { kit: kitPath, kitSha256: digest(image.sourceKitSha256), commit: source },
+      resolve(temporary, "verified-kit"),
     );
-    const pnpm = await pnpmExecutable();
-    await checked(
-      pnpm,
-      ["--dir", "tools/unstale", "install", "--frozen-lockfile"],
-      checkout,
-      childEnvironment(),
-      300000,
-      true,
-    );
-    await checked(
-      process.execPath,
-      ["apps/worker/container/build.ts", "--prepare"],
-      checkout,
-      childEnvironment(),
-      1200000,
-      true,
-    );
-    const generated = resolve(checkout, "apps/worker/dist/container");
-    assert.equal(
-      sha256(await regularBytes(resolve(generated, "sources-and-notices.tar"))),
-      image.sourceKitSha256,
-      "Recreated source kit differs from qualified image",
-    );
-    const output = resolve(repository, "apps/worker/dist/container");
+    const expected = new Map<string, string>([
+      [
+        "Dockerfile",
+        sha256(await regularBytes(resolve(repository, "apps/worker/container/Dockerfile"))),
+      ],
+      ["computerd", kit.embedded.binarySha256],
+      ...kit.freeze.packages.map((pkg): [string, string] => [
+        `packages/${pkg.name}.deb`,
+        pkg.sha256,
+      ]),
+      ...Object.entries(kit.notices).map(([name, hash]): [string, string] => [
+        `notices/${name}`,
+        hash,
+      ]),
+    ]);
+    const directories = new Set<string>([""]);
+    for (const name of expected.keys()) {
+      safePath(name);
+      const parts = name.split("/");
+      while (parts.length > 1) {
+        parts.pop();
+        directories.add(parts.join("/"));
+      }
+    }
+    const checkContext = async (root: string, prefix = ""): Promise<Set<string>> => {
+      const directory = resolve(root, prefix);
+      const stat = await lstat(directory);
+      assert.ok(stat.isDirectory() && !stat.isSymbolicLink());
+      const found = new Set<string>();
+      for (const name of await readdir(directory)) {
+        const path = prefix ? `${prefix}/${name}` : name;
+        safePath(path);
+        const filename = resolve(root, path);
+        if (directories.has(path)) {
+          for (const member of await checkContext(root, path)) found.add(member);
+        } else {
+          assert.ok(expected.has(path), "Unexpected qualified image input");
+          const file = await lstat(filename);
+          assert.ok(file.isFile() && !file.isSymbolicLink() && file.nlink === 1);
+          assert.ok(file.size <= (path === "computerd" ? 200_000_000 : 32_000_000));
+          assert.equal(
+            await hashFile(filename),
+            expected.get(path),
+            "Qualified image input differs",
+          );
+          found.add(path);
+        }
+      }
+      return found;
+    };
+    const context = resolve(downloaded, "context");
+    assert.deepEqual((await checkContext(context)).size, expected.size, "Incomplete image inputs");
     await mkdir(output, { recursive: true });
     await writeFile(resolve(output, "image-metadata.json"), metadata, { flag: "wx" });
-    for (const file of ["context", "source-revision.json", "sources-and-notices.tar"])
-      await cp(resolve(generated, file), resolve(output, file), {
-        recursive: true,
-        errorOnExist: true,
-        force: false,
-      });
+    await cp(context, resolve(output, "context"), {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+    assert.equal((await checkContext(resolve(output, "context"))).size, expected.size);
+    await copyFile(
+      resolve(kit.directory, "source-revision.json"),
+      resolve(output, "source-revision.json"),
+      1,
+    );
+    await copyFile(kitPath, resolve(output, "sources-and-notices.tar"), 1);
+    assert.equal(await hashFile(resolve(output, "sources-and-notices.tar")), kit.sourceKitSha256);
     await materializeSourceKitInventory(
       { kit: resolve(output, "sources-and-notices.tar"), kitSha256: string(image.sourceKitSha256) },
       resolve(output, "source-kit-inventory.json"),
     );
   } finally {
-    await git("worktree", "remove", "--force", checkout);
     await rm(temporary, { recursive: true, force: true });
   }
 }
