@@ -1,5 +1,5 @@
 // Check deployment capabilities without exposing credentials or response bodies.
-export {};
+import { createHash } from "node:crypto";
 
 class AccessError extends Error {}
 
@@ -53,6 +53,7 @@ async function cloudflare(): Promise<void> {
     }
     console.log(`${label}: verified`);
   }
+  console.log(`Account binding SHA-256: ${createHash("sha256").update(account).digest("hex")}`);
   console.log("Write/deploy permissions will be verified by the actual deployment.");
 }
 
