@@ -8,6 +8,10 @@ import type {
 import { type FileRecord, object, string } from "./verify-release-gates.ts";
 
 const protocol = "fortipi-application-recovery-v1";
+const observationProtocol = "fortipi-infrastructure-observation-v1";
+export interface InfrastructureObservationPort {
+  read(input: unknown): Promise<unknown>;
+}
 type Coordinator =
   | { mode: "perform"; bridge: ApplicationRecoveryBridge }
   | { mode: "verify-existing"; bridge: ExistingApplicationRecoveryBridge };
@@ -63,26 +67,51 @@ export function attachApplicationRecoveryChannel(
   directory: string,
   coordinator: Coordinator,
   forbidden: readonly string[] = [],
+  observer?: InfrastructureObservationPort,
 ) {
   assert.ok(isAbsolute(directory) && child.connected && child.send);
   assert.ok(coordinator.mode === "perform" || coordinator.mode === "verify-existing");
   let discovered = false;
   let accepted = 0;
   let completed = 0;
+  let observationStarted = false;
+  let observationCompleted = false;
   let failure: Error | undefined;
   let pending = Promise.resolve();
   const send = (value: Record<string, unknown>) => {
     safeMessage(value, forbidden);
     if (child.connected) child.send?.(value, () => {});
   };
-  const reject = (id: unknown) => {
+  const reject = (id: unknown, responseProtocol = protocol) => {
     failure ??= new Error("Application recovery channel rejected");
-    send({ protocol, id: Number.isSafeInteger(id) ? id : 0, ok: false });
+    send({ protocol: responseProtocol, id: Number.isSafeInteger(id) ? id : 0, ok: false });
   };
   const onMessage = (value: unknown) => {
     let id: unknown = 0;
+    let responseProtocol = protocol;
     try {
       safeMessage(value);
+      if (object(value).protocol === observationProtocol) {
+        responseProtocol = observationProtocol;
+        const request = closed(value, ["protocol", "id", "method", "input"]);
+        id = request.id;
+        assert.equal(id, 1);
+        assert.equal(request.method, "read");
+        assert.ok(observer && !observationStarted && !failure && accepted === 0);
+        observationStarted = true;
+        pending = pending.then(async () => {
+          if (failure) return;
+          try {
+            const result = await observer.read(request.input);
+            assert.ok(!failure);
+            send({ protocol: observationProtocol, id, ok: true, value: result });
+            observationCompleted = true;
+          } catch {
+            reject(id, observationProtocol);
+          }
+        });
+        return;
+      }
       const request = closed(value, ["protocol", "id", "method", "checkpoint"]);
       id = request.id;
       assert.equal(request.protocol, protocol);
@@ -97,6 +126,7 @@ export function attachApplicationRecoveryChannel(
       assert.equal(request.id, accepted + 1);
       assert.equal(accepted, completed, "Prior recovery phase still pending");
       assert.ok(!failure);
+      assert.ok(!observer || observationCompleted, "Infrastructure observation incomplete");
       const method = methods(coordinator.mode)[accepted];
       assert.ok(method && request.method === method, "Recovery phase mismatch");
       let file: FileRecord | undefined;
@@ -123,7 +153,7 @@ export function attachApplicationRecoveryChannel(
         }
       });
     } catch {
-      reject(id);
+      reject(id, responseProtocol);
     }
   };
   child.on("message", onMessage);
@@ -131,6 +161,7 @@ export function attachApplicationRecoveryChannel(
     async settled() {
       await pending;
       if (failure) throw failure;
+      assert.ok(!observer || observationCompleted, "Infrastructure observation incomplete");
       assert.equal(completed, methods(coordinator.mode).length, "Application recovery incomplete");
     },
     close() {
@@ -162,7 +193,7 @@ function exchange<T>(
       try {
         safeMessage(value);
         const response = object(value);
-        assert.equal(response.protocol, protocol);
+        assert.equal(response.protocol, request.protocol);
         assert.equal(response.id, request.id);
         assert.equal(typeof response.ok, "boolean");
         if (!response.ok) {
@@ -185,6 +216,25 @@ function exchange<T>(
       disconnected();
     }
   });
+}
+
+/** One read on the inherited channel. Domain validation remains the caller's job. */
+export function infrastructureObservationChannel(): InfrastructureObservationPort {
+  assert.ok(process.send && process.connected, "Inherited application recovery channel required");
+  let started = false;
+  return {
+    async read(input) {
+      assert.ok(!started, "Infrastructure observation already requested");
+      started = true;
+      return exchange(
+        { protocol: observationProtocol, id: 1, method: "read", input },
+        (response) => {
+          closed(response, ["protocol", "id", "ok", "value"]);
+          return response.value;
+        },
+      );
+    },
+  };
 }
 
 let discoveryStarted = false;
