@@ -36,6 +36,11 @@ async function until<T>(read: () => Promise<T>, predicate: (value: T) => boolean
 /** Actual installed CLI, new protected root/ledger, no copied node_modules or
  * prior ledger. Only this OS counts; cloud deployment and other OS jobs do not. */
 export async function runNativeDaemon(installed: Installed): Promise<ScenarioEvidence> {
+  assert.notEqual(
+    process.platform,
+    "darwin",
+    "Actual isolated OS user or a supported private executor registry path is required: --profile does not relocate stateHome()/roots on Darwin; refuse before service setup, profile loading or registry access without overriding HOME",
+  );
   const module = (await import(
     pathToFileURL(installed.resolveExport(`@${installed.candidate.scope}/fortipi-executor`)).href
   )) as typeof import("../../packages/fortipi-executor/dist/index.js");
