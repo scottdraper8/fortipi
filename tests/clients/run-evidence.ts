@@ -481,11 +481,12 @@ export async function runEvidence(
       "local-infrastructure-details",
       [
         "runLocalInfrastructureDetails",
+        "produceDefaultComputerDeclarations",
         "runInfrastructureLocalOutput",
         "produceLocalRefusalRestoration",
         "existing-retention-and-retirement",
       ],
-      "Actual LOCAL output/pressure/SQLite/staging/history/headroom cases plus already observed retention/physical retirement complete the detailed original infrastructure claim",
+      "Actual LOCAL default declarations/output/pressure/SQLite/staging/history/headroom plus same-run retention/physical retirement complete the original infrastructure claim",
       async () => {
         const core = object(
           await import(
@@ -1185,8 +1186,14 @@ export async function runEvidence(
         await measure(
           "live-infrastructure-controls",
           ["runLiveInfrastructureControls", "installed-public-SDK", "default-policy"],
-          "Fresh public default allocation declarations, final-slot contention/refused-key recovery and request-window recovery preserve canonical bytes and complete scoped cleanup",
+          "Fresh actual Free ordinary canonical reads, known above-only refusals, final-slot contention/refused-key recovery and request-window recovery preserve bytes and confirmed cleanup; required nine-case default details are authenticated LOCAL",
           async () => {
+            assert.ok(
+              ["models-security", "cloud-local-portability"].every((id) =>
+                results.some((row) => row.id === id && row.outcome === "pass"),
+              ),
+              "Actual model and canonical transfer observations are required before Free infrastructure controls",
+            );
             controls = await context.infrastructureControls();
             publicLimits.push(...controls.publicControls.limitations);
             publicSensitivity.push(...controls.publicControls.sensitivity);

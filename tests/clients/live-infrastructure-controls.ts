@@ -28,7 +28,14 @@ import {
   type LocalInfrastructureProofData,
   verifyLocalInfrastructureProof,
 } from "./infrastructure-local-proof.ts";
+import {
+  assertKnownDeclarationRefusal,
+  runLiveAllocationRefusals,
+} from "./live-allocation-refusals.ts";
 import { deviceCanonicalBytes, deviceReadRequests } from "./live-device.ts";
+
+export { assertKnownDeclarationRefusal } from "./live-allocation-refusals.ts";
+
 import { publicRequestPressure } from "./live-pressure.ts";
 import type { RecoveryWorkspaceCanary } from "./platform-recovery.ts";
 import type { RoleContext } from "./roles.ts";
@@ -828,27 +835,6 @@ export async function abortInfrastructureStage(
     acknowledgment: conflictStatus === null ? "direct" : "recovered-by-current-scoped-status",
   };
 }
-export function assertKnownDeclarationRefusal(delta: -1 | 0 | 1, error: FortiPiError) {
-  assert.equal(error.status, 429);
-  assert.equal(error.code, "quota_exceeded");
-  assert.equal(error.retryable, false);
-  const pressure = error.details?.pressure;
-  assert.ok(pressure);
-  assertInfrastructurePressure(pressure);
-  assert.equal(pressure.resource, "storage");
-  assert.equal(pressure.scope.kind, "object");
-  assert.equal(pressure.source, "policy");
-  assert.equal(pressure.measurement, "estimated");
-  assert.equal(pressure.action, "reclaim-storage");
-  assert.equal(pressure.resetAt, undefined);
-  assert.equal(
-    pressure.reason,
-    delta > 0
-      ? "Snapshot exceeds effective workspace bounds"
-      : "Workspace physical copies and unspent growth exhaust the shared pool",
-  );
-  return structuredClone(pressure);
-}
 /** Actual tiny publication provides an independently hashed same-workspace
  * canary; declaration stages must never change its revision, manifest or bytes. */
 export async function seedInfrastructureWorkspace(
@@ -1002,13 +988,29 @@ export async function observeComputerDeclaration(
       canary.files.map((file) => file.path),
     );
     let rejected: unknown;
+    let beginStatus: number | undefined,
+      beginCode: string | null = null,
+      beginRetryable: boolean | null = null;
     try {
-      open = await request(() => client.uploads.begin(binding.workspaceId, body), lease);
+      const response = await request(
+        () =>
+          client.request({
+            operationId: "beginUpload",
+            path: { workspaceId: binding.workspaceId },
+            query: {},
+            body,
+          }),
+        lease,
+      );
+      assert.equal(response.status, 201);
+      beginStatus = response.status;
+      open = response.body;
     } catch (error) {
       rejected = error;
     }
     let pressure: InfrastructurePressure | undefined,
       ordinary: Record<string, unknown> | undefined,
+      admission: Record<string, unknown> | undefined,
       abort: Awaited<ReturnType<typeof abortInfrastructureStage>> | undefined;
     if (delta <= 0 && resource !== "snapshot") {
       if (rejected) throw rejected;
@@ -1022,6 +1024,12 @@ export async function observeComputerDeclaration(
       assert.equal(status.manifestHash, fixture.manifestHash);
       assert.equal(status.baseRevision, binding.revision);
       assert.deepEqual(status.receivedChunks, []);
+      admission = {
+        uploadId: status.uploadId,
+        state: status.state,
+        manifestHash: status.manifestHash,
+        baseRevision: status.baseRevision,
+      };
       abort = await abortInfrastructureStage(input, lease, open.uploadId);
       open = undefined;
     } else {
@@ -1031,6 +1039,9 @@ export async function observeComputerDeclaration(
       assert.equal(rejected.code, "quota_exceeded");
       assert.ok(rejected.details?.pressure);
       assertInfrastructurePressure(rejected.details.pressure);
+      beginStatus = rejected.status;
+      beginCode = rejected.code;
+      beginRetryable = rejected.retryable;
       pressure = assertKnownDeclarationRefusal(resource === "snapshot" ? delta : 1, rejected);
       await canonical();
       if (resource === "snapshot") {
@@ -1053,7 +1064,18 @@ export async function observeComputerDeclaration(
           manifest,
           canary.files.map((file) => file.path),
         );
-        open = await request(() => client.uploads.begin(binding.workspaceId, feasible), lease);
+        const positive = await request(
+          () =>
+            client.request({
+              operationId: "beginUpload",
+              path: { workspaceId: binding.workspaceId },
+              query: {},
+              body: feasible,
+            }),
+          lease,
+        );
+        assert.equal(positive.status, 201);
+        open = positive.body;
         assert.equal(open.state, "open");
         assert.equal(open.manifestHash, feasible.manifestHash);
         const uploadId = open.uploadId;
@@ -1069,6 +1091,11 @@ export async function observeComputerDeclaration(
         abort = await abortInfrastructureStage(input, lease, open.uploadId);
         ordinary = {
           declaredBytes: size,
+          status: positive.status,
+          workspaceId: binding.workspaceId,
+          uploadId: status.uploadId,
+          requestedManifestHash: feasible.manifestHash,
+          baseRevision: status.baseRevision,
           state: status.state,
           manifestHash: status.manifestHash,
           chunksDelivered: 0,
@@ -1089,9 +1116,16 @@ export async function observeComputerDeclaration(
           : delta > 0
             ? "descriptor-refusal"
             : "opened-and-aborted",
-      pressure,
-      ordinary,
-      abort,
+      workspaceId: binding.workspaceId,
+      leaseId: lease.leaseId,
+      requestedManifestHash: fixture.manifestHash,
+      beginStatus,
+      beginCode,
+      beginRetryable,
+      pressure: pressure ?? null,
+      admission: admission ?? null,
+      ordinary: ordinary ?? null,
+      abort: abort ?? null,
       chunksDelivered: 0,
       publishedRevision: binding.revision,
       publishedManifestHash: binding.manifestHash,
@@ -1259,8 +1293,6 @@ export async function runLiveInfrastructureControls(input: {
     assert.equal(ticket.identity.role, "client");
     assert.equal(ticket.identity.deploymentId, protocol.deploymentId);
     assert.deepEqual(ticket.identity.credential, readRole.credential);
-    const leases: { leaseId: string; released: boolean }[] = [];
-    const declarations: Record<string, unknown>[] = [];
     const capabilityRefusals: { kind: string; status: number; unchangedVersion: number }[] = [];
     const started = Date.now();
     const snapshots: Record<string, unknown>[] = [];
@@ -1364,48 +1396,11 @@ export async function runLiveInfrastructureControls(input: {
       }
       await usage("before");
       await deviceCanonicalBytes(reader, workspace, request);
-      const allocationGroups = [];
-      for (const resource of ["file", "snapshot", "entries"] as const) {
-        const binding = await roles.call({
-          operationId: "createWorkspace",
-          path: {},
-          query: {},
-          body: { requestId: randomUUID(), config: { kind: "computer" } },
-        });
-        const { client } = await issue({
-          ...empty,
-          workspaceIds: [binding.workspaceId],
-          actions: ["workspace.write", "workspace.read", "workspaces.read"],
-        });
-        const probe = { client, errorType: sdk.FortiPiError, request };
-        const canary = await seedInfrastructureWorkspace(probe, binding);
-        allocationGroups.push({ resource, canary, client });
-      }
-      for (const delta of [-1, 0, 1] as const) {
-        // Preserve the three original scopes and real quiet rounds. A quiet
-        // request window never bypasses child-role or install storage limits;
-        // those still refuse admission and leave this claim nonpassing.
-        const quietFrom = Date.now();
-        await delay(60000);
-        const quietThrough = Date.now();
-        assert.ok(quietThrough - quietFrom >= 60000);
-        for (const { resource, canary, client } of allocationGroups) {
-          const observation = await observeComputerDeclaration({
-            client,
-            errorType: sdk.FortiPiError,
-            request,
-            resource,
-            delta,
-            canary,
-          });
-          leases.push(observation.leaseRelease);
-          declarations.push({
-            ...observation,
-            quietWindow: { from: quietFrom, through: quietThrough },
-          });
-        }
-        await deviceCanonicalBytes(reader, workspace, request);
-      }
+      const aboveOnly = await runLiveAllocationRefusals({ installed, roles, workspace });
+      assert.equal(aboveOnly.observation.workspaceId, workspace.binding.workspaceId);
+      assert.equal(aboveOnly.observation.originalRevision, workspace.binding.revision);
+      assert.equal(aboveOnly.observation.originalManifestHash, workspace.binding.manifestHash);
+      assert.equal(aboveOnly.observation.revoked, true);
       concurrency = await publicConcurrency({ installed, roles, agentId, workspace });
       pressure = await publicRequestPressure({
         installed,
@@ -1421,9 +1416,8 @@ export async function runLiveInfrastructureControls(input: {
           logicalApplicationId: protocol.deploymentId,
           policySha256: sha256(canonicalJson(policy)),
           fixtureBounds: infrastructureFixtureBounds,
-          declarations,
+          aboveOnlyRefusals: aboveOnly.observation,
           capabilityRefusals,
-          leases,
           concurrency,
           requestWindow: pressure.observation,
           applicationUsage: snapshots,
@@ -1434,15 +1428,15 @@ export async function runLiveInfrastructureControls(input: {
           rateWaits,
         },
         oracle:
-          "Actual default-policy public declaration boundaries, last-slot admission/refused-key recovery and request-window recovery preserve independently hashed canonical bytes; application accounting never invents provider CPU, SQL writes, reset or shared headroom",
+          "Actual unchanged Free ordinary canonical reads/above-only descriptor refusals, last-slot admission/refused-key recovery and request-window recovery preserve bytes and cleanup; required default-boundary LOCAL details remain separately authenticated",
         sensitivity: [
-          "Feasible file/entry declarations require real stages; snapshot descriptors require the exact policy storage cause and a same-workspace2MiB positive, with original hashes and fresh confirmed cleanup. No cleanup failure is begin-refusal evidence",
+          "Actual above-only refusals require the exact known typed descriptor cause, no admitted stage, unchanged current canonical bytes and confirmed lease/role cleanup. The required nine-case LOCAL contribution cannot be replaced by these observations",
           "Public refused contender creates no accepted receipt/canonical message or assignment before its exact key becomes admissible after settlement",
         ],
         limitations: [
-          "Allocation/declaration boundaries only; default snapshot pool refusals do not certify a maximum transferable snapshot or provider/account exhaustion",
-          "Original canary bytes are freshly read; local reduced-cap tests, SQL/CPU counters, physical reclamation and event/output maxima are not aliased into this row",
-          "Three real60s quiet rounds cover separate declaration principals/workspaces; sequential stages avoid adding shared-pool contention, and original short leases are acquired only after each wait",
+          "Ordinary actual Free controls and above-only descriptor refusals; not maximum transfer, provider/account exhaustion or remaining capacity",
+          "Original same-workspace canonical bytes are freshly read; all nine default and isolated lower-cap cases remain REQUIRED LOCAL data, with no source/telemetry alias or claim of a viable all-nine live schedule",
+          "No extra probe workspace or child allocation is requested; the existing canonical workspace is reused for bounded above-only refusals, with original short leases acquired after each unchanged request wait",
         ],
       };
     } catch (error) {

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import type { FortiPiError } from "../../packages/fortipi-client/dist/node.js";
 import {
   canonicalJson,
+  type InfrastructurePressure,
   type Manifest,
   type Mutation,
   type WorkspaceOperationLease,
@@ -12,6 +14,27 @@ import type { Installed } from "../distribution/install.ts";
 import type { ScenarioEvidence } from "./evidence.ts";
 import type { RecoveryWorkspaceCanary } from "./platform-recovery.ts";
 import type { RoleContext } from "./roles.ts";
+
+export function assertKnownDeclarationRefusal(delta: -1 | 0 | 1, error: FortiPiError) {
+  assert.equal(error.status, 429);
+  assert.equal(error.code, "quota_exceeded");
+  assert.equal(error.retryable, false);
+  const pressure = error.details?.pressure;
+  assert.ok(pressure);
+  assert.equal(pressure.resource, "storage");
+  assert.equal(pressure.scope.kind, "object");
+  assert.equal(pressure.source, "policy");
+  assert.equal(pressure.measurement, "estimated");
+  assert.equal(pressure.action, "reclaim-storage");
+  assert.equal(pressure.resetAt, undefined);
+  assert.equal(
+    pressure.reason,
+    delta > 0
+      ? "Snapshot exceeds effective workspace bounds"
+      : "Workspace physical copies and unspent growth exhaust the shared pool",
+  );
+  return structuredClone(pressure);
+}
 
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 /** A metadata-only refusal companion, not an exhaustion/load generator. No
@@ -96,6 +119,8 @@ export async function runLiveAllocationRefusals(input: {
     declared: number;
     status: number;
     code: string;
+    retryable: boolean;
+    pressure: InfrastructurePressure;
   }[] = [];
   const cleanup: { leaseId: string; released: boolean }[] = [];
   let revoked = false;
@@ -233,6 +258,7 @@ export async function runLiveAllocationRefusals(input: {
         if (!(failure instanceof module.FortiPiError)) throw failure;
         assert.equal(failure.status, 429);
         assert.equal(failure.code, "quota_exceeded");
+        const pressure = assertKnownDeclarationRefusal(1, failure);
         observations.push({
           resource,
           limit: limits[resource],
@@ -244,6 +270,8 @@ export async function runLiveAllocationRefusals(input: {
                 : sizes.length,
           status: failure.status,
           code: failure.code,
+          retryable: failure.retryable,
+          pressure,
         });
       } finally {
         await release();

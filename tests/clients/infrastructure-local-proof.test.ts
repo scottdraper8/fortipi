@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { canonicalJson } from "../../packages/fortipi-contract/dist/index.js";
+import {
+  canonicalJson,
+  freeInfrastructurePolicy,
+} from "../../packages/fortipi-contract/dist/index.js";
 import { integratedClaims, sha256 } from "../../scripts/verify-release-gates.ts";
 import {
   type InfrastructureLocalTarget,
   verifyLocalInfrastructureProof,
 } from "./infrastructure-local-proof.ts";
-import { infrastructureFixtureBounds } from "./live-infrastructure-controls.ts";
+import {
+  allocationDeclaration,
+  infrastructureFixtureBounds,
+} from "./live-infrastructure-controls.ts";
 
 // Controlled DATA only: these tests make no candidate, actual job/artifact,
 // authenticated producer or passing runEvidence Gate. Parent authentication is
@@ -22,6 +28,128 @@ const target: InfrastructureLocalTarget = {
   baseBoundsSha256: sha256(canonicalJson(infrastructureFixtureBounds)),
   node: "26.13.1",
 };
+function controlledDefaultDeclarations() {
+  const resources = ["file", "snapshot", "entries"] as const;
+  const relations = ["below", "at", "above"] as const;
+  const policy = structuredClone(freeInfrastructurePolicy);
+  policy.bounds.requestsPerPrincipalMinute = 10000;
+  policy.bounds.requestsPerInstallMinute = 10000;
+  const canary = { path: "notes.txt", size: 7, sha256: sha256("old-v1\n") };
+  const manifestHash = (entries: unknown[]) =>
+    sha256(`fortipi:manifest:v1\n${canonicalJson({ version: 1, entries })}`);
+  const canaryHash = manifestHash([{ ...canary, type: "file", mode: 420 }]);
+  const ordinaryHash = manifestHash([
+    {
+      path: "ordinary.bin",
+      type: "file",
+      mode: 420,
+      size: 2097152,
+      sha256: sha256(Buffer.alloc(2097152, 101)),
+    },
+  ]);
+  const cases = resources.flatMap((resource) =>
+    relations.map((relation) => {
+      const delta = relation === "below" ? -1 : relation === "above" ? 1 : 0;
+      const fixture = allocationDeclaration(resource, delta);
+      const admitted = resource !== "snapshot" && delta <= 0;
+      const uploadId = `controlled-${resource}-${relation}`;
+      const abort = {
+        uploadId,
+        state: "aborted",
+        conflictStatus: 409,
+        acknowledgment: "recovered-by-current-scoped-status",
+      };
+      const workspaceId = `workspace-${uploadId}`,
+        publishedRevision = `revision-${uploadId}`,
+        leaseId = `lease-${uploadId}`;
+      return {
+        resource,
+        relation,
+        limit: fixture.limit,
+        declared: fixture.declared,
+        outcome: admitted
+          ? "opened-and-aborted"
+          : resource === "snapshot" && delta <= 0
+            ? "combined-budget-refusal"
+            : "descriptor-refusal",
+        workspaceId,
+        leaseId,
+        requestedManifestHash: fixture.manifestHash,
+        beginStatus: admitted ? 201 : 429,
+        beginCode: admitted ? null : "quota_exceeded",
+        beginRetryable: admitted ? null : false,
+        pressure: admitted
+          ? null
+          : {
+              resource: "storage",
+              scope: { kind: "object" },
+              source: "policy",
+              measurement: "estimated",
+              reason:
+                resource === "snapshot" && delta <= 0
+                  ? "Workspace physical copies and unspent growth exhaust the shared pool"
+                  : "Snapshot exceeds effective workspace bounds",
+              action: "reclaim-storage",
+            },
+        admission: admitted
+          ? {
+              uploadId,
+              state: "open",
+              manifestHash: fixture.manifestHash,
+              baseRevision: publishedRevision,
+            }
+          : null,
+        ordinary:
+          resource === "snapshot"
+            ? {
+                declaredBytes: 2097152,
+                status: 201,
+                workspaceId,
+                uploadId,
+                requestedManifestHash: ordinaryHash,
+                baseRevision: publishedRevision,
+                state: "open",
+                manifestHash: ordinaryHash,
+                chunksDelivered: 0,
+                abort,
+              }
+            : null,
+        abort: admitted || resource === "snapshot" ? abort : null,
+        chunksDelivered: 0,
+        publishedRevision,
+        publishedManifestHash: canaryHash,
+        canonicalFiles: [canary],
+        leaseRelease: { leaseId, released: true },
+        applicationId: "controlled-local",
+        storagePathSha256: sha256(resource),
+        credentialId: uploadId,
+      };
+    }),
+  );
+  return {
+    schemaVersion: 1,
+    scope: "LOCAL separate installations per resource",
+    defaultPolicySha256: sha256(canonicalJson(freeInfrastructurePolicy)),
+    fixturePolicySha256: sha256(canonicalJson(policy)),
+    cadence: { requestsPerPrincipalMinute: 10000, requestsPerInstallMinute: 10000 },
+    installations: resources.map((resource) => ({
+      resource,
+      applicationId: "controlled-local",
+      storagePathSha256: sha256(resource),
+      credentialCleanup: relations.map((relation) => ({
+        credentialId: `controlled-${resource}-${relation}`,
+        generation: 1,
+        state: "complete",
+        pendingRecipients: 0,
+      })),
+    })),
+    cases,
+    limitations: [
+      "Controlled parser fixture only; no actual producer, job, candidate, provider or passing Gate authority",
+    ],
+  };
+}
+
 function packet() {
   const producer = {
     workflowPath: ".github/workflows/ci.yml",
@@ -83,6 +211,7 @@ function packet() {
       localInfrastructureDetails: {
         schemaVersion: 1,
         baseBoundsSha256: target.baseBoundsSha256,
+        defaultComputerDeclarations: controlledDefaultDeclarations(),
         retention: {
           lowerFixtureRetainedEvents: 6,
           retainedOriginalEvents: 5,
@@ -266,6 +395,62 @@ test("original LOCAL result bytes, producer/candidate identity and each detailed
   });
   reject((p) => {
     p.result.observation.localInfrastructureDetails.headroom.retainedCleanup.possibleExternalEffects = false;
+  });
+  reject((p) => {
+    Object.assign(p.result.observation.localInfrastructureDetails, {
+      defaultComputerDeclarations: undefined,
+    });
+  });
+  reject((p) => {
+    const rows = p.result.observation.localInfrastructureDetails.defaultComputerDeclarations.cases;
+    const first = rows[0];
+    assert.ok(first);
+    rows[1] = first;
+  });
+  reject((p) => {
+    const row =
+      p.result.observation.localInfrastructureDetails.defaultComputerDeclarations.cases[0];
+    assert.ok(row);
+    row.canonicalFiles[0] = { path: "notes.txt", size: 7, sha256: "0".repeat(64) };
+  });
+  reject((p) => {
+    const row =
+      p.result.observation.localInfrastructureDetails.defaultComputerDeclarations.cases.find(
+        (row) => row.ordinary,
+      );
+    assert.ok(row?.ordinary);
+    row.ordinary.workspaceId = "foreign-workspace";
+  });
+  reject((p) => {
+    const row =
+      p.result.observation.localInfrastructureDetails.defaultComputerDeclarations.cases[0];
+    assert.ok(row);
+    row.leaseRelease.leaseId = "foreign-lease";
+  });
+  reject((p) => {
+    const installation =
+      p.result.observation.localInfrastructureDetails.defaultComputerDeclarations.installations[0];
+    assert.ok(installation);
+    const cleanup = installation.credentialCleanup[0];
+    assert.ok(cleanup);
+    cleanup.state = "pending";
+  });
+  reject((p) => {
+    p.result.observation.localInfrastructureDetails.defaultComputerDeclarations.cadence.requestsPerPrincipalMinute = 30;
+  });
+  reject((p) => {
+    const row =
+      p.result.observation.localInfrastructureDetails.defaultComputerDeclarations.cases[0];
+    assert.ok(row);
+    Object.assign(row, { resource: "unknown" });
+  });
+  reject((p) => {
+    const row =
+      p.result.observation.localInfrastructureDetails.defaultComputerDeclarations.cases.find(
+        (row) => row.resource === "snapshot" && row.relation === "at",
+      );
+    assert.ok(row?.pressure);
+    row.pressure.source = "provider";
   });
   const flagged = { ...data(packet()), verified: true };
   assert.throws(() => verifyLocalInfrastructureProof(flagged, target));

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  canonicalJson,
+  freeInfrastructurePolicy,
+} from "../../packages/fortipi-contract/dist/index.js";
+import {
   type ArtifactReference,
   assertGate,
   integratedClaims,
@@ -181,9 +185,11 @@ export function verifyLocalInfrastructureObservation(input: unknown, baseBoundsS
     "retirement",
     "stagingAndHistory",
     "headroom",
+    "defaultComputerDeclarations",
   ]);
   assert.equal(detail.schemaVersion, 1);
   same(detail.baseBoundsSha256, baseBoundsSha256);
+  verifyDefaultComputerDeclarations(detail.defaultComputerDeclarations);
   const retention = object(detail.retention);
   assert.ok(count(retention.lowerFixtureRetainedEvents) > 0);
   assert.ok(count(retention.retainedOriginalEvents) <= count(retention.lowerFixtureRetainedEvents));
@@ -339,4 +345,252 @@ export function verifyLocalInfrastructureObservation(input: unknown, baseBoundsS
   assert.equal(retirement.unreferencedPublicReadStatus, 404);
   assert.equal(retirement.publishedIndependentHashesPreserved, true);
   return structuredClone(observation);
+}
+
+/** Closed original-LOCAL contribution; consistency is not producer authority. */
+export function verifyDefaultComputerDeclarations(value: unknown) {
+  const detail = closed(value, [
+    "schemaVersion",
+    "scope",
+    "defaultPolicySha256",
+    "fixturePolicySha256",
+    "cadence",
+    "installations",
+    "cases",
+    "limitations",
+  ]);
+  assert.equal(detail.schemaVersion, 1);
+  assert.equal(detail.scope, "LOCAL separate installations per resource");
+  same(detail.defaultPolicySha256, sha256(canonicalJson(freeInfrastructurePolicy)));
+  const fixturePolicy = structuredClone(freeInfrastructurePolicy);
+  fixturePolicy.bounds.requestsPerPrincipalMinute = 10000;
+  fixturePolicy.bounds.requestsPerInstallMinute = 10000;
+  same(detail.fixturePolicySha256, sha256(canonicalJson(fixturePolicy)));
+  assert.deepEqual(
+    closed(detail.cadence, ["requestsPerPrincipalMinute", "requestsPerInstallMinute"]),
+    { requestsPerPrincipalMinute: 10000, requestsPerInstallMinute: 10000 },
+  );
+  const limits = { file: 4194304, snapshot: 16777216, entries: 512 };
+  const canaryFile = { path: "notes.txt", size: 7, sha256: sha256("old-v1\n") };
+  const manifestHash = (
+    entries: { path: string; type: "file"; mode: 420; size: number; sha256: string }[],
+  ) => sha256(`fortipi:manifest:v1\n${canonicalJson({ version: 1, entries })}`);
+  const expectedCanaryHash = manifestHash([{ ...canaryFile, type: "file", mode: 420 }]);
+  const hashes = new Map<number, string>();
+  const blobHash = (size: number) => {
+    let hash = hashes.get(size);
+    if (!hash) {
+      hash = sha256(Buffer.alloc(size, 101));
+      hashes.set(size, hash);
+    }
+    return hash;
+  };
+  const expectedDeclaration = (resource: keyof typeof limits, delta: number) => {
+    const size = limits[resource] + delta;
+    const sizes =
+      resource === "file"
+        ? [size]
+        : resource === "snapshot"
+          ? delta > 0
+            ? [4194304, 4194304, 4194304, 4194304, 1]
+            : [4194304, 4194304, 4194304, size - 3 * 4194304]
+          : Array<number>(size).fill(1);
+    return manifestHash(
+      sizes.map((size, index) => ({
+        path: `edge-${String(index).padStart(4, "0")}.bin`,
+        type: "file",
+        mode: 420,
+        size,
+        sha256: blobHash(size),
+      })),
+    );
+  };
+  const ordinaryHash = manifestHash([
+    { path: "ordinary.bin", type: "file", mode: 420, size: 2097152, sha256: blobHash(2097152) },
+  ]);
+  assert.ok(Array.isArray(detail.installations) && detail.installations.length === 3);
+  const installations = new Map<
+    string,
+    { applicationId: string; storagePathSha256: string; credentials: Set<string> }
+  >();
+  for (const input of detail.installations) {
+    const row = closed(input, [
+      "resource",
+      "applicationId",
+      "storagePathSha256",
+      "credentialCleanup",
+    ]);
+    const resource = string(row.resource);
+    assert.ok(Object.hasOwn(limits, resource) && !installations.has(resource));
+    const applicationId = string(row.applicationId, 192);
+    assert.ok(Array.isArray(row.credentialCleanup) && row.credentialCleanup.length > 0);
+    const credentials = new Set<string>();
+    for (const input of row.credentialCleanup) {
+      const cleanup = closed(input, ["credentialId", "generation", "state", "pendingRecipients"]);
+      const id = string(cleanup.credentialId, 192);
+      assert.ok(!credentials.has(id));
+      credentials.add(id);
+      assert.ok(count(cleanup.generation) > 0);
+      assert.equal(cleanup.state, "complete");
+      assert.equal(cleanup.pendingRecipients, 0);
+    }
+    assert.match(string(row.storagePathSha256), /^[a-f0-9]{64}$/);
+    installations.set(resource, {
+      applicationId,
+      storagePathSha256: string(row.storagePathSha256),
+      credentials,
+    });
+  }
+  assert.equal(new Set([...installations.values()].map((row) => row.storagePathSha256)).size, 3);
+  assert.ok(Array.isArray(detail.cases) && detail.cases.length === 9);
+  const seen = new Set<string>();
+  const used = new Map<string, Set<string>>();
+  const checkAbort = (value: unknown, uploadId: unknown) => {
+    const row = closed(value, ["uploadId", "state", "conflictStatus", "acknowledgment"]);
+    assert.equal(string(row.uploadId), uploadId);
+    assert.equal(row.state, "aborted");
+    assert.ok(row.conflictStatus === null || row.conflictStatus === 409);
+    assert.equal(
+      row.acknowledgment,
+      row.conflictStatus === null ? "direct" : "recovered-by-current-scoped-status",
+    );
+  };
+  for (const input of detail.cases) {
+    const row = closed(input, [
+      "resource",
+      "relation",
+      "limit",
+      "declared",
+      "outcome",
+      "workspaceId",
+      "leaseId",
+      "requestedManifestHash",
+      "beginStatus",
+      "beginCode",
+      "beginRetryable",
+      "pressure",
+      "admission",
+      "ordinary",
+      "abort",
+      "chunksDelivered",
+      "publishedRevision",
+      "publishedManifestHash",
+      "canonicalFiles",
+      "leaseRelease",
+      "applicationId",
+      "storagePathSha256",
+      "credentialId",
+    ]);
+    const resource = string(row.resource);
+    assert.ok(resource === "file" || resource === "snapshot" || resource === "entries");
+    const relation = string(row.relation);
+    assert.ok(relation === "below" || relation === "at" || relation === "above");
+    const key = `${resource}/${relation}`;
+    assert.ok(!seen.has(key));
+    seen.add(key);
+    const delta = relation === "below" ? -1 : relation === "above" ? 1 : 0;
+    assert.equal(row.limit, limits[resource]);
+    assert.equal(row.declared, limits[resource] + delta);
+    same(row.requestedManifestHash, expectedDeclaration(resource, delta));
+    string(row.workspaceId, 192);
+    string(row.leaseId, 192);
+    string(row.publishedRevision, 192);
+    same(row.publishedManifestHash, expectedCanaryHash);
+    assert.deepEqual(row.canonicalFiles, [canaryFile]);
+    assert.equal(row.chunksDelivered, 0);
+    const installation = installations.get(resource);
+    assert.ok(installation);
+    assert.equal(row.applicationId, installation.applicationId);
+    same(row.storagePathSha256, installation.storagePathSha256);
+    const credential = string(row.credentialId, 192);
+    assert.ok(installation.credentials.has(credential));
+    if (!used.has(resource)) used.set(resource, new Set());
+    used.get(resource)?.add(credential);
+    const release = closed(row.leaseRelease, ["leaseId", "released"]);
+    assert.equal(release.leaseId, row.leaseId);
+    assert.equal(release.released, true);
+    const admitted = resource !== "snapshot" && delta <= 0;
+    assert.equal(
+      row.outcome,
+      admitted
+        ? "opened-and-aborted"
+        : resource === "snapshot" && delta <= 0
+          ? "combined-budget-refusal"
+          : "descriptor-refusal",
+    );
+    if (admitted) {
+      assert.equal(row.beginStatus, 201);
+      assert.equal(row.beginCode, null);
+      assert.equal(row.beginRetryable, null);
+      assert.equal(row.pressure, null);
+      assert.equal(row.ordinary, null);
+      const admission = closed(row.admission, [
+        "uploadId",
+        "state",
+        "manifestHash",
+        "baseRevision",
+      ]);
+      string(admission.uploadId, 192);
+      assert.equal(admission.state, "open");
+      same(admission.manifestHash, row.requestedManifestHash);
+      assert.equal(admission.baseRevision, row.publishedRevision);
+      checkAbort(row.abort, admission.uploadId);
+    } else {
+      assert.equal(row.beginStatus, 429);
+      assert.equal(row.beginCode, "quota_exceeded");
+      assert.equal(row.beginRetryable, false);
+      assert.equal(row.admission, null);
+      const pressure = closed(row.pressure, [
+        "resource",
+        "scope",
+        "source",
+        "measurement",
+        "reason",
+        "action",
+      ]);
+      assert.equal(pressure.resource, "storage");
+      assert.deepEqual(closed(pressure.scope, ["kind"]), { kind: "object" });
+      assert.equal(pressure.source, "policy");
+      assert.equal(pressure.measurement, "estimated");
+      assert.equal(pressure.action, "reclaim-storage");
+      assert.equal(
+        pressure.reason,
+        resource === "snapshot" && delta <= 0
+          ? "Workspace physical copies and unspent growth exhaust the shared pool"
+          : "Snapshot exceeds effective workspace bounds",
+      );
+      if (resource === "snapshot") {
+        const ordinary = closed(row.ordinary, [
+          "declaredBytes",
+          "status",
+          "workspaceId",
+          "uploadId",
+          "requestedManifestHash",
+          "baseRevision",
+          "state",
+          "manifestHash",
+          "chunksDelivered",
+          "abort",
+        ]);
+        assert.equal(ordinary.declaredBytes, 2097152);
+        assert.equal(ordinary.status, 201);
+        assert.equal(ordinary.workspaceId, row.workspaceId);
+        assert.equal(ordinary.baseRevision, row.publishedRevision);
+        assert.equal(ordinary.state, "open");
+        assert.equal(ordinary.chunksDelivered, 0);
+        same(ordinary.requestedManifestHash, ordinaryHash);
+        same(ordinary.manifestHash, ordinaryHash);
+        string(ordinary.uploadId, 192);
+        checkAbort(ordinary.abort, ordinary.uploadId);
+        assert.deepEqual(row.abort, ordinary.abort);
+      } else {
+        assert.equal(row.ordinary, null);
+        assert.equal(row.abort, null);
+      }
+    }
+  }
+  for (const [resource, installation] of installations)
+    assert.deepEqual(used.get(resource), installation.credentials);
+  strings(detail.limitations);
+  return structuredClone(detail);
 }

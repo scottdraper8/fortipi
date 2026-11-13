@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { manifestDigest } from "../../../../packages/fortipi-contract/dist/index.js";
+import { FortiPiClient, FortiPiError } from "../../../../packages/fortipi-client/dist/node.js";
+import {
+  canonicalJson,
+  freeInfrastructurePolicy,
+  manifestDigest,
+} from "../../../../packages/fortipi-contract/dist/index.js";
 import {
   infrastructureLocalOutputLimitations,
   runInfrastructureLocalOutput,
 } from "../../../../tests/clients/infrastructure-local-output.ts";
-import { verifyLocalInfrastructureObservation } from "../../../../tests/clients/infrastructure-local-proof.ts";
+import {
+  verifyDefaultComputerDeclarations,
+  verifyLocalInfrastructureObservation,
+} from "../../../../tests/clients/infrastructure-local-proof.ts";
 import { produceLocalRefusalRestoration } from "../../../../tests/clients/infrastructure-local-refusal.ts";
+import {
+  observeComputerDeclaration,
+  seedInfrastructureWorkspace,
+} from "../../../../tests/clients/live-infrastructure-controls.ts";
 import { RoleContext } from "../../../../tests/clients/roles.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { assignedJob } from "../control/artifact-job.ts";
@@ -27,10 +39,11 @@ export async function completeLocalInfrastructureObservation(prior: {
   retirement: unknown;
   baseBoundsSha256: string;
 }) {
-  const [details, output, refusalRestoration] = await Promise.all([
+  const [details, output, refusalRestoration, defaultComputerDeclarations] = await Promise.all([
     runLocalInfrastructureDetails(),
     runInfrastructureLocalOutput(),
     produceLocalRefusalRestoration(),
+    produceDefaultComputerDeclarations(),
   ]);
   const observation = verifyLocalInfrastructureObservation(
     {
@@ -42,6 +55,7 @@ export async function completeLocalInfrastructureObservation(prior: {
         retirement: prior.retirement,
         output,
         refusalRestoration,
+        defaultComputerDeclarations,
         ...details,
       },
     },
@@ -51,6 +65,7 @@ export async function completeLocalInfrastructureObservation(prior: {
     observation,
     limitations: [
       ...infrastructureLocalOutputLimitations,
+      ...defaultComputerDeclarations.limitations,
       "Output uses ASCII stdout with artifact capacity equal to output capacity; no independent Unicode/stderr or artifact-clipping boundary claim",
       "Refusal uses real workerd/SQLite INSERT-abort and SIGKILL/same-storage canary recovery; recipient pressure and known120s guidance are synthetic, not observed provider exhaustion or reset discovery",
       "Detailed allocations/faults and registered CP cleanup are LOCAL; they do not certify Cloudflare account ceilings, a native process stop or provider recovery",
@@ -600,4 +615,132 @@ export async function localRetainedCleanupHeadroom() {
     channel?.socket.close();
     await h.close();
   }
+}
+
+/** Fixed local-only fixture port; no job authority or credentials in results. */
+export async function localDeclarationProbe(
+  runtime: Runtime,
+  roles: RoleContext,
+  resource: "file" | "snapshot" | "entries",
+  delta: -1 | 0 | 1,
+  transport: typeof fetch = fetch,
+) {
+  const binding = await roles.call({
+    operationId: "createWorkspace",
+    path: {},
+    query: {},
+    body: { requestId: randomUUID(), config: { kind: "computer" } },
+  });
+  const role = await roles.issue({
+    requestId: randomUUID(),
+    role: "client",
+    grants: [
+      {
+        grantId: randomUUID(),
+        version: 1,
+        resources: {
+          agentIds: [],
+          conversationIds: [],
+          workspaceIds: [binding.workspaceId],
+          executorIds: [],
+          backendIds: [],
+          tools: [],
+          actions: ["workspace.read", "workspace.write", "workspaces.read"],
+        },
+      },
+    ],
+  });
+  const client = new FortiPiClient({
+    endpoint: runtime.endpoint,
+    credentials: async () => role.token,
+    allowLoopbackHttp: true,
+    fetch: transport,
+  });
+  const context = {
+    client,
+    errorType: FortiPiError,
+    request: <T>(operation: () => Promise<T>) => operation(),
+  };
+  const canary = await seedInfrastructureWorkspace(context, binding);
+  return { ...context, canary, resource, delta, credentialId: role.credential.credentialId };
+}
+
+/** All nine cases are REQUIRED LOCAL data, on separate genuine workerd
+ * installations per resource. No test registration, synthetic facts or scope
+ * substitution is used by the normal evidence runner. */
+export async function produceDefaultComputerDeclarations() {
+  const cases: Record<string, unknown>[] = [];
+  const installations: {
+    resource: string;
+    applicationId: string;
+    storagePathSha256: string;
+    credentialCleanup: Awaited<ReturnType<RoleContext["cleanup"]>>;
+  }[] = [];
+  const fixturePolicy = structuredClone(freeInfrastructurePolicy);
+  fixturePolicy.bounds.requestsPerPrincipalMinute = 10000;
+  fixturePolicy.bounds.requestsPerInstallMinute = 10000;
+  let fixturePolicySha256: string | undefined;
+  for (const resource of ["file", "snapshot", "entries"] as const) {
+    const runtime = await start(),
+      roles = new RoleContext(runtime.endpoint, runtime.admin);
+    let applicationId: string | undefined;
+    try {
+      const protocol = await runtime.api<D.Protocol>("/v1/protocol");
+      assert.equal(protocol.status, 200);
+      assert.deepEqual(
+        protocol.body.infrastructure,
+        fixturePolicy,
+        "Only LOCAL request cadence differs; allocation/headroom defaults remain exact",
+      );
+      applicationId = protocol.body.deploymentId;
+      const observedPolicyHash = hash(canonicalJson(protocol.body.infrastructure));
+      if (fixturePolicySha256) assert.equal(fixturePolicySha256, observedPolicyHash);
+      else fixturePolicySha256 = observedPolicyHash;
+      for (const delta of [-1, 0, 1] as const) {
+        const probe = await localDeclarationProbe(runtime, roles, resource, delta);
+        const observation = await observeComputerDeclaration(probe);
+        roles.assertSanitized(observation);
+        cases.push({
+          ...observation,
+          applicationId,
+          storagePathSha256: hash(runtime.directory),
+          credentialId: probe.credentialId,
+        });
+      }
+    } finally {
+      try {
+        const credentialCleanup = await roles.cleanup();
+        assert.ok(
+          credentialCleanup.every((row) => row.state === "complete" && row.pendingRecipients === 0),
+          "Unknown/pending LOCAL credential cleanup blocks details",
+        );
+        if (applicationId)
+          installations.push({
+            resource,
+            applicationId,
+            storagePathSha256: hash(runtime.directory),
+            credentialCleanup,
+          });
+      } finally {
+        await runtime.dispose();
+      }
+    }
+  }
+  assert.ok(fixturePolicySha256);
+  const observed = {
+    schemaVersion: 1,
+    scope: "LOCAL separate installations per resource",
+    defaultPolicySha256: hash(canonicalJson(freeInfrastructurePolicy)),
+    fixturePolicySha256,
+    cadence: { requestsPerPrincipalMinute: 10000, requestsPerInstallMinute: 10000 },
+    installations,
+    cases,
+    limitations: [
+      "Actual public SDK/workerd/Computer/SQLite on separate LOCAL installations per resource, with10000 fixture request cadence and unchanged default allocation/headroom bounds",
+      "Fixture logical application IDs may repeat; storage-root hashes correlate actual independent temporary roots, not provider identity or artifact authority",
+      "Descriptor allocation and same-workspace recovery only; no maximum snapshot transfer, one-installation schedule, actual Free-account headroom or provider exhaustion claim",
+    ],
+  };
+  verifyDefaultComputerDeclarations(observed);
+  return observed;
 }
