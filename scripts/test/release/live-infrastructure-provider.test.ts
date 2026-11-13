@@ -364,6 +364,29 @@ test("private loopback collector binds fixed queries/account/version/all3 namesp
     for (const value of [account, token, JSON.stringify(token).slice(1, -1)])
       assert.ok(!publicBytes.includes(value));
     assert.ok(!Object.hasOwn(result, "verified") && !Object.hasOwn(result, "authorized"));
+    // Returned DATA must not alias the authority retained for a later read.
+    const boundWorker = { ...result.worker };
+    const boundNamespaces = p.input.namespaces.namespaces.map((n) => n.namespaceId);
+    result.worker.name = "foreign-worker-from-prior-output";
+    result.worker.versionId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const returnedNamespace = present(result.datasets.find((d) => d.namespace)?.namespace);
+    assert.ok(returnedNamespace);
+    returnedNamespace.namespaceId = "e".repeat(32);
+    const start = p.seen.length;
+    const second = await reader.read(p.clock);
+    const wrongTargets = p.seen
+      .slice(start)
+      .filter(({ variables }) =>
+        variables.worker !== undefined
+          ? variables.worker !== boundWorker.name || variables.version !== boundWorker.versionId
+          : variables.namespace !== undefined &&
+            !boundNamespaces.includes(String(variables.namespace)),
+      );
+    assert.equal(wrongTargets.length, 0);
+    assert.equal(p.seen.length - start, 22);
+    assert.deepEqual(second.worker, boundWorker);
+    assert.notEqual(second.worker, result.worker);
+    assert.ok(second.datasets.every((d) => d.active.aggregate.unavailable === null));
   } finally {
     await p.close();
   }

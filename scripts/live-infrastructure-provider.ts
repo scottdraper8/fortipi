@@ -661,7 +661,7 @@ export function createInfrastructureAnalyticsReader(input: InfrastructureAnalyti
             const dataset: InfrastructureDataset = {
               kind: s.kind,
               dataset: s.node,
-              namespace,
+              namespace: namespace ? { ...namespace } : null,
               quality: s.quality,
               units: { ...s.units },
               active: bad("schema"),
@@ -731,7 +731,7 @@ export function createInfrastructureAnalyticsReader(input: InfrastructureAnalyti
         );
         const result: InfrastructureAnalyticsCollection = {
           accountBindingSha256,
-          worker,
+          worker: { ...worker },
           namespaceMetadataSha256: identity.metadataSha256,
           requestedWindows: windows,
           schema,
