@@ -12,6 +12,7 @@ concurrency:
 env:
   CI: "true"
   SOURCE_SHA: ${{ github.sha }}
+  IMAGE_REFERENCE: ${{ vars.FORTIPI_IMAGE_REFERENCE }}
   WRANGLER_SEND_METRICS: "false"
   CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"
   npm_config_build_from_source: "true"
@@ -42,14 +43,7 @@ jobs:
             pypi.org:443
             files.pythonhosted.org:443
             api.osv.dev:443
-            auth.docker.io:443
-            registry-1.docker.io:443
-            production.cloudflare.docker.com:443
-            production.cloudfront.docker.com:443
-            ghcr.io:443
-            pkg-containers.githubusercontent.com:443
-            snapshot.debian.org:443
-            keyring.debian.org:443
+            *.actions.githubusercontent.com:443
             api.stepsecurity.io:443
             agent.api.stepsecurity.io:443
       - name: Require actual Linux hardener service
@@ -85,18 +79,25 @@ jobs:
       - run: node scripts/verify-foundation.ts --egress
       - run: node tools/unstale/review-supply-chain.ts --locks --check
       - run: node scripts/check-licenses.ts --foundation
-      - name: Retrieve exact qualified image metadata
+      - run: node scripts/build-workspaces.ts build:evidence
+      - name: Save the qualified image descriptor
+        run: node scripts/prepare-release.ts descriptor --out "$RUNNER_TEMP/image-reference.json" --kind image
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(vars.FORTIPI_IMAGE_REFERENCE).runId }}
+          artifact-ids: ${{ fromJSON(vars.FORTIPI_IMAGE_REFERENCE).artifactId }}
+          path: ${{ runner.temp }}/qualified-image
+      - name: Verify the qualified image inputs
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/cli-proof.ts image
-      - name: Recreate the exact image source context without Docker
-        run: node scripts/cli-proof.ts context
       - run: pnpm run build
       - run: node scripts/generate-notices.ts
       - run: pnpm run typecheck
       - run: pnpm run schema:check
       - run: pnpm run check:licenses
-      - name: Pack and install the real consumer through the reviewed registry
+      - name: Stage and install the five scoped source component bundles
         run: node scripts/cli-proof.ts install
       - name: Run the installed CLI with an empty OS home and no external network
         env:

@@ -1,35 +1,17 @@
 // CI boundary only. The CLI owner supplies both installed-consumer proof ports.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import {
-  access,
-  chmod,
-  cp,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readlink,
-  realpath,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { access, chmod, lstat, mkdir, readlink, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { materializeSourceKitInventory } from "./image-source-distribution.ts";
+import { readDistributionReceipt } from "../packages/fortipi-cli/test/offline-consumer.ts";
 
 const execute = promisify(execFile);
 const script = fileURLToPath(import.meta.url);
 const root = resolve(dirname(script), "..");
-const imageSource = "ad053471b6dce3e3e666cc070c623090ac11925d";
-const imageRun = 43144678762;
-const imageArtifact = 13910344388;
-const imageHash = "8a59a497b45ebc8125282e7766744ccbc603aed96faba0d4158217c86ff55092";
-const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const inside = (parent: string, path: string) => path.startsWith(`${parent}${sep}`);
 type OwnerPort = "install-harness" | "offline-consumer" | "notices";
 type HostTool = "unshare" | "mount" | "setpriv" | "unzip" | "ip";
@@ -81,14 +63,6 @@ async function run(file: string, args: string[], cwd = root, timeout = 120000) {
     });
   } catch (error) {
     failure = `subprocess ${basename(file)} failed`;
-    if (
-      args[0] === "apps/worker/container/build.ts" &&
-      error instanceof Error &&
-      "stderr" in error &&
-      typeof error.stderr === "string" &&
-      error.stderr.includes("Signed image dependency/source closure drift")
-    )
-      failure = "signed image dependency/source closure drift; qualified context not recreated";
     throw error;
   }
 }
@@ -172,140 +146,11 @@ async function inputs() {
   gate = "phase";
   failure = "phase guard or required input";
 }
-async function bounded(response: Response, maximum: number) {
-  assert.ok(response.body, "Required producer response has no body");
-  const reader = response.body.getReader();
-  const parts: Buffer[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const next = await reader.read();
-      if (next.done) return Buffer.concat(parts);
-      size += next.value.length;
-      assert.ok(size <= maximum, "Producer response exceeds the proof input bound");
-      parts.push(Buffer.from(next.value));
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-    reader.releaseLock();
-  }
-}
 async function image() {
-  const repository = process.env.GITHUB_REPOSITORY;
-  assert.match(repository ?? "", /^[\w.-]+\/[\w.-]+$/);
-  const token = process.env.GH_TOKEN;
-  assert.ok(token, "Read-only Actions token is required only for the qualified artifact");
-  const api = `https://api.github.com/repos/${repository}`;
-  const get = async (path: string) => {
-    const response = await fetch(`${api}${path}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2026-03-10",
-      },
-      redirect: "manual",
-      signal: AbortSignal.timeout(30000),
-    });
-    return response;
-  };
-  const runResponse = await get(`/actions/runs/${imageRun}`);
-  assert.equal(runResponse.status, 200, "Qualified producer run is unavailable");
-  const producer = JSON.parse((await bounded(runResponse, 262144)).toString());
-  assert.equal(producer.head_sha, imageSource);
-  assert.equal(producer.repository.full_name, repository);
-  assert.equal(producer.conclusion, "success");
-  const infoResponse = await get(`/actions/artifacts/${imageArtifact}`);
-  assert.equal(infoResponse.status, 200, "Qualified producer artifact is unavailable");
-  const info = JSON.parse((await bounded(infoResponse, 65536)).toString());
-  assert.equal(info.id, imageArtifact);
-  assert.equal(info.name, `container-evidence-rootless-${imageSource}`);
-  assert.equal(info.expired, false);
-  assert.equal(info.workflow_run.id, imageRun);
-  assert.equal(info.workflow_run.head_sha, imageSource);
-  assert.ok(info.size_in_bytes > 0 && info.size_in_bytes <= 65536);
-  const download = await get(`/actions/artifacts/${imageArtifact}/zip`);
-  assert.equal(download.status, 302, "Producer artifact redirect is required");
-  const location = new URL(download.headers.get("Location") ?? "");
-  assert.ok(
-    location.protocol === "https:" &&
-      !location.username &&
-      !location.password &&
-      (!location.port || location.port === "443") &&
-      (location.hostname.endsWith(".blob.core.windows.net") ||
-        location.hostname.endsWith(".actions.githubusercontent.com")),
-    "Unexpected artifact storage origin",
-  );
-  // The GitHub token is never forwarded to the signed storage URL or a child.
-  const archive = await fetch(location, { redirect: "error", signal: AbortSignal.timeout(30000) });
-  assert.equal(archive.status, 200, "Qualified artifact bytes are unavailable");
-  const directory = await mkdtemp(join(tmpdir(), "fortipi-cli-image-"));
-  try {
-    const path = join(directory, "metadata.zip");
-    await writeFile(path, await bounded(archive, 65536), { flag: "wx" });
-    const unzip = await hostTool("unzip");
-    const entries = (await run(unzip, ["-Z1", path])).stdout.trim().split("\n");
-    assert.ok(entries.length <= 32 && entries.every((entry) => !entry.split("/").includes("..")));
-    const names = entries.filter((entry) => /(^|\/)image-metadata\.json$/.test(entry));
-    assert.equal(names.length, 1, "One actual image metadata entry is required");
-    const bytes = Buffer.from((await run(unzip, ["-p", path, names[0] ?? ""])).stdout);
-    assert.equal(sha256(bytes), imageHash, "Parent-qualified metadata bytes changed");
-    const metadata = JSON.parse(bytes.toString());
-    assert.equal(metadata.sourceCommit, imageSource);
-    assert.equal(metadata.runtimeVerified, false);
-    assert.equal(metadata.licenseReviewRequired, true);
-    assert.equal(metadata.registryDigest, null);
-    await mkdir(join(root, "apps/worker/dist/container"), { recursive: true });
-    await writeFile(join(root, "apps/worker/dist/container/image-metadata.json"), bytes, {
-      flag: "wx",
-    });
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-}
-async function context() {
-  await git("diff", "--exit-code", imageSource, "HEAD", "--", "apps/worker/container");
-  const directory = await mkdtemp(join(tmpdir(), "fortipi-cli-ad-context-"));
-  const checkout = join(directory, "source");
-  await git("worktree", "add", "--detach", checkout, imageSource);
-  try {
-    await run(process.execPath, ["scripts/install-dependencies.ts"], checkout, 600000);
-    await run("pnpm", ["--dir", "tools/unstale", "install", "--frozen-lockfile"], checkout);
-    await run(process.execPath, ["apps/worker/container/build.ts", "--prepare"], checkout, 1200000);
-    const source = join(checkout, "apps/worker/dist/container");
-    const target = join(root, "apps/worker/dist/container");
-    const metadata = JSON.parse(await readFile(join(target, "image-metadata.json"), "utf8"));
-    failure = "reconstructed qualified AD source kit differs from image evidence";
-    assert.equal(
-      sha256(await readFile(join(source, "sources-and-notices.tar"))),
-      metadata.sourceKitSha256,
-    );
-    failure = "qualified context/support input copy";
-    for (const path of ["context", "source-revision.json", "sources-and-notices.tar"])
-      await cp(join(source, path), join(target, path), {
-        recursive: true,
-        errorOnExist: true,
-        force: false,
-      });
-    await materializeSourceKitInventory(
-      { kit: join(target, "sources-and-notices.tar"), kitSha256: metadata.sourceKitSha256 },
-      join(target, "source-kit-inventory.json"),
-    );
-  } finally {
-    await git("worktree", "remove", "--force", checkout);
-    await rm(directory, { recursive: true, force: true });
-  }
-}
-interface Receipt {
-  schemaVersion: number;
-  consumer: string;
-  checkout: string;
-  checkoutUid: number;
-  sourceCommit: string;
-  assetManifestSha256: string;
-  parentNetworkNamespace: string;
-  strictInstalledConsumer: boolean;
-  readOnlyInstall: boolean;
-  installedPrepare: boolean;
+  const temporary = process.env.RUNNER_TEMP;
+  assert.ok(temporary && isAbsolute(temporary), "Actual runner temporary directory required");
+  const { prepareImage } = await import("./prepare-release.ts");
+  await prepareImage(join(temporary, "image-reference.json"), join(temporary, "qualified-image"));
 }
 interface Boundary {
   consumer: string;
@@ -380,8 +225,7 @@ async function namespace(boundary: Boundary) {
 async function offline() {
   const staging = distribution();
   const receiptPath = join(staging, "distribution.json");
-  const bytes = await readFile(receiptPath);
-  const receipt = JSON.parse(bytes.toString()) as Receipt;
+  const receipt = await readDistributionReceipt(receiptPath);
   assert.equal(receipt.schemaVersion, 1);
   assert.equal(receipt.checkout, await realpath(root));
   assert.equal(receipt.checkoutUid, (await lstat(root)).uid);
@@ -489,10 +333,10 @@ async function offline() {
       schemaVersion: 1,
       sourceCommit: receipt.sourceCommit,
       assetManifestSha256: receipt.assetManifestSha256,
-      imageSource,
-      imageRun,
-      imageArtifact,
-      imageMetadataSha256: imageHash,
+      componentOnly: true,
+      publishable: false,
+      scope: receipt.scope,
+      packageName: receipt.packageName,
       passed: true,
       emptyOsHomeInitially: true,
       dedicatedIdentity: true,
@@ -523,7 +367,6 @@ async function main() {
   assert.equal(process.argv.length, 3);
   if (phase === "inputs") await inputs();
   else if (phase === "image") await image();
-  else if (phase === "context") await context();
   else if (phase === "install") {
     await inputs();
     await run(
@@ -541,9 +384,7 @@ if (import.meta.main)
   await main().catch((error: unknown) => {
     // Neither signed artifact URLs nor child auth/output can enter a diagnostic.
     const phase = process.argv[2];
-    const label = ["inputs", "image", "context", "install", "offline", "namespace"].includes(
-      phase ?? "",
-    )
+    const label = ["inputs", "image", "install", "offline", "namespace"].includes(phase ?? "")
       ? phase
       : "unknown";
     const condition =
