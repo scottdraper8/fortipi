@@ -33,7 +33,7 @@ on:
         type: string
         required: true
       previous:
-        description: For verify, path of actual CLI receipt inside a retained live artifact
+        description: For verify, path of retained version receipt (deployment.provider-version.json after recovery)
         type: string
         default: "{}"
       confirm:
@@ -210,13 +210,16 @@ jobs:
         run:
           node scripts/deploy-smoke.ts operate --installation "$RUNNER_TEMP/installation.json" --out
           "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json" --confirm "$CONFIRM"
-      - name: Actual owner10 live verification with application role only
+      - name: Coordinate actual recovery with isolated application evidence
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
         run:
           node scripts/deploy-smoke.ts evidence --candidate "$RUNNER_TEMP/candidate/candidate.json" --fixture
-          "$FORTIPI_EVIDENCE_FIXTURE" --out "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json"
+          "$FORTIPI_EVIDENCE_FIXTURE" --out "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json" --installation
+          "$RUNNER_TEMP/installation.json" --proofs "$RUNNER_TEMP/proofs.json"
       - name: Retain observed identity and actual claim results
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -225,14 +228,15 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run:
           node scripts/deploy-smoke.ts observe-installed --installation "$RUNNER_TEMP/installation.json" --cli
-          "$RUNNER_TEMP/deployment.json.cli.json" --out "$RUNNER_TEMP/deployment.json"
+          "$RUNNER_TEMP/deployment.json.provider-version.json" --out "$RUNNER_TEMP/deployment.json"
       - name: Bind exact results without refreshing behavioral evidence
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run:
           node scripts/deploy-smoke.ts retain-operation --candidate "$RUNNER_TEMP/candidate/candidate.json" --claims
           "$RUNNER_TEMP/claims" --deployment "$RUNNER_TEMP/deployment.json" --out "$RUNNER_TEMP/live" --readiness
-          "$RUNNER_TEMP/readiness"
+          "$RUNNER_TEMP/readiness" --recovery "$RUNNER_TEMP/claims.recovery-link.json" --current
+          "$RUNNER_TEMP/deployment.json.provider-version.json" --proofs "$RUNNER_TEMP/proofs.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name:

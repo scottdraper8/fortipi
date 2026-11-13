@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { cp, mkdir, realpath, writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { operatorConfig } from "../packages/fortipi-cli/dist/config.js";
+import { validateRecoveryRetention } from "./application-recovery-retention.ts";
 import { repository } from "./build-workspaces.ts";
 import {
   childEnvironment,
@@ -10,7 +11,6 @@ import {
   loadWorkflowCandidate,
   producer,
   resolveCandidateReadContext,
-  runEvidence,
 } from "./prepare-release.ts";
 import {
   type ArtifactReference,
@@ -482,7 +482,7 @@ export async function operateDeployment(
     );
     await saveJson(`${out}.cli.json`, cli);
   } else {
-    assert.ok(previous, "Verification requires the prior exact CLI receipt");
+    assert.ok(previous, "Verification requires the prior exact retained version receipt");
     cli = await readJson(previous);
     const bytes = await regularBytes(previous);
     const bundle = object(await readJson(proofsPath));
@@ -512,7 +512,7 @@ export async function operateDeployment(
       await verifyPayload(directory, receipt.files, ["gate.json"]);
       matched = true;
     }
-    assert.ok(matched, "Prior CLI receipt is not retained in a trusted live producer");
+    assert.ok(matched, "Prior version receipt is not retained in a trusted live producer");
   }
   const token = process.env.CLOUDFLARE_API_TOKEN;
   assert.ok(token);
@@ -556,6 +556,7 @@ export async function retainEvidence(
   out: string,
   kind: "live" | "independent",
   readinessOut: string,
+  recovery?: { factsPath: string; currentReceiptPath: string; proofsPath: string },
 ): Promise<void> {
   const loaded = await loadWorkflowCandidate(candidatePath);
   const child = await readJson(resolve(claimsDirectory, "gate.json"));
@@ -567,7 +568,19 @@ export async function retainEvidence(
   assertDeployment(deployment);
   assert.equal(deployment.candidateSha256, loaded.hash);
   freshness(deployment.checkedAt, 0.25);
-  assertObservedDeployment(child.deployments, deployment);
+  if (recovery)
+    await validateRecoveryRetention({
+      candidate: loaded.candidate,
+      candidateSha256: loaded.hash,
+      kind,
+      child,
+      claimsDirectory,
+      deployment,
+      originalCliPath: cliPath,
+      ...recovery,
+      request: githubRequest(process.env.GITHUB_TOKEN),
+    });
+  else assertObservedDeployment(child.deployments, deployment);
   await mkdir(out, { mode: 0o700 });
   await cp(claimsDirectory, resolve(out, "claims"), {
     recursive: true,
@@ -576,6 +589,10 @@ export async function retainEvidence(
   });
   await cp(deploymentPath, resolve(out, "deployment.json"));
   await cp(cliPath, resolve(out, "deployment.cli.json"));
+  if (recovery) {
+    await cp(recovery.currentReceiptPath, resolve(out, "deployment.provider-version.json"));
+    await cp(recovery.factsPath, resolve(out, "recovery-link.json"));
+  }
   const sourceProducer = await producer(repository, true, "deploy.yml");
   const result: GateReceipt = {
     ...child,
@@ -593,6 +610,13 @@ export async function retainEvidence(
   await mkdir(readinessOut, { mode: 0o700 });
   await cp(deploymentPath, resolve(readinessOut, "deployment.json"));
   await cp(cliPath, resolve(readinessOut, "deployment.cli.json"));
+  if (recovery) {
+    await cp(
+      recovery.currentReceiptPath,
+      resolve(readinessOut, "deployment.provider-version.json"),
+    );
+    await cp(recovery.factsPath, resolve(readinessOut, "recovery-link.json"));
+  }
   const files = await inventory(readinessOut);
   const record = files.find((f) => f.path === "deployment.json");
   assert.ok(record);
@@ -760,15 +784,17 @@ if (import.meta.main) {
         string(a.proofs),
         a.previous,
       );
-    else if (operation === "evidence")
-      await runEvidence(
-        "live",
-        string(a.candidate),
-        string(a.fixture),
-        string(a.out),
-        string(a.deployment),
-      );
-    else if (operation === "retain" || operation === "retain-operation") {
+    else if (operation === "evidence") {
+      const { runLiveRecoveryEvidence } = await import("./live-recovery-evidence.ts");
+      await runLiveRecoveryEvidence({
+        candidatePath: resolve(string(a.candidate)),
+        installationPath: resolve(string(a.installation)),
+        fixture: resolve(string(a.fixture)),
+        out: resolve(string(a.out)),
+        deploymentPath: resolve(string(a.deployment)),
+        proofsPath: resolve(string(a.proofs)),
+      });
+    } else if (operation === "retain" || operation === "retain-operation") {
       const kind =
         operation === "retain-operation"
           ? process.env.OPERATION === "deploy"
@@ -784,6 +810,13 @@ if (import.meta.main) {
         string(a.out),
         kind,
         string(a.readiness),
+        a.recovery
+          ? {
+              factsPath: resolve(string(a.recovery)),
+              currentReceiptPath: resolve(string(a.current)),
+              proofsPath: resolve(string(a.proofs)),
+            }
+          : undefined,
       );
     } else if (operation === "prepare-readiness")
       await prepareReadiness(
