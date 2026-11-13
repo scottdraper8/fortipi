@@ -120,6 +120,7 @@ export async function validateRecoveryRetention(input: {
     assert.equal(matches.length, 1);
     const proof = matches[0];
     assert.ok(proof);
+    assert.equal(proof.artifact.candidateSha256, input.candidateSha256);
     assert.equal(proof.receipt.kind, "live");
     assert.equal(proof.receipt.candidateSha256, input.candidateSha256);
     assert.equal(proof.receipt.sourceCommit, input.candidate.sourceCommit);
