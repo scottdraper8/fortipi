@@ -10,6 +10,7 @@ export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 export const publicPackages = ["contract", "client", "tui", "executor", "cli"] as const;
 export const packagePaths = publicPackages.map((name) => `packages/fortipi-${name}`);
 export const projects = [...packagePaths, "apps/worker"];
+export const FULL_SOURCE_TEST_TIMEOUT_MS = 30 * 60_000;
 
 /** Argument arrays only. A timeout terminates the child and remains a failure. */
 export async function run(
@@ -62,7 +63,18 @@ export async function filesBelow(path: string): Promise<string[]> {
   return result.sort();
 }
 
-async function tests(roots: string[], observeProcesses = false): Promise<void> {
+async function tests(
+  roots: string[],
+  observeProcesses = false,
+  totalTimeout?: number,
+): Promise<void> {
+  const deadline = totalTimeout === undefined ? undefined : performance.now() + totalTimeout;
+  const remainingTimeout = (): number => {
+    if (deadline === undefined) return 900_000;
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) throw new Error("Full source test deadline exhausted");
+    return remaining;
+  };
   const paths: string[] = [];
   for (const root of roots) {
     // Missing required suites fail. Never turn a partial checkout into green CI.
@@ -88,14 +100,14 @@ async function tests(roots: string[], observeProcesses = false): Promise<void> {
       process.execPath,
       [...diagnostics, "--test", "--test-reporter=tap", ...parallel],
       repository,
-      900_000,
+      remainingTimeout(),
     );
   if (paths.includes(provenance))
     await run(
       process.execPath,
       [...diagnostics, "--test", "--test-reporter=tap", provenance],
       repository,
-      900_000,
+      remainingTimeout(),
     );
 }
 
@@ -138,7 +150,7 @@ export async function main(command: string | undefined): Promise<void> {
           "--scope",
           "fortipi-ci-test",
         ],
-        // This wraps build, checks, the 15-minute test stage and packing. Keep
+        // This wraps build, checks, the 30-minute test stage and packing. Keep
         // the existing 40-minute source CI ceiling; individual stage limits remain.
         { cwd: repository, timeout: 40 * 60_000, maxBuffer: 8_000_000 },
       ).catch((error: unknown) => {
@@ -266,6 +278,7 @@ export async function main(command: string | undefined): Promise<void> {
           "tests/clients",
         ],
         true,
+        FULL_SOURCE_TEST_TIMEOUT_MS,
       );
       return;
     case "test:executor":

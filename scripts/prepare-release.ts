@@ -26,7 +26,7 @@ import {
   attachApplicationRecoveryChannel,
   type InfrastructureObservationPort,
 } from "./application-recovery-channel.ts";
-import { packagePaths, repository } from "./build-workspaces.ts";
+import { FULL_SOURCE_TEST_TIMEOUT_MS, packagePaths, repository } from "./build-workspaces.ts";
 import {
   resolveCurrentCandidateReference,
   verifyCurrentCandidateRead,
@@ -1098,7 +1098,14 @@ export async function prepareCandidate(
       ["run", "test"],
     ]) {
       phase = `source check ${args[1]}`;
-      await checked(pnpm, args, root, childEnvironment(), 900000, true);
+      await checked(
+        pnpm,
+        args,
+        root,
+        childEnvironment(),
+        args[1] === "test" ? FULL_SOURCE_TEST_TIMEOUT_MS : 900000,
+        true,
+      );
     }
     phase = "pre-commit checks";
     await checked("pre-commit", ["run", "--all-files"], root, childEnvironment(), 600000, true);
