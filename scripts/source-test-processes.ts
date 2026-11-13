@@ -75,7 +75,10 @@ export function sourceTestDiagnostic(line: string): boolean {
       line,
     ) &&
       !line.includes("../")) ||
-    recoveryDiagnostic(line)
+    recoveryDiagnostic(line) ||
+    /^# \{"diagnostic":"source-recovery-phase","event":"(?:enter|abort)","phase":"(?:initial\.start|agent\.create|canary\.(?:write|crash|restart|read)|allocation\.(?:initial|arm|wait|crash|lost|restart|retry)|(?:before-submit|after-submit)\.(?:arm|wait|crash|lost|restart|witness|retry|complete|inspect|repeat)|cleanup)","elapsedMs":\d{1,8},"phaseMs":\d{1,8}\}$/.test(
+      line,
+    )
   );
 }
 
@@ -101,7 +104,7 @@ function recoveryDiagnostic(line: string): boolean {
     input === null || (typeof input === "string" && allowed.includes(input));
   if (
     typeof value.phase !== "string" ||
-    !/^(?:initial\.start|agent\.create|canary\.(?:write|crash|restart|read)|allocation\.(?:initial|arm|wait|crash|restart|retry)|(?:before-submit|after-submit)\.(?:arm|wait|crash|restart|retry|complete|inspect|repeat)|cleanup)$/.test(
+    !/^(?:initial\.start|agent\.create|canary\.(?:write|crash|restart|read)|allocation\.(?:initial|arm|wait|crash|lost|restart|retry)|(?:before-submit|after-submit)\.(?:arm|wait|crash|lost|restart|witness|retry|complete|inspect|repeat)|cleanup)$/.test(
       value.phase,
     ) ||
     typeof value.kind !== "string" ||
