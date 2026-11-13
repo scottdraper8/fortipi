@@ -18,7 +18,6 @@ import {
   type UploadStatus,
 } from "../../packages/fortipi-contract/dist/index.js";
 import type { Profile } from "../../packages/fortipi-executor/dist/index.js";
-import type { CandidateReadContext } from "../../scripts/prepare-release.ts";
 import type { DeploymentIdentity } from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
 import type { ScenarioEvidence } from "./evidence.ts";
@@ -125,12 +124,66 @@ export interface DeviceContinuityA {
 }
 export interface DevicePhaseInput {
   installed: Installed;
-  context: CandidateReadContext;
+  context: DeviceJobRead;
   roles: RoleContext;
   deployment: DeploymentIdentity;
   seed: DeviceContinuitySeed;
   clientRole: IssuedRole;
   executorRole: IssuedRole;
+}
+export interface DeviceJobMetadata {
+  id: number;
+  name: string;
+  run_id: number;
+  head_sha: string;
+  status: string;
+  conclusion: string | null;
+  runner_name: string | null;
+  runner_id: number;
+  labels: readonly string[];
+}
+/** Bound by trusted setup to this run/attempt only. No archive reference,
+ * arbitrary URL callback, artifact verifier or bearer is part of this port. */
+export interface DeviceJobRead {
+  readonly candidateSha256: string;
+  readonly runId: number;
+  readonly runAttempt: number;
+  readJobs(page: number): Promise<{
+    total_count: number;
+    jobs: readonly DeviceJobMetadata[];
+  }>;
+}
+export type DevicePhaseCompletion = Awaited<ReturnType<typeof executePhase>>;
+export interface DeviceReadClient {
+  conversations: Pick<FortiPiClient["conversations"], "get" | "events">;
+  tasks: Pick<FortiPiClient["tasks"], "get">;
+  jobs: Pick<FortiPiClient["jobs"], "get">;
+  workspaces: Pick<FortiPiClient["workspaces"], "get" | "manifest" | "read">;
+  tickets: Pick<FortiPiClient["tickets"], "mint">;
+  negotiate: FortiPiClient["negotiate"];
+}
+export interface DeviceContinuityBObservation {
+  phase: "b";
+  sourceCommit: string;
+  candidateSha256: string;
+  deploymentId: string;
+  workerVersionId: string;
+  hosts: [DeviceHost, DeviceHost];
+  originalAdmission: AdmissionReceipt;
+  originalJobId: string;
+  originalExecutionId: string;
+  originalReceiptSha256: string;
+  originalEventPrefixSha256: string;
+  originalWorkspace: RecoveryWorkspaceCanary;
+  replacement: DevicePhaseCompletion;
+  staleLease: Awaited<ReturnType<typeof rejectStaleDeviceLease>>;
+  retirementId: string;
+  revocationId: string;
+  originalStarts: number;
+  replacementStarts: number;
+  aRootAbsentBeforeB: boolean;
+  bMaterializedOriginalHashes: boolean;
+  physicalHostLoss: "not-observed";
 }
 async function until<T>(read: () => Promise<T>, accept: (value: T) => boolean, timeout = 180000) {
   const end = Date.now() + timeout;
@@ -190,19 +243,24 @@ async function host(input: DevicePhaseInput, phase: "a" | "b"): Promise<DeviceHo
   assert.equal(process.env.RUNNER_ENVIRONMENT, "github-hosted");
   assert.equal(process.env.RUNNER_OS, "Linux");
   assert.ok(process.env.RUNNER_NAME);
-  assert.equal(input.context.reference.candidateSha256, input.installed.hash);
+  assert.deepEqual(Reflect.ownKeys(input.context).sort(), [
+    "candidateSha256",
+    "readJobs",
+    "runAttempt",
+    "runId",
+  ]);
+  assert.equal(Object.getPrototypeOf(input.context), Object.prototype);
+  assert.equal(input.context.candidateSha256, input.installed.hash);
   const runId = Number(process.env.GITHUB_RUN_ID),
     runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT);
   assert.ok(
     Number.isSafeInteger(runId) && runId > 0 && Number.isSafeInteger(runAttempt) && runAttempt > 0,
   );
-  const jobs: Record<string, unknown>[] = [];
+  assert.equal(input.context.runId, runId);
+  assert.equal(input.context.runAttempt, runAttempt);
+  const jobs: DeviceJobMetadata[] = [];
   for (let page = 1; page <= 20; page++) {
-    const value = await input.context.request(
-      `/repos/scottdraper8/fortipi/actions/runs/${runId}/attempts/${runAttempt}/jobs?per_page=100&page=${page}`,
-    );
-    assert.ok(value && typeof value === "object" && !Array.isArray(value));
-    const data = value as { jobs?: Record<string, unknown>[]; total_count?: number };
+    const data = await input.context.readJobs(page);
     assert.ok(
       Array.isArray(data.jobs) &&
         data.jobs.length <= 100 &&
@@ -239,7 +297,7 @@ async function host(input: DevicePhaseInput, phase: "a" | "b"): Promise<DeviceHo
   };
 }
 async function prefix(
-  client: FortiPiClient,
+  client: Pick<DeviceReadClient, "conversations">,
   conversationId: string,
   through: number,
   request: ReturnType<typeof requests>,
@@ -261,7 +319,7 @@ async function prefix(
   return hash(canonicalJson(events));
 }
 async function canonicalBytes(
-  client: FortiPiClient,
+  client: Pick<DeviceReadClient, "workspaces">,
   workspace: RecoveryWorkspaceCanary,
   request: ReturnType<typeof requests>,
 ) {
@@ -1080,7 +1138,7 @@ export async function runDeviceContinuityB(
         aRootAbsentBeforeB: true,
         bMaterializedOriginalHashes: true,
         physicalHostLoss: "not-observed",
-      },
+      } satisfies DeviceContinuityBObservation,
       oracle:
         "After A's observed daemon SIGKILL/full private-tree removal and public retirement, a distinct authenticated hosted OS job materializes all original Computer bytes; the same scoped principal retries the exact original admission without replaying its completed effect, then an explicit new job commits R2 while original receipt/events/R0/R1 remain intact",
       sensitivity: [
@@ -1099,3 +1157,9 @@ export async function runDeviceContinuityB(
     await fixture.destroy();
   }
 }
+export {
+  canonicalBytes as deviceCanonicalBytes,
+  expectedFiles as deviceExpectedFiles,
+  prefix as deviceEventPrefix,
+  requests as deviceReadRequests,
+};
