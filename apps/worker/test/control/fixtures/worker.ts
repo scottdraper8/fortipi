@@ -42,6 +42,42 @@ export class TestControlPlane extends ControlPlane {
       await hash(ticket),
     );
   }
+  async clientStreamTicketExpiry(
+    ticket: string,
+    mode: "read" | "expire",
+  ): Promise<{ expiresAt: number; used: boolean }> {
+    check(
+      /^[a-f0-9]{64}$/.test(ticket) && (mode === "read" || mode === "expire"),
+      "invalid_request",
+      "Invalid fixture ticket expiry request",
+    );
+    const key = await hash(ticket);
+    return this.store.tx(() => {
+      const read = () =>
+        this.ctx.storage.sql
+          .exec<{ audience: string; expiresAt: number; used: number }>(
+            "SELECT json_extract(value,'$.audience') AS audience,json_extract(value,'$.expiresAt') AS expiresAt,json_extract(value,'$.used') AS used FROM cp_records WHERE kind='ticket' AND key=?",
+            key,
+          )
+          .one();
+      const before = read();
+      check(
+        before.audience === "client-stream" &&
+          before.used === 0 &&
+          Number.isSafeInteger(before.expiresAt),
+        "invalid_request",
+        "Fixture requires a retained unused client stream ticket",
+      );
+      if (mode === "expire")
+        this.ctx.storage.sql.exec(
+          "UPDATE cp_records SET value=json_set(value,'$.expiresAt',?) WHERE kind='ticket' AND key=?",
+          Date.now() - 1,
+          key,
+        );
+      const after = read();
+      return { expiresAt: after.expiresAt, used: after.used !== 0 };
+    });
+  }
   async recoveredPresence(executorId: string, generation: number): Promise<D.Outcome<boolean>> {
     // Reconstruct only the component: use real retained workerd sockets and
     // storage, while its process-local heartbeat map starts empty.
@@ -453,6 +489,7 @@ export type FixtureControl = DurableObject<Env> &
     | "deployment"
     | "streamRegistration"
     | "replaceTicketAgents"
+    | "clientStreamTicketExpiry"
     | "recoveredPresence"
     | "drainTest"
     | "canary"
