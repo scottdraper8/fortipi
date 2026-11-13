@@ -897,6 +897,64 @@ export async function runEvidence(
         );
         const controlLimits: string[] = [],
           controlSensitivity: string[] = [];
+        let execution: Awaited<ReturnType<typeof context.executionControls>> | undefined;
+        await measure(
+          "live-execution-setup",
+          ["openLiveExecutionControls", "installed-native-CLI", "scoped-public-roles"],
+          "Actual Linux installed executor uses only its private supported XDG registry/profile and one exact public application scope",
+          async () => {
+            execution = await context.executionControls();
+            return { actualPlatform: process.platform, privateXdgState: true };
+          },
+          [
+            "Source controlled checks cannot substitute for actual installed execution against the authenticated deployed target",
+          ],
+        );
+        if (execution) {
+          const ports = execution;
+          try {
+            for (const [id, port] of [
+              ["dispatch-safety", ports.dispatch],
+              ["approval-reconcile", ports.reconciliation],
+            ] as const) {
+              const limits: string[] = [],
+                sensitivity: string[] = [];
+              await measure(
+                id,
+                [
+                  "openLiveExecutionControls",
+                  id,
+                  "installed-native-CLI",
+                  "public-model-driven-job",
+                ],
+                id === "dispatch-safety"
+                  ? "One original admission, exact remote/native consent and fsynced start survive actual same-ledger daemon loss without re-executing a completed job"
+                  : "Actual started native uncertainty is acknowledged without rewriting the original outcome; distinct public FreshJobs authorization still requires its own rejected-before-assignment approval",
+                async () => {
+                  const evidence = await port();
+                  limits.push(...evidence.limitations);
+                  sensitivity.push(...evidence.sensitivity);
+                  return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
+                },
+                limits,
+                sensitivity,
+              );
+            }
+          } finally {
+            await measure(
+              "live-execution-role-cleanup",
+              ["live-execution-close", "public-complete-revocations"],
+              "The real daemon exits and both scoped client/executor roles complete public revocation before provider recovery",
+              async () => {
+                await ports.close();
+                return { daemonClosed: true, rolesRevoked: true };
+              },
+              [
+                "Pending/unknown cleanup fails this prerequisite; outer ownership cleanup remains independent",
+              ],
+            );
+          }
+        }
         await measure(
           "live-pending-task-controls",
           ["runLiveTaskControls", "installed-node-export", "public-cancel", "seed1010"],
