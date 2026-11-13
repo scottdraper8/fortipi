@@ -5,7 +5,8 @@ import { copyFile, lstat, readFile, readlink, realpath, writeFile } from "node:f
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { type Lock, yaml } from "../../../scripts/check-pins.ts";
+import { parse as parseYaml } from "yaml";
+import type { Lock } from "../../../scripts/check-pins.ts";
 import {
   childEnvironment,
   installCandidate,
@@ -95,7 +96,10 @@ export async function installConsumer(directory: string): Promise<Record<string,
     join(root, "packages/fortipi-cli/test/offline-consumer.ts"),
     join(consumer, "offline-consumer.ts"),
   );
-  const lock = await yaml<Lock>(consumer, "pnpm-lock.yaml");
+  // The ordinary consumer has no packageManager field: its pnpm lock has one
+  // application document. The repository's two-document manager policy is a
+  // separate source-install invariant.
+  const lock = parseYaml(await readFile(join(consumer, "pnpm-lock.yaml"), "utf8")) as Lock;
   const names = new Set(candidate.packages.map((pkg) => `${pkg.name}@${pkg.version}`));
   const result = {
     schemaVersion: 1,

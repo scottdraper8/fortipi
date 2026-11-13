@@ -37,6 +37,7 @@ type InputGate =
   | `inputs.host.${HostTool}`;
 let gate: InputGate | "phase" = "phase";
 let failure = "eligibility or required input";
+let diagnosticSources: readonly string[] = [];
 function inputGate(value: InputGate) {
   gate = value;
   failure = "guard";
@@ -85,6 +86,19 @@ async function run(file: string, args: string[], cwd = root, timeout = 120000) {
         "stdout" in error && (typeof error.stdout === "string" || Buffer.isBuffer(error.stdout))
           ? Buffer.byteLength(error.stdout)
           : 0;
+      // This fixed installer runs only with onlineEnv(): no deployment,
+      // application, registry or GitHub credentials are present. Preserve its
+      // bounded tool diagnostic; signed URL queries and auth-shaped values
+      // are still removed. Other subprocess failures never emit captured text.
+      process.stderr.write(
+        stderr
+          .slice(0, 8192)
+          .replace(/https?:\/\/[^\s"'<>]+/g, "[URL removed]")
+          .replace(
+            /(?:Bearer\s+|(?:token|password|secret|authorization)\s*[=:]\s*)[^\s"',;]+/gi,
+            "[authentication removed]",
+          ),
+      );
       const condition =
         [
           "ERR_ASSERTION",
@@ -97,9 +111,13 @@ async function run(file: string, args: string[], cwd = root, timeout = 120000) {
           "EACCES",
           "ENOSPC",
           "ENOMEM",
+          "SyntaxError",
+          "TypeError",
+          "ReferenceError",
+          "RangeError",
         ].find((known) => stderr.includes(known) || ("code" in error && error.code === known)) ??
         "unknown";
-      failure = `${installedFailureLocation(stderr)}; exit=${code}; signal=${signal}; stderrBytes=${Buffer.byteLength(stderr)}; stdoutBytes=${stdoutBytes}; kind=${condition}`;
+      failure = `${installedFailureLocation(stderr, diagnosticSources)}; exit=${code}; signal=${signal}; stderrBytes=${Buffer.byteLength(stderr)}; stdoutBytes=${stdoutBytes}; kind=${condition}`;
     }
     throw error;
   }
@@ -107,12 +125,24 @@ async function run(file: string, args: string[], cwd = root, timeout = 120000) {
 
 /** Only static repository locations are diagnostic output; discard all values,
  * URLs, request bodies and arbitrary exception messages from library stderr. */
-export function installedFailureLocation(stderr: unknown): string {
+export function installedFailureLocation(
+  stderr: unknown,
+  trackedSources: readonly string[] = [],
+): string {
+  const allowed = new Set(trackedSources);
   const locations =
     typeof stderr === "string"
-      ? (stderr.match(
-          /(?:scripts\/(?:prepare-release|rewrite-publish-names|runtime-closure|runtime-conveyance|check-licenses|generate-notices|stage-runtime-bundle|verify-release-gates|pnpm-executable)\.ts|scripts\/test\/release\/fixtures\.ts|packages\/fortipi-cli\/(?:dist|test)\/[a-z.-]+\.(?:ts|js)):\d{1,6}:\d{1,6}/g,
-        ) ?? [])
+      ? (
+          stderr.match(
+            /(?:scripts|packages|tests|apps)\/[\w./-]+\.(?:ts|js):\d{1,6}(?::\d{1,6})?/g,
+          ) ?? []
+        ).filter(
+          (location) =>
+            allowed.has(location.replace(/:\d+(?::\d+)?$/, "")) ||
+            /^(?:scripts\/(?:prepare-release|rewrite-publish-names|runtime-closure|runtime-conveyance|check-licenses|generate-notices|stage-runtime-bundle|verify-release-gates|pnpm-executable)\.ts|scripts\/test\/release\/fixtures\.ts|packages\/fortipi-cli\/(?:dist|test)\/[a-z.-]+\.(?:ts|js)):/.test(
+              location,
+            ),
+        )
       : [];
   const selected = [...new Set(locations)].slice(0, 4);
   return `scoped component failed${selected.length ? ` at ${selected.join(",")}` : " before a known source frame"}`;
@@ -180,6 +210,7 @@ function distribution() {
   return join(directory, "fortipi-cli-distribution");
 }
 async function inputs() {
+  diagnosticSources = (await git("ls-files", "--", "*.ts", "*.js")).split("\n");
   for (const [port, path] of [
     ["install-harness", "packages/fortipi-cli/test/install-harness.ts"],
     ["offline-consumer", "packages/fortipi-cli/test/offline-consumer.ts"],

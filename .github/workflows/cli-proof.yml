@@ -74,9 +74,13 @@ jobs:
           check-latest: false
       - name: Require frozen owner ports
         run: node scripts/cli-proof.ts inputs
+      - name: Populate the pinned producer store before the normal frozen install
+        run: pnpm fetch --frozen-lockfile --ignore-scripts
       - run: node scripts/install-dependencies.ts
       - run: pnpm --dir tools/unstale install --frozen-lockfile
       - run: node scripts/verify-foundation.ts --egress
+      - name: Probe the installed native build tools and PTY behavior
+        run: node scripts/verify-foundation.ts --native
       - run: node tools/unstale/review-supply-chain.ts --locks --check
       - run: node scripts/check-licenses.ts --foundation
       - run: node scripts/build-workspaces.ts build:evidence
