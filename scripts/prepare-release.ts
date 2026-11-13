@@ -552,7 +552,14 @@ export async function stageAndPack(
       producedPackages.set(pkg, authority);
       producedArchives.set(pkg.sha256, authority);
       packages.push(pkg);
-      runtimeNotices.push(legal);
+      const legalDirectory = resolve(output, "legal-evidence", sourceName);
+      await mkdir(dirname(legalDirectory), { recursive: true });
+      await cp(legal.directory, legalDirectory, {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+      });
+      runtimeNotices.push({ ...legal, directory: legalDirectory });
     }
     return { packages, assetManifestSha256: stage.assetManifestSha256, runtimeNotices };
   } finally {
@@ -1025,7 +1032,7 @@ export async function prepareCandidate(
       "Compatibility watch requires review at this candidate SHA",
     );
     phase = "notices";
-    const notices = await generateNotices(root);
+    await generateNotices(root);
     for (const args of [
       ["run", "typecheck"],
       ["run", "lint"],
@@ -1057,19 +1064,12 @@ export async function prepareCandidate(
       ),
     ])
       await copy(root, `packages/fortipi-contract/${file}`, resolve(destination, "spec", file));
-    for (const notice of notices)
-      for (const file of [
-        "LICENSE",
-        "THIRD_PARTY_NOTICES.md",
-        ...(await inventory(resolve(root, notice.directory, "licenses"))).map(
-          (f) => `licenses/${f.path}`,
-        ),
-      ])
-        await copy(
-          root,
-          `${notice.directory}/${file}`,
-          resolve(destination, "legal", notice.package, file),
-        );
+    for (const notice of packed.runtimeNotices)
+      for (const file of notice.files) {
+        const source = resolve(notice.directory, safePath(file.path));
+        assert.equal(sha256(await regularBytes(source, file.size)), file.sha256);
+        await copy(root, source, resolve(destination, "legal", notice.package, file.path));
+      }
     for (const file of ["image-metadata.json", "source-revision.json", "sources-and-notices.tar"])
       await copy(root, `apps/worker/dist/container/${file}`, resolve(destination, "image", file));
     for (const file of ["inventory.json", "advisory-review.json"])

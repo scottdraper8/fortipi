@@ -56,7 +56,13 @@ test("actual five scoped pnpm packs retain staged bytes, executable bins, legal 
       const legal = packed.runtimeNotices.find((notice) => notice.package === p.sourceName);
       assert.ok(legal);
       const entries = new Map(p.entries.map((entry) => [entry.path, entry]));
-      for (const file of legal.files) assert.deepEqual(entries.get(file.path), file);
+      for (const file of legal.files) {
+        assert.deepEqual(entries.get(file.path), file);
+        assert.equal(
+          sha256(await regularBytes(resolve(legal.directory, file.path), file.size)),
+          file.sha256,
+        );
+      }
       assert.ok(p.entries.some((e) => e.path === "THIRD_PARTY_NOTICES.md"));
       assert.equal(
         p.entries.some(
