@@ -640,6 +640,7 @@ export async function createRuntimeLayout(
         auth,
         "--store-dir",
         store,
+        "--config.package-import-method=copy",
         "--filter",
         sourceName,
         "--node-linker",
