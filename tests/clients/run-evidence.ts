@@ -25,6 +25,7 @@ import { workspaceAtomicBytes } from "../../apps/worker/test/integration/workspa
 import {
   applicationRecoveryChannel,
   discoverApplicationRecoveryMode,
+  infrastructureObservationChannel,
 } from "../../scripts/application-recovery-channel.ts";
 import {
   type CandidateReadContext,
@@ -65,6 +66,7 @@ import {
 import { type LiveRecoveryBridge, liveContext } from "./live.ts";
 import {
   InfrastructureEvidenceUnavailable,
+  type InfrastructureMeasurements,
   type InfrastructureObserver,
 } from "./live-infrastructure-controls.ts";
 import { runNativeDaemon } from "./native-daemon.ts";
@@ -1328,6 +1330,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     .then(async () => {
       const input = argumentsFor(process.argv.slice(2));
       let recovery: LiveRecoveryBridge | undefined;
+      let infrastructure: InfrastructureObserver | undefined;
       if (process.send && process.connected) {
         assert.equal(input.mode, "live", "Recovery bridge is live-only");
         const mode = await discoverApplicationRecoveryMode();
@@ -1335,9 +1338,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
           mode === "perform"
             ? { mode, bridge: applicationRecoveryChannel("perform") }
             : { mode, bridge: applicationRecoveryChannel("verify-existing") };
+        const observations = infrastructureObservationChannel();
+        infrastructure = {
+          // The domain consumer validates the closed, attributed result before
+          // qualifying it. IPC supplies data rather than metric authority.
+          read: async (request) => (await observations.read(request)) as InfrastructureMeasurements,
+        };
       }
       const context = await resolveCandidateReadContext(input.candidateManifest);
-      return runEvidence(input, context, recovery);
+      return runEvidence(input, context, recovery, undefined, infrastructure);
     })
     .then((rows) => {
       process.stdout.write(
