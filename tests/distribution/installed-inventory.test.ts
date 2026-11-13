@@ -36,7 +36,7 @@ test("installed inventory accepts authenticated bundled dependencies while rejec
     );
     const original = await installedPackageInventory(root, expected);
     assert.deepEqual(
-      original.map((file) => ({ path: file.path, size: file.size, sha256: file.sha256 })),
+      original.files.map((file) => ({ path: file.path, size: file.size, sha256: file.sha256 })),
       [...expected]
         .sort((a, b) => a.path.localeCompare(b.path, "en"))
         .map(({ path, size, sha256 }) => ({ path, size, sha256 })),
@@ -84,6 +84,85 @@ test("installed inventory accepts authenticated bundled dependencies while rejec
     assert.deepEqual(await installedPackageInventory(root, expected), original);
   } finally {
     await rm(hardlink, { force: true });
+    for (const directory of directories) await chmod(directory, 0o700);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("only package-declared bin links to authenticated executable bytes join the installed inventory", async () => {
+  const root = await mkdtemp(resolve(await realpath(tmpdir()), "fortipi-installed-bins-"));
+  const module = resolve(root, "node_modules/declared"),
+    bins = resolve(root, "node_modules/.bin");
+  await mkdir(resolve(module, "bin"), { recursive: true });
+  await mkdir(bins);
+  const members = [
+    {
+      path: "node_modules/declared/package.json",
+      bytes: Buffer.from('{"name":"declared","bin":{"run-tool":"./bin/run.js"}}\n'),
+      mode: 0o644,
+    },
+    {
+      path: "node_modules/declared/bin/run.js",
+      bytes: Buffer.from("#!/usr/bin/env node\n"),
+      mode: 0o755,
+    },
+  ];
+  const expected = members.map((file) => ({
+    path: file.path,
+    mode: file.mode,
+    size: file.bytes.length,
+    sha256: createHash("sha256").update(file.bytes).digest("hex"),
+  }));
+  for (const file of members) {
+    await writeFile(resolve(root, file.path), file.bytes);
+    await chmod(resolve(root, file.path), file.mode & 0o111 ? 0o555 : 0o444);
+  }
+  const command = resolve(bins, "run-tool");
+  await symlink("../declared/bin/run.js", command);
+  const directories = [root, resolve(root, "node_modules"), module, resolve(module, "bin"), bins];
+  for (const path of directories) await chmod(path, 0o555);
+  try {
+    const original = await installedPackageInventory(root, expected);
+    assert.equal(original.files.length, 2);
+    assert.deepEqual(original.binLinks, [
+      {
+        path: "node_modules/.bin/run-tool",
+        target: "node_modules/declared/bin/run.js",
+        relativeTarget: "../declared/bin/run.js",
+        manifest: "node_modules/declared/package.json",
+        manifestSha256: expected[0]?.sha256,
+        targetSha256: expected[1]?.sha256,
+      },
+    ]);
+    await chmod(bins, 0o755);
+    await assert.rejects(installedPackageInventory(root, expected), /read-only/);
+    await chmod(bins, 0o555);
+    await chmod(bins, 0o700);
+    await rm(command);
+    await symlink("../declared/package.json", command);
+    await chmod(bins, 0o555);
+    await assert.rejects(installedPackageInventory(root, expected), /bin target changed/);
+    await chmod(bins, 0o700);
+    await rm(command);
+    await writeFile(command, "replacement shim", { mode: 0o555 });
+    await chmod(bins, 0o555);
+    await assert.rejects(installedPackageInventory(root, expected), /exact declared link/);
+    await chmod(bins, 0o700);
+    await rm(command);
+    await symlink("../declared/bin/run.js", command);
+    await symlink("../declared/bin/run.js", resolve(bins, "undeclared-alias"));
+    await chmod(bins, 0o555);
+    await assert.rejects(installedPackageInventory(root, expected), /Unexpected installed package/);
+    await chmod(bins, 0o700);
+    await rm(resolve(bins, "undeclared-alias"));
+    await rm(command);
+    await chmod(bins, 0o555);
+    await assert.rejects(installedPackageInventory(root, expected), /Missing installed bin link/);
+    await chmod(bins, 0o700);
+    await symlink("../declared/bin/run.js", command);
+    await chmod(bins, 0o555);
+    assert.deepEqual(await installedPackageInventory(root, expected), original);
+  } finally {
     for (const directory of directories) await chmod(directory, 0o700);
     await rm(root, { recursive: true, force: true });
   }
