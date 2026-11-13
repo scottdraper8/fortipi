@@ -13,6 +13,7 @@ import {
 } from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
 import { publicAccess } from "./live-access.ts";
+import { publicRequestPressure } from "./live-pressure.ts";
 import { runLiveTaskControls } from "./live-task-controls.ts";
 import { runLiveWorkspace } from "./live-workspace.ts";
 import type { RecoveryWorkspaceCanary } from "./platform-recovery.ts";
@@ -209,6 +210,24 @@ export async function liveContext(
         noUnavailableBackendInvocation: deployment.backend === "free",
         limitation:
           "Discovery/configuration prerequisite only; bounded ordinary live activity and account-wide/platform refusal proofs are separate",
+      };
+    },
+    async requestPressure() {
+      const evidence = await publicRequestPressure({ installed, roles, agentId: agent.agentId });
+      const current = await roles.call({
+        operationId: "getConfiguration",
+        path: {},
+        query: {},
+        body: undefined,
+      });
+      assert.equal(sha256(canonicalJson(current)), deployment.runtimeConfigSha256);
+      return {
+        ...evidence,
+        observation: {
+          ...evidence.observation,
+          providerDeploymentId: deployment.deploymentId,
+          authenticatedRuntimeConfigSha256: deployment.runtimeConfigSha256,
+        },
       };
     },
     publicRole: async (index: number, usage: "python" | "tui" | "browser") => {

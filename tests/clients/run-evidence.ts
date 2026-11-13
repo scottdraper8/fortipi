@@ -892,6 +892,21 @@ export async function runEvidence(
             "Discovery does not prove account-wide capacity/exhaustion; infrastructure-boundaries remains a separate required live claim",
           ],
         );
+        const pressureLimits: string[] = [],
+          pressureSensitivity: string[] = [];
+        await measure(
+          "live-request-pressure",
+          ["publicRequestPressure", "bounded-read-only", "declared-retry-window"],
+          "Bounded ordinary public reads encounter actual request admission pressure and recover the same scoped resource after its declared wait without changing policy",
+          async () => {
+            const evidence = await context.requestPressure();
+            pressureLimits.push(...evidence.limitations);
+            pressureSensitivity.push(...evidence.sensitivity);
+            return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
+          },
+          pressureLimits,
+          pressureSensitivity,
+        );
         await measure(
           "installed-browser",
           ["Chromium", "installed-browser-export", "seed1010"],
