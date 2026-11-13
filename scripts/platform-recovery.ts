@@ -326,12 +326,20 @@ async function coordinate(
       assert.equal(ids[0], input.before.workerVersionId, "Unrelated latest upload");
     else equal(ids.slice(0, 2), [next, input.before.workerVersionId]);
   };
+  const readTransition = async () => {
+    try {
+      const bytes = await regularBytes(file("transition.json"));
+      return { value: JSON.parse(bytes.toString("utf8")) as unknown, sha256: sha256(bytes) };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
+  };
+  const retained = input.mode === "verify-existing" ? await readTransition() : undefined;
   if (input.mode === "verify-existing") {
     digest(input.retainedTransitionSha256);
-    assert.equal(
-      sha256(await regularBytes(file("transition.json"))),
-      input.retainedTransitionSha256,
-    );
+    assert.ok(retained);
+    assert.equal(retained.sha256, input.retainedTransitionSha256);
   }
   const attempted = { intentSha256 };
   if (input.mode === "perform" && (await first(file("upload-attempt.json"), attempted))) {
@@ -419,23 +427,26 @@ async function coordinate(
     physicalHostLoss: "not-observed",
     requiresApplicationVerification: true,
   };
-  const saved = await optional(file("transition.json"));
+  const saved = retained ?? (await readTransition());
   if (saved !== undefined) {
-    const previous = object(saved);
+    const previous = object(saved.value);
     equal({ ...previous, after }, result);
     assertDeployment(previous.after);
     equal(withoutTime(previous.after), withoutTime(after));
     return {
-      transition: saved as ProviderTransition,
-      transitionSha256: sha256(await regularBytes(file("transition.json"))),
+      transition: saved.value as ProviderTransition,
+      transitionSha256: saved.sha256,
       current: after,
     };
   }
   assert.equal(input.mode, "perform");
   await first(file("transition.json"), result);
+  const written = await readTransition();
+  assert.ok(written);
+  equal(written.value, result);
   return {
-    transition: result,
-    transitionSha256: sha256(await regularBytes(file("transition.json"))),
+    transition: written.value as ProviderTransition,
+    transitionSha256: written.sha256,
     current: after,
   };
 }

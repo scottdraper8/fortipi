@@ -427,6 +427,72 @@ test("uncertain writes reconcile exact retained intent, without repeating upload
   }
 });
 
+test("historical transition and digest share one snapshot across provider awaits", {
+  timeout: 120000,
+}, async () => {
+  for (const mode of ["verify-existing", "perform"] as const) {
+    const f = await fixture();
+    try {
+      await recoverProvider({ ...f.input, mode: "perform" }, f.ports);
+      const path = resolve(f.input.journalDirectory, "transition.json");
+      const original = await regularBytes(path);
+      const originalValue = object(JSON.parse(original.toString("utf8")));
+      const retainedTransitionSha256 = sha256(original);
+      let replacement: Buffer | undefined;
+      const ports: RecoveryPorts = {
+        ...f.ports,
+        read: async (request) => {
+          if (!replacement && request.endsWith("/versions?per_page=100")) {
+            const value = object(JSON.parse(original.toString("utf8")));
+            value.after = {
+              ...object(value.after),
+              checkedAt: new Date(
+                Date.parse(String(object(value.after).checkedAt)) + 1,
+              ).toISOString(),
+            };
+            replacement = Buffer.from(`${canonicalJson(value)}\n`);
+            assert.notEqual(sha256(replacement), retainedTransitionSha256);
+            await writeFile(path, replacement);
+          }
+          return f.ports.read(request);
+        },
+        wrangler: {
+          async run() {
+            assert.fail("Retained transition must not repeat effects");
+          },
+        },
+      };
+      const result = await recoverProvider(
+        mode === "verify-existing"
+          ? { ...f.input, mode, retainedTransitionSha256 }
+          : { ...f.input, mode },
+        ports,
+      );
+      assert.ok(replacement);
+      assert.equal(result.transitionSha256, sha256(`${canonicalJson(result.transition)}\n`));
+      if (mode === "verify-existing") {
+        assert.equal(result.transitionSha256, retainedTransitionSha256);
+        assert.deepEqual(
+          result.transition,
+          originalValue,
+          "Keep the authenticated historical timestamp",
+        );
+      } else {
+        assert.equal(result.transitionSha256, sha256(replacement));
+        assert.deepEqual(result.transition, JSON.parse(replacement.toString("utf8")));
+      }
+      assert.deepEqual(
+        await regularBytes(path),
+        replacement,
+        "Neither mode rewrites the retained history",
+      );
+      assert.equal(f.calls.length, 2);
+    } finally {
+      await f.close();
+    }
+  }
+});
+
 test("candidate/prepared identity, distinct version and inherited module/binding/namespace/secret guards fail before deployment", {
   timeout: 180000,
 }, async () => {
