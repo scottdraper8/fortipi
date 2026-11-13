@@ -211,6 +211,14 @@ async function checked(
   onSpawn?: (child: ChildProcess) => void,
 ): Promise<string> {
   const result = await execute(command, args, cwd, env, timeout, progress, onSpawn);
+  if (result.code !== 0 || result.timedOut)
+    console.error(
+      JSON.stringify({
+        diagnostic: "required-command-failure",
+        exitCode: result.code,
+        limitHit: result.timedOut,
+      }),
+    );
   assert.ok(
     result.code === 0 && !result.timedOut,
     `Required command failed: ${basename(command)} ${args[0] ?? ""}`,

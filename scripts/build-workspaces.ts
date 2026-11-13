@@ -132,7 +132,31 @@ export async function main(command: string | undefined): Promise<void> {
         // This wraps build, checks, the 15-minute test stage and packing. Keep
         // the existing 40-minute source CI ceiling; individual stage limits remain.
         { cwd: repository, timeout: 40 * 60_000, maxBuffer: 8_000_000 },
-      );
+      ).catch((error: unknown) => {
+        // Node may truncate a large captured test log while printing an error.
+        // Surface only the fixed failure record; raw tail/argv/env stay private.
+        try {
+          const stderr =
+            error !== null && typeof error === "object"
+              ? Object.getOwnPropertyDescriptor(error, "stderr")?.value
+              : undefined;
+          if (typeof stderr === "string") {
+            const records = stderr
+              .slice(-8192)
+              .split("\n")
+              .filter((line) =>
+                /^\{"diagnostic":"required-command-failure","exitCode":(?:null|-?\d{1,10}),"limitHit":(?:true|false)\}$/.test(
+                  line,
+                ),
+              )
+              .slice(-4);
+            for (const record of records) process.stderr.write(`${record}\n`);
+          }
+        } catch {
+          /* Preserve the original failure even if diagnostics cannot be read. */
+        }
+        throw error;
+      });
       const receipt = JSON.parse(output.stdout.trim()) as {
         schemaVersion: number;
         candidateManifestPath: string;
