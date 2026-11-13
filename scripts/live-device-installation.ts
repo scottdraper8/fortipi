@@ -3,6 +3,7 @@ import { lstat, realpath } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { runtimeImports } from "../tests/distribution/consumer-runtime.ts";
 import { type Installed, install } from "../tests/distribution/install.ts";
+import { installedPackageInventory } from "../tests/distribution/installed-inventory.ts";
 import { repository } from "./build-workspaces.ts";
 import { assertTarget, type TargetDescriptor } from "./deploy-smoke.ts";
 import {
@@ -17,7 +18,6 @@ import {
   readJson,
   regularBytes,
   saveJson,
-  sha256,
   string,
 } from "./verify-release-gates.ts";
 
@@ -119,16 +119,7 @@ export async function loadLiveDeviceInstallation(path: string): Promise<{
         assert.ok(stat.isDirectory() && !stat.isSymbolicLink());
         assert.equal(stat.mode & 0o222, 0);
       }
-      for (const file of pkg.entries) {
-        const entry = resolve(root, file.path);
-        assert.ok(entry.startsWith(`${root}${sep}`));
-        const stat = await lstat(entry);
-        assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1);
-        assert.equal(stat.mode & 0o222, 0);
-        assert.equal(Boolean(stat.mode & 0o111), Boolean(file.mode & 0o111));
-        assert.equal(stat.size, file.size);
-        assert.equal(sha256(await regularBytes(entry, file.size)), file.sha256);
-      }
+      await installedPackageInventory(root, pkg.entries);
     }
   };
   await verifyUnchanged();

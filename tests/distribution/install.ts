@@ -9,9 +9,10 @@ import {
   installCandidate,
   loadCandidate,
 } from "../../scripts/prepare-release.ts";
-import { inventory, regularBytes, sha256 } from "../../scripts/verify-release-gates.ts";
+import { regularBytes, sha256 } from "../../scripts/verify-release-gates.ts";
 import { runtimeImports } from "./consumer-runtime.ts";
 import { consumerTypes } from "./consumer-types.ts";
+import { installedPackageInventory } from "./installed-inventory.ts";
 
 export async function install(path: string, context?: CandidateReadContext) {
   const loaded = await loadCandidate(path, context);
@@ -46,7 +47,7 @@ export async function install(path: string, context?: CandidateReadContext) {
   const ownedInventory = () =>
     Promise.all(
       loaded.candidate.packages.map((p) =>
-        inventory(resolve(together.consumer, "node_modules", p.name)),
+        installedPackageInventory(resolve(together.consumer, "node_modules", p.name), p.entries),
       ),
     );
   const modulesBefore = await ownedInventory();
@@ -141,15 +142,6 @@ export async function install(path: string, context?: CandidateReadContext) {
     // Trusted setup already authenticated archives. A client integrity check
     // cannot acquire a new archive reader by reloading serialized metadata.
     assert.equal(sha256(await regularBytes(path)), loaded.hash);
-    for (const pkg of loaded.candidate.packages)
-      for (const file of pkg.entries)
-        assert.equal(
-          sha256(
-            await regularBytes(resolve(together.consumer, "node_modules", pkg.name, file.path)),
-          ),
-          file.sha256,
-          "Installed candidate bytes changed during actual consumer execution",
-        );
     const manifest = JSON.parse(
       await readFile(resolve(ports.cliRoot, "worker-assets/asset-manifest.json"), "utf8"),
     );
