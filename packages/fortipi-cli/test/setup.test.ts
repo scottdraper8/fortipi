@@ -288,6 +288,8 @@ async function harness(
         return response({
           items: ["my-device", "workspace-device"].map((executorId) => ({
             executorId,
+            ledgerId: `${executorId}-ledger`,
+            ledgerInstanceId: `${executorId}-instance`,
             generation: 1,
             connectionEpoch: 1,
             platform: "linux",
