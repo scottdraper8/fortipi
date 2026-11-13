@@ -78,9 +78,16 @@ async function tests(roots: string[]): Promise<void> {
     "packages/fortipi-cli/test/enforcer-context-provenance.test.ts",
   );
   const parallel = paths.filter((path) => path !== provenance);
-  if (parallel.length) await run(process.execPath, ["--test", ...parallel], repository, 900_000);
+  // Emit each assertion immediately, even if another file outlives the aggregate runner.
+  if (parallel.length)
+    await run(
+      process.execPath,
+      ["--test", "--test-reporter=tap", ...parallel],
+      repository,
+      900_000,
+    );
   if (paths.includes(provenance))
-    await run(process.execPath, ["--test", provenance], repository, 900_000);
+    await run(process.execPath, ["--test", "--test-reporter=tap", provenance], repository, 900_000);
 }
 
 async function compile(path: string): Promise<void> {
@@ -122,7 +129,9 @@ export async function main(command: string | undefined): Promise<void> {
           "--scope",
           "fortipi-ci-test",
         ],
-        { cwd: repository, timeout: 900_000, maxBuffer: 8_000_000 },
+        // This wraps build, checks, the 15-minute test stage and packing. Keep
+        // the existing 40-minute source CI ceiling; individual stage limits remain.
+        { cwd: repository, timeout: 40 * 60_000, maxBuffer: 8_000_000 },
       );
       const receipt = JSON.parse(output.stdout.trim()) as {
         schemaVersion: number;
