@@ -469,6 +469,32 @@ test("forged original producer fails before reading original recovery payload or
   }
   assert.deepEqual(await inventory(f.root), before);
 });
+
+test("original artifact reference candidate digest must match the retained candidate before payload access", async (t) => {
+  const f = await fixture(t, "verify-existing");
+  const bundle = object(await readJson(f.input.proofsPath));
+  assert.ok(Array.isArray(bundle.proofs));
+  const artifact = object(object(bundle.proofs[0]).artifact);
+  artifact.candidateSha256 = sha256("unrelated candidate reference");
+  const facts = object(await readJson(f.input.factsPath));
+  facts.evidence = artifact;
+  await fs.writeFile(f.input.proofsPath, `${canonicalJson(bundle)}\n`);
+  await write(f.input.factsPath, facts);
+  await assert.rejects(
+    validateRecoveryRetention(f.input).then(() => {
+      t.diagnostic(
+        JSON.stringify({
+          accepted: true,
+          downloads: f.downloads(),
+          referenceCandidateSha256: artifact.candidateSha256,
+          candidateSha256,
+        }),
+      );
+    }),
+    "Matching serialized references must not replace the authenticated candidate binding",
+  );
+  assert.equal(f.downloads(), 0);
+});
 async function write(path: string, value: unknown): Promise<FileRecord> {
   const bytes = Buffer.from(`${canonicalJson(value)}\n`);
   await fs.writeFile(path, bytes, { mode: 0o600 });
