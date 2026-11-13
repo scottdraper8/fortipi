@@ -10,6 +10,7 @@ import {
   evidenceProducer,
   execute,
   loadCandidate,
+  producer as packingProducer,
   verifyRetainedCandidate,
 } from "../../prepare-release.ts";
 import {
@@ -55,6 +56,7 @@ import {
 
 test("evidence origin binds the actual workflow/job and synthetic observations cannot authorize a privileged gate", async () => {
   const keys = [
+    "OPERATION",
     "GITHUB_ACTIONS",
     "GITHUB_REPOSITORY",
     "GITHUB_REPOSITORY_ID",
@@ -175,6 +177,31 @@ test("evidence origin binds the actual workflow/job and synthetic observations c
         44,
       );
     }
+    Object.assign(process.env, {
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_JOB: "native",
+      GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/release.yml@refs/heads/main`,
+      OPERATION: "candidate",
+    });
+    assert.equal(
+      (await evidenceProducer(repository, c, "native", githubRequest(undefined, server.transport)))
+        .workflowId,
+      44,
+    );
+    process.env.GITHUB_JOB = "candidate";
+    assert.equal(
+      (
+        await packingProducer(
+          repository,
+          false,
+          "release.yml",
+          githubRequest(undefined, server.transport),
+        )
+      ).workflowId,
+      44,
+    );
+    assert.equal(c.publishable, false);
     delete process.env.GITHUB_ACTIONS;
     const local = await evidenceProducer(repository, c, "local");
     const gate = receipt(local);
@@ -264,6 +291,43 @@ test("actual evidence child environment carries producer metadata and only the l
       model: false,
     })),
   );
+});
+
+test("only trusted candidate setup receives GitHub context and ordinary client children strip it", async () => {
+  const c = candidate();
+  const reference: ArtifactReference = {
+    runId: c.producer.runId,
+    runAttempt: c.producer.runAttempt,
+    artifactId: 1,
+    artifactName: "candidate-fixture",
+    artifactDigest: `sha256:${sha256("fixture")}`,
+    candidateSha256: sha256("candidate"),
+  };
+  const code = `
+    const {evidenceEnvironment,childEnvironment,execute}=await import(${JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href)});
+    const trusted=evidenceEnvironment(${JSON.stringify(c.producer)},'native',{
+      kind:'current',reference:${JSON.stringify(reference)},request:()=>{throw Error('No API call in environment test')}
+    });
+    const result=await execute(process.execPath,['--input-type=module','-e',
+      "const {childEnvironment,execute}=await import("+${JSON.stringify(JSON.stringify(pathToFileURL(resolve(repository, "scripts/prepare-release.ts")).href))}+"); const result=await execute(process.execPath,['-e', 'console.log(JSON.stringify({github:!!process.env.GITHUB_TOKEN,reference:!!process.env.FORTIPI_CANDIDATE_REFERENCE,admin:!!process.env.FORTIPI_ADMIN_TOKEN,cf:!!process.env.CLOUDFLARE_API_TOKEN,npm:!!process.env.NPM_TOKEN,model:!!process.env.OPENAI_API_KEY}))'],process.cwd(),childEnvironment());if(result.code!==0)throw Error('client failed');console.log(JSON.stringify({trustedGithub:!!process.env.GITHUB_TOKEN,operation:process.env.OPERATION,reference:JSON.parse(process.env.FORTIPI_CANDIDATE_REFERENCE),client:JSON.parse(result.stdout)}));"
+    ],${JSON.stringify(repository)},trusted);
+    if(result.code!==0)throw Error('trusted setup failed');process.stdout.write(result.stdout);`;
+  const result = await execute(process.execPath, ["--input-type=module", "-e", code], repository, {
+    PATH: process.env.PATH,
+    GITHUB_TOKEN: "synthetic-github-role",
+    CLOUDFLARE_API_TOKEN: "synthetic-cloudflare-role",
+    NPM_TOKEN: "synthetic-npm-role",
+    OPENAI_API_KEY: "synthetic-model-role",
+    FORTIPI_ADMIN_TOKEN: "synthetic-admin-role",
+    OPERATION: "candidate",
+  });
+  assert.equal(result.code, 0, result.stdout);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    trustedGithub: true,
+    operation: "candidate",
+    reference,
+    client: { github: false, reference: false, admin: false, cf: false, npm: false, model: false },
+  });
 });
 
 test("real HTTP GitHub verification binds current attempt, paginated jobs, workflow bytes and independent archive digest", async () => {
@@ -404,6 +468,20 @@ test("real HTTP GitHub verification binds current attempt, paginated jobs, workf
       /Artifact payload differs|ENOENT/,
     );
     assert.ok(calls.includes("/retained.zip"), "Producer archive must be authenticated first");
+    const beforeDenied = calls.length;
+    await assert.rejects(
+      loadCandidate(retainedPath, {
+        kind: "current",
+        reference: ref,
+        request: githubRequest(undefined, server.transport),
+      }),
+      (error: unknown) => error instanceof Error && !/ENOENT/.test(error.message),
+    );
+    assert.equal(
+      calls.length,
+      beforeDenied,
+      "Denied current context must not fall back to source or payload",
+    );
     await assert.rejects(
       verifyRetainedCandidate(c, sha256("different retained candidate"), ref, api),
       /Retained candidate hash mismatch/,

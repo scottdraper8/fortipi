@@ -18,6 +18,7 @@ import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import { assetPath } from "../packages/fortipi-cli/src/asset-manifest.ts";
 import { canonicalJson } from "../packages/fortipi-contract/dist/index.js";
+import { readArtifactZip } from "./artifact-zip.ts";
 import { repository } from "./build-workspaces.ts";
 
 export { canonicalJson };
@@ -703,45 +704,8 @@ export function githubRequest(
             "GitHub archive digest mismatch",
           );
           if (!member || !path) return undefined;
-          const unzip = "/usr/bin/unzip";
-          const stat = await lstat(unzip);
-          assert.ok(
-            stat.isFile() &&
-              !stat.isSymbolicLink() &&
-              stat.uid === 0 &&
-              (stat.mode & 0o022) === 0 &&
-              (stat.mode & 0o111) !== 0,
-            "Trusted native ZIP reader unavailable",
-          );
-          const execute = promisify(execFile);
-          const listed = (
-            await execute(unzip, ["-Z1", path], {
-              timeout: 30000,
-              maxBuffer: 4_000_000,
-              env: { PATH: process.env.PATH, LANG: "C" },
-            })
-          ).stdout
-            .trim()
-            .split(/\r?\n/);
-          assert.ok(listed.length > 0 && listed.length <= 30000);
-          const names = listed.filter((name) => !name.endsWith("/"));
-          listed.forEach((name) => {
-            safePath(name.replace(/\/$/, ""));
-          });
-          assert.equal(
-            new Set(names.map((name) => name.toLowerCase())).size,
-            names.length,
-            "Duplicate normalized ZIP path",
-          );
-          assert.ok(names.includes(safePath(member)), "Metadata missing from actual archive");
-          const data = (
-            await execute(unzip, ["-p", path, member], {
-              timeout: 30000,
-              maxBuffer: 8_000_000,
-              encoding: "buffer",
-              env: { PATH: process.env.PATH, LANG: "C" },
-            })
-          ).stdout;
+          const { names, bytes: data } = await readArtifactZip(path, safePath(member));
+          for (const name of names) safePath(name);
           const metadata = object(JSON.parse(data.toString("utf8")));
           if (member === "candidate.json" || member === "gate.json") {
             records(metadata.files);

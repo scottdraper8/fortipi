@@ -179,6 +179,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          FORTIPI_CANDIDATE_REFERENCE: ${{ inputs.candidate }}
         run: node scripts/prepare-release.ts evidence --mode local --candidate "$RUNNER_TEMP/candidate/candidate.json" --fixture "$FORTIPI_EVIDENCE_FIXTURE" --out dist/evidence/integrated
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: github.event_name == 'workflow_dispatch'
