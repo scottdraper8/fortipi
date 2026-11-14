@@ -107,6 +107,8 @@ const failurePaths = new Set<string>([
   "apps/worker/test/agent/harness.ts",
   "apps/worker/test/execution/native-process.ts",
   "apps/worker/test/execution/native-service.ts",
+  "apps/worker/test/integration/oracles.ts",
+  "apps/worker/test/integration/runtime.ts",
 ]);
 const failureCategories = new Set([
   "testCodeFailure",
@@ -251,6 +253,12 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    /^# \{"diagnostic":"source-runtime-readiness","invocation":\d{1,3},"fetchStatus":(?:null|[1-5]\d{2}),"httpStatus":(?:null|[1-5]\d{2}),"httpOutcome":"(?:response|deadline|transport)"\}$/.test(
+      line,
+    ) ||
+    /^# \{"diagnostic":"source-native-state","mode":"(?:running|seed|attached|attempted|assign-ack|result|receipt)","activation":"(?:agent-first|executor-first)","jobState":(?:null|"(?:created|awaiting_approval|authorized|queued|waiting_for_executor|waiting_for_local_policy|leased|dispatch_attempted|running|result_pending_commit|completed|failed|cancelled|interrupted|expired|workspace_conflict|requires_reconciliation)"),"ledgerState":(?:null|"(?:pending|start_intent|running|result|closed|unknown)"),"resultState":(?:null|"(?:succeeded|failed|cancelled|unknown)"),"committed":(?:true|false),"connected":(?:true|false)\}$/.test(
+      line,
+    ) ||
     /^# \{"diagnostic":"source-recovery-start","event":"(?:spawned|probe|ready|end)","invocation":\d{1,3},"elapsedMs":\d{1,8},"attempts":\d{1,3},"deadlines":\d{1,3},"transports":\d{1,3},"status":(?:null|[1-5]\d{2}),"exitCode":(?:null|-?\d{1,3}),"signal":(?:null|"(?:SIG[A-Z0-9]{1,8}|other)"),"logStage":"(?:ready-log|starting-log|unobserved)"\}$/.test(
       line,
     ) ||

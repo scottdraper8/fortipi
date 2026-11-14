@@ -16,6 +16,7 @@ import {
   fixture,
   nodeCommand,
 } from "../../../../packages/fortipi-executor/test/fixtures/daemon.ts";
+import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, pause } from "../agent/harness.ts";
 import { processHarness } from "../agent/process-harness.ts";
@@ -656,6 +657,17 @@ export async function nativeProcessRecovery(
       if (final.jobs[0]?.state === "completed" && f.ledger.get(job.jobId)?.committed) break;
       await pause(50);
     }
+    const snapshot = JSON.stringify({
+      diagnostic: "source-native-state",
+      mode,
+      activation,
+      jobState: final?.jobs[0]?.state ?? null,
+      ledgerState: f.ledger.get(job.jobId)?.state ?? null,
+      resultState: f.ledger.get(job.jobId)?.result?.state ?? null,
+      committed: !!f.ledger.get(job.jobId)?.committed,
+      connected: native.connected,
+    });
+    if (sourceTestDiagnostic(`# ${snapshot}`)) console.log(snapshot);
     const diagnostic = JSON.stringify({
       application: final,
       diagnostic: (await service.api(`${probe}/job-diagnostics?job=${job.jobId}`)).body,

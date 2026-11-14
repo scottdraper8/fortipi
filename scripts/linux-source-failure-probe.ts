@@ -32,6 +32,8 @@ try {
     "scripts/test/release/source-failure-diagnostics.test.ts",
     "scripts/linux-source-failure-probe.ts",
     ".github/workflows/linux-source-failure-probe.yml",
+    "apps/worker/test/agent/process-harness.ts",
+    "apps/worker/test/execution/native-process.ts",
   ]);
   if (
     git("diff", "--name-only", baseProductSource1d, head)

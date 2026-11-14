@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -257,6 +258,46 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
           else transports++;
         }
         if (attempts % 25 === 0) observe("probe");
+        // Independent one-shot connection distinguishes the fetch pool from the
+        // runtime listener. It never supplies readiness or changes its oracle.
+        if (attempts % 100 === 0) {
+          const independent = await new Promise<{
+            httpStatus: number | null;
+            httpOutcome: "response" | "deadline" | "transport";
+          }>((accept) => {
+            let settled = false;
+            const finish = (
+              httpStatus: number | null,
+              httpOutcome: "response" | "deadline" | "transport",
+            ) => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              accept({ httpStatus, httpOutcome });
+            };
+            const request = httpRequest(
+              `${origin}/__test/ping`,
+              { agent: false, headers: { Connection: "close" } },
+              (response) => {
+                response.resume();
+                finish(response.statusCode ?? null, "response");
+              },
+            );
+            const timer = setTimeout(() => {
+              finish(null, "deadline");
+              request.destroy();
+            }, 300);
+            request.once("error", () => finish(null, "transport"));
+            request.end();
+          });
+          const line = JSON.stringify({
+            diagnostic: "source-runtime-readiness",
+            invocation: childInvocation,
+            fetchStatus: status,
+            ...independent,
+          });
+          if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+        }
         await pause(50);
       }
       assert.fail("Wrangler not ready");
