@@ -36,13 +36,13 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
         content: `seed1010-${point}`,
         busyBehavior: "followUp",
       };
-      const previous = (await runtime.api<State>(`${probe}/state`)).body.admissions.map(
+      const previous = (await runtime.api<State>(`${probe}/barrier`)).body.admissions.map(
         (a) => a.operationId,
       );
       assert.equal((await runtime.api(`${probe}/fault`, point)).status, 200);
       const lost = runtime.api(path, input, "POST", fixture.client.token).catch(() => undefined);
       await runtime.barrier(fixture.agent.agentId, point);
-      const before = (await runtime.api<State>(`${probe}/state`)).body;
+      const before = (await runtime.api<State>(`${probe}/barrier`)).body;
       const identity = before.admissions.find((a) => !previous.includes(a.operationId));
       assert.ok(identity);
       assert.equal(identity.receipt, null);
