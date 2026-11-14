@@ -377,7 +377,7 @@ export async function validateReleaseReport(
   root: string,
   value: unknown,
   sourceCommit: string,
-  now = Date.now(),
+  now?: number,
   retained?: RetainedCompatibilityInputs,
 ): Promise<CompatibilityReport> {
   const basis = await releaseBasis(root, sourceCommit, retained?.imageMetadata);
@@ -403,7 +403,7 @@ export async function validateReleaseReport(
     closed(receipt.advisory, ["checkedAt", "identities", "findings"]);
   }
   await checkPins(root, advisory);
-  assessReleaseReport(value, basis, baseline, now);
+  assessReleaseReport(value, basis, baseline, now ?? Date.now());
   return value;
 }
 export async function createReleaseReport(

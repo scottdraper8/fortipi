@@ -165,6 +165,18 @@ test("lawful maturity and review metadata preserve byte identity, never raw enfo
 test("normal current-policy checks and closed spawn/parse/write/assessment failures preserve private input", async () => {
   const { report } = await controlledCompatibility(root);
   await validateReleaseReport(root, report, report.sourceCommit);
+  // Exercise the actual producer's stdout boundary, not a hand-constructed JSON response.
+  const script =
+    'import{controlledCompatibility}from"./tools/compatibility-watch/fixtures/release.ts";import{createReleaseReport}from"./tools/compatibility-watch/release.ts";const{report}=await controlledCompatibility(process.cwd());console.log(JSON.stringify(await createReleaseReport(process.cwd(),report.lookahead.results,report.checkedAt)));';
+  const produced = await promisify(execFile)(
+    process.execPath,
+    ["--input-type=module", "-e", script],
+    { cwd: root, timeout: 15000, maxBuffer: 1_000_000 },
+  );
+  const actual = JSON.parse(produced.stdout);
+  assert.equal(actual.format, 2);
+  assert.equal(actual.sourceCommit, report.sourceCommit);
+
   const directory = await mkdtemp(resolve(tmpdir(), "fortipi-compatibility-control-")),
     path = resolve(directory, "report.json"),
     canary = "synthetic-private-input-NOT-OUTPUT";
@@ -281,5 +293,32 @@ test("expired source observation and absent ignored inputs require bound fresh r
       await assert.rejects(checkPins(directory, invalid));
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("completion-time freshness refuses an observation expiring during validation and preserves explicit clocks", async () => {
+  const { report } = await controlledCompatibility(root),
+    clock = Date.now,
+    start = clock();
+  report.checkedAt = new Date(start - 86_400_000 + 250).toISOString();
+  report.lookahead.checkedAt = report.checkedAt;
+  try {
+    Date.now = () => start;
+    await validateReleaseReport(root, report, report.sourceCommit);
+    let advanced = false;
+    Date.now = () => (advanced ? start + 1000 : start);
+    const crossing = validateReleaseReport(root, report, report.sourceCommit);
+    setImmediate(() => {
+      advanced = true;
+    });
+    await assert.rejects(crossing, /Stale\/future compatibility evidence/);
+    assert.equal(advanced, true);
+    await validateReleaseReport(root, report, report.sourceCommit, start);
+    await assert.rejects(
+      validateReleaseReport(root, report, report.sourceCommit, start + 1000),
+      /Stale\/future compatibility evidence/,
+    );
+  } finally {
+    Date.now = clock;
   }
 });

@@ -1057,8 +1057,8 @@ export async function readCompatibilityGate(
   candidateHash: string,
   candidateArtifact: ArtifactReference,
   request: GitHubRequest,
-  now = Date.now(),
-): Promise<void> {
+  now?: number,
+): Promise<{ checkedAt: string; advisoryCheckedAt: string }> {
   assert.equal(proof.receipt.kind, "integrated");
   assert.equal(proof.receipt.sourceCommit, candidate.sourceCommit);
   assert.equal(proof.receipt.candidateSha256, candidateHash);
@@ -1121,14 +1121,6 @@ export async function readCompatibilityGate(
       sha256(advisoryReview) === advisoryRecord.sha256,
     "Authenticated candidate advisory review differs",
   );
-  const report = await validateReleaseReport(
-    repository,
-    JSON.parse(bytes.toString()),
-    candidate.sourceCommit,
-    now,
-    { imageMetadata, advisoryReview },
-  );
-  assert.equal(report.validationInputs.sourcePolicySha256, candidate.hashes.toolchainPolicy);
   const baseline = object(
     await readJson(resolve(repository, "tools/compatibility-watch/baseline.json")),
   );
@@ -1139,9 +1131,24 @@ export async function readCompatibilityGate(
       candidate.image[key as keyof CandidateManifest["image"]],
       object(cohort.image)[key],
     );
+  const report = await validateReleaseReport(
+    repository,
+    JSON.parse(bytes.toString()),
+    candidate.sourceCommit,
+    now,
+    { imageMetadata, advisoryReview },
+  );
+  assert.equal(report.validationInputs.sourcePolicySha256, candidate.hashes.toolchainPolicy);
   const observation = { ...object(row.observation) };
   for (const key of ["scenarioPorts", "invocation", "durationMs"]) delete observation[key];
   assertCompatibilityDetail(observation, report, bytes, candidateHash);
+  const advisoryCheckedAt = string(
+    object(object(JSON.parse(advisoryReview.toString())).advisory).checkedAt,
+  );
+  const completedAt = now ?? Date.now();
+  freshness(report.checkedAt, 24, completedAt);
+  freshness(advisoryCheckedAt, 24, completedAt);
+  return { checkedAt: report.checkedAt, advisoryCheckedAt };
 }
 export interface CurrentReadinessContext {
   directory: string;
@@ -1164,6 +1171,7 @@ export async function verifyReleaseGates(
   assert.equal(candidateArtifact.candidateSha256, candidateHash);
   await trustedMain(candidate, request);
   await verifyProducer(candidate, "candidate", candidate.producer, candidateArtifact, request, now);
+  const compatibilityTimes: { checkedAt: string; advisoryCheckedAt: string }[] = [];
   const kinds: GateKind[] = ["integrated", "native", "access", "live", "independent"];
   if (!currentReadiness) kinds.push("readiness");
   for (const kind of kinds) {
@@ -1199,13 +1207,15 @@ export async function verifyReleaseGates(
       );
       await verifyPayload(proof.directory, r.files, ["gate.json"]);
       if (kind === "integrated")
-        await readCompatibilityGate(
-          proof,
-          candidate,
-          candidateHash,
-          candidateArtifact,
-          request,
-          now,
+        compatibilityTimes.push(
+          await readCompatibilityGate(
+            proof,
+            candidate,
+            candidateHash,
+            candidateArtifact,
+            request,
+            now,
+          ),
         );
       if (kind === "access")
         await readAccessGate({ receipt: r, directory: proof.directory }, candidate, now);
@@ -1287,6 +1297,10 @@ export async function verifyReleaseGates(
   );
   // Authorization must use the clock after all API, archive and filesystem awaits.
   const authorizedAt = now ?? Date.now();
+  for (const t of compatibilityTimes) {
+    freshness(t.checkedAt, 24, authorizedAt);
+    freshness(t.advisoryCheckedAt, 24, authorizedAt);
+  }
   for (const proof of proofs)
     if (kinds.includes(proof.receipt.kind))
       freshness(proof.receipt.checkedAt, policy[proof.receipt.kind].hours, authorizedAt);
@@ -1334,6 +1348,7 @@ export async function verifyDeploymentGates(
   await trustedMain(candidate, request);
   await verifyProducer(candidate, "candidate", candidate.producer, candidateArtifact, request, now);
   const selected: GateReceipt[] = [];
+  const compatibilityTimes: { checkedAt: string; advisoryCheckedAt: string }[] = [];
   for (const kind of ["integrated", "native", accessKind] as const) {
     const matches = proofs.filter((p) => p.receipt.kind === kind);
     assert.equal(matches.length, 1, `Missing/duplicate ${kind} prerequisite`);
@@ -1367,13 +1382,15 @@ export async function verifyDeploymentGates(
       sha256(gateBytes),
     );
     if (kind === "integrated")
-      await readCompatibilityGate(
-        { ...proof, receipt: r },
-        candidate,
-        candidateHash,
-        candidateArtifact,
-        request,
-        now,
+      compatibilityTimes.push(
+        await readCompatibilityGate(
+          { ...proof, receipt: r },
+          candidate,
+          candidateHash,
+          candidateArtifact,
+          request,
+          now,
+        ),
       );
     if (kind === "access" || kind === "cloudflare-access") {
       const result = await readAccessGate({ ...proof, receipt: r }, candidate, now);
@@ -1397,7 +1414,12 @@ export async function verifyDeploymentGates(
     selected.push(r);
   }
   await trustedMain(candidate, request);
-  for (const r of selected) freshness(r.checkedAt, 24, now ?? Date.now());
+  const authorizedAt = now ?? Date.now();
+  for (const r of selected) freshness(r.checkedAt, 24, authorizedAt);
+  for (const t of compatibilityTimes) {
+    freshness(t.checkedAt, 24, authorizedAt);
+    freshness(t.advisoryCheckedAt, 24, authorizedAt);
+  }
 }
 export async function git(...args: string[]): Promise<string> {
   return (

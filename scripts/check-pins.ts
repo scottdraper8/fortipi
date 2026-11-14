@@ -199,13 +199,14 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
     createHash("sha256")
       .update(await readFile(resolve(root, path)))
       .digest("hex");
-  const advisory = reviewedAdvisory(review, fresh, {
+  const advisoryInputs = {
     reviewSha256: await hash("tools/unstale/supply-chain.json"),
     locks: {
       "pnpm-lock.yaml": await hash("pnpm-lock.yaml"),
       "tools/unstale/pnpm-lock.yaml": await hash("tools/unstale/pnpm-lock.yaml"),
     },
-  });
+  };
+  const advisory = reviewedAdvisory(review, fresh, advisoryInputs);
   const manifests = new Map<string, Manifest>();
   for (const path of manifestPaths) {
     const manifest = await json<Manifest>(root, path);
@@ -455,9 +456,12 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
       assert.equal(sha, top?.fortipi?.actions[name]?.sha, `Unreviewed Action ${name}`);
     }
   }
+  reviewedAdvisory(review, fresh, advisoryInputs);
+}
+
+if (import.meta.main) {
+  await checkPins(rootArgument());
   console.log(
     "Pins: exact manifests, both locked archive graphs, lifecycle/age policy and protected hooks verified",
   );
 }
-
-if (import.meta.main) await checkPins(rootArgument());
