@@ -7,7 +7,6 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { freeInfrastructurePolicy } from "fortipi-contract";
-import { observeSourceCpuProfile } from "../../../../scripts/source-cpu-profile-probe.ts";
 import { diagnosticPiMain, observePiOpenStages } from "../../../../scripts/source-pi-open-probe.ts";
 import { observeSourceProcessCompute } from "../../../../scripts/source-test-processes.ts";
 import {
@@ -221,7 +220,6 @@ export async function start(options: RuntimeOptions = {}) {
   }
   let apiOrdinal = 0,
     clientObservations = 0;
-  let failureProfile: Promise<void> | undefined;
   const observeClient = (
     ordinal: number,
     kind: "barrier" | "submission" | "other",
@@ -284,16 +282,7 @@ export async function start(options: RuntimeOptions = {}) {
       return { status: response.status, body: value };
     } catch (error) {
       observeClient(ordinal, kind, status === null ? "fetch.error" : "body.error", status);
-      if (signal.aborted && child?.pid) {
-        observeSourceProcessCompute(child.pid, "request-deadline");
-        try {
-          // Concurrent failed requests join one bounded attempt before cleanup.
-          failureProfile ??= observeSourceCpuProfile(inspector, signal);
-          await failureProfile;
-        } catch {
-          // Preserve this request's original failed fetch/body value.
-        }
-      }
+      if (signal.aborted && child?.pid) observeSourceProcessCompute(child.pid, "request-deadline");
       throw error;
     }
   };

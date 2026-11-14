@@ -561,14 +561,41 @@ export class TestAgentSession extends AgentSession {
     };
     // Test-only barriers wrap the supported API, after its actual durable commit.
     // The supervisor kills workerd; no product fault lane or private Pi SQL exists.
+    const observeAdmission = (stage: string) => {
+      try {
+        console.log(`FORTIPI_ADMISSION_STAGE ${stage}`);
+      } catch {
+        // Fixed milestones cannot change a supported operation's result.
+      }
+    };
+    const finishAdmission = this.conversations.finishAdmission.bind(this.conversations);
+    this.conversations.finishAdmission = async (...args) => {
+      observeAdmission("app.finish.enter");
+      const result = await finishAdmission(...args);
+      observeAdmission("app.finish.exit");
+      return result;
+    };
     const session = this.pi.session.bind(this.pi);
     this.pi.session = (...args) => {
       const current = session(...args);
+      const setModel = current.setModel.bind(current);
+      current.setModel = async (...input) => {
+        observeAdmission("app.model.enter");
+        const result = await setModel(...input);
+        observeAdmission("app.model.exit");
+        return result;
+      };
       const submit = current.submit.bind(current);
       current.submit = async (...input) => {
+        observeAdmission("app.before.enter");
         await this.barrier("before-submit");
+        observeAdmission("app.before.exit");
+        observeAdmission("app.submit.enter");
         const receipt = await submit(...input);
+        observeAdmission("app.submit.exit");
+        observeAdmission("app.after.enter");
         await this.barrier("after-submit");
+        observeAdmission("app.after.exit");
         return receipt;
       };
       return current;

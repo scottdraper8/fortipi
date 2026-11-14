@@ -28,7 +28,6 @@ try {
     "apps/worker/test/integration/runtime.ts",
     "apps/worker/test/integration/fixture-worker.ts",
     "scripts/source-pi-open-probe.ts",
-    "scripts/source-cpu-profile-probe.ts",
   ]);
   if (
     git("diff", "--name-only", productSource, head)

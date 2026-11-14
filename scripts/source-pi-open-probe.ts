@@ -42,6 +42,32 @@ const barrierPhases = [
   "marker.enter",
   "marker.exit",
 ] as const;
+const admissionStages = [
+  "app.finish.enter",
+  "app.finish.exit",
+  "app.model.enter",
+  "app.model.exit",
+  "app.before.enter",
+  "app.before.exit",
+  "app.submit.enter",
+  "app.submit.exit",
+  "app.after.enter",
+  "app.after.exit",
+  "sdk.open.enter",
+  "sdk.open.exit",
+  "sdk.conversation.enter",
+  "sdk.conversation.exit",
+  "sdk.lookup.enter",
+  "sdk.lookup.exit",
+  "sdk.submit.enter",
+  "sdk.submit.exit",
+  "sdk.first-wake.enter",
+  "sdk.first-wake.exit",
+  "sdk.hand.enter",
+  "sdk.hand.exit",
+  "sdk.last-wake.enter",
+  "sdk.last-wake.exit",
+] as const;
 const enabled = () => process.env.FORTIPI_SOURCE_PI_OPEN_DIAGNOSTICS === "1";
 
 /** Explicit existing caller mains take precedence over this test-only default. */
@@ -93,7 +119,60 @@ function overlay(source: string): string {
     original,
     "Pi open overlay changed an original statement",
   );
-  return source.slice(0, start) + instrumented + source.slice(stop);
+  let result = source.slice(0, start) + instrumented + source.slice(stop);
+  const instrument = (
+    begin: string,
+    end: string,
+    steps: readonly (readonly [string, string])[],
+  ) => {
+    assert.equal(result.split(begin).length, 2, "Pi admission function differs");
+    const start = result.indexOf(begin),
+      stop = result.indexOf(end, start);
+    assert.ok(stop > start, "Pi admission boundary differs");
+    const original = result.slice(start, stop);
+    let changed = original;
+    for (const [stage, needle] of steps) {
+      const matches = [
+        ...changed.matchAll(new RegExp(`^${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gm")),
+      ];
+      assert.equal(matches.length, 1, "Pi admission stage differs");
+      const position = matches[0]!.index;
+      const observed = `\ttry { console.log("FORTIPI_ADMISSION_STAGE ${stage}.enter"); } catch {}\n${needle}\n\ttry { console.log("FORTIPI_ADMISSION_STAGE ${stage}.exit"); } catch {}`;
+      changed = changed.slice(0, position) + observed + changed.slice(position + needle.length);
+    }
+    assert.equal(
+      changed.replace(
+        /^\ttry \{ console\.log\("FORTIPI_ADMISSION_STAGE [a-z.-]+"\); \} catch \{\}\n/gm,
+        "",
+      ),
+      original,
+      "Pi admission overlay changed an original statement",
+    );
+    result = result.slice(0, start) + changed + result.slice(stop);
+  };
+  instrument("async function _admitDraft(session, requested, draft) {\n", "\n}\n/**", [
+    [
+      "sdk.open",
+      "\tconst { storage } = await _assertClassBrand(_PiHarness_brand, this, _open).call(this);",
+    ],
+    ["sdk.conversation", "\tconst conversation = await this.conversation(session);"],
+    [
+      "sdk.lookup",
+      "\t\t\tconst accepted = await storage.submissionByRequest(conversation.id, operationId, BG) === void 0;",
+    ],
+    [
+      "sdk.submit",
+      "\t\t\tawait conversation.submit({\n\t\t\t\t...draft,\n\t\t\t\trequestId: operationId\n\t\t\t}, BG);",
+    ],
+  ]);
+  // The two wake statements differ only in indentation; replace the complete
+  // surrounding statements so each remains unambiguously the same operation.
+  instrument("async function _admit(hand) {\n", "\n}\n/**", [
+    ["sdk.first-wake", "\t\tawait _assertClassBrand(_PiHarness_brand, this, _wake).call(this);"],
+    ["sdk.hand", "\t\tresult = await hand();"],
+    ["sdk.last-wake", "\tawait _assertClassBrand(_PiHarness_brand, this, _wake).call(this);"],
+  ]);
+  return result;
 }
 
 /** Original archive, policy and installed member must agree before fixed instrumentation. */
@@ -160,14 +239,17 @@ export function observePiOpenStages(
     if (!dropping && records < 1024) {
       const stage = stages.find((tag) => line === `FORTIPI_PI_OPEN_STAGE ${tag}`);
       const phase = barrierPhases.find((tag) => line === `FORTIPI_INTEGRATION_BARRIER ${tag}`);
-      if (stage || phase) {
+      const admission = admissionStages.find((tag) => line === `FORTIPI_ADMISSION_STAGE ${tag}`);
+      if (stage || phase || admission) {
         records++;
         try {
           emit(
             JSON.stringify(
-              stage
-                ? { diagnostic: "source-pi-open-stage", invocation, stage }
-                : { diagnostic: "source-integration-barrier", invocation, phase },
+              admission
+                ? { diagnostic: "source-admission-stage", invocation, stage: admission }
+                : stage
+                  ? { diagnostic: "source-pi-open-stage", invocation, stage }
+                  : { diagnostic: "source-integration-barrier", invocation, phase },
             ),
           );
         } catch {
