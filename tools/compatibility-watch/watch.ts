@@ -398,7 +398,7 @@ export function summary(results: Result[]): string {
   ].join("\n");
 }
 
-if (import.meta.main) {
+async function main(): Promise<void> {
   assert.ok(
     process.argv.slice(2).every((arg) => arg === "--gh" || arg === "--release"),
     "Only --gh (local reads) and --release (strict installed assessment) are supported; no acceptance command exists",
@@ -433,3 +433,5 @@ if (import.meta.main) {
     await appendFile(process.env.GITHUB_STEP_SUMMARY, summary(results));
   process.exitCode = code;
 }
+
+if (import.meta.main) void main();
