@@ -1,10 +1,9 @@
-// Explicit one-time, local installed-source overlay. Never an installer hook.
+// Explicit one-time preparation of ignored shadow entries. Never an installer hook.
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
-import { build } from "esbuild";
+import { dirname, relative, resolve } from "node:path";
 import { routingHeader, routingPrefix, routingStages } from "./root-routing-observation.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -57,25 +56,36 @@ export function instrumentRoutingProxy(source: string): string {
   assert.equal(restoreRoutingProxy(changed), original);
   return changed;
 }
-export function instrumentRoutingFixture(path: string, source: string): string {
-  if (path === resolve(root, "apps/worker/test/agent/runtime-worker.ts")) {
-    const old = '    if (url.pathname === "/__test/ping") return new Response("ready");';
-    const next =
-      '    if (url.pathname === "/__test/ping") {\n      __fortipiRoute(request, "user-ping-enter");\n      const response = new Response("ready");\n      __fortipiRoute(request, "user-ping-return");\n      return response;\n    }';
-    const result = routingProducer + one(source, old, next);
-    assert.equal(one(one(result, routingProducer, ""), next, old), source);
+/** No prebundle: Wrangler follows the original fixture graph from this ESM wrapper. */
+export function routingFixtureEntry(specifier: string): string {
+  return `import worker from ${JSON.stringify(specifier)};
+export * from ${JSON.stringify(specifier)};
+${routingProducer}
+export default {
+  ...worker,
+  fetch(...args) {
+    const request = args[0];
+    let marked = false;
+    try {
+      if (request.headers.get(${JSON.stringify(routingHeader)}) === "1") {
+        const path = new URL(request.url).pathname;
+        marked = path === "/__test/ping" || path === "/health";
+      }
+    } catch {}
+    if (!marked) return worker.fetch.apply(worker, args);
+    __fortipiRoute(request, "user-default-fetch-enter");
+    const result = worker.fetch.apply(worker, args);
+    try {
+      if (result instanceof Promise) {
+        // Observe settlement without replacing the returned Promise or its rejection.
+        Promise.prototype.then.call(result,
+          () => { __fortipiRoute(request, "user-default-fetch-return"); }, () => {});
+      } else __fortipiRoute(request, "user-default-fetch-return");
+    } catch {}
     return result;
-  }
-  if (path === resolve(root, "apps/worker/src/api/router.ts")) {
-    const old =
-      '    if (route.owner === "discovery") return merge(discovery(route, path, env), exposed);';
-    const next =
-      '    if (route.owner === "discovery") {\n      __fortipiRoute(request, "user-ping-enter");\n      const response = merge(discovery(route, path, env), exposed);\n      __fortipiRoute(request, "user-ping-return");\n      return response;\n    }';
-    const result = routingProducer + one(source, old, next);
-    assert.equal(one(one(result, routingProducer, ""), next, old), source);
-    return result;
-  }
-  return source;
+  },
+};
+`;
 }
 async function atomic(path: string, bytes: string | Buffer, mode: number) {
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -122,40 +132,17 @@ export async function prepareRootRouting(restore = false) {
   assert.equal(hash(cli), cliOriginalSha256);
   assert.equal(hash(bin), binOriginalSha256);
   await mkdir(destination, { recursive: true });
-  const metadata: Record<string, string | number> = { version: 1 };
+  const metadata: Record<string, string | number> = { version: 2 };
   for (const [kind, entry] of [
     ["process", "apps/worker/test/agent/runtime-worker.ts"],
     ["integration", "apps/worker/test/integration/fixture-worker.ts"],
   ] as const) {
-    const result = await build({
-      entryPoints: [resolve(root, entry)],
-      bundle: true,
-      write: false,
-      format: "esm",
-      platform: "neutral",
-      mainFields: ["browser", "module", "main"],
-      target: "es2024",
-      conditions: ["workerd", "worker", "browser"],
-      external: ["cloudflare:*", "node:*"],
-      logLevel: "silent",
-      plugins: [
-        {
-          name: "root-routing-fixture",
-          setup(build) {
-            build.onLoad({ filter: /(?:runtime-worker|router)\.ts$/ }, async (args) => ({
-              contents: instrumentRoutingFixture(args.path, await readFile(args.path, "utf8")),
-              loader: "ts",
-              resolveDir: dirname(args.path),
-            }));
-          },
-        },
-      ],
-    });
-    assert.equal(result.outputFiles.length, 1);
-    const bytes = result.outputFiles[0]?.contents;
-    assert.ok(bytes && bytes.length <= 8_000_000);
-    metadata[kind] = hash(Buffer.from(bytes));
-    await atomic(resolve(destination, `${kind}.mjs`), Buffer.from(bytes), 0o644);
+    const bytes = routingFixtureEntry(
+      relative(destination, resolve(root, entry)).split("\\").join("/"),
+    );
+    assert.ok(Buffer.byteLength(bytes) <= 8192);
+    metadata[kind] = hash(bytes);
+    await atomic(resolve(destination, `${kind}.mjs`), bytes, 0o644);
   }
   const proxyCopy = resolve(destination, "ProxyWorker.js"),
     cliCopy = resolve(destination, "cli-source.cjs"),

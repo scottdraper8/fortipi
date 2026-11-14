@@ -13,8 +13,8 @@ export const routingStages = [
   "proxy-config-wait",
   "proxy-config-present",
   "proxy-forward",
-  "user-ping-enter",
-  "user-ping-return",
+  "user-default-fetch-enter",
+  "user-default-fetch-return",
   "proxy-upstream-response",
 ] as const;
 type Stage = (typeof routingStages)[number];
@@ -175,13 +175,13 @@ export function rootRoutingMain(kind: Kind, main: string): string {
       metadataStat.isSymbolicLink() ||
       mainStat.isSymbolicLink() ||
       metadataStat.size > 4096 ||
-      mainStat.size > 8_000_000
+      mainStat.size > 8192
     )
       return main;
     const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
     const bytes = readFileSync(path);
     if (
-      metadata.version !== 1 ||
+      metadata.version !== 2 ||
       metadata[kind] !== createHash("sha256").update(bytes).digest("hex")
     )
       return main;
@@ -216,7 +216,7 @@ export function rootRoutingWrangler(wrangler: string, main: string): string {
       return wrangler;
     const metadata = JSON.parse(readFileSync(metadataPath, "utf8"));
     if (
-      metadata.version !== 1 ||
+      metadata.version !== 2 ||
       metadata.entry !== createHash("sha256").update(readFileSync(entry)).digest("hex")
     )
       return wrangler;
