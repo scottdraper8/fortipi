@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { appendFile, chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import { create as createTar } from "tar";
+import { controlledCompatibility } from "../../../tools/compatibility-watch/fixtures/release.ts";
+import { compatibilityDetail } from "../../../tools/compatibility-watch/release.ts";
 import { repository } from "../../build-workspaces.ts";
 import { cloudflareAccessChecks, npmAccessChecks } from "../../check-access.ts";
 import {
@@ -34,6 +36,7 @@ import {
   integratedClaims,
   inventory,
   liveClaims,
+  object,
   type ProofInput,
   REPOSITORY,
   REPOSITORY_ID,
@@ -902,8 +905,33 @@ test("current readiness uses completed per-slot job and actual archive while its
 test("complete API/ZIP proof set requires all three target rows with distinct accounts and independent producers", async () => {
   // These are synthetic producer/claim observations over real HTTP and ZIP transport, not runtime acceptance.
   const root = await temporary("fortipi-full-gate-");
+  const { basis, report } = await controlledCompatibility(repository);
+  const source = basis.sourceCommit;
   const c = candidate();
-  const candidateZip = await metadataArchive(c);
+  c.sourceCommit = source;
+  c.hashes.lock = String(basis.cohort.rootLock);
+  c.hashes.toolchainPolicy = basis.validationInputs.sourcePolicySha256;
+  c.image = { ...c.image, ...object(basis.cohort.image) };
+  const compatibilityBytes = Buffer.from(`${canonicalJson(report)}\n`);
+  c.files.push({
+    path: "compatibility.json",
+    size: compatibilityBytes.length,
+    mode: 0o600,
+    sha256: sha256(compatibilityBytes),
+  });
+  const imageMetadata = await regularBytes(
+    resolve(repository, "apps/worker/dist/container/image-metadata.json"),
+  );
+  c.files.push({
+    path: "image/image-metadata.json",
+    size: imageMetadata.length,
+    mode: 0o600,
+    sha256: sha256(imageMetadata),
+  });
+  const candidateZip = await metadataArchive(c, {
+    "compatibility.json": compatibilityBytes,
+    "image/image-metadata.json": imageMetadata,
+  });
   const hash = candidateZip.metadataSha256;
   const now = Date.now();
   const proofs: ProofInput[] = [];
@@ -992,19 +1020,36 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
       const cf = claim === "cloudflare-read-access";
       const npm = claim === "npm-read-access";
       const value =
-        cf || npm
+        claim === "compatibility-review"
           ? {
-              schemaVersion: 1,
-              kind: cf ? "cloudflare" : "npm",
-              checkedAt: new Date(now - 2000).toISOString(),
-              checks: cf ? cloudflareAccessChecks : npmAccessChecks,
-              ...(cf
-                ? { accountBindingSha256: freeDecision.accountBindingSha256 }
-                : { scope: c.scope }),
+              id: claim,
+              outcome: "pass",
+              identity: { sourceCommit: source, candidateSha256: hash },
+              observation: compatibilityDetail(report, compatibilityBytes, hash),
             }
-          : {};
+          : cf || npm
+            ? {
+                schemaVersion: 1,
+                kind: cf ? "cloudflare" : "npm",
+                checkedAt: new Date(now - 2000).toISOString(),
+                checks: cf ? cloudflareAccessChecks : npmAccessChecks,
+                ...(cf
+                  ? { accountBindingSha256: freeDecision.accountBindingSha256 }
+                  : { scope: c.scope }),
+              }
+            : {};
+      if (claim === "compatibility-review") await mkdir(resolve(path, "claims"));
       await writeFile(
-        resolve(path, cf ? "cloudflare.json" : npm ? "npm.json" : `${claim}.json`),
+        resolve(
+          path,
+          claim === "compatibility-review"
+            ? "claims/compatibility-review.json"
+            : cf
+              ? "cloudflare.json"
+              : npm
+                ? "npm.json"
+                : `${claim}.json`,
+        ),
         `${canonicalJson(value)}\n`,
         { mode: 0o600 },
       );
@@ -1028,11 +1073,13 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
         const result = files.find(
           (f) =>
             f.path ===
-            (id === "cloudflare-read-access"
-              ? "cloudflare.json"
-              : id === "npm-read-access"
-                ? "npm.json"
-                : `${id}.json`),
+            (id === "compatibility-review"
+              ? "claims/compatibility-review.json"
+              : id === "cloudflare-read-access"
+                ? "cloudflare.json"
+                : id === "npm-read-access"
+                  ? "npm.json"
+                  : `${id}.json`),
         );
         assert.ok(result);
         return { id, outcome: "pass", result };
@@ -1154,14 +1201,24 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
     response.end(JSON.stringify(value));
   });
   try {
-    await verifyReleaseGates(
-      c,
-      hash,
-      candidateRef,
-      proofs,
-      githubRequest(undefined, server.transport),
-      now,
-    );
+    // This whole file runs in the existing serial lane: no ordinary reader races.
+    // No canonical generated image input remains; the authenticated ZIP is the only source.
+    const canonicalMetadata = resolve(repository, "apps/worker/dist/container/image-metadata.json");
+    const withheld = resolve(root, "withheld-image-metadata.json");
+    await rename(canonicalMetadata, withheld);
+    try {
+      await verifyReleaseGates(
+        c,
+        hash,
+        candidateRef,
+        proofs,
+        githubRequest(undefined, server.transport),
+        now,
+      );
+    } finally {
+      await rename(withheld, canonicalMetadata);
+    }
+
     const account = freeDecision.accountBindingSha256;
     await verifyDeploymentGates(
       c,

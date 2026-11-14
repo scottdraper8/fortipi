@@ -22,6 +22,7 @@ import { basename, dirname, resolve, sep } from "node:path";
 import { t as listTar } from "tar";
 import { parse as parseYaml } from "yaml";
 import type { DeviceEvidenceData } from "../tests/clients/device-observer.ts";
+import { validateReleaseReport } from "../tools/compatibility-watch/release.ts";
 import {
   attachApplicationRecoveryChannel,
   type InfrastructureObservationPort,
@@ -1012,6 +1013,45 @@ export interface CandidateOptions {
   commitSha: string;
   scope: string;
 }
+export class CompatibilityPreparationFailure extends Error {
+  readonly failureClass: "spawn" | "report-parse" | "report-write" | "required-assessment";
+  constructor(failureClass: "spawn" | "report-parse" | "report-write" | "required-assessment") {
+    super(`Compatibility preparation refused: ${failureClass}`);
+    this.name = "CompatibilityPreparationFailure";
+    this.failureClass = failureClass;
+  }
+}
+/** Closed failure categories; never expose child output, errors or request material. */
+export async function retainCompatibilityReport(
+  root: string,
+  path: string,
+  run: () => Promise<ProcessResult>,
+): Promise<void> {
+  let result: ProcessResult;
+  try {
+    result = await run();
+  } catch {
+    throw new CompatibilityPreparationFailure("spawn");
+  }
+  let report: unknown;
+  try {
+    report = JSON.parse(result.stdout);
+  } catch {
+    throw new CompatibilityPreparationFailure("report-parse");
+  }
+  try {
+    assert.equal(result.code, 0);
+    assert.equal(result.timedOut, false);
+    await validateReleaseReport(root, report, await git("rev-parse", "HEAD"));
+  } catch {
+    throw new CompatibilityPreparationFailure("required-assessment");
+  }
+  try {
+    await saveJson(path, report);
+  } catch {
+    throw new CompatibilityPreparationFailure("report-write");
+  }
+}
 /** Build before stage/pack, without recursively invoking owner10's installed/browser/PTY evidence. */
 export async function prepareCandidate(
   options: CandidateOptions,
@@ -1075,22 +1115,18 @@ export async function prepareCandidate(
       "Embedded assets must be built at this candidate source",
     );
     phase = "compatibility review";
-    const compatibility = await execute(
-      process.execPath,
-      [
-        "tools/compatibility-watch/watch.ts",
-        ...(process.env.GITHUB_ACTIONS === "true" ? [] : ["--gh"]),
-      ],
-      root,
-      childEnvironment({ GITHUB_TOKEN: process.env.GITHUB_TOKEN }),
-      180000,
-    );
-    await saveJson(resolve(destination, "compatibility.json"), JSON.parse(compatibility.stdout));
-    phase = "compatibility review";
-    assert.equal(
-      compatibility.code,
-      0,
-      "Compatibility watch requires review at this candidate SHA",
+    await retainCompatibilityReport(root, resolve(destination, "compatibility.json"), () =>
+      execute(
+        process.execPath,
+        [
+          "tools/compatibility-watch/watch.ts",
+          "--release",
+          ...(process.env.GITHUB_ACTIONS === "true" ? [] : ["--gh"]),
+        ],
+        root,
+        childEnvironment({ GITHUB_TOKEN: process.env.GITHUB_TOKEN }),
+        180000,
+      ),
     );
     phase = "notices";
     await generateNotices(root);
@@ -1196,6 +1232,13 @@ export async function prepareCandidate(
     const candidateSha256 = await saveJson(candidateManifestPath, candidate);
     return { schemaVersion: 1, candidateManifestPath, candidateSha256 };
   } catch (error) {
+    if (error instanceof CompatibilityPreparationFailure)
+      console.error(
+        JSON.stringify({
+          diagnostic: "compatibility-release-failure",
+          failureClass: error.failureClass,
+        }),
+      );
     console.error(`Candidate preparation failed during ${phase}.`);
     await rm(destination, { recursive: true, force: true });
     throw error;

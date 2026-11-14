@@ -283,9 +283,11 @@ export async function runEvidence(
     await measure(
       "compatibility-review",
       ["compatibilityReview"],
-      "Every maintained watch source is reviewed and unchanged at the retained observation; current pin values match exactly",
+      "Four reviewed installed/source cohorts and twelve fresh strict policy/release observations match this candidate; all sixteen lookahead outcomes remain honest",
       () => compatibilityReview(input.candidateManifest, context),
-      ["A later upstream change requires normal review; no moving-main adoption"],
+      [
+        "Known or ambiguous current impact blocks; uninstalled main is lookahead, never future-code or runtime clearance",
+      ],
     );
     await measure(
       "image-security",

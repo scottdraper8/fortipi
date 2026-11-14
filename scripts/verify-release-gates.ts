@@ -18,6 +18,10 @@ import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import { assetPath } from "../packages/fortipi-cli/src/asset-manifest.ts";
 import { canonicalJson } from "../packages/fortipi-contract/dist/index.js";
+import {
+  assertCompatibilityDetail,
+  validateReleaseReport,
+} from "../tools/compatibility-watch/release.ts";
 import { readArtifactZip } from "./artifact-zip.ts";
 import { repository } from "./build-workspaces.ts";
 import { cloudflareAccessChecks, npmAccessChecks } from "./check-access.ts";
@@ -1046,6 +1050,82 @@ export async function readAccessGate(
   assert.equal(Date.parse(r.checkedAt), oldest, "Access receipt refreshed original observation");
   return { accountBindingSha256 };
 }
+/** Payload checks only, AFTER producer/archive/payload authentication by the caller. */
+export async function readCompatibilityGate(
+  proof: Pick<ProofInput, "receipt" | "directory">,
+  candidate: CandidateManifest,
+  candidateHash: string,
+  candidateArtifact: ArtifactReference,
+  request: GitHubRequest,
+  now = Date.now(),
+): Promise<void> {
+  assert.equal(proof.receipt.kind, "integrated");
+  assert.equal(proof.receipt.sourceCommit, candidate.sourceCommit);
+  assert.equal(proof.receipt.candidateSha256, candidateHash);
+  assert.equal(proof.receipt.scope, candidate.scope);
+  const claim = proof.receipt.claims.find((c) => c.id === "compatibility-review");
+  assert.ok(
+    claim && claim.result.path === "claims/compatibility-review.json",
+    "Missing closed compatibility detail2",
+  );
+  assert.deepEqual(
+    proof.receipt.files.find((f) => f.path === claim.result.path),
+    claim.result,
+  );
+  const row = object(
+    JSON.parse(
+      (await regularBytes(resolve(proof.directory, claim.result.path), 1_000_000)).toString(),
+    ),
+  );
+  assert.equal(row.id, "compatibility-review");
+  assert.equal(row.outcome, "pass");
+  assert.equal(object(row.identity).candidateSha256, candidateHash);
+  assert.equal(object(row.identity).sourceCommit, candidate.sourceCommit);
+  const expected = candidate.files.find((f) => f.path === "compatibility.json");
+  assert.ok(
+    expected && expected.size <= 1_000_000,
+    "Candidate lacks bounded compatibility report2",
+  );
+  const bytes = await request.verifyArtifact(candidateArtifact, "compatibility.json");
+  assert.ok(
+    bytes && bytes.length === expected.size && sha256(bytes) === expected.sha256,
+    "Candidate compatibility bytes differ",
+  );
+  const imageRecord = candidate.files.find((f) => f.path === "image/image-metadata.json");
+  assert.ok(imageRecord && imageRecord.size <= 8_000_000);
+  const imageMetadata = await request.verifyArtifact(
+    candidateArtifact,
+    "image/image-metadata.json",
+  );
+  assert.ok(
+    imageMetadata &&
+      imageMetadata.length === imageRecord.size &&
+      sha256(imageMetadata) === imageRecord.sha256 &&
+      sha256(imageMetadata) === candidate.image.metadataSha256,
+    "Authenticated candidate image metadata differs",
+  );
+  const report = await validateReleaseReport(
+    repository,
+    JSON.parse(bytes.toString()),
+    candidate.sourceCommit,
+    now,
+    imageMetadata,
+  );
+  assert.equal(report.validationInputs.sourcePolicySha256, candidate.hashes.toolchainPolicy);
+  const baseline = object(
+    await readJson(resolve(repository, "tools/compatibility-watch/baseline.json")),
+  );
+  const cohort = object(object(baseline.releaseReference).cohort);
+  assert.equal(cohort.rootLock, candidate.hashes.lock);
+  for (const key of ["sourceCommit", "metadataSha256", "builtManifestDigest", "sourceKitSha256"])
+    assert.equal(
+      candidate.image[key as keyof CandidateManifest["image"]],
+      object(cohort.image)[key],
+    );
+  const observation = { ...object(row.observation) };
+  for (const key of ["scenarioPorts", "invocation", "durationMs"]) delete observation[key];
+  assertCompatibilityDetail(observation, report, bytes, candidateHash);
+}
 export interface CurrentReadinessContext {
   directory: string;
   phase: "readiness" | "final-readiness";
@@ -1101,6 +1181,15 @@ export async function verifyReleaseGates(
         sha256(gateBytes),
       );
       await verifyPayload(proof.directory, r.files, ["gate.json"]);
+      if (kind === "integrated")
+        await readCompatibilityGate(
+          proof,
+          candidate,
+          candidateHash,
+          candidateArtifact,
+          request,
+          now,
+        );
       if (kind === "access")
         await readAccessGate({ receipt: r, directory: proof.directory }, candidate, now);
       if (kind === "integrated" || kind === "live" || kind === "independent")
@@ -1260,6 +1349,15 @@ export async function verifyDeploymentGates(
       sha256(await regularBytes(resolve(proof.directory, "gate.json"))),
       sha256(gateBytes),
     );
+    if (kind === "integrated")
+      await readCompatibilityGate(
+        { ...proof, receipt: r },
+        candidate,
+        candidateHash,
+        candidateArtifact,
+        request,
+        now,
+      );
     if (kind === "access" || kind === "cloudflare-access") {
       const result = await readAccessGate({ ...proof, receipt: r }, candidate, now);
       assert.equal(

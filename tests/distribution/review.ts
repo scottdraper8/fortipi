@@ -13,8 +13,10 @@ import {
   sha256,
   string,
 } from "../../scripts/verify-release-gates.ts";
-import { sources } from "../../tools/compatibility-watch/catalog.ts";
-import { localPins, type Result } from "../../tools/compatibility-watch/watch.ts";
+import {
+  compatibilityDetail,
+  validateReleaseReport,
+} from "../../tools/compatibility-watch/release.ts";
 
 const root = resolve(import.meta.dirname, "../..");
 /** Reauthenticate retained candidate facts against its actual source policies.
@@ -76,29 +78,35 @@ export async function supplyReview(path: string, context?: CandidateReadContext)
   };
 }
 export async function compatibilityReview(path: string, context?: CandidateReadContext) {
-  const { candidate } = await loadCandidate(path, context);
-  const report = object(await readJson(resolve(dirname(resolve(path)), "compatibility.json")));
-  freshness(string(report.checkedAt), 24);
-  assert.ok(Array.isArray(report.results));
-  const results = report.results as Result[];
-  assert.deepEqual(results.map((row) => row.id).sort(), sources.map((source) => source.id).sort());
-  for (const source of sources) {
-    const row = results.find((row) => row.id === source.id)!;
-    assert.equal(row.outcome, "unchanged", "Unreviewed upstream movement remains blocking");
-    assert.equal(row.classification, "reviewed-reference");
-    assert.deepEqual(row.pins, await localPins(source, root));
-    assert.ok(row.observed && row.baseline);
-    assert.equal(row.observed.sha256, row.baseline.sha256);
-  }
-  return {
-    candidateSource: candidate.sourceCommit,
-    checkedAt: report.checkedAt,
-    actualCatalogIds: results.map((row) => row.id),
-    exactCurrentPins: true,
-    limitations: [
-      "Authenticated retained watch observation at its checked time; later upstream movement requires a new normal review",
-    ],
-  };
+  const { candidate, hash } = await loadCandidate(path, context);
+  const bytes = await regularBytes(
+    resolve(dirname(resolve(path)), "compatibility.json"),
+    1_000_000,
+  );
+  const imageMetadata = await regularBytes(
+    resolve(dirname(resolve(path)), "image/image-metadata.json"),
+    8_000_000,
+  );
+  assert.equal(sha256(imageMetadata), candidate.image.metadataSha256);
+  const report = await validateReleaseReport(
+    root,
+    JSON.parse(bytes.toString()),
+    candidate.sourceCommit,
+    Date.now(),
+    imageMetadata,
+  );
+  assert.equal(candidate.hashes.toolchainPolicy, report.validationInputs.sourcePolicySha256);
+  assert.equal(candidate.hashes.lock, sha256(await regularBytes(resolve(root, "pnpm-lock.yaml"))));
+  const image = object(
+    object(await readJson(resolve(root, "tools/compatibility-watch/baseline.json")))
+      .releaseReference,
+  ).cohort;
+  for (const key of ["sourceCommit", "metadataSha256", "builtManifestDigest", "sourceKitSha256"])
+    assert.equal(
+      candidate.image[key as keyof typeof candidate.image],
+      object(object(image).image)[key],
+    );
+  return compatibilityDetail(report, bytes, hash);
 }
 export async function imageSourceReview(path: string, context?: CandidateReadContext) {
   const { candidate } = await loadCandidate(path, context),

@@ -105,6 +105,7 @@ export async function fixtureFiles(root: string, _c: CandidateManifest): Promise
 }
 export async function metadataArchive(
   c: CandidateManifest,
+  members: Readonly<Record<string, Buffer>> = {},
 ): Promise<{ bytes: Buffer; metadataSha256: string; close: () => Promise<void> }> {
   const directory = await temporary("fortipi-api-zip-");
   const payload = resolve(directory, "payload");
@@ -113,9 +114,10 @@ export async function metadataArchive(
     await mkdir(dirname(resolve(payload, entry.path)), { recursive: true });
     await writeFile(
       resolve(payload, entry.path),
-      entry.path.startsWith("packs/")
-        ? Buffer.from(`registry fixture ${entry.path.slice(6, -4)}`)
-        : Buffer.from("{}"),
+      members[entry.path] ??
+        (entry.path.startsWith("packs/")
+          ? Buffer.from(`registry fixture ${entry.path.slice(6, -4)}`)
+          : Buffer.from("{}")),
     );
   }
   const metadata = `${canonicalJson(c)}\n`;

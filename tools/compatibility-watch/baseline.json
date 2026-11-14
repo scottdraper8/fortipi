@@ -270,5 +270,132 @@
       "reviewedAt": "2026-11-12T03:10:28.983Z",
       "reviewNote": "Reviewed official latest stable 1.12.1 release (empty notes), annotated tag958d178 to source70598bb, original meson.py/coredata.py (Python3.10+), pinned archive/entrypoint and Apache-2.0 COPYING identities. Retain exact source/archive/license pins. GitHub tag verification remains false/bad_email; no verified-signature or security claim. Release identity is a watch pointer; Python identity, build-option/API compatibility and actual FUSE rebuild/replacement/relink I/O remain separate acceptance."
     }
+  },
+  "releaseReference": {
+    "format": 1,
+    "cohort": {
+      "rootManifest": "c5caf6a930f9562efe7100defea7bd2ff648a480f19b0fabb998b75c5d348722",
+      "rootLock": "b4c97e00aed9c893e1a408e37a9ef36d512a79c3fe7bf8d525d5b4d8f90a59a3",
+      "workspaceInputs": "184d8e1a0596e562790e028ea2700aee54cf611a776d0c32b9f137fd432f0e28",
+      "toolingLock": "75a3f7298cadaa5444d04a018fcc763bf2be45e8e569282f71bd40f69ecbd63e",
+      "sourcePolicyInputs": "292dd0d1818cb811e2af13106bd859f995316732db8bc2038008263e156a6b00",
+      "patchReview": "0f43b42be09b86a49bd8d30886d4e3d9522ad2afee713069d47b411d1c65c7a1",
+      "patchTree": "c601ec5b06b4c0eb09eaae60f69abb203b6fe082",
+      "platformTools": "34c2ec28d230f3583e1da8d1f7ef1e62e083e0c82ba078e332e036aac9419dfc",
+      "imageInputs": "be74003a3969ceb3e4eb6b7d45e612d54db50d412316c07efa4de458e6d5f39a",
+      "productTrees": {
+        "worker": "9aae2db0247f7bb0ad581c546bbf99d07c017fe4",
+        "packages": "289c8a142e28800b24176d6b17b2b450f59aca75"
+      },
+      "image": {
+        "sourceCommit": "8ead7a2734769d3595cd37f54067050de7c03882",
+        "metadataSha256": "73cbbc1301dffb4ef440157f0a99b7062b7cc03013a5b986d62b2f7a6957fa4e",
+        "builtManifestDigest": "sha256:e3e5f41f8bdebad946cbc5b0f0260b303722d2546e3adbfbcfeb4a90f970a60d",
+        "sourceKitSha256": "10c50b19e254716cf7807712c3abd063c9fb35bb2f9957efec14382dedc3e2c6"
+      }
+    },
+    "cohortSha256": "e2639a9b5ccf4f7ef4c9474b110637d12b347cdea21ecb4c90a591951f81b9f0",
+    "references": {
+      "pi-runtime": {
+        "sourceFactsSha256": "d1853d93b918ceeb5da681a105366d7e050f862b0936afcb01c903bb0d1ac9ac",
+        "currentImpact": "reviewed",
+        "basisReviewedAt": "2026-11-14T01:27:43.023Z",
+        "primaryReferences": [
+          {
+            "uri": "https://registry.npmjs.org/@earendil-works/chord/-/chord-1.5.2.tgz",
+            "sha256": "e3a9c74adc7162a38809a2cb1f5decb15842fb3b49f0912209881e57ae501030"
+          },
+          {
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-1.5.2.tgz",
+            "sha256": "d5715efa834c23bfdf10a042b49df4ee169cc99000bf16d7998fab2d533b45f8"
+          },
+          {
+            "uri": "https://raw.githubusercontent.com/scottdraper8/fortipi/a3609006a7b77a64130a1a3caa2b7bfefe22f760/patches/@earendil-works__pi-ai@1.5.2.patch",
+            "sha256": "966118ea7d110bd1b0368f17cf3f8d144a2d9b260ed91ea043e53ffbbc1dec21"
+          },
+          {
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-codemode/-/pi-codemode-1.5.2.tgz",
+            "sha256": "ac81bf4f4f01ede1a534d6d0fca1ab13afd66506c00904e9d5a07f590ae302e0"
+          },
+          {
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-durable/-/pi-durable-1.5.2.tgz",
+            "sha256": "915648ed07c48ca4a2cf8bde97e9b1693a0127cb1332225b6883bf0d5f6f9082"
+          },
+          {
+            "uri": "https://raw.githubusercontent.com/scottdraper8/fortipi/e5a7fe03b6c25926b28ea5b5e78d7f7a1f3cf388/patches/@earendil-works__pi-durable@1.5.2.patch",
+            "sha256": "2e4a878a49ac70b158956b55e1131dd595b91a88fe86de2cacfae2f1c7abe536"
+          },
+          {
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-schema/-/pi-schema-1.5.2.tgz",
+            "sha256": "5f351297ff74bec1ed4c6a974475ae41f194e023c14f0cf61a427e4fa17cf76a"
+          },
+          {
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-telemetry/-/pi-telemetry-1.5.2.tgz",
+            "sha256": "0d29dbee830c74af7115035c7cb326c1e9da2f690a3f6f95620597092da9f9ee"
+          },
+          {
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-1.5.2.tgz",
+            "sha256": "2fdd7609ee61e7c275a528e32d62093c2c298d3f9254ad3048451df2063e6bda"
+          }
+        ],
+        "limitation": "Reviewed installed 1.5.2 archives, both declared Pi transformations, actual queued SQLite PiHarness path and all five maintained public entry surfaces. Existing remote-hold A/B/C race remains real upstream; no established exposure via the supported Worker loop, AI OpenAI/Anthropic/Codex wrappers or pi-tui primitives (AI/TUI archives have no Chord imports). Remote/sync/store adoption must reopen this record. Later827383a design docs are lookahead, not installed code or blanket conveyed-export safety. No new runtime, provider, recovery or future-advisory clearance."
+      },
+      "agents-lifecycle": {
+        "sourceFactsSha256": "a34a982d22a8917350f1cff490e9b602740c078d7410437c9444034e604bff7c",
+        "currentImpact": "reviewed",
+        "basisReviewedAt": "2026-11-14T01:27:43.023Z",
+        "primaryReferences": [
+          {
+            "uri": "https://registry.npmjs.org/agents/-/agents-0.33.0.tgz",
+            "sha256": "985a3e04db1c8500b6dbc6c79cbb1aa43579fef2f2ad903bde7cd3bfa764ff7f"
+          },
+          {
+            "uri": "https://raw.githubusercontent.com/scottdraper8/fortipi/e2eccdea0c488d076358252b4c0ea646180e9611/patches/agents@0.33.0.patch",
+            "sha256": "be9cf2adb5bb78fb438c17555aeaf048e9b6f07f9760f1edf61af47c9ad50528"
+          }
+        ],
+        "limitation": "Exact agents0.33.0 archive has no gitHead; do not infer a published base commit. Declared Lifecycle patch5071 fences retry/outcome after supersession and is checked against original/patched/installed member bytes. Actual maintained imports are Lifecycle.install, PiHarness/websockets and models/pi-ai; application host-close/current-authority guards remain separate. This is current source coupling, not SDK transport, eviction, future-main, or deployed recovery clearance."
+      },
+      "computer-fuse": {
+        "sourceFactsSha256": "645d0bdc91df175b152b1b5590017e8d4ed2a020c78d646ab3bbccd298b005e3",
+        "currentImpact": "reviewed",
+        "basisReviewedAt": "2026-11-14T01:27:43.023Z",
+        "primaryReferences": [
+          {
+            "uri": "https://registry.npmjs.org/@cloudflare/computer/-/computer-0.11.1.tgz",
+            "sha256": "fdcfad1b6f27b9133597c8355dca3ec3311207c5f51f9b7e3538c467ce4ed7cb"
+          },
+          {
+            "uri": "https://github.com/cloudflare/computer/archive/812bce58d2ea3735c12e6f6181c269c4010293df.tar.gz",
+            "sha256": "ee20eae6939c82bd465933c3a591f96b362aa58fe344888307f7ea4839121f27"
+          }
+        ],
+        "limitation": "Exact client0.11.1 and capnweb graph; no package patch. Original812 source attribution and accepted8ead immutable image/source kit bind separate daemon/SEA22.23.5/FUSE inputs. Existing Workspace/storage/backends/output, WorkspaceProxy and backend APIs remain in their reviewed wrappers. Future904d/0.11.2 is not installed equivalence. Preserve runtimeVerified:false, licenseReviewRequired:true and registryDigest:null metadata; historical native artifact authentication is separate, not new current cloud/image/runtime approval."
+      },
+      "wrangler": {
+        "sourceFactsSha256": "101e5bbeab53e210edee7c172574de82343943c4d40448c0ba69aed30176c233",
+        "currentImpact": "reviewed",
+        "basisReviewedAt": "2026-11-14T01:27:43.023Z",
+        "primaryReferences": [
+          {
+            "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261113.1.tgz",
+            "sha256": "cef32e75d5876601ea2b17e48f76ed9aded000984bfcf3000be9cdd71d8db5b7"
+          },
+          {
+            "uri": "https://registry.npmjs.org/miniflare/-/miniflare-5.20261113.0-beta.tgz",
+            "sha256": "4777f56bb9e822fd249b05929dec2a82e1c9b9fc4cf5a757f7ef15cb9bd34785"
+          },
+          {
+            "uri": "https://registry.npmjs.org/workerd/-/workerd-1.20261113.1.tgz",
+            "sha256": "e52d9df647b4e15bbef09a2cc603e9fd9d1d665176c15f22ebdec56947869d90"
+          },
+          {
+            "uri": "https://registry.npmjs.org/wrangler/-/wrangler-4.162.0.tgz",
+            "sha256": "bdc0366417fbeea506296931be1c5dd91c131043f8873e31601e03ed4c31956a"
+          }
+        ],
+        "limitation": "Installed4.162.0 source archive and exact Miniflare/workerd/types closure are reviewed; CLI still verifies pinned Node26.13.1/Wrangler and actual config/prepare/deploy ports remain required. Later watched Artifacts-to-Workflow feature is unsupported by the closed FortiPi config (no artifacts/workflow/triggers), not future code certified compatible. Omitted Paid max_instances retains installed single-step rollout; later81e56 default-rollout fix is not adopted. Free omits paid bindings. Actual Paid rollout, genuine candidate and live proof remain open."
+      }
+    }
   }
 }

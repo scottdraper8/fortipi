@@ -149,6 +149,10 @@ jobs:
           FORTIPI_PRECOMMIT_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
         run: node --test tools/unstale/precommit-python.test.ts
       - run: pnpm exec playwright install --with-deps chromium
+      - name: Assess installed release compatibility
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/compatibility-watch/watch.ts --release
       - name: Build immutable candidate
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -13,6 +13,14 @@ export interface Source {
   links: string[];
 }
 
+// Fixed installed cohorts; all other catalog rows remain strict current release/policy references.
+export const installedReferenceIds = [
+  "pi-runtime",
+  "agents-lifecycle",
+  "computer-fuse",
+  "wrangler",
+] as const;
+
 const docs = "cloudflare/cloudflare-docs";
 const content = "src/content/";
 const worker = "apps/worker/package.json";

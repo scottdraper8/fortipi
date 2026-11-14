@@ -156,6 +156,11 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
       - run: pnpm run schema:check
         if: github.event_name != 'workflow_dispatch'
+      - name: Assess installed release compatibility (full lookahead stays separate)
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/compatibility-watch/watch.ts --release
       - run: pnpm run candidate:local
         if: github.event_name != 'workflow_dispatch'
         env:

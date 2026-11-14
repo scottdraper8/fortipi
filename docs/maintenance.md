@@ -99,12 +99,37 @@ and static-helper rebuild, replacement/relink and I/O through the existing proce
 Update only the reviewed Meson baseline entry; other reference records retain their
 original evidence and timestamps. Security-only Dependabot remains separate.
 
-Release tooling (thread 9) must run this check at preflight on the candidate SHA
-and inspect relevant unreviewed drift before deployment/publication. Attach the
-result identity/time to release evidence. Exit 1/2 needs an explicit primary-source
-review/disposition or repaired observation and rerun; never silently waive a
-failure or blindly replace the baseline. This standalone guard does not modify
-the release workflow or replace its pinned-lock, runtime, security or license gates.
+Release candidate and required CI assessment use `node tools/compatibility-watch/watch.ts --release`.
+This separate predicate keeps all sixteen lookahead results and their original
+exit code in a format2 report. The scheduled/PR full-watch command above keeps
+its honest nonzero alerts. Four source-committed installed references (Pi, Agents,
+Computer, Wrangler) bind exact archives, declared patches, both locks, current
+product trees and the retained image identity. The other twelve references—five
+Cloudflare policy/flag sources and seven latest-release sources—must be freshly
+unchanged. Future main is neither installed code nor a blanket safety claim.
+
+A reviewed installed reference records its immutable primary byte identities,
+semantic review time, current-impact disposition and limits. Equal bytes with
+`hold` or `unknown` still refuse. Reopen it for changed source/exposure or known
+or ambiguously applicable current risk. There is no automatic acceptance or
+caller/env/dispatch override. Historical review times do not expire daily; the
+report and actual full policy/advisory checks remain fresh within24h (at most
+one minute future). Existing API/live bounds remain stricter where specified.
+
+Only paired age-exception retirement and metadata/advisory review refresh are
+excluded from immutable identity projections. Complete current workspace and
+source-policy hashes remain validation inputs; normal pins, exception expiry,
+SRI/signature/lifecycle/patch/license and fresh advisory enforcement still run.
+A lock, archive, patch, image or coarse Worker/packages tree change invalidates
+the source reference. It needs normal review, never a copied timestamp.
+
+Candidate inventory retains exact report bytes. Owner10 detailSchemaVersion2
+binds candidate/source/report/cohort/reference digests; owner9 rechecks those
+bytes and current source predicate after producer/archive/payload authentication
+at deployment and final release retention. Format1 remains watch/history data;
+it cannot authorize a new release claim. Genuine candidate, native, deployed
+Free/Paid, image, legal and final QA gates remain independent and mandatory.
+No npm ownership or publication permission follows from the intended scope.
 
 ## Operator-confirmed Workers Free plan
 
