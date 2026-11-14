@@ -305,6 +305,9 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    /^# \{"diagnostic":"source-integration-client","ordinal":(?:[1-9]\d{0,2}),"kind":"(?:barrier|submission|other)","phase":"(?:fetch\.enter|headers|body\.enter|body\.exit|fetch\.error|body\.error|pause\.enter|pause\.exit)","status":(?:null|[1-5]\d{2})\}$/.test(
+      line,
+    ) ||
     /^# \{"diagnostic":"source-integration-barrier","invocation":\d{1,3},"phase":"(?:forward\.enter|entered|page\.enter|page\.exit|marker\.enter|marker\.exit)"\}$/.test(
       line,
     ) ||

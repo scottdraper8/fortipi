@@ -20,12 +20,15 @@ export async function poll<T>(
   read: () => Promise<T>,
   ready: (value: T) => boolean,
   timeout = 20000,
+  observePause?: (phase: "pause.enter" | "pause.exit") => void,
 ): Promise<T> {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     const value = await read();
     if (ready(value)) return value;
+    observePause?.("pause.enter");
     await new Promise<void>((accept) => setTimeout(accept, 25));
+    observePause?.("pause.exit");
   }
   throw new Error("Expected durable boundary did not become observable before its deadline");
 }
@@ -207,6 +210,38 @@ export async function start(options: RuntimeOptions = {}) {
     ]);
     child = undefined;
   }
+  let apiOrdinal = 0,
+    clientObservations = 0;
+  const observeClient = (
+    ordinal: number,
+    kind: "barrier" | "submission" | "other",
+    phase:
+      | "fetch.enter"
+      | "headers"
+      | "body.enter"
+      | "body.exit"
+      | "fetch.error"
+      | "body.error"
+      | "pause.enter"
+      | "pause.exit",
+    status: number | null = null,
+  ) => {
+    if (
+      process.env.FORTIPI_SOURCE_PI_OPEN_DIAGNOSTICS !== "1" ||
+      ordinal < 1 ||
+      ordinal > 999 ||
+      clientObservations >= 1024
+    )
+      return;
+    clientObservations++;
+    try {
+      console.log(
+        JSON.stringify({ diagnostic: "source-integration-client", ordinal, kind, phase, status }),
+      );
+    } catch {
+      // Fixed milestones cannot replace the original response or rejection.
+    }
+  };
   const api = async <T>(
     path: string,
     body?: unknown,
@@ -215,6 +250,14 @@ export async function start(options: RuntimeOptions = {}) {
   ) => {
     assert.ok(path.startsWith("/") && !path.startsWith("//"));
     const signal = AbortSignal.timeout(30000);
+    const ordinal = ++apiOrdinal,
+      kind = /^\/__test\/agents\/[A-Za-z0-9_-]+\/barrier$/.test(path)
+        ? "barrier"
+        : /^\/v1\/conversations\/[A-Za-z0-9_-]+\/messages$/.test(path)
+          ? "submission"
+          : "other";
+    let status: number | null = null;
+    observeClient(ordinal, kind, "fetch.enter");
     try {
       const response = await fetch(`${endpoint}${path}`, {
         method,
@@ -223,8 +266,14 @@ export async function start(options: RuntimeOptions = {}) {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal,
       });
-      return { status: response.status, body: (await response.json()) as T };
+      status = response.status;
+      observeClient(ordinal, kind, "headers", status);
+      observeClient(ordinal, kind, "body.enter", status);
+      const value = (await response.json()) as T;
+      observeClient(ordinal, kind, "body.exit", status);
+      return { status: response.status, body: value };
     } catch (error) {
+      observeClient(ordinal, kind, status === null ? "fetch.error" : "body.error", status);
       if (signal.aborted && child?.pid) observeSourceProcessCompute(child.pid, "request-deadline");
       throw error;
     }
@@ -246,12 +295,18 @@ export async function start(options: RuntimeOptions = {}) {
     api,
     stopAbruptly: () => stop(true),
     reopenSameStorage: launch,
-    barrier: async (agentId: string, name: string) =>
-      poll(
-        async () =>
-          (await api<{ barrier: string | null }>(`/__test/agents/${agentId}/barrier`)).body,
+    barrier: async (agentId: string, name: string) => {
+      let ordinal = 0;
+      return poll(
+        async () => {
+          ordinal = apiOrdinal + 1;
+          return (await api<{ barrier: string | null }>(`/__test/agents/${agentId}/barrier`)).body;
+        },
         (state) => state.barrier === name,
-      ),
+        20000,
+        (phase) => observeClient(ordinal, "barrier", phase),
+      );
+    },
     dispose: async () => {
       await stop(false);
       await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
