@@ -60,8 +60,12 @@ test("configure uses anonymous bounded discovery, exclusive protected output and
     const credential = join(f.path, "issued.json"),
       input = join(f.path, "device.json"),
       output = join(f.path, "new.json");
+    async function issueEnvelope(changed: Partial<typeof envelope> & { state?: string } = {}) {
+      // Each independent configure probe needs current authority to reach its oracle.
+      envelope.expiresAt = Date.now() + 60000;
+      await privateWrite(credential, JSON.stringify({ ...envelope, ...changed }));
+    }
     await platform.protect(f.path, true);
-    await privateWrite(credential, JSON.stringify(envelope));
     await privateWrite(input, JSON.stringify(device));
     const nativeCliEnvironment = childEnvironment();
     if (process.platform === "win32") {
@@ -73,6 +77,7 @@ test("configure uses anonymous bounded discovery, exclusive protected output and
       nativeCliEnvironment.LOCALAPPDATA = localAppData;
     }
     const binary = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
+    await issueEnvelope();
     const result = await promisify(execFile)(
       process.execPath,
       [
@@ -113,21 +118,28 @@ test("configure uses anonymous bounded discovery, exclusive protected output and
     assert.equal(result.stdout.includes(envelope.token), false);
     assert.equal(await readFile(credential, "utf8"), JSON.stringify(envelope));
     const original = await privateRead(output);
+    await issueEnvelope();
     await assert.rejects(configureProfile(credential, input, output, platform, true), {
       code: "EEXIST",
     });
     assert.equal(await privateRead(output), original);
     for (const changed of [
-      { ...envelope, role: "client" },
-      { ...envelope, state: "pending" },
-      { ...envelope, expiresAt: 1 },
-      { ...envelope, endpoint: `${origin}/override` },
+      { role: "client" },
+      { state: "pending" },
+      { endpoint: `${origin}/override` },
     ]) {
-      await privateWrite(credential, JSON.stringify(changed));
+      await issueEnvelope(changed);
       await assert.rejects(
         configureProfile(credential, input, join(f.path, "refused.json"), platform, true),
       );
     }
+    await issueEnvelope({ expiresAt: 1 });
+    const beforeExpired = observed.length;
+    await assert.rejects(
+      configureProfile(credential, input, join(f.path, "refused.json"), platform, true),
+      { message: "invalid issued executor envelope" },
+    );
+    assert.equal(observed.length, beforeExpired, "expired authority must fail before discovery");
     const privateCanary = "synthetic-malformed-secret-CANARY-4837";
     await privateWrite(credential, `{"token":"${privateCanary}",invalid:${privateCanary}`);
     await assert.rejects(
@@ -156,7 +168,6 @@ test("configure uses anonymous bounded discovery, exclusive protected output and
         return true;
       },
     );
-    await privateWrite(credential, JSON.stringify(envelope));
     for (const changed of [
       { ...device, origin },
       { ...device, executorGeneration: 0 },
@@ -165,21 +176,29 @@ test("configure uses anonymous bounded discovery, exclusive protected output and
       { ...device, bindings: [{ ...f.profile.bindings[0], path: f.path }] },
     ]) {
       await privateWrite(input, JSON.stringify(changed));
+      await issueEnvelope();
       await assert.rejects(
         configureProfile(credential, input, join(f.path, "refused.json"), platform, true),
       );
     }
     await privateWrite(input, JSON.stringify(device));
     feature = false;
+    await issueEnvelope();
+    const beforeIncompatible = observed.length;
     await assert.rejects(
       configureProfile(credential, input, join(f.path, "refused.json"), platform, true),
       /incompatible/,
     );
+    assert.equal(observed.length, beforeIncompatible + 1);
     feature = true;
     redirect = true;
+    await issueEnvelope();
+    const beforeRedirect = observed.length;
     await assert.rejects(
       configureProfile(credential, input, join(f.path, "refused.json"), platform, true),
+      /incompatible/,
     );
+    assert.equal(observed.length, beforeRedirect + 1);
     assert.ok(observed.length > 0);
     assert.ok(observed.every((r) => r.path === "/v1/protocol" && r.authorization === undefined));
     await assert.rejects(readFile(join(f.path, "refused.json")), { code: "ENOENT" });

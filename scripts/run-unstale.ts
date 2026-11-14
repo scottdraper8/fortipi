@@ -87,7 +87,7 @@ import { json } from "./check-pins.ts";
 // for setup and twice that for its last-resort report/exit. Leave another 30s
 // (its default public-request timeout) for process/config startup and shutdown.
 // --wait 0 instead selects a 300s setup bound; it does not mean immediate setup.
-// https://github.com/vuca-dev/unstale/blob/v0.2.12/src/onboarding.rs
+// https://github.com/vuca-dev/unstale/blob/v0.2.12/local/cli/src/onboarding.rs
 const coverageTimeout = 150_000;
 
 async function execute(
