@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "6cd7d1ae63824aa532ab855ff7c5719c8aab9c29",
-        "version": "v1.20261113.1",
-        "sha256": "07f92772ff128a2b24f2172ae900dd310dbaf95fec2243f5d203f41f2a80e5ba",
+        "commit": "3d3093c8f01b9b53f4d36d20a8e4ea0a39787992",
+        "version": "v1.20261114.1",
+        "sha256": "753baeb3d305c8b33cbd2edb992d150b1e6d236f0280880d9bd14f38e264d0cf",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261113.1"
       },
-      "reviewedAt": "2026-11-13T20:50:27.711Z",
-      "reviewNote": "Retain reviewed6cd7d1a/v1.20261113.1 source snapshot/69-commit used-boundary assessment. Coherent published SDK now selects workerd1.20261113.1 exactly and compatible types5.20261113.1; nine archive signatures/SRI/source/lifecycle/legal/age facts reviewed. Four generated type files match immutable6cd7 source. DO RPC cancellation still needs explicit abort; orphaned cross-context waits now reject and deferred cross-context actions remain material to lifecycle. SQLite sync defaults true; false is test-only. Snapshot kvData/URLPattern/Node crypto additions unused. Workerd install.js remains denied; optional authenticated binary selected. Compatibility date does not pin deployed runtime/autogates. Source/local graph qualification is not cloud recovery or security-wide clearance. Evidence:phase3/thread-9/foundation-wrangler-4162-build.md; prior phase3/thread-9/compatibility-refresh-build.md."
+      "reviewedAt": "2026-11-14T01:57:11.283Z",
+      "reviewNote": "Reviewed6cd7d1a..3d3093c8/v1.20261114.1. SQL nearest-savepoint/GetMultiple contracts preserved. TS flush/output-lock fix requires absent experimental typescript_implemented_streams. Ungated5a725: selected transient RPC owns its server/callback through pinned KJ LocalClient call attachments; cancellation destroys dependent chain before owner. Ordinary entrypoint RPC uses ctx.run; selected Codemode uses Loader.load, not get; facets/WorkerShell not selected. This excludes callback-drop with surviving queued run for inspected callers, not arbitrary consumers. Rust/JSG bounds/lifetime hardening remains bounded source assessment, not native-security clearance. Retain RPC abort/cross-context/deferred-action/SQLite sync caveats. Keep4.162/MF13beta/workerd13.1/types13.1 pins/archives/patches; no14.1 adoption without coherent Foundation review. Compatibility date does not pin cloud runtime; no Root/live proof. Evidence:phase3/thread-9/workerd-20261114-reference-build.md."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
