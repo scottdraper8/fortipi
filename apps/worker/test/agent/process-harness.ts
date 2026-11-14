@@ -193,7 +193,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       output = (output + String(data)).slice(-12000);
       if (announcedPort === undefined) {
         const announced =
-          /\bReady on\s+http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})(?=\s|$)/.exec(output);
+          /\bReady on\s+http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})(?=\s)/.exec(output);
         if (announced) announcedPort = Number(announced[1]);
       }
     };
