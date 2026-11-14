@@ -93,6 +93,7 @@ test("Free maximum encoded tool response retains cancel and known receipts under
       assert.equal(controlRetry.body.error.code, "rate_limited");
       assert.equal(controlRetry.body.error.retryable, true);
       const retryAfterMs = controlRetry.body.error.details?.retryAfterMs;
+      assert.ok(Number.isInteger(retryAfterMs));
       assert.ok(retryAfterMs && retryAfterMs > 0 && retryAfterMs <= 60000);
     }
     let beforeRetry = await cp.ingressCounts();
@@ -187,6 +188,7 @@ test("Free maximum encoded tool response retains cancel and known receipts under
       assert.equal(retried.body.error.code, "rate_limited");
       assert.equal(retried.body.error.retryable, true);
       const retryAfterMs = retried.body.error.details?.retryAfterMs;
+      assert.ok(Number.isInteger(retryAfterMs));
       assert.ok(retryAfterMs && retryAfterMs > 0 && retryAfterMs <= 60000);
       // Ordinary authentication quota applies even to known receipt reads.
       // Wait the actual declared window; storage pressure never changes caps.
