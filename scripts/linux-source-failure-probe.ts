@@ -6,11 +6,7 @@ import { Readable } from "node:stream";
 import type { ProcessResult } from "./prepare-release.ts";
 
 const productSource = "b9c0dcd30418cfb122b6959a456f70f54453ba3a";
-const files = [
-  "apps/worker/test/agent/process-recovery.test.ts",
-  "apps/worker/test/execution/native-connected-recovery.test.ts",
-  "apps/worker/test/integration/admission-recovery.test.ts",
-];
+const files = ["apps/worker/test/integration/admission-recovery.test.ts"];
 let actualhead: string | null = null;
 let result: ProcessResult | undefined;
 let complete = false;
@@ -32,6 +28,7 @@ try {
     "apps/worker/test/integration/runtime.ts",
     "apps/worker/test/integration/fixture-worker.ts",
     "scripts/source-pi-open-probe.ts",
+    "scripts/source-cpu-profile-probe.ts",
   ]);
   if (
     git("diff", "--name-only", productSource, head)

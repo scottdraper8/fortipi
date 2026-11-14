@@ -95,7 +95,7 @@ jobs:
       - run: pnpm run check:licenses
       - name: Prepare authenticated source-only Pi open diagnostic mains
         run: FORTIPI_SOURCE_PI_OPEN_DIAGNOSTICS=1 node scripts/source-pi-open-probe.ts prepare
-      - name: Capture only closed diagnostics from the three selected recovery source files
+      - name: Capture only closed diagnostics from the selected integration recovery file
         env:
           FORTIPI_SOURCE_PI_OPEN_DIAGNOSTICS: "1"
         run: node scripts/linux-source-failure-probe.ts
