@@ -543,59 +543,63 @@ test("local-stage status waits for actual empty or multichunk durable consumer p
           completedBefore = completedChunks;
         await assert.rejects(
           runtime.transfer(wrong, "bad_open").catch((error: unknown) => {
-            // Native TAP omits fetch's nested cause. Emit only closed classifications
-            // and timing bounds, then let the original integrity oracle judge it.
-            const cause = error instanceof Error ? error.cause : undefined,
-              causeCode =
-                cause !== null && typeof cause === "object" && "code" in cause
-                  ? cause.code
-                  : undefined,
-              message = error instanceof Error ? error.message : undefined;
-            t.diagnostic(
-              JSON.stringify({
-                diagnostic: "local-stage-integrity-probe",
-                mode,
-                elapsedMs: Math.ceil(performance.now() - started),
-                transferRemainingAtOpenMs: wrong.expiresAt - openedAt,
-                transferRemainingAtErrorMs: wrong.expiresAt - Date.now(),
-                leaseRemainingAtOpenMs: wrong.lease.expiresAt - openedAt,
-                deadlineRemainingAtOpenMs: wrong.deadline - openedAt,
-                chunkCalls: chunkCalls - callsBefore,
-                completedChunks: completedChunks - completedBefore,
-                errorKind:
-                  error instanceof TypeError
-                    ? "TypeError"
-                    : error instanceof Error
-                      ? "Error"
-                      : "other",
-                messageKind:
-                  message === "transfer file integrity"
-                    ? "file-integrity"
-                    : message === "fetch failed"
-                      ? "fetch-failed"
-                      : message === "expired transfer"
-                        ? "expired-transfer"
-                        : message === "transfer lease"
-                          ? "transfer-lease"
-                          : message === "request deadline expired"
-                            ? "request-deadline-expired"
-                            : message === "input chunk integrity"
-                              ? "input-chunk-integrity"
-                              : "other",
-                causeCode:
-                  [
-                    "UND_ERR_SOCKET",
-                    "UND_ERR_CONNECT_TIMEOUT",
-                    "UND_ERR_HEADERS_TIMEOUT",
-                    "UND_ERR_BODY_TIMEOUT",
-                    "ECONNRESET",
-                    "ECONNREFUSED",
-                    "ETIMEDOUT",
-                    "EPIPE",
-                  ].find((known) => known === causeCode) ??
-                  (causeCode === undefined ? "absent" : "other"),
-              }),
-            );
+            try {
+              // Native TAP omits fetch's nested cause. Emit only closed classifications
+              // and timing bounds, then let the original integrity oracle judge it.
+              const cause = error instanceof Error ? error.cause : undefined,
+                causeCode =
+                  cause !== null && typeof cause === "object" && "code" in cause
+                    ? cause.code
+                    : undefined,
+                message = error instanceof Error ? error.message : undefined;
+              t.diagnostic(
+                JSON.stringify({
+                  diagnostic: "local-stage-integrity-probe",
+                  mode,
+                  elapsedMs: Math.ceil(performance.now() - started),
+                  transferRemainingAtOpenMs: wrong.expiresAt - openedAt,
+                  transferRemainingAtErrorMs: wrong.expiresAt - Date.now(),
+                  leaseRemainingAtOpenMs: wrong.lease.expiresAt - openedAt,
+                  deadlineRemainingAtOpenMs: wrong.deadline - openedAt,
+                  chunkCalls: chunkCalls - callsBefore,
+                  completedChunks: completedChunks - completedBefore,
+                  errorKind:
+                    error instanceof TypeError
+                      ? "TypeError"
+                      : error instanceof Error
+                        ? "Error"
+                        : "other",
+                  messageKind:
+                    message === "transfer file integrity"
+                      ? "file-integrity"
+                      : message === "fetch failed"
+                        ? "fetch-failed"
+                        : message === "expired transfer"
+                          ? "expired-transfer"
+                          : message === "transfer lease"
+                            ? "transfer-lease"
+                            : message === "request deadline expired"
+                              ? "request-deadline-expired"
+                              : message === "input chunk integrity"
+                                ? "input-chunk-integrity"
+                                : "other",
+                  causeCode:
+                    [
+                      "UND_ERR_SOCKET",
+                      "UND_ERR_CONNECT_TIMEOUT",
+                      "UND_ERR_HEADERS_TIMEOUT",
+                      "UND_ERR_BODY_TIMEOUT",
+                      "ECONNRESET",
+                      "ECONNREFUSED",
+                      "ETIMEDOUT",
+                      "EPIPE",
+                    ].find((known) => known === causeCode) ??
+                    (causeCode === undefined ? "absent" : "other"),
+                }),
+              );
+            } catch {
+              // Diagnostics must never replace the original transfer rejection.
+            }
             throw error;
           }),
           /file integrity/,
