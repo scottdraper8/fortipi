@@ -118,7 +118,8 @@ export async function ticketsAndRevoke() {
       undefined,
       "Audience cannot be exchanged",
     );
-    const expired = await mint({ ttlMs: 1 });
+    const expired = await mint({ ttlMs: 5000 });
+    assert.ok(expired.expiresAt > Date.now(), "the expiry control ticket must arrive unexpired");
     await poll(
       async () => Date.now(),
       (now) => now > expired.expiresAt,
