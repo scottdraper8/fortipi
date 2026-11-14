@@ -2,6 +2,7 @@
 import type { ChildProcess } from "node:child_process";
 import { execFile } from "node:child_process";
 import { open } from "node:fs/promises";
+import { type ClientRequest, request as httpRequest, type IncomingMessage } from "node:http";
 import { posix } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
@@ -107,6 +108,64 @@ export function rootRuntimeDiagnostic(line: string): boolean {
             r.oomKill,
           ].every((v) => numeric(v))
         );
+      case "http":
+        return (
+          r.phase === "stall" &&
+          keys(r, `${base}outcome,status,headers,body,cause`) &&
+          member(r.outcome, [
+            "complete",
+            "deadline",
+            "transport",
+            "body-limit",
+            "unavailable",
+            "cancelled",
+          ]) &&
+          numeric(r.status, 100, 599) &&
+          member(r.headers, ["received", "unobserved"]) &&
+          member(r.body, ["complete", "incomplete", "unobserved"]) &&
+          (r.headers === "unobserved"
+            ? r.status === null && r.body === "unobserved"
+            : r.status !== null && r.body !== "unobserved") &&
+          (r.outcome !== "complete" || r.body === "complete") &&
+          (r.cause === null || member(r.cause, httpCauses))
+        );
+      case "cpu":
+        return (
+          r.phase === "stall" &&
+          keys(
+            r,
+            `${base}outcome,intervalMs,selected,sampled,ticks,owner,ownerSelected,ownerSampled,ownerTicks`,
+          ) &&
+          member(r.outcome, ["sampled", "partial", "unavailable"]) &&
+          numeric(r.intervalMs, 0, 500) &&
+          numeric(r.selected, 0, 8) &&
+          bounded(r.sampled, 0, typeof r.selected === "number" ? r.selected : 0) &&
+          numeric(r.ticks) &&
+          member(r.owner, ["expected-group", "foreign", "absent", "unknown"]) &&
+          numeric(r.ownerSelected, 0, 8) &&
+          bounded(r.ownerSampled, 0, typeof r.ownerSelected === "number" ? r.ownerSelected : 0) &&
+          numeric(r.ownerTicks) &&
+          (r.sampled === 0 ? r.ticks === null : r.ticks !== null && r.intervalMs !== null) &&
+          (r.outcome !== "unavailable" || r.sampled === 0) &&
+          (r.ownerSelected === null ||
+            (typeof r.selected === "number" &&
+              typeof r.ownerSelected === "number" &&
+              r.ownerSelected <= r.selected)) &&
+          r.ownerSampled <= r.sampled &&
+          (r.ownerSampled > 0 && r.ownerSampled === r.ownerSelected
+            ? r.ownerTicks !== null
+            : r.ownerTicks === null) &&
+          (r.outcome !== "sampled" ||
+            (r.selected === r.sampled &&
+              r.sampled > 0 &&
+              r.ticks !== null &&
+              r.intervalMs !== null)) &&
+          (r.outcome !== "partial" ||
+            (r.sampled > 0 &&
+              typeof r.selected === "number" &&
+              r.sampled < r.selected &&
+              r.ticks !== null))
+        );
       case "delta":
         return (
           r.phase !== "start" &&
@@ -193,7 +252,7 @@ const number = (text: string | undefined): number | null => {
 function counters(text: string | null): Map<string, number> {
   const result = new Map<string, number>();
   for (const line of text?.trim().split("\n") ?? []) {
-    const m = /^([a-z_]+) (\d+)$/.exec(line);
+    const m = /^([a-z_]+(?:\.[a-z_]+)*) (\d+)$/.exec(line);
     if (m?.[1]) {
       const value = number(m[2]);
       if (value !== null && !result.has(m[1])) result.set(m[1], value);
@@ -277,6 +336,7 @@ function listenerOwner(
   rows: Row[] | null,
   port: number,
   group: number | undefined,
+  owners?: Set<number>,
 ) {
   if (text === null || !rows || !group) return "unknown";
   const lines = text.trim() ? text.trim().split("\n") : [];
@@ -297,6 +357,7 @@ function listenerOwner(
     const pids = [...(m[3] ?? "").matchAll(/\bpid=(\d+),/g)];
     if (!pids.length) unknown = true;
     for (const pid of pids) {
+      if (owners && owners.size < 9) owners.add(Number(pid[1]));
       const row = rowsByPid.get(Number(pid[1]));
       if (!row) unknown = true;
       else if (row.group === group) expected = true;
@@ -313,7 +374,7 @@ function listenerOwner(
           ? "expected-group"
           : "unknown";
 }
-async function sample(child: ChildProcess, port: number) {
+async function sample(child: ChildProcess, port: number, capture?: (targets: CpuTargets) => void) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 800);
   timer.unref();
@@ -335,6 +396,21 @@ async function sample(child: ChildProcess, port: number) {
       return bounded(value) ? value : null;
     };
     const zombies = workers?.filter((row) => row.zombie).length;
+    const owners = new Set<number>();
+    const listener = listenerOwner(ss, rows, port, child.pid, owners);
+    try {
+      capture?.({
+        group: child.pid ?? 0,
+        workers: workers?.map((row) => row.pid) ?? null,
+        owners:
+          listener === "expected-group" && owners.size <= 8
+            ? [...owners].filter((pid) => workers?.some((row) => row.pid === pid))
+            : null,
+        owner: listener,
+      });
+    } catch {
+      /* Private sampling cannot replace the existing observation. */
+    }
     return {
       processes: {
         wrapper:
@@ -354,7 +430,7 @@ async function sample(child: ChildProcess, port: number) {
               : zombies === workers.length
                 ? "zombie"
                 : "mixed",
-        listener: listenerOwner(ss, rows, port, child.pid),
+        listener,
         wrapperExit: numeric(child.exitCode, -255, 255) ? child.exitCode : null,
         workerdExit: null,
         processes: rows?.length ?? null,
@@ -373,7 +449,254 @@ async function sample(child: ChildProcess, port: number) {
 }
 type Snapshot = Awaited<ReturnType<typeof sample>>;
 
-/** No timers/requests in readiness. All callbacks are guarded; sampling is side work. */
+// The mechanism probe shares the existing stall trigger, never readiness control flow.
+const httpCauses = [...causes, "EPIPE", "HPE_HEADER_OVERFLOW", "HPE_INVALID_CONSTANT"] as const;
+type Owner = "expected-group" | "foreign" | "absent" | "unknown";
+type CpuTargets = {
+  group: number;
+  workers: number[] | null;
+  owners: number[] | null;
+  owner: Owner;
+};
+function beginMechanism(
+  kind: Kind,
+  port: number,
+  emit: (metric: string, data: Record<string, unknown>) => void,
+) {
+  const began = performance.now();
+  let request: ClientRequest | undefined, response: IncomingMessage | undefined;
+  let httpDone = false,
+    cpuDone = false,
+    cpuStarted = false;
+  let status: number | null = null,
+    bytes = 0;
+  let cpuTimer: ReturnType<typeof setTimeout> | undefined,
+    interval: ReturnType<typeof setTimeout> | undefined;
+  const send = (metric: string, data: Record<string, unknown>) => {
+    try {
+      emit(metric, data);
+    } catch {
+      /* Observation only. */
+    }
+  };
+  const cpuUnknown = () => {
+    if (cpuDone) return;
+    cpuDone = true;
+    clearTimeout(cpuTimer);
+    clearTimeout(interval);
+    if (httpDone) clearTimeout(overall);
+    send("cpu", {
+      outcome: "unavailable",
+      intervalMs: null,
+      selected: null,
+      sampled: 0,
+      ticks: null,
+      owner: "unknown",
+      ownerSelected: null,
+      ownerSampled: 0,
+      ownerTicks: null,
+    });
+  };
+  const httpEnd = (outcome: string, cause: unknown = null) => {
+    if (httpDone) return;
+    if (performance.now() - began >= 500) outcome = "deadline";
+    httpDone = true;
+    clearTimeout(httpTimer);
+    send("http", {
+      outcome,
+      status,
+      headers: response ? "received" : "unobserved",
+      body:
+        response?.complete && response.readableEnded
+          ? "complete"
+          : response
+            ? "incomplete"
+            : "unobserved",
+      cause: member(cause, httpCauses) ? cause : null,
+    });
+    try {
+      response?.destroy();
+      request?.destroy();
+    } catch {
+      /* Best-effort teardown. */
+    } finally {
+      response = undefined;
+      request = undefined;
+    }
+    if (cpuDone) clearTimeout(overall);
+  };
+  // Timers are absolute; receiving headers or data never restarts them.
+  const httpTimer = setTimeout(() => httpEnd("deadline"), 500);
+  const overall = setTimeout(() => {
+    httpEnd("deadline");
+    cpuUnknown();
+  }, 1500);
+  httpTimer.unref();
+  overall.unref();
+  const failed = (error: unknown) => {
+    let code: unknown = null;
+    try {
+      if (error && typeof error === "object")
+        code = Object.getOwnPropertyDescriptor(error, "code")?.value;
+    } catch {
+      /* unavailable */
+    }
+    httpEnd("transport", code);
+  };
+  try {
+    request = httpRequest(
+      {
+        hostname: "127.0.0.1",
+        port,
+        path: kind === "process" ? "/__test/ping" : "/health",
+        method: "GET",
+        agent: false,
+        maxHeaderSize: 4096,
+      },
+      (message) => {
+        if (httpDone) {
+          message.on("error", () => {});
+          message.destroy();
+          return;
+        }
+        response = message;
+        status = bounded(message.statusCode, 100, 599) ? message.statusCode : null;
+        message.on("error", failed);
+        message.on("aborted", () => httpEnd("transport"));
+        message.on("data", (chunk: Buffer) => {
+          bytes += chunk.length;
+          if (bytes > 4096) httpEnd("body-limit");
+        });
+        message.on("end", () => httpEnd(message.complete ? "complete" : "transport"));
+      },
+    );
+    request.on("error", failed);
+    request.on("socket", (socket) => socket.unref());
+    request.end();
+  } catch {
+    httpEnd("unavailable");
+  }
+  const capture = (targets: CpuTargets) => {
+    if (cpuStarted || cpuDone) return;
+    cpuStarted = true;
+    if (
+      process.platform !== "linux" ||
+      !targets.workers?.length ||
+      targets.workers.length > 8 ||
+      !bounded(targets.group, 1, 2147483647) ||
+      new Set(targets.workers).size !== targets.workers.length ||
+      targets.workers.some((pid) => !bounded(pid, 1, 2147483647))
+    ) {
+      cpuUnknown();
+      return;
+    }
+    const pids = targets.workers;
+    const cpuDeadline = Math.min(began + 1500, performance.now() + 500);
+    const owners =
+      targets.owners &&
+      targets.owners.length <= 8 &&
+      new Set(targets.owners).size === targets.owners.length &&
+      targets.owners.every((pid) => pids.includes(pid))
+        ? targets.owners
+        : null;
+    const read = async (pid: number) => {
+      if (cpuDone || performance.now() >= cpuDeadline) return null;
+      const text = await smallFile(`/proc/${pid}/stat`);
+      if (cpuDone || text === null || !text.startsWith(`${pid} (`)) return null;
+      const end = text.lastIndexOf(") ");
+      if (end < 0) return null;
+      const fields = text
+        .slice(end + 2)
+        .trim()
+        .split(/\s+/);
+      const group = number(fields[2]),
+        user = number(fields[11]),
+        system = number(fields[12]),
+        start = number(fields[19]);
+      if (
+        group !== targets.group ||
+        user === null ||
+        system === null ||
+        start === null ||
+        !bounded(user + system) ||
+        !/^[A-Za-z]$/.test(fields[0] ?? "")
+      )
+        return null;
+      return { ticks: user + system, start };
+    };
+    cpuTimer = setTimeout(
+      cpuUnknown,
+      Math.min(500, Math.max(0, 1500 - (performance.now() - began))),
+    );
+    cpuTimer.unref();
+    void (async () => {
+      const first = await Promise.all(pids.map(read));
+      if (cpuDone) return;
+      if (performance.now() >= cpuDeadline) {
+        cpuUnknown();
+        return;
+      }
+      const firstAt = performance.now();
+      await new Promise<void>((resolve) => {
+        interval = setTimeout(resolve, 250);
+        interval.unref();
+      });
+      if (cpuDone) return;
+      const second = await Promise.all(pids.map(read));
+      if (cpuDone) return;
+      if (performance.now() >= cpuDeadline) {
+        cpuUnknown();
+        return;
+      }
+      const elapsed = Math.round(performance.now() - firstAt);
+      if (!bounded(elapsed, 0, 500)) {
+        cpuUnknown();
+        return;
+      }
+      const deltas = pids.map((_, i) => {
+        const a = first[i],
+          b = second[i];
+        return a && b && a.start === b.start && bounded(b.ticks - a.ticks)
+          ? b.ticks - a.ticks
+          : null;
+      });
+      const valid = deltas.filter((value): value is number => value !== null);
+      const ownerDeltas = owners?.map((pid) => deltas[pids.indexOf(pid)] ?? null);
+      const sum = (values: number[]) => {
+        const total = values.reduce((a, b) => a + b, 0);
+        return bounded(total) ? total : null;
+      };
+      cpuDone = true;
+      clearTimeout(cpuTimer);
+      if (httpDone) clearTimeout(overall);
+      send("cpu", {
+        outcome:
+          valid.length === pids.length ? "sampled" : valid.length ? "partial" : "unavailable",
+        intervalMs: elapsed,
+        selected: pids.length,
+        sampled: valid.length,
+        ticks: valid.length ? sum(valid) : null,
+        owner: targets.owner,
+        ownerSelected: owners?.length ?? null,
+        ownerSampled: ownerDeltas?.filter((v) => v !== null).length ?? 0,
+        ownerTicks:
+          ownerDeltas?.length && ownerDeltas.every((v): v is number => v !== null)
+            ? sum(ownerDeltas)
+            : null,
+      });
+    })().catch(cpuUnknown);
+  };
+  return {
+    capture,
+    cancel: () => {
+      httpEnd("cancelled");
+      cpuUnknown();
+      clearTimeout(overall);
+    },
+  };
+}
+
+/** No observation awaits in readiness. Guarded side work has independent fixed bounds. */
 export function observeRootRuntime(options: {
   kind: Kind;
   invocation: number;
@@ -410,6 +733,7 @@ export function observeRootRuntime(options: {
       snapshots = 0;
     const queue: { phase: Phase; readiness: Record<string, unknown> }[] = [];
     let initial: Snapshot | undefined;
+    let mechanism: ReturnType<typeof beginMechanism> | undefined;
     const elapsed = () => Math.min(99_999_999, Math.max(0, Math.round(performance.now() - began)));
     const emit = (phase: Phase, metric: string, data: Record<string, unknown>) => {
       try {
@@ -424,7 +748,7 @@ export function observeRootRuntime(options: {
         });
         const size = Buffer.byteLength(line) + 1;
         // Reserve two units for Node TAP's '# ' prefix.
-        if (rows >= 11 || bytes + size > 5632 || line.length > 510 || !rootRuntimeDiagnostic(line))
+        if (rows >= 13 || bytes + size > 6656 || line.length > 510 || !rootRuntimeDiagnostic(line))
           return;
         rows++;
         bytes += size;
@@ -516,7 +840,7 @@ export function observeRootRuntime(options: {
         drain();
       }, 1200);
       timer.unref();
-      void sample(child, port)
+      void sample(child, port, item.phase === "stall" ? mechanism?.capture : undefined)
         .then((snapshot) => {
           if (!unavailable) publish(item, snapshot);
         })
@@ -600,6 +924,9 @@ export function observeRootRuntime(options: {
     const failedProbe = () => {
       if (!stalled && readyPort !== "unknown" && (outcome === "deadline" || attempts >= 25)) {
         stalled = true;
+        mechanism = beginMechanism(options.kind, port, (metric, data) =>
+          emit("stall", metric, data),
+        );
         request("stall");
       }
     };
@@ -644,6 +971,7 @@ export function observeRootRuntime(options: {
         safe(() => {
           if (finished) return;
           finished = true;
+          mechanism?.cancel();
           for (const remove of detach.splice(0)) remove();
           outcome = ready ? "ready" : "failed";
           request("end");

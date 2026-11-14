@@ -36,10 +36,8 @@ async function fixture(fail?: "ordinary" | "gates") {
       `import test from 'node:test';import {appendFile} from 'node:fs/promises';\n${cases.map((name) => `test(${JSON.stringify(name)},async()=>{await appendFile(${JSON.stringify(journal)},${JSON.stringify(`${path}:${name}\n`)});${(fail === "ordinary" && path === files[0]) || (fail === "gates" && path === gates) ? "throw new Error('controlled child failure');" : ""}});`).join("\n")}\n`,
     );
   }
-  await copyFile(
-    resolve(repository, "scripts/source-test-processes.ts"),
-    join(directory, "scripts/source-test-processes.ts"),
-  );
+  for (const name of ["source-test-processes.ts", "root-runtime-observation.ts"])
+    await copyFile(resolve(repository, "scripts", name), join(directory, "scripts", name));
   return {
     directory,
     files,
