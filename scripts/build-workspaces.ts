@@ -68,6 +68,87 @@ function observeDiagnosticLines(stream: Readable, acceptLine: (line: string) => 
   // A close without end is not a complete final line and deliberately does not flush.
 }
 
+/** Diagnostic counts only: original command results remain the coverage authority. */
+export function observeRootCoverage(stderr: Readable, emit: (line: string) => void) {
+  const began = performance.now();
+  let inventory: { ordinary: number; gates: number; provenance: number } | undefined;
+  const started = new Set<string>(),
+    exited = new Set<string>();
+  let stagesStarted = 0,
+    stagesEnded = 0,
+    consistent = true;
+  const masks = { ordinary: 1, gates: 2, provenance: 4 };
+  observeDiagnosticLines(stderr, (line) => {
+    if (!line.startsWith("{") || !sourceTestDiagnostic(line)) return;
+    const record = JSON.parse(line) as Record<string, unknown>;
+    if (record.diagnostic === "root-source-inventory") {
+      if (inventory) consistent = false;
+      inventory = {
+        ordinary: record.ordinary as number,
+        gates: record.gates as number,
+        provenance: record.provenance as number,
+      };
+    } else if (record.diagnostic === "root-source-stage") {
+      const mask = masks[record.stage as keyof typeof masks];
+      if (record.event === "enter") stagesStarted |= mask;
+      else stagesEnded |= mask;
+    } else if (record.diagnostic === "source-test-process") {
+      const path = record.path as string;
+      if (record.event === "spawn") {
+        if (started.has(path)) consistent = false;
+        if (!started.has(path) && started.size >= 512) {
+          consistent = false;
+          return;
+        }
+        started.add(path);
+      } else {
+        if (!started.has(path)) {
+          consistent = false;
+          return;
+        }
+        if (exited.has(path)) consistent = false;
+        exited.add(path);
+      }
+    }
+  });
+  return (result: { code: number | null; timedOut: boolean }) => {
+    try {
+      const required = inventory
+        ? inventory.ordinary + inventory.gates + inventory.provenance
+        : null;
+      const line = JSON.stringify({
+        diagnostic: "root-source-terminal",
+        ordinary: inventory?.ordinary ?? null,
+        gates: inventory?.gates ?? null,
+        provenance: inventory?.provenance ?? null,
+        started: started.size,
+        exited: exited.size,
+        unstarted: required === null ? null : Math.max(0, required - started.size),
+        active: Math.max(0, started.size - exited.size),
+        stagesStarted,
+        stagesEnded,
+        elapsedMs: Math.round(performance.now() - began),
+        exitCode: result.code,
+        limitHit: result.timedOut,
+        consistent: !!inventory && consistent && required !== null && started.size <= required,
+      });
+      if (sourceTestDiagnostic(line)) emit(`${line}\n`);
+    } catch {
+      // Counts never replace the original command result.
+    }
+  };
+}
+
+function rootStageDiagnostic(record: Record<string, string | number>): void {
+  if (process.env.FORTIPI_ROOT_CONTEXT_DIAGNOSTICS !== "1") return;
+  try {
+    const line = JSON.stringify(record);
+    if (sourceTestDiagnostic(line)) process.stderr.write(`${line}\n`);
+  } catch {
+    // Diagnostics cannot change stage execution.
+  }
+}
+
 /** Argument arrays only. A timeout terminates the child and remains a failure. */
 export async function run(
   command: string,
@@ -160,20 +241,47 @@ export async function tests(
   const diagnostics = observeProcesses
     ? ["--require", join(directory, "scripts/source-test-processes.ts")]
     : [];
+  rootStageDiagnostic({
+    diagnostic: "root-source-inventory",
+    ordinary: parallel.length,
+    gates: paths.has(gates) ? 1 : 0,
+    provenance: paths.has(provenance) ? 1 : 0,
+  });
   // Emit each assertion immediately, even if another file outlives the aggregate runner.
   // Keep the complete native aggregation file separate; shared-context mutation stays last.
-  for (const selected of [
+  const selections = [
     parallel,
     paths.has(gates) ? [gates] : [],
     paths.has(provenance) ? [provenance] : [],
-  ])
-    if (selected.length)
+  ];
+  for (const [index, selected] of selections.entries()) {
+    if (!selected.length) continue;
+    const stage = ["ordinary", "gates", "provenance"][index] as string;
+    rootStageDiagnostic({
+      diagnostic: "root-source-stage",
+      stage,
+      event: "enter",
+      selected: selected.length,
+    });
+    let completed = false;
+    try {
       await execute(
         process.execPath,
         [...diagnostics, "--test", "--test-reporter=tap", ...selected],
         directory,
         remainingTimeout(),
       );
+      completed = true;
+    } finally {
+      rootStageDiagnostic({
+        diagnostic: "root-source-stage",
+        stage,
+        event: "exit",
+        selected: selected.length,
+        outcome: completed ? "success" : "failure",
+      });
+    }
+  }
 }
 
 async function compile(path: string): Promise<void> {

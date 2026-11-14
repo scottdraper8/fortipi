@@ -1,0 +1,210 @@
+name: Measured original Root context
+on:
+  push:
+    branches:
+      - ci/fortipi-root-context-diagnostic-20261114-1
+permissions:
+  contents: read
+concurrency:
+  group: root-context-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  CI: "true"
+  GOTOOLCHAIN: local
+  FORTIPI_EVIDENCE_FIXTURE: tests/clients/fixtures/local.json
+  WRANGLER_SEND_METRICS: "false"
+  npm_config_node_gyp: ${{ github.workspace }}/node_modules/node-gyp/bin/node-gyp.js
+  npm_config_build_from_source: "true"
+  FORTIPI_ROOT_CONTEXT_DIAGNOSTICS: "1"
+jobs:
+  policy-and-integration:
+    if: github.repository == 'scottdraper8/fortipi' && !github.event.repository.fork
+      && github.ref ==
+      'refs/heads/ci/fortipi-root-context-diagnostic-20261114-1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443 github.com:443
+            objects.githubusercontent.com:443 raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443 codeload.github.com:443
+            *.actions.githubusercontent.com:443 *.blob.core.windows.net:443
+            registry.npmjs.org:443 nodejs.org:443 www.python.org:443
+            downloads.python.org:443 pypi.org:443 files.pythonhosted.org:443
+            go.dev:443 dl.google.com:443 proxy.golang.org:443 sum.golang.org:443
+            storage.googleapis.com:443 api.osv.dev:443 download.docker.com:443
+            auth.docker.io:443 registry-1.docker.io:443
+            production.cloudflare.docker.com:443 ghcr.io:443
+            pkg-containers.githubusercontent.com:443 snapshot.debian.org:443
+            cdn.playwright.dev:443 playwright.download.prss.microsoft.com:443
+            archive.ubuntu.com:80 security.ubuntu.com:80
+            azure.archive.ubuntu.com:80 api.unstale.sh:443 unstale.sh:443
+            *.stepsecurity.io:443
+      - name: Require Linux hardener service active
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 1
+        run: /usr/bin/systemctl is-active --quiet agent.service
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 26.13.1
+          check-latest: false
+          package-manager-cache: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 12.18.0
+          run_install: false
+          cache: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        id: python
+        with:
+          python-version: 3.15.2
+          check-latest: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.27.4
+          check-latest: false
+          cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir tools/unstale install --frozen-lockfile
+      - run: node node_modules/typescript/bin/tsc -p
+          packages/fortipi-contract/tsconfig.json
+      - run: node scripts/verify-foundation.ts --egress
+      - run: node tools/unstale/review-supply-chain.ts --locks --check
+        if: github.event_name != 'workflow_dispatch'
+      - run: pnpm run check:pins
+        if: github.event_name != 'workflow_dispatch'
+      - run: node --test tools/unstale/foundation.test.ts
+        if: github.event_name != 'workflow_dispatch'
+      - run: node tools/unstale/provision-docker.ts
+        if: github.event_name != 'workflow_dispatch'
+      - name: Bootstrap verified private pre-commit tools
+        env:
+          PINNED_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: >
+          node tools/unstale/precommit-python.ts --prepare-hosted-python
+          "$PINNED_PYTHON"
+
+          node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON"
+          --directory "$RUNNER_TEMP/fortipi-precommit" --github-path
+          "$GITHUB_PATH"
+        if: github.event_name != 'workflow_dispatch'
+      - run: node tools/unstale/review-precommit.ts
+        if: github.event_name != 'workflow_dispatch'
+      - name: Prove cold pinned Python hooks and artifact refusals
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          FORTIPI_PRECOMMIT_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: node --test tools/unstale/precommit-python.test.ts
+      - run: pnpm run check:licenses -- --foundation
+        if: github.event_name != 'workflow_dispatch'
+      - run: pnpm run unstale:check
+        if: github.event_name != 'workflow_dispatch'
+      - name: Save qualified image reference
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          IMAGE_REFERENCE: ${{ vars.FORTIPI_IMAGE_REFERENCE }}
+        run: node scripts/prepare-release.ts descriptor --kind image --out
+          "$RUNNER_TEMP/image-reference.json"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(vars.FORTIPI_IMAGE_REFERENCE).runId }}
+          artifact-ids: ${{ fromJSON(vars.FORTIPI_IMAGE_REFERENCE).artifactId }}
+          path: ${{ runner.temp }}/qualified-image
+      - name: Authenticate image and recreate its exact context
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/prepare-release.ts image --descriptor
+          "$RUNNER_TEMP/image-reference.json" --downloaded
+          "$RUNNER_TEMP/qualified-image"
+      - run: pnpm run build
+        if: github.event_name != 'workflow_dispatch'
+      - run: pnpm run verify:foundation
+        if: github.event_name != 'workflow_dispatch'
+        timeout-minutes: 3
+      - run: pnpm run typecheck
+        if: github.event_name != 'workflow_dispatch'
+      - run: pnpm run lint
+        if: github.event_name != 'workflow_dispatch'
+      - run: pnpm run schema:check
+        if: github.event_name != 'workflow_dispatch'
+      - name: Verify maintained compatibility release boundaries
+        if: github.event_name != 'workflow_dispatch'
+        run: node --test tools/compatibility-watch/release.test.ts
+      - name: Assess installed release compatibility (full lookahead stays separate)
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/compatibility-watch/watch.ts --release
+      - run: pnpm run candidate:local
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: pnpm run check:licenses
+        if: github.event_name != 'workflow_dispatch'
+      - name: Compile source-side evidence ports without rebuilding the candidate
+        if: github.event_name == 'workflow_dispatch'
+        run: node scripts/build-workspaces.ts build:evidence
+      - name: Save exact retained candidate reference
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          CANDIDATE_REFERENCE: ${{ inputs.candidate }}
+        run: node scripts/prepare-release.ts descriptor --kind candidate --out
+          "$RUNNER_TEMP/candidate-reference.json"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ fromJSON(inputs.candidate).runId }}
+          artifact-ids: ${{ fromJSON(inputs.candidate).artifactId }}
+          path: ${{ runner.temp }}/candidate
+      - name: Authenticate completed candidate producer, archive and checkout
+        id: retained
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/prepare-release.ts retained-evidence --candidate
+          "$RUNNER_TEMP/candidate/candidate.json" --reference
+          "$RUNNER_TEMP/candidate-reference.json"
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:browser
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Prove the exact retained candidate
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FORTIPI_CANDIDATE_REFERENCE: ${{ inputs.candidate }}
+        run: node scripts/prepare-release.ts evidence --mode local --candidate
+          "$RUNNER_TEMP/candidate/candidate.json" --fixture
+          "$FORTIPI_EVIDENCE_FIXTURE" --out dist/evidence/integrated
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: ${{ steps.retained.outputs.artifact }}
+          path: dist/evidence/integrated
+          if-no-files-found: error
+          retention-days: 30
+      - name: Run verified private hooks
+        env:
+          PINNED_PYTHON: ${{ steps.python.outputs.python-path }}
+          PRE_COMMIT_HOME: ${{ runner.temp }}/fortipi-precommit/pre-commit-home
+        run: >
+          node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON"
+          --verify "$RUNNER_TEMP/fortipi-precommit"
+
+          "$RUNNER_TEMP/fortipi-precommit/venv/bin/pre-commit" run --all-files
+        if: github.event_name != 'workflow_dispatch'

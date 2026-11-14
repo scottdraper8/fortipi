@@ -250,6 +250,10 @@ export function sourceTestDiagnostic(line: string): boolean {
     ) &&
       !line.includes("../")) ||
     failureDiagnostic(line) ||
+    rootCountDiagnostic(line) ||
+    /^# \{"diagnostic":"integrated-recovery-phase","oracle":"(?:admission|lifecycle)","event":"(?:enter|exit|failure)","phase":"(?:runtime\.start|provision|dispose|canary\.(?:write|kill|reopen|read)|(?:before-submit|after-submit)\.(?:previous|arm|cue|kill|lost|reopen|witness|retry|projection|inspect|duplicates|conflict)|submit|running|kill|reopen|release|terminal|projection)","elapsedMs":\d{1,8}\}$/.test(
+      line,
+    ) ||
     recoveryDiagnostic(line) ||
     /^# \{"diagnostic":"source-recovery-start","event":"(?:spawned|probe|ready|end)","invocation":\d{1,3},"elapsedMs":\d{1,8},"attempts":\d{1,3},"deadlines":\d{1,3},"transports":\d{1,3},"status":(?:null|[1-5]\d{2}),"exitCode":(?:null|-?\d{1,3}),"signal":(?:null|"(?:SIG[A-Z0-9]{1,8}|other)"),"logStage":"(?:ready-log|starting-log|unobserved)"\}$/.test(
       line,
@@ -258,6 +262,57 @@ export function sourceTestDiagnostic(line: string): boolean {
       line,
     )
   );
+}
+
+function rootCountDiagnostic(line: string): boolean {
+  if (!line.startsWith('{"diagnostic":"root-source-')) return false;
+  try {
+    const value = JSON.parse(line) as Record<string, unknown>;
+    if (line !== JSON.stringify(value)) return false;
+    const keys = Object.keys(value).join(",");
+    const count = (v: unknown, nullable = false, maximum = 512) =>
+      (nullable && v === null) ||
+      (typeof v === "number" && Number.isSafeInteger(v) && v >= 0 && v <= maximum);
+    if (value.diagnostic === "root-source-inventory")
+      return (
+        keys === "diagnostic,ordinary,gates,provenance" &&
+        count(value.ordinary) &&
+        count(value.gates, false, 1) &&
+        count(value.provenance, false, 1)
+      );
+    if (value.diagnostic === "root-source-stage")
+      return (
+        ["ordinary", "gates", "provenance"].includes(value.stage as string) &&
+        count(value.selected) &&
+        ((keys === "diagnostic,stage,event,selected" && value.event === "enter") ||
+          (keys === "diagnostic,stage,event,selected,outcome" &&
+            value.event === "exit" &&
+            ["success", "failure"].includes(value.outcome as string)))
+      );
+    return (
+      value.diagnostic === "root-source-terminal" &&
+      keys ===
+        "diagnostic,ordinary,gates,provenance,started,exited,unstarted,active,stagesStarted,stagesEnded,elapsedMs,exitCode,limitHit,consistent" &&
+      count(value.ordinary, true) &&
+      count(value.gates, true, 1) &&
+      count(value.provenance, true, 1) &&
+      count(value.started) &&
+      count(value.exited) &&
+      count(value.unstarted, true) &&
+      count(value.active) &&
+      count(value.stagesStarted, false, 7) &&
+      count(value.stagesEnded, false, 7) &&
+      count(value.elapsedMs, false, 99_999_999) &&
+      (value.exitCode === null ||
+        (typeof value.exitCode === "number" &&
+          Number.isInteger(value.exitCode) &&
+          Math.abs(value.exitCode) <= 255)) &&
+      typeof value.limitHit === "boolean" &&
+      typeof value.consistent === "boolean"
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Exact process-recovery fixture output only, never an arbitrary TAP diagnostic. */

@@ -29,6 +29,7 @@ import {
 } from "./application-recovery-channel.ts";
 import {
   FULL_SOURCE_TEST_TIMEOUT_MS,
+  observeRootCoverage,
   observeSourceTestFailures,
   packagePaths,
   repository,
@@ -140,6 +141,8 @@ export function childEnvironment(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessE
     "RUNNER_ENVIRONMENT",
   ])
     if (process.env[key]) result[key] = process.env[key];
+  if (process.env.FORTIPI_ROOT_CONTEXT_DIAGNOSTICS === "1")
+    result.FORTIPI_ROOT_CONTEXT_DIAGNOSTICS = "1";
   return { ...result, ...extra };
 }
 export interface ProcessResult {
@@ -175,6 +178,16 @@ export async function execute(
       stdio: onSpawn ? ["ignore", "pipe", "pipe", "ipc"] : ["ignore", "pipe", "pipe"],
     });
     assert.ok(child.stdout && child.stderr);
+    const rootCommand =
+      progress &&
+      (command === "pnpm" || basename(command) === "pnpm.exe") &&
+      args.length === 2 &&
+      args[0] === "run" &&
+      args[1] === "test";
+    const rootCoverage =
+      rootCommand && env.FORTIPI_ROOT_CONTEXT_DIAGNOSTICS === "1"
+        ? observeRootCoverage(child.stderr, (line) => process.stderr.write(line))
+        : undefined;
     if (
       progress &&
       (command === "pnpm" || basename(command) === "pnpm.exe") &&
@@ -209,6 +222,7 @@ export async function execute(
     });
     child.once("close", (code) => {
       clearTimeout(timer);
+      rootCoverage?.({ code, timedOut });
       accept({ stdout, code, timedOut });
     });
     try {
