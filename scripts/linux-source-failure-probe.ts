@@ -33,6 +33,7 @@ try {
     "scripts/linux-source-failure-probe.ts",
     ".github/workflows/linux-source-failure-probe.yml",
     "apps/worker/test/agent/process-harness.ts",
+    "apps/worker/test/agent/runtime-worker.ts",
     "apps/worker/test/execution/native-process.ts",
   ]);
   if (

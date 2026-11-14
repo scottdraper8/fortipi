@@ -99,6 +99,30 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
   let child: ChildProcess | undefined,
     output = "";
   let childInvocation = 0;
+  let startupStages = 0;
+  const stageNames = [
+    "store.open.enter",
+    "store.open.exit",
+    "models.enter",
+    "models.exit",
+    "pi.start.enter",
+    "pi.start.exit",
+    "host.start.enter",
+    "host.start.exit",
+  ];
+  const startupSnapshot = (checkpoint: "ready" | "readiness-end" | "request-failure") => {
+    try {
+      const line = JSON.stringify({
+        diagnostic: "source-runtime-startup",
+        invocation: childInvocation,
+        checkpoint,
+        stages: startupStages,
+      });
+      if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+    } catch {
+      // Diagnostics cannot replace the request result or readiness decision.
+    }
+  };
   const origin = `http://127.0.0.1:${port}`;
   const api = async <T>(
     path: string,
@@ -118,6 +142,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       stage = "body";
       return { status: response.status, body: (await response.json()) as T };
     } catch (error) {
+      startupSnapshot("request-failure");
       try {
         if (error !== null && typeof error === "object") {
           const cause = Object.getOwnPropertyDescriptor(error, "cause")?.value;
@@ -164,6 +189,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
   async function start() {
     assert.ok(!child, "Previous process must be stopped");
     childInvocation++;
+    startupStages = 0;
     output = "";
     child = spawn(
       process.execPath,
@@ -194,7 +220,11 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     );
     const current = child;
     const retain = (data: Buffer) => {
-      if (child === current) output = (output + String(data)).slice(-12000);
+      if (child === current) {
+        output = (output + String(data)).slice(-12000);
+        for (const [index, stage] of stageNames.entries())
+          if (output.includes(`FORTIPI_RUNTIME_STAGE ${stage}`)) startupStages |= 1 << index;
+      }
     };
     child.stdout?.on("data", retain);
     child.stderr?.on("data", retain);
@@ -302,6 +332,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       }
       assert.fail("Wrangler not ready");
     } finally {
+      startupSnapshot(ready ? "ready" : "readiness-end");
       observe(ready ? "ready" : "end");
     }
   }

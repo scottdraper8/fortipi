@@ -370,10 +370,30 @@ export class TestAgentSession extends AgentSession {
       }),
     );
     super(ctx, env, async () => {
+      console.log("FORTIPI_RUNTIME_STAGE models.enter");
       const models = createModels();
       models.setProvider(faux.provider);
+      console.log("FORTIPI_RUNTIME_STAGE models.exit");
       return { ok: true, value: models };
     });
+    const storeOpen = this.store.open.bind(this.store);
+    this.store.open = async () => {
+      console.log("FORTIPI_RUNTIME_STAGE store.open.enter");
+      try {
+        await storeOpen();
+      } finally {
+        console.log("FORTIPI_RUNTIME_STAGE store.open.exit");
+      }
+    };
+    const piStart = this.pi.onStart.bind(this.pi);
+    this.pi.onStart = async (context) => {
+      console.log("FORTIPI_RUNTIME_STAGE pi.start.enter");
+      try {
+        await piStart(context);
+      } finally {
+        console.log("FORTIPI_RUNTIME_STAGE pi.start.exit");
+      }
+    };
     this.completion = completion;
     this.faux = faux;
     const replay = this.store.replay.bind(this.store);
@@ -421,6 +441,14 @@ export class TestAgentSession extends AgentSession {
         throw error;
       }
     };
+  }
+  override async onStart(): Promise<void> {
+    console.log("FORTIPI_RUNTIME_STAGE host.start.enter");
+    try {
+      await super.onStart();
+    } finally {
+      console.log("FORTIPI_RUNTIME_STAGE host.start.exit");
+    }
   }
   diagnose() {
     return this.diagnostic;

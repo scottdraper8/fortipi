@@ -253,6 +253,9 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    /^# \{"diagnostic":"source-runtime-startup","invocation":\d{1,3},"checkpoint":"(?:ready|readiness-end|request-failure)","stages":(?:\d|[1-9]\d|1\d{2}|2[0-4]\d|25[0-5])\}$/.test(
+      line,
+    ) ||
     /^# \{"diagnostic":"source-runtime-readiness","invocation":\d{1,3},"fetchStatus":(?:null|[1-5]\d{2}),"httpStatus":(?:null|[1-5]\d{2}),"httpOutcome":"(?:response|deadline|transport)"\}$/.test(
       line,
     ) ||
