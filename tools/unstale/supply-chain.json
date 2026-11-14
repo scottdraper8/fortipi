@@ -8410,18 +8410,7 @@
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/zod@4.6.7; Sigstore transparency verification required at release"
     }
   },
-  "exemptions": {
-    "miniflare@5.20261113.0-beta": {
-      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
-      "expires": "2026-11-14T16:58:59.894Z",
-      "integrity": "sha512-Kg+SarKNSn0lkhR88OHI29rIXJvmKs/c9hmxFXvEqK1J9aHu+AFl6CdaBq/k3iOTyMbm2p4h1HGLs7vXaLYMWA=="
-    },
-    "wrangler@4.162.0": {
-      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
-      "expires": "2026-11-14T17:04:39.586Z",
-      "integrity": "sha512-jUnlzHKlWdW4MFXPgeYbe0+c4oTy/AAZfL/IUz921+dZBY5nJ48xjpvwff5djUR1MXoJRevzntAP/U97TUhPEw=="
-    }
-  },
+  "exemptions": {},
   "advisory": {
     "checkedAt": "2026-11-13T20:53:21.337Z",
     "identities": 381,
