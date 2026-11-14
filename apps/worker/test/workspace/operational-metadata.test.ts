@@ -60,6 +60,10 @@ test("private operational metadata requires the current scoped dispatch writer a
         agentId: "agent",
         conversationId: "conversation",
       });
+      const discoveryQuery = new URLSearchParams({
+        agentId: "agent",
+        conversationId: "conversation",
+      }).toString();
       const read = (
         headers: Record<string, string> = write,
         suffix = query.toString(),
@@ -87,37 +91,45 @@ test("private operational metadata requires the current scoped dispatch writer a
         "workspaceId",
       ]);
       assert.deepEqual(metadata.config, config);
+      const discovery = await read(write, discoveryQuery);
+      assert.equal(discovery.status, 200, "Scoped discovery may omit the expected revision");
+      assert.equal(discovery.headers.get("Cache-Control"), "no-store");
+      assert.deepEqual(await discovery.json(), binding);
       assert.deepEqual(
         await storage.exec("SELECT key,value FROM fp_ws_record ORDER BY key"),
         before,
         "Operational metadata changed workspace state",
       );
-      assert.equal(
-        (await read({ "x-test-write-only": "1" })).status,
-        403,
-        "Workspace write alone exposed operational metadata",
-      );
-      for (const headers of [
-        { "x-test-dispatch-only": "1" },
-        { "x-test-read-only": "1" },
-        { ...write, "x-test-split-actions": "1" },
-        { ...write, "x-test-split-scope": "1" },
-        { ...write, "x-test-other-agent": "1" },
-        { ...write, "x-test-other-conversation": "1" },
-        { ...write, "x-test-unregistered": "1" },
-        { ...write, "x-test-no-context": "1" },
-      ])
+      for (const suffix of [query.toString(), discoveryQuery]) {
         assert.equal(
-          (await read(headers)).status,
+          (await read({ "x-test-write-only": "1" }, suffix)).status,
           403,
-          "Operational metadata escaped its current authority scope",
+          "Workspace write alone exposed operational metadata",
         );
-      assert.equal((await read({ ...write, "x-test-expired": "1" })).status, 401);
+        for (const headers of [
+          { "x-test-dispatch-only": "1" },
+          { "x-test-read-only": "1" },
+          { ...write, "x-test-split-actions": "1" },
+          { ...write, "x-test-split-scope": "1" },
+          { ...write, "x-test-other-agent": "1" },
+          { ...write, "x-test-other-conversation": "1" },
+          { ...write, "x-test-unregistered": "1" },
+          { ...write, "x-test-no-context": "1" },
+        ])
+          assert.equal(
+            (await read(headers, suffix)).status,
+            403,
+            "Operational metadata escaped its current authority scope",
+          );
+        assert.equal((await read({ ...write, "x-test-expired": "1" }, suffix)).status, 401);
+      }
       assert.equal((await read(write, query.toString(), "POST")).status, 400);
       for (const suffix of [
         `${query}&revision=other-base`,
         `${query}&extra=1`,
-        "agentId=agent&conversationId=conversation",
+        "conversationId=conversation",
+        "agentId=agent",
+        `${discoveryQuery}&revision=`,
         `${query}&agentId=other`,
         new URLSearchParams({
           revision: binding.revision,
@@ -177,6 +189,7 @@ test("private operational metadata requires the current scoped dispatch writer a
       });
       assert.ok(invalidated.ok);
       assert.equal((await read()).status, 403, "Revoked actor received operational metadata");
+      assert.equal((await read(write, discoveryQuery)).status, 403);
       const recovery = await read({ ...write, "x-test-recovery": "1" });
       assert.equal(recovery.status, 200);
       assert.deepEqual(await recovery.json(), binding);
@@ -211,6 +224,13 @@ test("private operational metadata requires the current scoped dispatch writer a
       const current = await read({ ...write, "x-test-recovery": "1" }, currentQuery);
       assert.equal(current.status, 200);
       assert.deepEqual(await current.json(), rebound.value);
+      const discoveredCurrent = await read({ ...write, "x-test-recovery": "1" }, discoveryQuery);
+      assert.equal(discoveredCurrent.status, 200);
+      assert.deepEqual(
+        await discoveredCurrent.json(),
+        rebound.value,
+        "Discovery returned a historical binding",
+      );
       const queued = await read(
         { ...write, "x-test-recovery": "1", "x-test-metadata-queued": "1" },
         currentQuery,
