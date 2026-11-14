@@ -175,6 +175,7 @@ export const integratedClaims = requiredClaims.filter(
     ].includes(id),
 );
 export const liveClaims = [
+  "ordinary-tools",
   "pi-lifecycle",
   "ticket-grants-revoke",
   "workspace-atomicity",
@@ -187,6 +188,18 @@ export const liveClaims = [
   "public-clients",
   "infrastructure-boundaries",
 ] as const;
+/** Applicability only; callers first authenticate/validate the deployment identity. */
+export function applicableLiveClaims(deployments: readonly DeploymentIdentity[]) {
+  return liveClaims.filter(
+    (id) =>
+      (id !== "real-cloud-tools" ||
+        deployments.length === 0 ||
+        deployments.some((d) => d.backend !== "free")) &&
+      (id !== "ordinary-tools" ||
+        deployments.length === 0 ||
+        deployments.some((d) => d.backend === "free")),
+  );
+}
 const deploymentJobs = [
   "initial-installed-deployment",
   "live-device-a",
@@ -1257,10 +1270,7 @@ export async function verifyReleaseGates(
       if (kind === "integrated" || kind === "live" || kind === "independent")
         for (const id of kind === "integrated"
           ? integratedClaims
-          : liveClaims.filter(
-              (claim) =>
-                claim !== "real-cloud-tools" || r.deployments.some((d) => d.backend !== "free"),
-            ))
+          : applicableLiveClaims(r.deployments))
           assert.ok(
             r.claims.some((c) => c.id === id),
             `Missing required claim: ${id}`,

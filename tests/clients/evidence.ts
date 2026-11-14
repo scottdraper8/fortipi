@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open, realpath, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve, sep } from "node:path";
 import {
+  applicableLiveClaims,
   assertDeployment,
   assertProducer,
   type CandidateManifest,
@@ -10,7 +11,6 @@ import {
   type GateReceipt,
   integratedClaims,
   inventory,
-  liveClaims,
   type Producer,
   REPOSITORY,
   regularBytes,
@@ -73,12 +73,7 @@ export const releaseSet = (
     // Only the validated actual target may determine applicability. An absent
     // identity stays fail-closed; no fixture/CLI switch can shrink the set.
     for (const deployment of deployments) assertDeployment(deployment);
-    return liveClaims.filter(
-      (id) =>
-        id !== "real-cloud-tools" ||
-        deployments.length === 0 ||
-        deployments.some((deployment) => deployment.backend !== "free"),
-    );
+    return applicableLiveClaims(deployments);
   }
   return mode === "local"
     ? [

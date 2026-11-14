@@ -19,6 +19,8 @@ export interface LiveWorkspaceInput {
   installed: Installed;
   roles: RoleContext;
   deployment: Pick<DeploymentIdentity, "origin" | "deploymentId" | "publicConfigurationVersion">;
+  /** Trusted scenario input; the nonce stays in Computer bytes, never a model prompt. */
+  textCanary?: string;
 }
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 
@@ -28,6 +30,7 @@ export async function runLiveWorkspace({
   installed,
   roles,
   deployment,
+  textCanary,
 }: LiveWorkspaceInput): Promise<ScenarioEvidence> {
   assert.equal(roles.endpoint, deployment.origin);
   const module = (await import(
@@ -191,7 +194,7 @@ export async function runLiveWorkspace({
     assert.equal(protocol.deploymentId, deployment.deploymentId);
     assert.deepEqual(protocol.infrastructure, configuration.infrastructure);
     const files = {
-      "notes.txt": Buffer.from("old-v1\n"),
+      "notes.txt": Buffer.from(textCanary ?? "old-v1\n"),
       "binary.bin": Buffer.from([0, 255, 13, 10, 128, 1]),
       "multi.bin": Uint8Array.from({ length: 2 * 1024 * 1024 }, (_, i) => (i * 31 + 1010) % 256),
     };

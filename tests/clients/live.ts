@@ -303,6 +303,7 @@ export async function liveContext(
       const evidence = await runLiveWorkspace({
         installed,
         roles,
+        textCanary: `ordinary-input:${randomUUID()}\n`,
         deployment: {
           origin: roles.endpoint,
           deploymentId: protocol.deploymentId,

@@ -985,6 +985,27 @@ export async function runEvidence(
         if (execution) {
           const ports = execution;
           try {
+            if (deployment.backend === "free") {
+              const limits: string[] = [],
+                sensitivity: string[] = [];
+              await measure(
+                "ordinary-tools",
+                [
+                  "openLiveExecutionControls",
+                  "ordinary-natural-prompt",
+                  "public-context-and-Computer-bytes",
+                ],
+                "A fresh actual Workers AI conversation discovers scoped context before consent and commits the nonce-bearing file using the unchanged configured target preference and exact public admission/job/task/Computer identities",
+                async () => {
+                  const evidence = await ports.ordinary();
+                  limits.push(...evidence.limitations);
+                  sensitivity.push(...evidence.sensitivity);
+                  return { ...evidence.observation, qualifiedPortOracle: evidence.oracle };
+                },
+                limits,
+                sensitivity,
+              );
+            }
             for (const [id, port] of [
               ["dispatch-safety", ports.dispatch],
               ["approval-reconcile", ports.reconciliation],

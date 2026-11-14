@@ -143,6 +143,7 @@ test("actual runner recovery predicate requires the complete Free set including 
   );
   // Independent approved non-recovery Free obligations, not a count assertion.
   const rows = [
+    "ordinary-tools",
     "ticket-grants-revoke",
     "workspace-atomicity",
     "fence-generation",
@@ -156,6 +157,13 @@ test("actual runner recovery predicate requires the complete Free set including 
   const check = (items: readonly { id: string; outcome: string }[], target = current) =>
     ready({}, items, { deployments: [target] }, liveRecoveryReady);
   assert.equal(check(rows), true);
+  assert.equal(check(rows.filter((row) => row.id !== "ordinary-tools")), false);
+  assert.equal(check([...rows, { id: "live-execution-role-cleanup", outcome: "fail" }]), false);
+  for (const outcome of ["fail", "unavailable", "timeout"])
+    assert.equal(
+      check(rows.map((row) => (row.id === "ordinary-tools" ? { ...row, outcome } : row))),
+      false,
+    );
   assert.equal(
     check(rows.filter((row) => row.id !== "cloud-local-portability")),
     false,

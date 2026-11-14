@@ -24,6 +24,7 @@ import {
 import type { Installed } from "../distribution/install.ts";
 import type { ScenarioEvidence } from "./evidence.ts";
 import { deviceCanonicalBytes, deviceEventPrefix, deviceReadRequests } from "./live-device.ts";
+import { runOrdinaryTools } from "./live-ordinary-tools.ts";
 import type { RecoveryWorkspaceCanary } from "./platform-recovery.ts";
 import type { RoleContext } from "./roles.ts";
 
@@ -343,7 +344,8 @@ export async function openLiveExecutionControls(input: {
   let stream: ReturnType<FortiPiClient["conversations"]["subscribe"]> | undefined;
   const heldDone: { path: string; nonce: string }[] = [];
   let closed = false,
-    dispatchPassed = false;
+    dispatchPassed = false,
+    ordinaryStarted = false;
   async function command(args: string[], accepted = 0) {
     const sanitized = [process.execPath, bin!, ...args, "--profile", "<private-executor-profile>"];
     if (!nativeCommands.some((old) => canonicalJson(old) === canonicalJson(sanitized)))
@@ -490,6 +492,21 @@ export async function openLiveExecutionControls(input: {
     assert.ok(value.length > 0);
     await assertLiveStart(path, nonce);
   }
+  async function pendingLocal(approval: Approval) {
+    const local = await until(async () => {
+      const rows: unknown = JSON.parse(await command(["approvals", "list"]));
+      assert.ok(Array.isArray(rows));
+      return rows.find((row: { jobId?: string }) => row.jobId === approval.jobId) as
+        | { jobId: string; digest: string; assignment: { identity: { executionId: string } } }
+        | undefined;
+    }, Boolean);
+    assert.ok(
+      local &&
+        typeof local.digest === "string" &&
+        typeof local.assignment.identity.executionId === "string",
+    );
+    return local;
+  }
   async function submit(hold: boolean) {
     const marker = resolve(directory, `starts-${randomUUID()}`),
       done = `${marker}.done`,
@@ -550,18 +567,7 @@ export async function openLiveExecutionControls(input: {
     await assert.rejects(lstat(marker), { code: "ENOENT" });
     const remote = await request(() => client.approvals.decide(approval.approvalId, decision));
     assert.equal(remote.state, "approved");
-    const local = await until(async () => {
-      const rows: unknown = JSON.parse(await command(["approvals", "list"]));
-      assert.ok(Array.isArray(rows));
-      return rows.find((row: { jobId?: string }) => row.jobId === approval.jobId) as
-        | { jobId: string; digest: string; assignment: { identity: { executionId: string } } }
-        | undefined;
-    }, Boolean);
-    assert.ok(
-      local &&
-        typeof local.digest === "string" &&
-        typeof local.assignment.identity.executionId === "string",
-    );
+    const local = await pendingLocal(approval);
     await assert.rejects(lstat(marker), { code: "ENOENT" });
     await command(["approve", approval.jobId, "--digest", `${local.digest}-wrong`], 1);
     await assert.rejects(lstat(marker), { code: "ENOENT" });
@@ -676,6 +682,73 @@ export async function openLiveExecutionControls(input: {
     await request(() => stream!.ready);
     await start();
     return {
+      async ordinary(): Promise<ScenarioEvidence> {
+        assert.ok(!closed && !dispatchPassed && !ordinaryStarted);
+        ordinaryStarted = true;
+        assert.equal(deployment.backend, "free");
+        assert.deepEqual(protocol.infrastructure, configuration.infrastructure);
+        const actualAgent = await roles.call({
+          operationId: "describeAgent",
+          path: { agentId },
+          query: {},
+          body: undefined,
+        });
+        assert.equal(actualAgent.model.providerId, "cloudflare");
+        assert.ok(
+          configuration.models.some(
+            (model) =>
+              model.providerId === actualAgent.model.providerId &&
+              model.modelId === actualAgent.model.modelId,
+          ),
+        );
+        const result = await runOrdinaryTools({
+          client,
+          agentId,
+          conversationId: conversation.conversationId,
+          workspace,
+          configuration,
+          target: { kind: "executor", executorId, generation: 1 },
+          events,
+          request,
+          until,
+          async localConsent(approval) {
+            const local = await pendingLocal(approval);
+            await command(["approve", approval.jobId, "--digest", local.digest]);
+            return local.assignment.identity.executionId;
+          },
+        });
+        await installed.verifyUnchanged();
+        const current = await roles.call({
+          operationId: "getConfiguration",
+          path: {},
+          query: {},
+          body: undefined,
+        });
+        assert.equal(current.version, deployment.publicConfigurationVersion);
+        assert.equal(sha256(canonicalJson(current)), deployment.runtimeConfigSha256);
+        // Only the independently verified public Computer revision advances.
+        // Configuration identity and all role scopes remain unchanged.
+        workspace.binding = result.workspace.binding;
+        workspace.files = result.workspace.files;
+        const evidence: ScenarioEvidence = {
+          ...result.evidence,
+          observation: {
+            ...result.evidence.observation,
+            providerDeploymentId: deployment.deploymentId,
+            logicalApplicationId: protocol.deploymentId,
+            candidateSha256: installed.hash,
+            sourceCommit: installed.candidate.sourceCommit,
+            authenticatedRuntimeConfigSha256: deployment.runtimeConfigSha256,
+            publicConfigurationVersion: current.version,
+            configuredModel: actualAgent.model,
+            clientCredential: issued.credential,
+            executorCredential: executor.credential,
+            nativeCommands: structuredClone(nativeCommands),
+          },
+        };
+        roles.assertSanitized(evidence);
+        return evidence;
+      },
       async dispatch(): Promise<ScenarioEvidence> {
         assert.ok(!closed && !dispatchPassed);
         const run = await submit(false);
