@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -285,7 +285,7 @@ export function freshness(time: string, hours: number, now = Date.now()): void {
     "Stale/future proof",
   );
 }
-export async function regularBytes(path: string, maximum?: number): Promise<Buffer> {
+async function regularStat(path: string): Promise<Stats> {
   let parent = dirname(resolve(path));
   while (true) {
     const stat = await lstat(parent);
@@ -295,9 +295,13 @@ export async function regularBytes(path: string, maximum?: number): Promise<Buff
   }
   const stat = await lstat(path);
   assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1, "Nonregular artifact");
-  if (maximum === undefined) return readFile(path);
-  assert.ok(Number.isSafeInteger(maximum) && maximum >= 0);
-  assert.ok(stat.size <= maximum, "Artifact byte bound");
+  return stat;
+}
+async function openRegularFile(path: string, stat: Stats, maximum?: number) {
+  if (maximum !== undefined) {
+    assert.ok(Number.isSafeInteger(maximum) && maximum >= 0);
+    assert.ok(stat.size <= maximum, "Artifact byte bound");
+  }
   const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
     const current = await handle.stat();
@@ -308,23 +312,54 @@ export async function regularBytes(path: string, maximum?: number): Promise<Buff
         current.dev === stat.dev,
       "Artifact changed during open",
     );
-    assert.ok(current.size <= maximum, "Artifact byte bound");
-    const buffer = Buffer.alloc(Math.min(256 * 1024, maximum + 1));
+    if (maximum !== undefined) assert.ok(current.size <= maximum, "Artifact byte bound");
+    return handle;
+  } catch (error) {
+    await handle.close();
+    throw error;
+  }
+}
+async function* regularChunks(
+  handle: Awaited<ReturnType<typeof openRegularFile>>,
+  maximum = Number.MAX_SAFE_INTEGER,
+) {
+  const buffer = Buffer.alloc(Math.min(256 * 1024, maximum + 1));
+  let size = 0;
+  while (true) {
+    const { bytesRead } = await handle.read(
+      buffer,
+      0,
+      Math.min(buffer.length, maximum - size + 1),
+      null,
+    );
+    if (!bytesRead) break;
+    size += bytesRead;
+    assert.ok(size <= maximum, "Artifact byte bound");
+    yield buffer.subarray(0, bytesRead);
+  }
+}
+export async function regularBytes(path: string, maximum?: number): Promise<Buffer> {
+  const stat = await regularStat(path);
+  if (maximum === undefined) return readFile(path);
+  const handle = await openRegularFile(path, stat, maximum);
+  try {
     const chunks: Buffer[] = [];
     let size = 0;
-    while (true) {
-      const { bytesRead } = await handle.read(
-        buffer,
-        0,
-        Math.min(buffer.length, maximum - size + 1),
-        null,
-      );
-      if (!bytesRead) break;
-      size += bytesRead;
-      assert.ok(size <= maximum, "Artifact byte bound");
-      chunks.push(Buffer.from(buffer.subarray(0, bytesRead)));
+    for await (const chunk of regularChunks(handle, maximum)) {
+      chunks.push(Buffer.from(chunk));
+      size += chunk.length;
     }
     return Buffer.concat(chunks, size);
+  } finally {
+    await handle.close();
+  }
+}
+async function regularSha256(path: string, maximum?: number): Promise<string> {
+  const handle = await openRegularFile(path, await regularStat(path), maximum);
+  try {
+    const hash = createHash("sha256");
+    for await (const chunk of regularChunks(handle, maximum)) hash.update(chunk);
+    return hash.digest("hex");
   } finally {
     await handle.close();
   }
@@ -380,7 +415,7 @@ export async function inventory(
         path,
         mode: stat.mode & 0o777,
         size: stat.size,
-        sha256: sha256(await regularBytes(absolute, bounds?.get(path))),
+        sha256: await regularSha256(absolute, bounds?.get(path)),
       });
     }
   }
