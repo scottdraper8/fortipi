@@ -293,6 +293,36 @@ export function observeSourceProcessCompute(
 }
 
 /** Accept only the fixed nonsecret records emitted above, never raw stderr. */
+function cpuProfileDiagnostic(line: string): boolean {
+  if (!/^# \{"diagnostic":"source-cpu-profile(?:-frame)?",/.test(line)) return false;
+  try {
+    const value: unknown = JSON.parse(line.slice(2));
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+    const record = value as Record<string, unknown>;
+    if (line !== `# ${JSON.stringify(record)}`) return false;
+    const bounded = (value: unknown, max: number, min = 0): value is number =>
+      typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
+    if (record.diagnostic === "source-cpu-profile")
+      return (
+        Object.keys(record).join(",") === "diagnostic,available,samples,unmapped" &&
+        typeof record.available === "boolean" &&
+        bounded(record.samples, 20000) &&
+        bounded(record.unmapped, record.samples) &&
+        (record.available || (record.samples === 0 && record.unmapped === 0))
+      );
+    return (
+      Object.keys(record).join(",") === "diagnostic,source,sha256,line,samples" &&
+      record.source === "inspector-script" &&
+      typeof record.sha256 === "string" &&
+      /^[a-f0-9]{64}$/.test(record.sha256) &&
+      bounded(record.line, 999999, 1) &&
+      bounded(record.samples, 20000, 1)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function sourceTestDiagnostic(line: string): boolean {
   if (line.length > 512) return false;
   return (
@@ -305,6 +335,7 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    cpuProfileDiagnostic(line) ||
     /^# \{"diagnostic":"source-integration-client","ordinal":(?:[1-9]\d{0,2}),"kind":"(?:barrier|submission|other)","phase":"(?:fetch\.enter|headers|body\.enter|body\.exit|fetch\.error|body\.error|pause\.enter|pause\.exit)","status":(?:null|[1-5]\d{2})\}$/.test(
       line,
     ) ||
