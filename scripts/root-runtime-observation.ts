@@ -598,7 +598,7 @@ export function observeRootRuntime(options: {
     }
     request("start");
     const failedProbe = () => {
-      if (!stalled && (outcome === "deadline" || attempts >= 25)) {
+      if (!stalled && readyPort !== "unknown" && (outcome === "deadline" || attempts >= 25)) {
         stalled = true;
         request("stall");
       }
