@@ -67,6 +67,17 @@ const admissionStages = [
   "sdk.hand.exit",
   "sdk.last-wake.enter",
   "sdk.last-wake.exit",
+  "fixture.fault.enter",
+  "fixture.fault.exit",
+  "fixture.transaction.enter",
+  "fixture.transaction.callback",
+  "fixture.transaction.exit",
+  "fixture.remove.enter",
+  "fixture.remove.exit",
+  "fixture.put.enter",
+  "fixture.put.exit",
+  "fixture.hold.enter",
+  "fixture.hold.exit",
 ] as const;
 const enabled = () => process.env.FORTIPI_SOURCE_PI_OPEN_DIAGNOSTICS === "1";
 

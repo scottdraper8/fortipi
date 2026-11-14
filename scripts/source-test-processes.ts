@@ -305,7 +305,7 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
-    /^# \{"diagnostic":"source-admission-stage","invocation":(?:[1-9]\d{0,2}),"stage":"(?:app\.(?:finish|model|before|submit|after)|sdk\.(?:open|conversation|lookup|submit|first-wake|hand|last-wake))\.(?:enter|exit)"\}$/.test(
+    /^# \{"diagnostic":"source-admission-stage","invocation":(?:[1-9]\d{0,2}),"stage":"(?:(?:app\.(?:finish|model|before|submit|after)|sdk\.(?:open|conversation|lookup|submit|first-wake|hand|last-wake)|fixture\.(?:fault|remove|put|hold))\.(?:enter|exit)|fixture\.transaction\.(?:enter|callback|exit))"\}$/.test(
       line,
     ) ||
     /^# \{"diagnostic":"source-integration-client","ordinal":(?:[1-9]\d{0,2}),"kind":"(?:barrier|submission|other)","phase":"(?:fetch\.enter|headers|body\.enter|body\.exit|fetch\.error|body\.error|pause\.enter|pause\.exit)","status":(?:null|[1-5]\d{2})\}$/.test(

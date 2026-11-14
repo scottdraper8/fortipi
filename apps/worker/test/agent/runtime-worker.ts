@@ -683,14 +683,33 @@ export class TestAgentSession extends AgentSession {
     });
   }
   private async barrier(point: string) {
+    const observe = (stage: string) => {
+      if (point !== "after-submit") return;
+      try {
+        console.log(`FORTIPI_ADMISSION_STAGE fixture.${stage}`);
+      } catch {
+        // Observe the existing fault boundary without changing its operations.
+      }
+    };
+    observe("fault.enter");
     const fault = await this.store.get<string | ProcessFault>("fixture", "fault");
+    observe("fault.exit");
     if (typeof fault === "string") {
       if (fault !== point) return;
+      observe("transaction.enter");
       await this.store.transaction(async (tx) => {
+        observe("transaction.callback");
+        observe("remove.enter");
         await this.store.remove("fixture", "fault", tx);
+        observe("remove.exit");
+        observe("put.enter");
         await this.store.put("fixture", "barrier", point, tx);
+        observe("put.exit");
       });
+      observe("transaction.exit");
+      observe("hold.enter");
       await new Promise<void>((accept) => setTimeout(accept, 300000));
+      observe("hold.exit");
       return;
     }
     if (
