@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
+import { routingPeer } from "../execution/routing-peer.ts";
 import type { TestAgentSession } from "./enforcer-publication-current-worker.js";
 import { eventually, harness, pause, setup } from "./harness.ts";
 
@@ -16,6 +17,7 @@ test("public job read cannot publish captured data after its actual credential e
   });
   let probe: DurableObjectStub<TestAgentSession> | undefined;
   let pending: Promise<{ status: number; body: D.Job | D.ErrorBody }> | undefined;
+  let native: Awaited<ReturnType<typeof routingPeer>> | undefined;
   try {
     const { agent, conversation } = await setup(h);
     probe = h.env.AGENT_SESSIONS.getByName(
@@ -26,14 +28,15 @@ test("public job read cannot publish captured data after its actual credential e
       config: { kind: "computer" },
     });
     assert.equal(workspace.status, 201);
+    native = await routingPeer(h, workspace.body, agent.agentId, conversation.conversationId);
     await probe.queueTool(
       JSON.stringify({
-        tool: "javascript",
-        arguments: { code: "return 42" },
+        tool: "shell",
+        arguments: { command: "echo awaiting-approval" },
         workspaceId: workspace.body.workspaceId,
         baseRevision: workspace.body.revision,
-        target: { kind: "backend", backendId: "cloud", generation: 1 },
-        capabilities: ["javascript"],
+        target: { kind: "executor", executorId: native.executorId, generation: 1 },
+        capabilities: ["shell"],
       }),
     );
     assert.equal(
@@ -131,6 +134,7 @@ test("public job read cannot publish captured data after its actual credential e
   } finally {
     await probe?.releaseJobRead();
     await pending?.catch(() => {});
+    await native?.close();
     await h.close();
   }
 });

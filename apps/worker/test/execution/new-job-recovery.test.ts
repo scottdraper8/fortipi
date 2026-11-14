@@ -8,6 +8,7 @@ import { build } from "esbuild";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, pause } from "../agent/harness.ts";
 import { processHarness } from "../agent/process-harness.ts";
+import { routingPeer } from "./routing-peer.ts";
 
 interface View {
   tasks: { id: number; kind: string; status: string }[];
@@ -19,6 +20,7 @@ test("fresh business authorization recovers the same actual Pi child after SIGKI
   const directory = await mkdtemp(join(tmpdir(), "fortipi-fresh-child-")),
     main = join(directory, "worker.js");
   let h: Awaited<ReturnType<typeof processHarness>> | undefined;
+  let native: Awaited<ReturnType<typeof routingPeer>> | undefined;
   try {
     let inserted = 0;
     await build({
@@ -82,13 +84,14 @@ test("fresh business authorization recovers the same actual Pi child after SIGKI
       config: { kind: "computer" },
     });
     assert.equal(workspace.status, 201);
+    native = await routingPeer(h, workspace.body, agent.body.agentId, cid);
     await h.api(`${probe}/tool`, {
-      tool: "javascript",
-      arguments: { code: "return 42" },
+      tool: "shell",
+      arguments: { command: "echo awaiting-approval" },
       workspaceId: workspace.body.workspaceId,
       baseRevision: workspace.body.revision,
-      target: { kind: "backend", backendId: "cloud", generation: 1 },
-      capabilities: ["javascript"],
+      target: { kind: "executor", executorId: native.executorId, generation: 1 },
+      capabilities: ["shell"],
     });
     assert.equal(
       (
@@ -141,6 +144,7 @@ test("fresh business authorization recovers the same actual Pi child after SIGKI
     await h.crash();
     await lost;
     await h.start();
+    await native.connect();
     assert.deepEqual(
       (await h.api(`${probe}/canary`)).body,
       canary,
@@ -180,6 +184,7 @@ test("fresh business authorization recovers the same actual Pi child after SIGKI
       }),
     );
   } finally {
+    await native?.close();
     await h?.close();
     await rm(directory, { recursive: true, force: true });
   }

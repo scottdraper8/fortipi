@@ -8,9 +8,10 @@ import { fixture } from "../../../../packages/fortipi-executor/test/fixtures/dae
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, type harness } from "../agent/harness.ts";
 
-/** A second real connected daemon, with an independent root/ledger and the same committed Computer input. */
+/** Real connected native daemon with an independent root/ledger and the committed Computer input. */
 export async function routingPeer(
-  h: Awaited<ReturnType<typeof harness>>,
+  h: Pick<Awaited<ReturnType<typeof harness>>, "api"> &
+    (Pick<Awaited<ReturnType<typeof harness>>, "server"> | { origin: string }),
   binding: D.WorkspaceBinding,
   agentId: string,
   conversationId: string,
@@ -54,7 +55,7 @@ export async function routingPeer(
     assert.equal(issued.status, 201);
     assert.equal(issued.body.state, "issued");
     if (issued.body.state !== "issued") throw new Error("Expected fixture credential");
-    const { url } = await h.server.listen();
+    const url = "origin" in h ? h.origin : (await h.server.listen()).url;
     const protocol = await h.api<D.Protocol>("/v1/protocol");
     Object.assign(f.profile, {
       origin: new URL(url).origin,
@@ -84,29 +85,34 @@ export async function routingPeer(
       http: new HttpTransport(f.profile, fetch, true),
     });
     await runtime.initialize();
-    const session = new SessionTransport(runtime.http, runtime);
-    runtime.session = session;
-    connection = session
-      .connect(stop.signal, {
-        type: "executor.register",
-        requestId: crypto.randomUUID(),
-        payload: {
-          executorId,
-          generation: 1,
-          ...runtime.http.ledgerIdentity(),
-          protocolVersion: "1.0",
-          schemaVersion: "1.0.0",
-          platform: process.platform as "darwin" | "linux" | "win32",
-          caseBehavior: f.root.identity.caseBehavior,
-          confinement: "host",
-          capabilities: ["shell", "local-workspace", "snapshots"],
-          rootBindingIds: ["root"],
-          transferLimits: runtime.http.transferLimits(),
-        },
-      })
-      .catch(() => {});
-    await eventually(async () => runtime!.connected, Boolean);
-    return { executorId, runtime, f, close };
+    const daemon = runtime,
+      session = new SessionTransport(daemon.http, daemon);
+    daemon.session = session;
+    const connect = async () => {
+      await connection;
+      connection = session
+        .connect(stop.signal, {
+          type: "executor.register",
+          requestId: crypto.randomUUID(),
+          payload: {
+            executorId,
+            generation: 1,
+            ...daemon.http.ledgerIdentity(),
+            protocolVersion: "1.0",
+            schemaVersion: "1.0.0",
+            platform: process.platform as "darwin" | "linux" | "win32",
+            caseBehavior: f.root.identity.caseBehavior,
+            confinement: "host",
+            capabilities: ["shell", "local-workspace", "snapshots"],
+            rootBindingIds: ["root"],
+            transferLimits: daemon.http.transferLimits(),
+          },
+        })
+        .catch(() => {});
+      await eventually(async () => daemon.connected, Boolean);
+    };
+    await connect();
+    return { executorId, runtime: daemon, f, connect, close };
   } catch (error) {
     await close();
     throw error;

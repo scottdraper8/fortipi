@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
+import { routingPeer } from "../execution/routing-peer.ts";
 import { eventually, harness, setup } from "./harness.ts";
 import type { TestAgentSession } from "./runtime-worker.js";
 
@@ -106,6 +107,7 @@ test("cancellation durably stops an unapproved actual Pi child and retains one c
   timeout: 25000,
 }, async () => {
   const h = await harness();
+  let native: Awaited<ReturnType<typeof routingPeer>> | undefined;
   try {
     const { agent, conversation } = await setup(h);
     const probe = h.env.AGENT_SESSIONS.getByName(agent.agentId);
@@ -114,14 +116,15 @@ test("cancellation durably stops an unapproved actual Pi child and retains one c
       config: { kind: "computer" },
     });
     assert.equal(binding.status, 201);
+    native = await routingPeer(h, binding.body, agent.agentId, conversation.conversationId);
     await probe.queueTool(
       JSON.stringify({
-        tool: "javascript",
-        arguments: { code: "return 42" },
+        tool: "shell",
+        arguments: { command: "echo awaiting-approval" },
         workspaceId: binding.body.workspaceId,
         baseRevision: binding.body.revision,
-        target: { kind: "backend", backendId: "cloud", generation: 1 },
-        capabilities: ["javascript"],
+        target: { kind: "executor", executorId: native.executorId, generation: 1 },
+        capabilities: ["shell"],
       }),
     );
     const sent = await h.api<D.AdmissionReceipt>(
@@ -157,6 +160,7 @@ test("cancellation durably stops an unapproved actual Pi child and retains one c
       "A later terminal observation cannot rewrite the original uncertain receipt",
     );
   } finally {
+    await native?.close();
     await h.close();
   }
 });

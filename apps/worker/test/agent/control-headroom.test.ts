@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
+import { routingPeer } from "../execution/routing-peer.ts";
 import { eventually, harness, setup } from "./harness.ts";
 
 for (const operation of ["resume", "cancel"] as const)
@@ -9,6 +10,7 @@ for (const operation of ["resume", "cancel"] as const)
     timeout: 30000,
   }, async () => {
     const h = await harness({ main: resolve("apps/worker/test/agent/control-headroom-worker.ts") });
+    let native: Awaited<ReturnType<typeof routingPeer>> | undefined;
     try {
       const { agent, conversation } = await setup(h);
       const probe = h.env.AGENT_SESSIONS.getByName(agent.agentId);
@@ -24,14 +26,15 @@ for (const operation of ["resume", "cancel"] as const)
           config: { kind: "computer" },
         });
         assert.equal(workspace.status, 201);
+        native = await routingPeer(h, workspace.body, agent.agentId, conversation.conversationId);
         await probe.queueTool(
           JSON.stringify({
-            tool: "javascript",
-            arguments: { code: "return 42" },
+            tool: "shell",
+            arguments: { command: "echo awaiting-approval" },
             workspaceId: workspace.body.workspaceId,
             baseRevision: workspace.body.revision,
-            target: { kind: "backend", backendId: "cloud", generation: 1 },
-            capabilities: ["javascript"],
+            target: { kind: "executor", executorId: native.executorId, generation: 1 },
+            capabilities: ["shell"],
           }),
         );
       }
@@ -135,6 +138,7 @@ for (const operation of ["resume", "cancel"] as const)
       };
       assert.equal(inspection.inputSubmissions, 1);
     } finally {
+      await native?.close();
       await h.close();
     }
   });

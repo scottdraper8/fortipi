@@ -3,11 +3,13 @@ import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, harness, setup } from "../agent/harness.ts";
 import type { TestAgentSession } from "../agent/runtime-worker.js";
+import { routingPeer } from "./routing-peer.ts";
 
 test("completed fresh-job handoffs do not exhaust the bounded Pi child-reference window", {
   timeout: 45000,
 }, async () => {
   const h = await harness();
+  let native: Awaited<ReturnType<typeof routingPeer>> | undefined;
   try {
     const { agent, conversation } = await setup(h),
       probe = h.env.AGENT_SESSIONS.getByName(agent.agentId),
@@ -20,14 +22,15 @@ test("completed fresh-job handoffs do not exhaust the bounded Pi child-reference
       config: { kind: "computer" },
     });
     assert.equal(workspace.status, 201);
+    native = await routingPeer(h, workspace.body, agent.agentId, conversation.conversationId);
     await probe.queueTool(
       JSON.stringify({
-        tool: "javascript",
-        arguments: { code: "return 42" },
+        tool: "shell",
+        arguments: { command: "echo awaiting-approval" },
         workspaceId: workspace.body.workspaceId,
         baseRevision: workspace.body.revision,
-        target: { kind: "backend", backendId: "cloud", generation: 1 },
-        capabilities: ["javascript"],
+        target: { kind: "executor", executorId: native.executorId, generation: 1 },
+        capabilities: ["shell"],
       }),
     );
     assert.equal(
@@ -116,6 +119,7 @@ test("completed fresh-job handoffs do not exhaust the bounded Pi child-reference
       "Rejections never acquire execution authority",
     );
   } finally {
+    await native?.close();
     await h.close();
   }
 });
