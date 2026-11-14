@@ -9,6 +9,10 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import {
+  rootRoutingMain,
+  rootRoutingWrangler,
+} from "../../../../scripts/root-routing-observation.ts";
 import { observeRootRuntime } from "../../../../scripts/root-runtime-observation.ts";
 import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import {
@@ -47,6 +51,7 @@ async function freePort() {
 }
 /** A real standalone Wrangler/workerd process. createTestHarness cannot persist. */
 export async function processHarness(main = resolve("apps/worker/test/agent/runtime-worker.ts")) {
+  main = rootRoutingMain("process", main);
   const runId = randomUUID();
   const directory = await mkdtemp(join(tmpdir(), "fortipi-process-"));
   const port = await freePort(),
@@ -79,9 +84,9 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       ],
     }),
   );
-  const wrangler = join(
-    dirname(fileURLToPath(import.meta.resolve("wrangler"))),
-    "../bin/wrangler.js",
+  const wrangler = rootRoutingWrangler(
+    join(dirname(fileURLToPath(import.meta.resolve("wrangler"))), "../bin/wrangler.js"),
+    main,
   );
   let child: ChildProcess | undefined,
     output = "";
@@ -174,6 +179,9 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
         env: {
           PATH: process.env.PATH,
           WRANGLER_SEND_METRICS: "false",
+          ...(process.env.FORTIPI_ROOT_CONTEXT_DIAGNOSTICS === "1"
+            ? { FORTIPI_ROOT_CONTEXT_DIAGNOSTICS: "1" }
+            : {}),
           XDG_CONFIG_HOME: join(directory, "xdg"),
           XDG_CACHE_HOME: join(directory, "cache"),
         },

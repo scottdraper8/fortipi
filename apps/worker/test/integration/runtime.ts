@@ -8,6 +8,10 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import {
+  rootRoutingMain,
+  rootRoutingWrangler,
+} from "../../../../scripts/root-routing-observation.ts";
 import { observeRootRuntime } from "../../../../scripts/root-runtime-observation.ts";
 import {
   offlineWranglerEnvironment,
@@ -99,11 +103,15 @@ export async function start(options: RuntimeOptions = {}) {
     );
     policy.bounds.conversationEvents = options.events;
   }
+  const diagnosticMain = rootRoutingMain(
+    "integration",
+    options.main ?? join(repository, "apps/worker/test/integration/fixture-worker.ts"),
+  );
   await writeFile(
     configPath,
     JSON.stringify({
       name: "fortipi-evidence-local",
-      main: options.main ?? join(repository, "apps/worker/test/integration/fixture-worker.ts"),
+      main: diagnosticMain,
       compatibility_date: "2026-11-10",
       compatibility_flags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
       ...(options.sourceLoader ? { worker_loaders: [{ binding: "LOADER" }] } : {}),
@@ -128,7 +136,8 @@ export async function start(options: RuntimeOptions = {}) {
   );
   const require = createRequire(join(repository, "apps/worker/package.json"));
   const manifestPath = require.resolve("wrangler/package.json");
-  const wrangler = options.wranglerBin ?? join(dirname(manifestPath), "bin/wrangler.js");
+  const originalWrangler = options.wranglerBin ?? join(dirname(manifestPath), "bin/wrangler.js");
+  const wrangler = rootRoutingWrangler(originalWrangler, diagnosticMain);
   const runId = randomUUID();
   const armLaunches = new WeakMap<ProcessArm, number>();
   let child: ChildProcess | undefined;
@@ -171,6 +180,9 @@ export async function start(options: RuntimeOptions = {}) {
         stdio: ["ignore", "pipe", "pipe"],
         env: {
           ...offlineWranglerEnvironment(directory),
+          ...(process.env.FORTIPI_ROOT_CONTEXT_DIAGNOSTICS === "1"
+            ? { FORTIPI_ROOT_CONTEXT_DIAGNOSTICS: "1" }
+            : {}),
           ...(options.tls ? { NODE_EXTRA_CA_CERTS: options.tls.ca } : {}),
         },
       },
@@ -283,7 +295,7 @@ export async function start(options: RuntimeOptions = {}) {
     return { status: response.status, body: (await response.json()) as T };
   };
   try {
-    await verifyOfflineWranglerAuth(wrangler);
+    await verifyOfflineWranglerAuth(originalWrangler);
     await launch();
   } catch (error) {
     await stop(false);

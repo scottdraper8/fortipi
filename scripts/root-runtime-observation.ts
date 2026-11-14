@@ -5,6 +5,11 @@ import { open } from "node:fs/promises";
 import { type ClientRequest, request as httpRequest, type IncomingMessage } from "node:http";
 import { posix } from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import {
+  observeRootRouting,
+  rootRoutingDiagnostic,
+  routingHeader,
+} from "./root-routing-observation.ts";
 
 const causes = [
   "ECONNRESET",
@@ -37,6 +42,7 @@ const keys = (value: Record<string, unknown>, names: string) =>
 /** Accept raw canonical JSON or exactly one TAP '# ' prefix; <=512 UTF-16 units total. */
 export function rootRuntimeDiagnostic(line: string): boolean {
   if (typeof line !== "string" || line.length > 512) return false;
+  if (rootRoutingDiagnostic(line)) return true;
   const json = line.startsWith("# ") ? line.slice(2) : line;
   try {
     const value: unknown = JSON.parse(json);
@@ -462,6 +468,7 @@ function beginMechanism(
   kind: Kind,
   port: number,
   emit: (metric: string, data: Record<string, unknown>) => void,
+  routeEnd: () => void,
 ) {
   const began = performance.now();
   let request: ClientRequest | undefined, response: IncomingMessage | undefined;
@@ -499,6 +506,11 @@ function beginMechanism(
   };
   const httpEnd = (outcome: string, cause: unknown = null) => {
     if (httpDone) return;
+    try {
+      routeEnd();
+    } catch {
+      /* Observation teardown cannot replace HTTP outcome. */
+    }
     if (performance.now() - began >= 500) outcome = "deadline";
     httpDone = true;
     clearTimeout(httpTimer);
@@ -551,6 +563,7 @@ function beginMechanism(
         path: kind === "process" ? "/__test/ping" : "/health",
         method: "GET",
         agent: false,
+        headers: { [routingHeader]: "1" },
         maxHeaderSize: 4096,
       },
       (message) => {
@@ -734,6 +747,11 @@ export function observeRootRuntime(options: {
     const queue: { phase: Phase; readiness: Record<string, unknown> }[] = [];
     let initial: Snapshot | undefined;
     let mechanism: ReturnType<typeof beginMechanism> | undefined;
+    const routing = observeRootRouting(child, options.kind, options.invocation, (line) => {
+      try {
+        (options.emit ?? console.log)(line);
+      } catch {}
+    });
     const elapsed = () => Math.min(99_999_999, Math.max(0, Math.round(performance.now() - began)));
     const emit = (phase: Phase, metric: string, data: Record<string, unknown>) => {
       try {
@@ -924,8 +942,12 @@ export function observeRootRuntime(options: {
     const failedProbe = () => {
       if (!stalled && readyPort !== "unknown" && (outcome === "deadline" || attempts >= 25)) {
         stalled = true;
-        mechanism = beginMechanism(options.kind, port, (metric, data) =>
-          emit("stall", metric, data),
+        routing.arm();
+        mechanism = beginMechanism(
+          options.kind,
+          port,
+          (metric, data) => emit("stall", metric, data),
+          routing.stop,
         );
         request("stall");
       }
@@ -972,6 +994,7 @@ export function observeRootRuntime(options: {
           if (finished) return;
           finished = true;
           mechanism?.cancel();
+          routing.stop();
           for (const remove of detach.splice(0)) remove();
           outcome = ready ? "ready" : "failed";
           request("end");
