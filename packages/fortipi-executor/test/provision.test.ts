@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -63,6 +63,15 @@ test("configure uses anonymous bounded discovery, exclusive protected output and
     await platform.protect(f.path, true);
     await privateWrite(credential, JSON.stringify(envelope));
     await privateWrite(input, JSON.stringify(device));
+    const nativeCliEnvironment = childEnvironment();
+    if (process.platform === "win32") {
+      const localAppData = process.env.LOCALAPPDATA;
+      assert.ok(
+        localAppData && isAbsolute(localAppData),
+        "native CLI requires actual absolute LOCALAPPDATA",
+      );
+      nativeCliEnvironment.LOCALAPPDATA = localAppData;
+    }
     const binary = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
     const result = await promisify(execFile)(
       process.execPath,
@@ -77,7 +86,7 @@ test("configure uses anonymous bounded discovery, exclusive protected output and
         output,
         "--local-test",
       ],
-      { env: childEnvironment(), timeout: 10000 },
+      { env: nativeCliEnvironment, timeout: 10000 },
     );
     const configured = JSON.parse(await privateRead(output));
     assert.equal(configured.origin, origin);
@@ -135,7 +144,7 @@ test("configure uses anonymous bounded discovery, exclusive protected output and
           join(f.path, "refused.json"),
           "--local-test",
         ],
-        { env: childEnvironment(), timeout: 10000 },
+        { env: nativeCliEnvironment, timeout: 10000 },
       ),
       (error: unknown) => {
         const failure = error as Error & { code: number; stdout: string; stderr: string };
