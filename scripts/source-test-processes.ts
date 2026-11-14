@@ -253,6 +253,15 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    /^# \{"diagnostic":"source-pi-open-stage","invocation":\d{1,3},"stage":"(?:last-close|session-store|factory|root|resume|turn|wake)\.(?:enter|exit)"\}$/.test(
+      line,
+    ) ||
+    /^# \{"diagnostic":"source-native-query","mode":"(?:running|seed|attached|attempted|assign-ack|result|receipt)","ordinal":\d{1,4},"state":(?:null|"(?:preparing|not_started|running|pending_sync|terminal|lost|unknown)"),"error":(?:null|"(?:authority|other)"),"ledgerState":(?:null|"(?:pending|start_intent|running|result|closed|unknown)"),"child":"(?:alive|exited|absent)","active":(?:true|false),"incarnationMatches":(?:true|false),"leaseExpired":(?:true|false|null),"hasResult":(?:true|false)\}$/.test(
+      line,
+    ) ||
+    /^# \{"diagnostic":"source-native-control","mode":"(?:running|seed|attached|attempted|assign-ack|result|receipt)","queries":\d{1,4},"recorded":(?:true|false),"ok":(?:true|false|null),"state":(?:null|"(?:preparing|not_started|running|pending_sync|terminal|lost|unknown)"),"code":(?:null|"(?:unauthenticated|unauthorized|unavailable|unavailable_executor|conflict|expired|quota_paused|rate_limited|unsupported|invalid_request|not_found|internal)"),"attempted":(?:true|false|null),"reserved":(?:true|false|null),"result":(?:true|false|null),"late":(?:true|false|null),"socket":(?:true|false|null),"durationMs":(?:null|\d{1,8})\}$/.test(
+      line,
+    ) ||
     /^# \{"diagnostic":"source-integration-phase","event":"(?:enter|error)","phase":"(?:initial\.start|agent\.create|canary\.(?:write|crash|restart|read)|(?:before-submit|after-submit)\.(?:arm|wait|inspect|crash|lost|restart|retry|complete|repeat)|cleanup)","kind":(?:null|"(?:request-deadline|boundary-timeout|other)"),"elapsedMs":\d{1,8}\}$/.test(
       line,
     ) ||

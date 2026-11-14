@@ -33,6 +33,8 @@ try {
     "apps/worker/test/agent/runtime-worker.ts",
     "apps/worker/test/integration/oracles.ts",
     "apps/worker/test/execution/native-process.ts",
+    "apps/worker/test/integration/runtime.ts",
+    "scripts/source-pi-open-probe.ts",
   ]);
   if (
     git("diff", "--name-only", productSource, head)
@@ -61,7 +63,11 @@ try {
     process.execPath,
     ["--require", "./scripts/source-test-processes.ts", "--test", "--test-reporter=tap", ...files],
     process.cwd(),
-    childEnvironment(),
+    childEnvironment(
+      process.env.FORTIPI_SOURCE_PI_OPEN_DIAGNOSTICS === "1"
+        ? { FORTIPI_SOURCE_PI_OPEN_DIAGNOSTICS: "1" }
+        : {},
+    ),
     15 * 60_000,
     false,
   );

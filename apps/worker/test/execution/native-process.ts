@@ -18,6 +18,7 @@ import {
   fixture,
   nodeCommand,
 } from "../../../../packages/fortipi-executor/test/fixtures/daemon.ts";
+import { diagnosticPiPlugins } from "../../../../scripts/source-pi-open-probe.ts";
 import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, pause } from "../agent/harness.ts";
@@ -166,6 +167,7 @@ export async function nativeProcessRecovery(
       loader: { ".yaml": "json" },
       logLevel: "silent",
       plugins: [
+        ...diagnosticPiPlugins(),
         {
           name: "owned-production-safe-wrapper",
           setup(builder) {
@@ -395,6 +397,63 @@ export async function nativeProcessRecovery(
     assert.ok(local);
     await local.importBinding(local.importProposal(crypto.randomUUID()));
     const native = runtime;
+    let queryCount = 0;
+    const queryStates = new Set<string>();
+    const originalQuery = native.queryExisting.bind(native);
+    const observeQuery = (
+      input: D.ExecutionIdentity,
+      state: string | null,
+      error: "authority" | "other" | null,
+    ) => {
+      try {
+        const key = error ?? state ?? "other";
+        if (queryStates.has(key)) return;
+        queryStates.add(key);
+        const row = f.ledger.get(input.jobId),
+          child = native.children.get(input.jobId);
+        const line = JSON.stringify({
+          diagnostic: "source-native-query",
+          mode,
+          ordinal: queryCount,
+          state,
+          error,
+          ledgerState: row?.state ?? null,
+          child: child
+            ? child.exitCode === null && child.signalCode === null
+              ? "alive"
+              : "exited"
+            : "absent",
+          active: native.active.has(input.jobId),
+          incarnationMatches: row?.incarnation === f.ledger.incarnation,
+          leaseExpired: row ? Date.now() >= row.assignment.identity.lease.expiresAt : null,
+          hasResult: !!row?.result,
+        });
+        if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+      } catch {
+        // Observations cannot replace the real query result or exception.
+      }
+    };
+    native.queryExisting = (input) => {
+      queryCount = Math.min(9999, queryCount + 1);
+      try {
+        const result = originalQuery(input);
+        observeQuery(input, result.state, null);
+        return result;
+      } catch (error) {
+        let kind: "authority" | "other" = "other";
+        try {
+          const message =
+            error && typeof error === "object"
+              ? Object.getOwnPropertyDescriptor(error, "message")?.value
+              : undefined;
+          if (message === "executor execution authority mismatch") kind = "authority";
+        } catch {
+          // A diagnostic cannot inspect or replace a throwing error descriptor.
+        }
+        observeQuery(input, null, kind);
+        throw error;
+      }
+    };
     const connect = async () => {
       const session = new SessionTransport(native.http, native);
       native.session = session;
@@ -736,10 +795,82 @@ export async function nativeProcessRecovery(
       connected: native.connected,
     });
     if (sourceTestDiagnostic(`# ${snapshot}`)) console.log(snapshot);
+    const agentDiagnostics = await service.api(`${probe}/job-diagnostics?job=${job.jobId}`);
+    const controlTrace = await service.api<{
+      query?: {
+        ok?: boolean;
+        state?: string;
+        code?: string;
+        attempted?: boolean;
+        reservedAgentRegistration?: boolean;
+        sockets?: number;
+        startedAt?: number;
+        finishedAt?: number;
+        resultPresent?: boolean;
+        lateResult?: boolean;
+      };
+    }>(`/__test/dispatch-trace?job=${job.jobId}`);
+    try {
+      const q = controlTrace.body?.query;
+      const duration =
+        q?.startedAt !== undefined && q.finishedAt !== undefined
+          ? q.finishedAt - q.startedAt
+          : null;
+      const line = JSON.stringify({
+        diagnostic: "source-native-control",
+        mode,
+        queries: queryCount,
+        recorded: !!q,
+        ok: typeof q?.ok === "boolean" ? q.ok : null,
+        state: [
+          "preparing",
+          "not_started",
+          "running",
+          "pending_sync",
+          "terminal",
+          "lost",
+          "unknown",
+        ].includes(q?.state ?? "")
+          ? q!.state
+          : null,
+        code: [
+          "unauthenticated",
+          "unauthorized",
+          "unavailable",
+          "unavailable_executor",
+          "conflict",
+          "expired",
+          "quota_paused",
+          "rate_limited",
+          "unsupported",
+          "invalid_request",
+          "not_found",
+          "internal",
+        ].includes(q?.code ?? "")
+          ? q!.code
+          : null,
+        attempted: typeof q?.attempted === "boolean" ? q.attempted : null,
+        reserved:
+          typeof q?.reservedAgentRegistration === "boolean" ? q.reservedAgentRegistration : null,
+        result: typeof q?.resultPresent === "boolean" ? q.resultPresent : null,
+        late: typeof q?.lateResult === "boolean" ? q.lateResult : null,
+        socket:
+          Number.isSafeInteger(q?.sockets) && q!.sockets! >= 0 && q!.sockets! <= 1000
+            ? q!.sockets! > 0
+            : null,
+        durationMs:
+          Number.isSafeInteger(duration) && duration! >= 0 && duration! <= 99999999
+            ? duration
+            : null,
+      });
+      if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+    } catch {
+      // Reuse the original diagnostic reads without exposing their raw payload.
+    }
     const diagnostic = JSON.stringify({
       application: final,
-      diagnostic: (await service.api(`${probe}/job-diagnostics?job=${job.jobId}`)).body,
-      control: (await service.api(`/__test/dispatch-trace?job=${job.jobId}`)).body,
+      diagnostic: agentDiagnostics.body,
+      control: controlTrace.body,
       native: {
         state: f.ledger.get(job.jobId)?.state,
         lease: f.ledger.get(job.jobId)?.assignment.identity.lease,

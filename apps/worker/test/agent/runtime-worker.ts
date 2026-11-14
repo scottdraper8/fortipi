@@ -111,9 +111,14 @@ export class ControlPlane extends RealControlPlane {
       finishedAt: Date.now(),
       sockets,
       ...(result.ok
-        ? { ok: true, state: result.value.state }
+        ? {
+            ok: true,
+            state: result.value.state,
+            resultPresent: "result" in result.value && !!result.value.result,
+          }
         : { ok: false, code: result.code, message: result.message }),
       attempted: record?.attempted ?? null,
+      lateResult: this.store.page("late_result", 0, 1, { subject: input.executionId }).length > 0,
       reservedAgentRegistration:
         ctx.registrationId === record?.intent.reservation.registrationIds.agent,
       registrationTools: registration?.resources.tools ?? null,
