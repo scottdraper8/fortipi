@@ -309,14 +309,22 @@ export class ExecutorRuntime implements FrameHandler {
               operation: row.assignment.approval,
             };
     }
+    const child = this.children.get(identity.jobId);
+    let state: "running" | "pending_sync" | "unknown" = "unknown";
+    if (row.state === "running" && child) {
+      if (child.exitCode === null && child.signalCode === null) state = "running";
+      else if (
+        row.incarnation === this.ledger.incarnation &&
+        this.active.has(identity.jobId) &&
+        !this.leaseLost(row.assignment)
+      )
+        // The child/active ownership is retained until finished() has durably
+        // collected its result or failed. An exited child is not a lost collector.
+        state = "pending_sync";
+    }
     return {
       identity: row.assignment.identity,
-      state:
-        row.state === "running" &&
-        this.children.get(identity.jobId)?.exitCode === null &&
-        this.children.get(identity.jobId)?.signalCode === null
-          ? "running"
-          : "unknown",
+      state,
       ...(row.backendExecutionId
         ? { backendExecutionId: row.backendExecutionId, runtimeUuid: row.incarnation }
         : {}),
