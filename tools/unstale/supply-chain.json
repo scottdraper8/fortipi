@@ -8411,45 +8411,10 @@
     }
   },
   "exemptions": {
-    "@cloudflare/workerd-darwin-64@1.20261113.1": {
-      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
-      "expires": "2026-11-14T01:00:02.439Z",
-      "integrity": "sha512-UcShHyWJVZNbuI8jL3F5QZXMrJm7oScge33D5p3hAyhIIkoVj72+bior+VcUcr1SBWkh5w3Umnrx179WE7Wvpw=="
-    },
-    "@cloudflare/workerd-darwin-arm64@1.20261113.1": {
-      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
-      "expires": "2026-11-14T01:02:04.579Z",
-      "integrity": "sha512-bKfFcpueb9GOg0NZSR4x7dpEJZMsQOwCk0XzsAoXoBfG4osFRQcFxtAhrXvB1y445zXFLhrEkDJ/+LvGAMkPSg=="
-    },
-    "@cloudflare/workerd-linux-64@1.20261113.1": {
-      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
-      "expires": "2026-11-14T01:01:11.748Z",
-      "integrity": "sha512-3VCnXzi7apwPSMwkiTIeEc5z/UWWGQXBZZNHCBBCXPlavWCR06SQ77tO0rEoKonfjBGW0MQaHNZ7U1pCPe4v3g=="
-    },
-    "@cloudflare/workerd-linux-arm64@1.20261113.1": {
-      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
-      "expires": "2026-11-14T01:01:00.851Z",
-      "integrity": "sha512-phnb1686FTIVSr4qxQFOt7MyiWMotqsVUyZVnQl579/bCrqWaYUcRnikN5f6bBpDbxCk1OvOvYz0ykjT1lvYpg=="
-    },
-    "@cloudflare/workerd-windows-64@1.20261113.1": {
-      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
-      "expires": "2026-11-14T00:59:57.201Z",
-      "integrity": "sha512-WtQakCAIzUQJ6dQDPn7kIGlFJ9yjB0ooNx2WFqEHLYNAT7TLCNyaORem2WVM38TceVR8flCP5UWgYm6ht3dlIw=="
-    },
-    "@cloudflare/workers-types@5.20261113.1": {
-      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
-      "expires": "2026-11-14T01:03:46.000Z",
-      "integrity": "sha512-FhF8hRtsQCr/BWZyUN7wm2x+jqAOkRIpLOW+2fJu5OQyIDOv+c3PxY8duEAkOYXuprLImxjW+PHTbvz9+Px5cw=="
-    },
     "miniflare@5.20261113.0-beta": {
       "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
       "expires": "2026-11-14T16:58:59.894Z",
       "integrity": "sha512-Kg+SarKNSn0lkhR88OHI29rIXJvmKs/c9hmxFXvEqK1J9aHu+AFl6CdaBq/k3iOTyMbm2p4h1HGLs7vXaLYMWA=="
-    },
-    "workerd@1.20261113.1": {
-      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
-      "expires": "2026-11-14T01:04:23.219Z",
-      "integrity": "sha512-FJP8Bm1jiiJTE2xpSIhT9JkMaKzU54y9Jk0q7n3BLWyWdUNsn35QGCqARcqXGwO3FGkvahhYqUEG2bJzlgcfhw=="
     },
     "wrangler@4.162.0": {
       "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
