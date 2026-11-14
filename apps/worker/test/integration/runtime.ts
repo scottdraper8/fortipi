@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import { observeRootRuntime } from "../../../../scripts/root-runtime-observation.ts";
 import {
   offlineWranglerEnvironment,
   verifyOfflineWranglerAuth,
@@ -176,6 +177,12 @@ export async function start(options: RuntimeOptions = {}) {
     );
     const current = child,
       launched = invocation;
+    const diagnostic = observeRootRuntime({
+      kind: "integration",
+      invocation: launched,
+      child: current,
+      port: number,
+    });
     // Parse bounded private cue lines only; retain a match boolean, never logs.
     for (const stream of [child.stdout, child.stderr]) {
       const decoder = new StringDecoder("utf8");
@@ -217,18 +224,29 @@ export async function start(options: RuntimeOptions = {}) {
     child.once("error", () => {
       spawnError = true;
     });
-    await poll(
-      async () => {
-        assert.ok(!spawnError && child?.exitCode === null, "Local runtime did not stay running");
-        try {
-          return (await fetch(`${endpoint}/health`, { signal: AbortSignal.timeout(300) })).ok;
-        } catch {
-          return false;
-        }
-      },
-      Boolean,
-      30000,
-    );
+    let ready = false;
+    try {
+      await poll(
+        async () => {
+          assert.ok(!spawnError && child?.exitCode === null, "Local runtime did not stay running");
+          let signal: AbortSignal | undefined;
+          try {
+            signal = AbortSignal.timeout(300);
+            const response = await fetch(`${endpoint}/health`, { signal });
+            diagnostic.response(response.status);
+            return response.ok;
+          } catch (error) {
+            diagnostic.failure(error, signal?.aborted === true);
+            return false;
+          }
+        },
+        Boolean,
+        30000,
+      );
+      ready = true;
+    } finally {
+      diagnostic.finish(ready);
+    }
   }
   async function stop(abrupt: boolean) {
     if (!child) return;

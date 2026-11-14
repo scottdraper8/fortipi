@@ -4,6 +4,7 @@ import { lstatSync, readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { rootRuntimeDiagnostic } from "./root-runtime-observation.ts";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const testPath =
@@ -250,6 +251,7 @@ export function sourceTestDiagnostic(line: string): boolean {
     ) &&
       !line.includes("../")) ||
     failureDiagnostic(line) ||
+    rootRuntimeDiagnostic(line) ||
     rootCountDiagnostic(line) ||
     /^# \{"diagnostic":"integrated-recovery-phase","oracle":"(?:admission|lifecycle)","event":"(?:enter|exit|failure)","phase":"(?:runtime\.start|provision|dispose|canary\.(?:write|kill|reopen|read)|(?:before-submit|after-submit)\.(?:previous|arm|cue|kill|lost|reopen|witness|retry|projection|inspect|duplicates|conflict)|submit|running|kill|reopen|release|terminal|projection)","elapsedMs":\d{1,8}\}$/.test(
       line,
