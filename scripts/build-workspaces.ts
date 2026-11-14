@@ -6,7 +6,7 @@ import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
-import { sourceTestDiagnostic } from "./source-test-processes.ts";
+import { sourceFailureLines, sourceTestDiagnostic } from "./source-test-processes.ts";
 
 export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const publicPackages = ["contract", "client", "tui", "executor", "cli"] as const;
@@ -21,6 +21,17 @@ export function observeCandidateDiagnostics(
     process.stderr.write(line);
   },
 ): void {
+  observeDiagnosticLines(stderr, (line) => {
+    if (sourceTestDiagnostic(line)) emit(`${line}\n`);
+  });
+}
+
+/** Classify private TAP at its existing capture boundary, before wrapper truncation. */
+export function observeSourceTestFailures(stdout: Readable, emit: (line: string) => void): void {
+  observeDiagnosticLines(stdout, sourceFailureLines(emit));
+}
+
+function observeDiagnosticLines(stream: Readable, acceptLine: (line: string) => void): void {
   const decoder = new StringDecoder("utf8");
   let partial = "",
     dropping = false;
@@ -30,7 +41,7 @@ export function observeCandidateDiagnostics(
     partial = "";
     dropping = false;
     try {
-      if (eligible && sourceTestDiagnostic(line)) emit(`${line}\n`);
+      if (eligible) acceptLine(line);
     } catch {
       /* Diagnostics cannot replace the child result. */
     }
@@ -47,10 +58,10 @@ export function observeCandidateDiagnostics(
       }
     }
   };
-  stderr.on("data", (chunk: Buffer | string) =>
+  stream.on("data", (chunk: Buffer | string) =>
     accept(typeof chunk === "string" ? chunk : decoder.write(chunk)),
   );
-  stderr.once("end", () => {
+  stream.once("end", () => {
     accept(decoder.end());
     flush();
   });

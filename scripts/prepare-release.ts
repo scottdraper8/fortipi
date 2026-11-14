@@ -27,7 +27,12 @@ import {
   attachApplicationRecoveryChannel,
   type InfrastructureObservationPort,
 } from "./application-recovery-channel.ts";
-import { FULL_SOURCE_TEST_TIMEOUT_MS, packagePaths, repository } from "./build-workspaces.ts";
+import {
+  FULL_SOURCE_TEST_TIMEOUT_MS,
+  observeSourceTestFailures,
+  packagePaths,
+  repository,
+} from "./build-workspaces.ts";
 import {
   resolveCurrentCandidateReference,
   verifyCurrentCandidateRead,
@@ -170,6 +175,16 @@ export async function execute(
       stdio: onSpawn ? ["ignore", "pipe", "pipe", "ipc"] : ["ignore", "pipe", "pipe"],
     });
     assert.ok(child.stdout && child.stderr);
+    if (
+      progress &&
+      (command === "pnpm" || basename(command) === "pnpm.exe") &&
+      args.length === 2 &&
+      args[0] === "run" &&
+      args[1] === "test"
+    )
+      observeSourceTestFailures(child.stdout, (line) => {
+        process.stderr.write(line);
+      });
     let stdout = "";
     let size = 0;
     let timedOut = false;
