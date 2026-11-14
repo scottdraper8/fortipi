@@ -83,6 +83,13 @@ export async function rejectedZodAdvisory(output: string): Promise<boolean> {
 
 import { json } from "./check-pins.ts";
 
+// unstale v0.2.12 onboarding::Bound gives a short positive --wait at least 60s
+// for setup and twice that for its last-resort report/exit. Leave another 30s
+// (its default public-request timeout) for process/config startup and shutdown.
+// --wait 0 instead selects a 300s setup bound; it does not mean immediate setup.
+// https://github.com/vuca-dev/unstale/blob/v0.2.12/src/onboarding.rs
+const coverageTimeout = 150_000;
+
 async function execute(
   binary: string,
   args: string[],
@@ -139,7 +146,7 @@ async function execute(
       if (timedOut || output.length > 2_000_000)
         reject(
           new Error(
-            `unstale ${operation} timeout/output limit; coverage unavailable; retry after checking service`,
+            `unstale ${operation} ${timedOut ? "timeout" : "output limit"}; coverage unavailable; retry after checking service`,
           ),
         );
       else accept({ code: code ?? 1, output });
@@ -180,14 +187,18 @@ async function main(): Promise<void> {
   if (!initialized) {
     const init = await execute(
       binary,
-      ["init", "--yes", "--mode", "personal", "--no-animation", "--wait", "0"],
-      60_000,
+      ["init", "--yes", "--mode", "personal", "--no-animation", "--wait", "10"],
+      coverageTimeout,
     );
     assert.equal(init.code, 0, `unstale setup failed: ${init.output}`);
   }
   const notify = await execute(binary, ["notify"]);
   assert.equal(notify.code, 0, `unstale notify failed: ${notify.output}`);
-  const status = await execute(binary, ["status", "--wait", "10", "--no-animation"], 60_000);
+  const status = await execute(
+    binary,
+    ["status", "--wait", "10", "--no-animation"],
+    coverageTimeout,
+  );
   assert.equal(status.code, 0, `unstale status failed: ${status.output}`);
   const sync = await execute(binary, ["sync"], 60_000);
   const advisories = await execute(binary, ["advisories"]);
