@@ -8,12 +8,8 @@ import type { ProcessResult } from "./prepare-release.ts";
 const productSource = "5f48b4b12296b630486ccf5904533175b6fda913";
 const files = [
   "apps/worker/test/agent/process-recovery.test.ts",
-  "apps/worker/test/control/tickets.test.ts",
   "apps/worker/test/execution/native-connected-recovery.test.ts",
   "apps/worker/test/integration/admission-recovery.test.ts",
-  "scripts/test/release/application-recovery-coordinator.test.ts",
-  "scripts/test/release/application-recovery-existing.test.ts",
-  "scripts/test/release/platform-recovery.test.ts",
 ];
 let actualhead: string | null = null;
 let result: ProcessResult | undefined;

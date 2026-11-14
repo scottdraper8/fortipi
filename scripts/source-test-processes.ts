@@ -1,4 +1,4 @@
-import { ChildProcess } from "node:child_process";
+import { ChildProcess, spawnSync } from "node:child_process";
 import { subscribe } from "node:diagnostics_channel";
 import { lstatSync, readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
@@ -240,6 +240,58 @@ export function sourceFailureLines(emit: (line: string) => void): (line: string)
   };
 }
 
+/** Failure-only Linux observation of this fixture's existing detached process group. */
+export function observeSourceProcessCompute(
+  group: number,
+  phase: "readiness-end" | "request-deadline",
+): void {
+  if (
+    process.env.FORTIPI_SOURCE_PI_OPEN_DIAGNOSTICS !== "1" ||
+    process.platform !== "linux" ||
+    !Number.isSafeInteger(group) ||
+    group <= 0
+  )
+    return;
+  try {
+    const result = spawnSync("ps", ["-eo", "pgid=,comm=,pcpu="], {
+      encoding: "utf8",
+      timeout: 1000,
+      maxBuffer: 1_000_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let processes = 0,
+      workerd = 0,
+      workerdCentiCpu: number | null = null,
+      nodeCentiCpu: number | null = null;
+    if (result.status === 0 && !result.error)
+      for (const row of result.stdout.split(/\r?\n/)) {
+        const match = /^\s*(\d{1,12})\s+(\S{1,4096})\s+(\d{1,5}(?:\.\d{1,3})?)\s*$/.exec(row);
+        if (!match || Number(match[1]) !== group) continue;
+        processes = Math.min(999, processes + 1);
+        const cpu = Math.round(Number(match[3]) * 100);
+        if (!Number.isSafeInteger(cpu) || cpu < 0 || cpu > 999999) continue;
+        if (/(?:^|\/)workerd(?:\.exe)?$/.test(match[2]!)) {
+          workerd = Math.min(999, workerd + 1);
+          workerdCentiCpu = Math.max(workerdCentiCpu ?? 0, cpu);
+        }
+        if (/(?:^|\/)node(?:\.exe)?$/.test(match[2]!))
+          nodeCentiCpu = Math.max(nodeCentiCpu ?? 0, cpu);
+      }
+    const line = JSON.stringify({
+      diagnostic: "source-process-compute",
+      phase,
+      available: result.status === 0 && !result.error,
+      processes,
+      workerd,
+      workerdCentiCpu,
+      nodeCentiCpu,
+    });
+    if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+  } catch {
+    // Never expose process names, paths, raw output/errors or change the failure.
+  }
+}
+
 /** Accept only the fixed nonsecret records emitted above, never raw stderr. */
 export function sourceTestDiagnostic(line: string): boolean {
   if (line.length > 512) return false;
@@ -253,6 +305,9 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    /^# \{"diagnostic":"source-process-compute","phase":"(?:readiness-end|request-deadline)","available":(?:true|false),"processes":\d{1,3},"workerd":\d{1,3},"workerdCentiCpu":(?:null|\d{1,6}),"nodeCentiCpu":(?:null|\d{1,6})\}$/.test(
+      line,
+    ) ||
     /^# \{"diagnostic":"source-native-ordering","mode":"(?:running|seed|attached|attempted|assign-ack|result|receipt)","queryBeforeReconnect":(?:true|false|null),"queryEpochMatchesSession":(?:true|false|null),"currentCPOnline":(?:true|false|null),"currentCPEpochMatchesSession":(?:true|false|null),"currentCPGenerationMatches":(?:true|false|null),"currentCPChannel":(?:true|false|null),"nativeConnected":(?:true|false),"sessionRegistered":(?:true|false)\}$/.test(
       line,
     ) ||

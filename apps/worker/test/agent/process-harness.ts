@@ -11,7 +11,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
 import { diagnosticPiMain, observePiOpenStages } from "../../../../scripts/source-pi-open-probe.ts";
-import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
+import {
+  observeSourceProcessCompute,
+  sourceTestDiagnostic,
+} from "../../../../scripts/source-test-processes.ts";
 import type { ProcessArm, ProcessWitness } from "./runtime-worker.js";
 
 const pause = (ms: number) => new Promise<void>((accept) => setTimeout(accept, ms));
@@ -339,6 +342,7 @@ export async function processHarness(
     } finally {
       startupSnapshot(ready ? "ready" : "readiness-end");
       observe(ready ? "ready" : "end");
+      if (!ready && child?.pid) observeSourceProcessCompute(child.pid, "readiness-end");
     }
   }
   async function stop(signal: "SIGKILL" | "SIGTERM") {
