@@ -170,24 +170,21 @@ export async function openSelectionNativePeer(input: {
     }
   }
   async function closePeer() {
-    try {
-      if (daemon) {
-        if (daemon.exitCode === null && daemon.signalCode === null) daemon.kill("SIGTERM");
-        assert.ok(exit);
-        assert.equal(
-          await Promise.race([
-            exit,
-            delay(15000, undefined, { ref: false }).then(() => {
-              throw new Error("Selection native closure unavailable");
-            }),
-          ]),
-          0,
-        );
-        daemon = undefined;
-      }
-    } finally {
-      await rm(directory, { recursive: true, force: true });
+    if (daemon) {
+      if (daemon.exitCode === null && daemon.signalCode === null) daemon.kill("SIGTERM");
+      assert.ok(exit);
+      assert.equal(
+        await Promise.race([
+          exit,
+          delay(15000, undefined, { ref: false }).then(() => {
+            throw new Error("Selection native closure unavailable");
+          }),
+        ]),
+        0,
+      );
+      daemon = undefined;
     }
+    await rm(directory, { recursive: true, force: true });
   }
   try {
     await platform.protect(directory, true);

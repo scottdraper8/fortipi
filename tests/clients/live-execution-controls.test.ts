@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { stripTypeScriptTypes } from "node:module";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
+import { parse } from "@babel/parser";
 import {
   type Approval,
   canonicalJson,
@@ -19,6 +21,94 @@ import {
   liveExecutionProgram,
   verifyLiveReconciliation,
 } from "./live-execution-controls.ts";
+
+test("selection peer cleanup preserves its private root until owned child exit is observed", async () => {
+  const directory = await realpath(await mkdtemp(resolve(tmpdir(), "fortipi-selection-close-")));
+  const source = await readFile(new URL("./live-execution-controls.ts", import.meta.url), "utf8");
+  const parsed = parse(source, { sourceType: "module", plugins: ["typescript"] });
+  const bodies: string[] = [];
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    const row = node as { type?: unknown; id?: { name?: unknown }; start?: unknown; end?: unknown };
+    if (row.type === "FunctionDeclaration" && row.id?.name === "closePeer") {
+      assert.equal(typeof row.start, "number");
+      assert.equal(typeof row.end, "number");
+      bodies.push(source.slice(row.start as number, row.end as number));
+    }
+    Object.values(node).forEach(visit);
+  };
+  visit(parsed);
+  assert.equal(bodies.length, 1);
+  const child = spawn(
+    process.execPath,
+    [
+      "-e",
+      "process.stdin.resume(); process.stdin.on('end', () => process.exit(0)); process.stdout.write('ready\\n');",
+    ],
+    { stdio: ["pipe", "pipe", "ignore"] },
+  );
+  const exited = new Promise<number | null>((accept, reject) => {
+    child.once("error", reject);
+    child.once("close", accept);
+  });
+  void exited.catch(() => {});
+  let expired = true;
+  const signals: string[] = [];
+  // Controlled signal delivery and deadline; the actual owned Node child and
+  // filesystem remain live. The independent control also uses the real15s timer.
+  const daemon = {
+    get exitCode() {
+      return child.exitCode;
+    },
+    get signalCode() {
+      return child.signalCode;
+    },
+    kill(signal: string) {
+      signals.push(signal);
+      return true;
+    },
+  };
+  const close = new Function(
+    "daemon",
+    "exit",
+    "delay",
+    "rm",
+    "directory",
+    "assert",
+    `${stripTypeScriptTypes(bodies[0]!)}; return closePeer;`,
+  )(
+    daemon,
+    exited,
+    () => (expired ? Promise.resolve() : new Promise<void>(() => {})),
+    rm,
+    directory,
+    assert,
+  ) as () => Promise<void>;
+  try {
+    await new Promise<void>((accept, reject) => {
+      child.once("error", reject);
+      child.stdout.once("data", () => accept());
+    });
+    await assert.rejects(close(), /Selection native closure unavailable/);
+    assert.deepEqual(signals, ["SIGTERM"]);
+    assert.equal(child.exitCode, null);
+    assert.equal(child.signalCode, null);
+    assert.equal((await lstat(directory)).isDirectory(), true);
+    child.stdin.end();
+    assert.equal(await exited, 0);
+    expired = false;
+    await close();
+    await assert.rejects(lstat(directory), { code: "ENOENT" });
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    await exited;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("actual inline native observer records duplicate and failed command invocations without changing canonical input", async () => {
   const root = await realpath(await mkdtemp(resolve(tmpdir(), "fortipi-live-command-")));
