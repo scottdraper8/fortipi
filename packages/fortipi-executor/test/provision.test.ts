@@ -60,6 +60,7 @@ test("configure uses anonymous bounded discovery, exclusive protected output and
     const credential = join(f.path, "issued.json"),
       input = join(f.path, "device.json"),
       output = join(f.path, "new.json");
+    await platform.protect(f.path, true);
     await privateWrite(credential, JSON.stringify(envelope));
     await privateWrite(input, JSON.stringify(device));
     const binary = fileURLToPath(new URL("../dist/bin.js", import.meta.url));
