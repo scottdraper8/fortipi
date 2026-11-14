@@ -29,6 +29,17 @@ import {
 } from "../../verify-release-gates.ts";
 import { candidate, discard, httpFixture, temporary } from "./fixtures.ts";
 
+// These source fixtures exercise local archives and mocked provider ports.
+// Isolate their test worker from the hosting workflow's candidate-reader context.
+const hostedWorkflow = process.env.GITHUB_ACTIONS;
+before(() => {
+  delete process.env.GITHUB_ACTIONS;
+});
+after(() => {
+  if (hostedWorkflow === undefined) delete process.env.GITHUB_ACTIONS;
+  else process.env.GITHUB_ACTIONS = hostedWorkflow;
+});
+
 const v0 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const v1 = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const other = "cccccccc-cccc-cccc-cccc-cccccccccccc";
