@@ -7,6 +7,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import { diagnosticPiMain, observePiOpenStages } from "../../../../scripts/source-pi-open-probe.ts";
 import {
   offlineWranglerEnvironment,
   verifyOfflineWranglerAuth,
@@ -95,7 +96,10 @@ export async function start(options: RuntimeOptions = {}) {
     configPath,
     JSON.stringify({
       name: "fortipi-evidence-local",
-      main: options.main ?? join(repository, "apps/worker/test/integration/fixture-worker.ts"),
+      main:
+        options.main ??
+        diagnosticPiMain("integration") ??
+        join(repository, "apps/worker/test/integration/fixture-worker.ts"),
       compatibility_date: "2026-11-10",
       compatibility_flags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
       ...(options.sourceLoader ? { worker_loaders: [{ binding: "LOADER" }] } : {}),
@@ -122,8 +126,10 @@ export async function start(options: RuntimeOptions = {}) {
   const manifestPath = require.resolve("wrangler/package.json");
   const wrangler = options.wranglerBin ?? join(dirname(manifestPath), "bin/wrangler.js");
   let child: ChildProcess | undefined;
+  let childInvocation = 0;
   async function launch() {
     assert.ok(!child, "Stop the previous runtime before reopening identical storage");
+    childInvocation++;
     child = spawn(
       process.execPath,
       [
@@ -161,6 +167,8 @@ export async function start(options: RuntimeOptions = {}) {
     );
     // Never retain raw runtime output: it may contain synthetic role values or
     // request payloads. The evidence contains only bounded public observations.
+    if (child.stdout) observePiOpenStages(child.stdout, childInvocation);
+    if (child.stderr) observePiOpenStages(child.stderr, childInvocation);
     child.stdout?.resume();
     child.stderr?.resume();
     let spawnError = false;

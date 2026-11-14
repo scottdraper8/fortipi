@@ -10,6 +10,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import { diagnosticPiMain, observePiOpenStages } from "../../../../scripts/source-pi-open-probe.ts";
 import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import type { ProcessArm, ProcessWitness } from "./runtime-worker.js";
 
@@ -59,7 +60,9 @@ async function freePort() {
   return address.port;
 }
 /** A real standalone Wrangler/workerd process. createTestHarness cannot persist. */
-export async function processHarness(main = resolve("apps/worker/test/agent/runtime-worker.ts")) {
+export async function processHarness(
+  main = diagnosticPiMain("agent") ?? resolve("apps/worker/test/agent/runtime-worker.ts"),
+) {
   const runId = randomUUID();
   const directory = await mkdtemp(join(tmpdir(), "fortipi-process-"));
   const port = await freePort(),
@@ -228,6 +231,8 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     };
     child.stdout?.on("data", retain);
     child.stderr?.on("data", retain);
+    if (child.stdout) observePiOpenStages(child.stdout, childInvocation);
+    if (child.stderr) observePiOpenStages(child.stderr, childInvocation);
     const began = performance.now();
     let attempts = 0,
       deadlines = 0,
