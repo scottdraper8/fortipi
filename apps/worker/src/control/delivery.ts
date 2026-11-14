@@ -20,7 +20,7 @@ interface Inbox {
 }
 interface Command {
   ctx: D.AuthContext;
-  delivery: D.ExecutorDelivery;
+  delivery: D.ExecutorDelivery & { connectionEpoch: number };
   ack: D.DeliveryAck;
   digest: string;
   attempts: number;
@@ -84,6 +84,22 @@ export class Delivery {
       tools: [record.intent.assignment.tool],
     };
     requireGrant(ctx, "jobs.dispatch", resources);
+    const target = this.store.get<ExecutorState>("executor", input.executorId);
+    check(
+      target && target.status !== "revoked" && target.generation === input.generation,
+      "conflict",
+      "Command executor generation changed",
+    );
+    const connectionEpoch =
+      input.connectionEpoch === undefined ? target.epoch : input.connectionEpoch;
+    check(
+      Number.isSafeInteger(connectionEpoch) &&
+        connectionEpoch > 0 &&
+        connectionEpoch === target.epoch,
+      "conflict",
+      "Command connection epoch is invalid or stale",
+    );
+    const delivery = { ...input, connectionEpoch };
     const workspaceResources = { ...resources, tools: [] };
     let workspaceProofAction: string | undefined;
     const currentAuthority = (): void => {
@@ -95,7 +111,7 @@ export class Delivery {
         executor &&
           executor.status !== "revoked" &&
           executor.generation === input.generation &&
-          executor.epoch === input.connectionEpoch,
+          executor.epoch === connectionEpoch,
         "conflict",
         "Terminal executor authority changed",
       );
@@ -237,8 +253,10 @@ export class Delivery {
       }
     }
     const digest = await hash(json(frame.payload));
+    currentAuthority();
     const key = `${identity.executionId}:${frame.type}:${frame.type === "job.committed" ? frame.payload.terminalVersion : frame.payload.leaseVersion}`;
     await this.store.arm();
+    currentAuthority();
     const command = this.store.tx(() => {
       currentAuthority();
       const current = this.store.get<DispatchRecord>("dispatch", identity.executionId);
@@ -298,13 +316,16 @@ export class Delivery {
       if (old) {
         check(old.digest === digest, "conflict", "Authority command changed");
         old.ctx = ctx;
+        // Only this freshly authorized foreground attempt may recapture an epoch.
+        // The payload/digest and durable transport receipt remain unchanged.
+        old.delivery = delivery;
         if (workspaceProofAction) old.workspaceProofAction = workspaceProofAction;
         this.store.put("command", key, old, "", "", Date.now());
         return old;
       }
       const command: Command = {
         ctx,
-        delivery: input,
+        delivery,
         digest,
         ack: {
           deliveryId: id(),
@@ -356,6 +377,21 @@ export class Delivery {
       requireGrant(liveCtx, "jobs.dispatch", scope);
       if (command.workspaceProofAction)
         requireGrant(liveCtx, command.workspaceProofAction, { ...scope, tools: [] });
+      const executor = this.store.get<ExecutorState>("executor", command.delivery.executorId);
+      if (
+        !executor ||
+        executor.status === "revoked" ||
+        executor.generation !== command.delivery.generation ||
+        !Number.isSafeInteger(command.delivery.connectionEpoch) ||
+        command.delivery.connectionEpoch <= 0 ||
+        executor.epoch !== command.delivery.connectionEpoch
+      ) {
+        // A superseded transport attempt cannot become current in the background.
+        // Retain its receipt without futile alarms; a fresh authorized retry can
+        // capture the replacement channel after revalidating the same command.
+        this.store.put("command", key, command);
+        return;
+      }
       if (frame.type === "job.lease_update") {
         const retained = this.store.get<{ lease: D.Lease }>(
           "lease",
@@ -393,6 +429,9 @@ export class Delivery {
     const e = this.store.get<ExecutorState>("executor", input.executorId);
     check(
       c.role === "executor" &&
+        Number.isSafeInteger(input.connectionEpoch) &&
+        input.connectionEpoch !== undefined &&
+        input.connectionEpoch > 0 &&
         c.executorId === input.executorId &&
         e &&
         e.epoch === input.connectionEpoch &&

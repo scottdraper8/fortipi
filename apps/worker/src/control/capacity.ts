@@ -3,7 +3,7 @@ import { contains, emptyScope, requireGrant } from "./authorization.js";
 import type { Directory } from "./directory.js";
 import type { Identities } from "./identity.js";
 import { queueRepairResume } from "./repair.js";
-import { check, id, ref, type Store, same } from "./store.js";
+import { ControlError, check, id, ref, type Store, same } from "./store.js";
 
 interface Counters {
   reserved: number;
@@ -14,6 +14,13 @@ interface Reservation {
   reservation: D.CapacityReservation;
   principal: string;
   workspaceId?: string;
+  agentAuthority?: {
+    registrationId: string;
+    agentId: string;
+    action: string;
+    grantId: string;
+    grantVersion: number;
+  };
   settlement?: { disposition: "consumed" | "unused"; observedBytes?: number };
 }
 export class Capacity {
@@ -159,6 +166,101 @@ export class Capacity {
     );
     return true;
   }
+  private agentAuthority(
+    ctx: D.AuthContext,
+    ownerId: string,
+    admissionSlots: number,
+  ): Reservation["agentAuthority"] {
+    const authority = this.directory.registeredOperation(ctx);
+    if (!authority) return undefined;
+    const { registration, action, grant } = authority;
+    const agentId = registration.recipient.id;
+    const expectedOwner =
+      action === "conversations.create" || action === "conversations.fork"
+        ? agentId
+        : registration.resources.conversationIds[0];
+    const expectedSlots =
+      action === "conversations.create" ||
+      action === "conversations.fork" ||
+      action === "jobs.dispatch"
+        ? 0
+        : 1;
+    if (expectedOwner !== ownerId || admissionSlots !== expectedSlots) return undefined;
+    return {
+      registrationId: registration.registrationId,
+      agentId,
+      action,
+      grantId: grant.grantId,
+      grantVersion: grant.version,
+    };
+  }
+  private settlement(
+    ctx: D.AuthContext,
+    input: {
+      reservationId: string;
+      disposition: "consumed" | "unused";
+      observedBytes?: number;
+    },
+  ): Reservation {
+    this.identities.current(ctx);
+    const row = this.store.get<Reservation>("capacity_reservation", input.reservationId);
+    check(row && row.principal === ctx.principalId, "not_found", "Reservation unavailable");
+    if (row.workspaceId)
+      check(
+        this.workspaceAuthority(ctx, row.workspaceId),
+        "unauthorized",
+        "Capacity settlement requires its workspace registration",
+      );
+    else if (row.agentAuthority)
+      check(
+        same(
+          this.agentAuthority(ctx, row.reservation.ownerId, row.reservation.admissionSlots),
+          row.agentAuthority,
+        ),
+        "unauthorized",
+        "Capacity settlement requires its original current Agent operation",
+      );
+    else requireGrant(ctx, "capacity.settle");
+    const settlement = {
+      disposition: input.disposition,
+      ...(input.observedBytes === undefined ? {} : { observedBytes: input.observedBytes }),
+    };
+    if (row.settlement) check(same(row.settlement, settlement), "conflict", "Settlement changed");
+    check(
+      input.observedBytes !== undefined &&
+        Number.isSafeInteger(input.observedBytes) &&
+        input.observedBytes >= 0 &&
+        input.observedBytes <= row.reservation.bytes,
+      "invalid_request",
+      "Settlement requires authoritative measured bytes",
+    );
+    check(
+      input.disposition !== "unused" || input.observedBytes === 0,
+      "conflict",
+      "Unused capacity still holds bytes",
+    );
+    return row;
+  }
+  admitSettlement(
+    ctx: D.AuthContext,
+    input: {
+      reservationId: string;
+      disposition: "consumed" | "unused";
+      observedBytes?: number;
+    },
+  ): void {
+    let completion = false;
+    try {
+      const row = this.settlement(ctx, input);
+      completion = row.workspaceId !== undefined || row.agentAuthority !== undefined;
+    } catch (error) {
+      if (!(error instanceof ControlError)) throw error;
+    }
+    // Each actual RPC, including idempotent retries, spends an install request.
+    // Only an authenticated retained completion can use existing repair headroom.
+    if (completion) this.admitRepair();
+    else this.admitRequest(ctx.principalId);
+  }
   reserve(
     ctx: D.AuthContext,
     input: {
@@ -171,7 +273,10 @@ export class Capacity {
   ): D.CapacityReservation {
     this.identities.current(ctx);
     const workspace = input.admissionSlots === 0 && this.workspaceAuthority(ctx, input.ownerId);
-    if (!workspace) requireGrant(ctx, "capacity.reserve");
+    const agentAuthority = workspace
+      ? undefined
+      : this.agentAuthority(ctx, input.ownerId, input.admissionSlots);
+    if (!workspace && !agentAuthority) requireGrant(ctx, "capacity.reserve");
     check(
       [input.bytes, input.admissionSlots].every((n) => Number.isSafeInteger(n) && n >= 0),
       "invalid_request",
@@ -182,6 +287,12 @@ export class Capacity {
       const key = `${ctx.principalId}:${input.operationId}:${input.ownerId}`;
       const old = this.store.get<Reservation>("capacity_request", key);
       if (old) {
+        if (old.agentAuthority)
+          check(
+            same(old.agentAuthority, agentAuthority),
+            "unauthorized",
+            "Reservation operation authority changed",
+          );
         check(
           same(
             {
@@ -234,6 +345,7 @@ export class Capacity {
         reservation,
         principal: ctx.principalId,
         ...(workspace ? { workspaceId: input.ownerId } : {}),
+        ...(agentAuthority ? { agentAuthority } : {}),
       };
       this.store.put("capacity_request", key, row);
       this.store.put("capacity_reservation", reservation.reservationId, row);
@@ -251,15 +363,7 @@ export class Capacity {
   ): D.CapacityReservation {
     this.identities.current(ctx);
     return this.store.tx(() => {
-      const row = this.store.get<Reservation>("capacity_reservation", input.reservationId);
-      check(row && row.principal === ctx.principalId, "not_found", "Reservation unavailable");
-      if (row.workspaceId)
-        check(
-          this.workspaceAuthority(ctx, row.workspaceId),
-          "unauthorized",
-          "Capacity settlement requires its workspace registration",
-        );
-      else requireGrant(ctx, "capacity.settle");
+      const row = this.settlement(ctx, input);
       const settlement = {
         disposition: input.disposition,
         ...(input.observedBytes === undefined ? {} : { observedBytes: input.observedBytes }),
@@ -268,19 +372,7 @@ export class Capacity {
         check(same(row.settlement, settlement), "conflict", "Settlement changed");
         return row.reservation;
       }
-      check(
-        input.observedBytes !== undefined &&
-          Number.isSafeInteger(input.observedBytes) &&
-          input.observedBytes >= 0 &&
-          input.observedBytes <= row.reservation.bytes,
-        "invalid_request",
-        "Settlement requires authoritative measured bytes",
-      );
-      check(
-        input.disposition !== "unused" || input.observedBytes === 0,
-        "conflict",
-        "Unused capacity still holds bytes",
-      );
+      check(input.observedBytes !== undefined, "invalid_request", "Measured bytes required");
       const totals = this.usage();
       const reservation = { ...row.reservation, state: "settled" as const };
       const updated = { ...row, reservation, settlement };

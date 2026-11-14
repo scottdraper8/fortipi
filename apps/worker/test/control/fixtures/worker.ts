@@ -5,12 +5,33 @@ import type { Env } from "../../../src/boundary/env.js";
 import { ControlPlane } from "../../../src/control/control-plane.js";
 import { Executors } from "../../../src/control/executors.js";
 import { EncryptedCredentialStore } from "../../../src/control/provider-auth-store.js";
-import { check, id, outcome } from "../../../src/control/store.js";
+import { check, hash, id, outcome } from "../../../src/control/store.js";
 import type { TestRecipient } from "./recipients.js";
 
 export { TestRecipient } from "./recipients.js";
 
 export class TestControlPlane extends ControlPlane {
+  async streamRegistration(envelope: string): Promise<string> {
+    const identity: unknown = JSON.parse(envelope);
+    check(
+      identity &&
+        typeof identity === "object" &&
+        "registrationId" in identity &&
+        typeof identity.registrationId === "string",
+      "invalid_request",
+      "Missing fixture socket registration",
+    );
+    return JSON.stringify(
+      this.store.get<D.AuthorityRegistration>("recipient", identity.registrationId) ?? null,
+    );
+  }
+  async replaceTicketAgents(ticket: string, agents: string[]): Promise<void> {
+    this.ctx.storage.sql.exec(
+      "UPDATE cp_records SET value=json_set(value,'$.identity.resources.agentIds',json(?)) WHERE kind='ticket' AND key=?",
+      JSON.stringify(agents),
+      await hash(ticket),
+    );
+  }
   async recoveredPresence(executorId: string, generation: number): Promise<D.Outcome<boolean>> {
     // Reconstruct only the component: use real retained workerd sockets and
     // storage, while its process-local heartbeat map starts empty.
@@ -251,9 +272,16 @@ export class TestControlPlane extends ControlPlane {
   ): Promise<D.TargetReservation | undefined> {
     return this.store.get("reservation", `${principalId}:${operationId}`);
   }
-  async refuseWrites(kind: "capacity" | "issuance" | null): Promise<void> {
+  async refuseWrites(kind: "capacity" | "issuance" | "ticket" | null): Promise<void> {
     this.ctx.storage.sql.exec("DROP TRIGGER IF EXISTS test_refuse_write");
-    const allowed = kind === "capacity" ? "capacity" : kind === "issuance" ? "issuance" : undefined;
+    const allowed =
+      kind === "capacity"
+        ? "capacity"
+        : kind === "issuance"
+          ? "issuance"
+          : kind === "ticket"
+            ? "ticket"
+            : undefined;
     if (allowed)
       this.ctx.storage.sql.exec(
         `CREATE TRIGGER test_refuse_write BEFORE INSERT ON cp_records WHEN NEW.kind='${allowed}' BEGIN SELECT RAISE(ABORT,'synthetic storage refusal'); END`,
@@ -402,6 +430,8 @@ export type FixtureControl = DurableObject<Env> &
   Pick<
     TestControlPlane,
     | "deployment"
+    | "streamRegistration"
+    | "replaceTicketAgents"
     | "recoveredPresence"
     | "drainTest"
     | "canary"

@@ -178,7 +178,7 @@ export class Controller {
     if (this.view === "agents") {
       this.agentId = id;
       await this.browse("conversations");
-    } else if (this.view === "conversations") await this.open(id);
+    } else if (this.view === "conversations") await this.open(id, this.agentId);
     else if (this.view === "approvals") await this.approval(id);
   }
   async create(title = "New conversation"): Promise<void> {
@@ -189,10 +189,12 @@ export class Controller {
       { requestId: globalThis.crypto.randomUUID(), title },
       { signal: this.selection.signal },
     );
-    if (generation === this.generation) await this.open(value.conversationId);
+    if (generation === this.generation) await this.open(value.conversationId, value.agentId);
   }
-  async open(conversationId: string): Promise<void> {
+  async open(conversationId: string, agentId = this.agentId): Promise<void> {
+    if (!agentId) throw new FortiPiError("select_agent");
     this.resetSelection();
+    this.agentId = agentId;
     this.choices = [];
     this.conversationId = conversationId;
     this.projection = new Projection(
@@ -211,6 +213,8 @@ export class Controller {
   private async connect(retain: boolean): Promise<void> {
     const id = this.conversationId;
     if (!id) throw new FortiPiError("select_conversation");
+    const agentId = this.agentId;
+    if (!agentId) throw new FortiPiError("select_agent");
     const generation = this.generation;
     const epoch = ++this.connectionEpoch;
     if (retain) this.cursorScope = this.subscription?.scope ?? this.cursorScope;
@@ -223,6 +227,7 @@ export class Controller {
       generation === this.generation && epoch === this.connectionEpoch && !liveSignal.aborted;
     const priorScope = this.cursorScope;
     const subscription = this.client.conversations.subscribe(id, {
+      agentId,
       signal: liveSignal,
       ...(retain && priorScope ? { after: this.projection.cursor, scope: priorScope } : {}),
       onSnapshot: async (value) => {
@@ -290,9 +295,16 @@ export class Controller {
           this.ticketIdentity &&
           cursorScopeKey({
             origin: this.client.http.origin,
+            agentId,
             conversationId: id,
             identity: this.ticketIdentity,
-          }) !== cursorScopeKey({ origin: this.client.http.origin, conversationId: id, identity })
+          }) !==
+            cursorScopeKey({
+              origin: this.client.http.origin,
+              agentId,
+              conversationId: id,
+              identity,
+            })
         ) {
           this.projection = new Projection();
           this.composer = "";

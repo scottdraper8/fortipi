@@ -7762,73 +7762,7 @@
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/zod@4.6.7; Sigstore transparency verification required at release"
     }
   },
-  "exemptions": {
-    "@earendil-works/chord@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:22:18.789Z",
-      "integrity": "sha512-3g088g7qVXL2cpRAKWjj9za6RLls9FBnuUo5c0hBZ0xCftBQjae0opS+34M22vdXTVE7BNqkRG/FPc9BsM7eEg=="
-    },
-    "@earendil-works/pi-ai@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:20:46.480Z",
-      "integrity": "sha512-2tWPSnV3qzfiDIY3aWluBag3vC++Vs+VsXt/UquSU5onPMohPih72FUhIhaqmDdMYubOgB3Byl9uF4Vk40JLvQ=="
-    },
-    "@earendil-works/pi-codemode@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:21:47.420Z",
-      "integrity": "sha512-HoZQ40a9RgdZ1VgmrX6x8887cNXedaRJT1l+Ie5YRIMK4gY7v0EpsiNqf6dmixrKylZlTgUSyR+vE8xhjfkr+w=="
-    },
-    "@earendil-works/pi-durable@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:21:58.246Z",
-      "integrity": "sha512-zDB3anbI/yD0IG+VVY+g5tU+c5XOVqQAFwLkXRMiqZb4p/afWro0voZtLNoRAWcDA2r73kvmH6kKin9Ka8l55g=="
-    },
-    "@earendil-works/pi-schema@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:24:21.986Z",
-      "integrity": "sha512-hJoyCXWUhsSrXY5wJo2Q4kHXUsR51pNhkJHAMkWRwVMLDRtMDPkKNaa+JlVRVqTw1hjdSxcVVaFLSDbKlaTXEQ=="
-    },
-    "@earendil-works/pi-telemetry@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:21:57.013Z",
-      "integrity": "sha512-m+cumjIqNh1aMISi/9ttcG3ZOwIdriPbz/eMyWmRMJCGa/WcgY1RX4lrb7HvsHhSfI/JUeBESA4nOCr8C3y5ow=="
-    },
-    "@earendil-works/pi-tui@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:21:46.597Z",
-      "integrity": "sha512-WK8ih+c88GWizaB79y7Pq3PV7ySf5VI1pZ1i/6aBBjDOAiG2EE3ojKjl+pxQqLfyQGnzHYu4VfakOBJgumuoyw=="
-    },
-    "@unstale/cli-darwin-arm64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:10:04.621Z",
-      "integrity": "sha512-DFW8XPHq4mmrF5ikQHsO2uH0P0HxUW4Oq9R9839AsqvBNi0+xiss41hmY5DfSa4KSsucTbOnxBEm55ElKJI5Gw=="
-    },
-    "@unstale/cli-darwin-x64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:09:08.126Z",
-      "integrity": "sha512-dMPwjCmfAJPJrPIQY+ifb2C+cKS1pz+wLBP+P3GyzNVaiRTcEv1hrq/QF9V1I1mf/QCCwT1m+tGIFW+qxv7aJA=="
-    },
-    "@unstale/cli-linux-arm64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:09:22.116Z",
-      "integrity": "sha512-yV58+ZQFuCBhpGLebAp3Ir+RbwA0af0zd13bRsDrWhffF9O+4leSEgk63Pz+xtPNNTBXnr+xt0CXdGZrCV+XZg=="
-    },
-    "@unstale/cli-linux-x64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:07:23.542Z",
-      "integrity": "sha512-HuVv/qK6KqRrXm7ugckaVllahCKju8hmeMO+Cw9uZpUmfGHhggutl2o0mW9eA6xblZJ3V340qX2MTIymzgCzcg=="
-    },
-    "@unstale/cli-win32-x64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:07:53.527Z",
-      "integrity": "sha512-2R93KzKWxkeX3TsAGfXRUfj3XYqQoNtmI4ctOZky72+Z5KlY30DOXVD8kTlQuXjAMOzvZQpkTYiq5bTtkD7osw=="
-    },
-    "@unstale/cli@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:08:27.771Z",
-      "integrity": "sha512-bg4rFUiut6gzpNZlF3sZIPFMjeCVLphy8hVVQ2XpiQxmlPhGDQkBOCargFV5ygdAGmo8mdNjYrkUwLRB8LWaFw=="
-    }
-  },
+  "exemptions": {},
   "advisory": {
     "checkedAt": "2026-11-11T01:19:13.255Z",
     "identities": 381,

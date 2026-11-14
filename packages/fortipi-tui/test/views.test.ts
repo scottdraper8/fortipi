@@ -16,7 +16,7 @@ void test("remote terminal controls and links are stripped; offline state remain
   await service.start();
   const controller = new Controller(service.client());
   try {
-    await controller.open("conv_1");
+    await controller.open("conv_1", "agent_1");
     const snapshot = controller.projection.snapshot;
     assert(snapshot);
     snapshot.conversation.taskState = {

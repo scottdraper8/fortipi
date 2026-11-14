@@ -59,6 +59,38 @@ copy retained bytes into a full new revision and recover its publication receipt
 without receiving public read permission. Public file/stat/manifest/receipt reads
 still require `workspace.read`.
 
+Private `getReceipt` can also recover an exact known commit with the current
+registered writer's retained reservation scope. It verifies the saved upload or
+local intent, original job/operation/base/lease identity, current agent/conversation/
+target grant and credential/executor floors. Historical expiry does not renew or
+rewrite that authority. Receipt lookup is observational and does not initiate
+publication or cleanup. The public `getCommitReceipt` path always requires read.
+
+When a commit reply is lost before its computed digest is known, private fact
+paging can expose only the intended recipient's actual retained publication fact
+under that same write authority. The fact must match the stored receipt and its
+original reservation; write does not authorize arbitrary facts. Read-authorized
+fact pages and acknowledgments also require one current grant covering the actual
+workspace, action, recipient agent and fact conversation. Acknowledgments retain
+their original event coordinates on retry. The service still compares each
+receipt/fact with its known job and binding: `CommitLookup` carries only workspace,
+commit ID and digest, not independent job or binding coordinates.
+
+Before reserving a job target, the service can use the existing private fetch lane
+`GET /__fortipi/operational-metadata?revision=BASE&agentId=AGENT&conversationId=CONVERSATION`
+with the same server-constructed workspace context header. Exactly these three
+query fields are required, once each. One current grant must cover the workspace,
+agent and conversation with both `jobs.dispatch` and `workspace.write`. The
+authority checks current credential/floors inside its FIFO, compares the expected
+revision with its current binding and retained manifest hash, then returns the
+existing `WorkspaceBinding` JSON with `Cache-Control: no-store`. It includes only
+binding metadata and opaque provider IDs, without a file tree or host paths.
+This observation does not reserve, acquire, mutate, renew or clean up anything.
+Public descriptor/manifest reads retain their existing permissions. The service
+must compare the returned base and resolve/register the actual current target
+before mutation. The binding has no executor-generation field; metadata is not
+execution or mutation authority. CP owns current registration-record binding.
+
 `POST /__fortipi/terminal-proof` accepts at most 64 KiB of the existing
 `JobCommitted` JSON, with the same server-constructed context header. It checks
 the historical acquired lease, known job/execution/operation reservation, current

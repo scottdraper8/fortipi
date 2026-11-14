@@ -70,6 +70,50 @@ export class WorkspaceObject extends WorkspaceBase {
     }
     if (path === "/__test/barrier")
       return new Response(this.state.get("test-barrier") ? "ready" : "waiting");
+    if (path === "/__test/metadata-queued") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      let enter = () => {};
+      let release = () => {};
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const hold = this.mutex.run(async () => {
+        enter();
+        await gate;
+      });
+      await entered;
+      const invalidation = this.invalidateGeneration(
+        {
+          kind: "control-recovery",
+          deploymentId: auth.deploymentId,
+          revocationId: "queued-metadata-floor",
+          recipient: { kind: "workspace", id: "workspace" },
+          actions: ["invalidate"],
+          deadline: auth.deadline,
+        },
+        {
+          revocationId: "queued-metadata-floor",
+          subject: {
+            kind: "credential",
+            credentialId: auth.credentialId,
+            minimumGeneration: auth.generation + 1,
+          },
+        },
+      );
+      const target = new URL(request.url);
+      target.pathname = "/__fortipi/operational-metadata";
+      const pending = super.fetch(new Request(target, request));
+      release();
+      await hold;
+      const ack = await invalidation;
+      if (!ack.ok) throw new Error("Queued metadata revocation failed");
+      return pending;
+    }
     return super.fetch(request);
   }
   override async commitUpload(
@@ -217,6 +261,7 @@ type Call =
   | { kind: "validate"; input: D.OperationRequest<"validateUpload"> }
   | { kind: "commit"; input: D.OperationRequest<"commitUpload"> }
   | { kind: "receipt"; input: D.CommitLookup }
+  | { kind: "public-receipt"; input: D.OperationRequest<"getCommitReceipt"> }
   | { kind: "manifest"; input: D.OperationRequest<"getWorkspaceManifest"> }
   | { kind: "list"; input: D.OperationRequest<"listWorkspaceFiles"> }
   | { kind: "stat"; input: D.OperationRequest<"statWorkspaceFile"> }
@@ -326,6 +371,21 @@ export default {
       for (const grant of ctx.grants) grant.resources.actions = ["artifacts.read"];
     if (request.headers.get("x-test-write-only") === "1")
       for (const grant of ctx.grants) grant.resources.actions = ["workspace.write"];
+    if (request.headers.get("x-test-dispatch-write") === "1")
+      for (const grant of ctx.grants)
+        grant.resources.actions = ["jobs.dispatch", "workspace.write"];
+    if (request.headers.get("x-test-dispatch-only") === "1")
+      for (const grant of ctx.grants) grant.resources.actions = ["jobs.dispatch"];
+    if (request.headers.get("x-test-split-actions") === "1") {
+      const grant = ctx.grants[0];
+      if (!grant) throw new Error("Split action grant missing");
+      ctx.grants.push({
+        ...grant,
+        grantId: "dispatch-only",
+        resources: { ...grant.resources, actions: ["jobs.dispatch"] },
+      });
+      grant.resources = { ...grant.resources, actions: ["workspace.write"] };
+    }
     if (request.headers.get("x-test-read-only") === "1")
       for (const grant of ctx.grants) grant.resources.actions = ["workspace.read"];
     if (request.headers.get("x-test-recovery") === "1") {
@@ -333,9 +393,54 @@ export default {
       ctx.registrationId = "recovery-registration";
     }
     if (request.headers.get("x-test-unregistered") === "1") delete ctx.registrationId;
+    if (request.headers.get("x-test-expired") === "1") ctx.credentialExpiresAt = Date.now() - 1;
+    if (request.headers.get("x-test-other-agent") === "1")
+      for (const grant of ctx.grants) grant.resources.agentIds = ["other"];
+    if (request.headers.get("x-test-other-target") === "1")
+      for (const grant of ctx.grants) {
+        grant.resources.executorIds = ["other"];
+        grant.resources.backendIds = ["other"];
+      }
     if (request.headers.get("x-test-other-conversation") === "1")
       for (const grant of ctx.grants) grant.resources.conversationIds = ["other"];
+    if (request.headers.get("x-test-split-scope") === "1") {
+      const grant = ctx.grants[0];
+      if (!grant) throw new Error("Split grant missing");
+      ctx.grants.push({
+        ...grant,
+        grantId: "scope-only",
+        resources: { ...grant.resources, actions: [] },
+      });
+      grant.resources = { ...grant.resources, conversationIds: ["other"] };
+    }
+    if (request.headers.get("x-test-mixed-read") === "1") {
+      const grant = ctx.grants[0];
+      if (!grant) throw new Error("Mixed grant missing");
+      ctx.grants.push({
+        ...grant,
+        grantId: "unrelated-reader",
+        resources: {
+          ...grant.resources,
+          actions: ["workspace.read"],
+          conversationIds: ["other"],
+        },
+      });
+    }
     const authority = env.WORKSPACES.getByName("workspace");
+    if (url.pathname === "/operational-metadata") {
+      const headers = new Headers();
+      if (request.headers.get("x-test-no-context") !== "1")
+        headers.set(internalHeader, JSON.stringify({ auth: ctx }));
+      return authority.fetch(
+        new Request(
+          `https://workspace.internal/${request.headers.get("x-test-metadata-queued") === "1" ? "__test/metadata-queued" : "__fortipi/operational-metadata"}${url.search}`,
+          {
+            method: request.method,
+            headers,
+          },
+        ),
+      );
+    }
     if (url.pathname === "/artifact-stream-control") {
       const response = await authority.fetch(
         new Request(
@@ -487,6 +592,8 @@ export default {
         return Response.json(await authority.commitUpload(ctx, call.input));
       case "receipt":
         return Response.json(await authority.getReceipt(ctx, call.input));
+      case "public-receipt":
+        return Response.json(await authority.getCommitReceipt(ctx, call.input));
       case "manifest":
         return Response.json(await authority.manifest(ctx, call.input));
       case "list":

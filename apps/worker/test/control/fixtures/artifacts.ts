@@ -73,6 +73,49 @@ export default {
   },
 };
 export class TestControlPlane extends BaseControlPlane {
+  private epochRelease: (() => void) | undefined;
+  private epochEntered = false;
+  async gateEpoch(stage: "hash" | "arm" | "drain"): Promise<void> {
+    this.epochEntered = false;
+    const gate = new Promise<void>((resolve) => {
+      this.epochRelease = resolve;
+    });
+    if (stage === "hash") {
+      const original = crypto.subtle.digest.bind(crypto.subtle);
+      crypto.subtle.digest = async (algorithm, data) => {
+        crypto.subtle.digest = original;
+        this.epochEntered = true;
+        await gate;
+        return original(algorithm, data);
+      };
+    } else if (stage === "arm") {
+      const original = this.store.arm.bind(this.store);
+      this.store.arm = async (at) => {
+        this.store.arm = original;
+        this.epochEntered = true;
+        await gate;
+        return original(at);
+      };
+    } else {
+      const original = this.delivery.drainCommand.bind(this.delivery);
+      this.delivery.drainCommand = async (key, executors) => {
+        this.delivery.drainCommand = original;
+        this.epochEntered = true;
+        await gate;
+        return original(key, executors);
+      };
+    }
+  }
+  async epochGateEntered(): Promise<boolean> {
+    return this.epochEntered;
+  }
+  async releaseEpochGate(): Promise<void> {
+    this.epochRelease?.();
+    this.epochRelease = undefined;
+  }
+  async epochCommands(): Promise<string> {
+    return JSON.stringify(this.store.page("command", 0, 16).map((row) => row.value));
+  }
   async refuseArtifactInbox(enabled: boolean): Promise<void> {
     this.ctx.storage.sql.exec("DROP TRIGGER IF EXISTS fixture_refuse_artifact_inbox");
     if (enabled)
@@ -109,6 +152,10 @@ export type ArtifactControl = FixtureControl &
     | "registrationRecord"
     | "leaseRecord"
     | "refuseArtifactInbox"
+    | "gateEpoch"
+    | "epochGateEntered"
+    | "releaseEpochGate"
+    | "epochCommands"
   >;
 /** Controlled durable proof authorities. They assert the private transport contract, not source3/5 enforcement. */
 export class TestRecipient extends BaseRecipient {

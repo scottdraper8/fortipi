@@ -164,7 +164,10 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: Parameters<ControlPlaneRpc["settleCapacity"]>[1],
   ): Promise<D.Outcome<D.CapacityReservation>> {
-    return this.call(ctx, async () => {
+    return outcome(ctx.requestId, async () => {
+      await this.initialized;
+      this.identities.current(ctx);
+      this.capacity.admitSettlement(ctx, input);
       await this.store.arm();
       return this.capacity.settle(ctx, input);
     });
@@ -292,182 +295,262 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
     ctx: D.AuthContext,
     input: D.OperationRequest<"listAgents">,
   ): Promise<D.Outcome<D.OperationResponse<"listAgents">>> {
-    return this.call(ctx, () => ({ status: 200, body: this.directory.list(ctx, input.query) }));
+    return this.call(ctx, () => this.listAgentsValue(ctx, input));
+  }
+  private listAgentsValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"listAgents">,
+  ): D.OperationResponse<"listAgents"> {
+    return { status: 200, body: this.directory.list(ctx, input.query) };
   }
   async createAgent(
     ctx: D.AuthContext,
     input: D.OperationRequest<"createAgent">,
   ): Promise<D.Outcome<D.OperationResponse<"createAgent">>> {
-    return this.call(ctx, async () => ({
+    return this.call(ctx, () => this.createAgentValue(ctx, input));
+  }
+  private async createAgentValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"createAgent">,
+  ): Promise<D.OperationResponse<"createAgent">> {
+    return {
       status: 201,
       body: await this.directory.create(ctx, input.body),
-    }));
+    };
   }
   async describeAgent(
     ctx: D.AuthContext,
     input: D.OperationRequest<"describeAgent">,
   ): Promise<D.Outcome<D.OperationResponse<"describeAgent">>> {
-    return this.call(ctx, () => ({
+    return this.call(ctx, () => this.describeAgentValue(ctx, input));
+  }
+  private describeAgentValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"describeAgent">,
+  ): D.OperationResponse<"describeAgent"> {
+    return {
       status: 200,
       body: this.directory.describe(ctx, input.path.agentId),
-    }));
+    };
   }
   async configureAgent(
     ctx: D.AuthContext,
     input: D.OperationRequest<"configureAgent">,
   ): Promise<D.Outcome<D.OperationResponse<"configureAgent">>> {
-    return this.call(ctx, async () => ({
+    return this.call(ctx, () => this.configureAgentValue(ctx, input));
+  }
+  private async configureAgentValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"configureAgent">,
+  ): Promise<D.OperationResponse<"configureAgent">> {
+    return {
       status: 200,
       body: await this.directory.configure(ctx, input.path.agentId, input.body),
-    }));
+    };
   }
   async mintCredential(
     ctx: D.AuthContext,
     input: D.OperationRequest<"mintCredential">,
   ): Promise<D.Outcome<D.OperationResponse<"mintCredential">>> {
-    return this.call(ctx, async () => {
-      check(
-        valid("administration", "CredentialMint", input.body),
-        "invalid_request",
-        "Invalid credential request",
-      );
-      return { status: 201, body: await this.identities.mint(ctx, input.body) };
-    });
+    return this.call(ctx, () => this.mintCredentialValue(ctx, input));
+  }
+  private async mintCredentialValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"mintCredential">,
+  ): Promise<D.OperationResponse<"mintCredential">> {
+    check(
+      valid("administration", "CredentialMint", input.body),
+      "invalid_request",
+      "Invalid credential request",
+    );
+    return { status: 201, body: await this.identities.mint(ctx, input.body) };
   }
   async acquireWorkspaceLease(
     ctx: D.AuthContext,
     input: D.OperationRequest<"acquireWorkspaceLease">,
   ): Promise<D.Outcome<D.OperationResponse<"acquireWorkspaceLease">>> {
-    return this.call(ctx, async () => ({
+    return this.call(ctx, () => this.acquireWorkspaceLeaseValue(ctx, input));
+  }
+  private async acquireWorkspaceLeaseValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"acquireWorkspaceLease">,
+  ): Promise<D.OperationResponse<"acquireWorkspaceLease">> {
+    return {
       status: 201,
       body: await this.leases.acquire(ctx, input),
-    }));
+    };
   }
   async renewWorkspaceLease(
     ctx: D.AuthContext,
     input: D.OperationRequest<"renewWorkspaceLease">,
   ): Promise<D.Outcome<D.OperationResponse<"renewWorkspaceLease">>> {
-    return this.call(ctx, async () => ({ status: 200, body: await this.leases.renew(ctx, input) }));
+    return this.call(ctx, () => this.renewWorkspaceLeaseValue(ctx, input));
+  }
+  private async renewWorkspaceLeaseValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"renewWorkspaceLease">,
+  ): Promise<D.OperationResponse<"renewWorkspaceLease">> {
+    return { status: 200, body: await this.leases.renew(ctx, input) };
   }
   async releaseWorkspaceLease(
     ctx: D.AuthContext,
     input: D.OperationRequest<"releaseWorkspaceLease">,
   ): Promise<D.Outcome<D.OperationResponse<"releaseWorkspaceLease">>> {
-    return this.call(ctx, async () => ({
+    return this.call(ctx, () => this.releaseWorkspaceLeaseValue(ctx, input));
+  }
+  private async releaseWorkspaceLeaseValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"releaseWorkspaceLease">,
+  ): Promise<D.OperationResponse<"releaseWorkspaceLease">> {
+    return {
       status: 200,
       body: await this.leases.release(ctx, input),
-    }));
+    };
   }
   async revokeCredential(
     ctx: D.AuthContext,
     input: D.OperationRequest<"revokeCredential">,
   ): Promise<D.Outcome<D.OperationResponse<"revokeCredential">>> {
-    return this.call(ctx, async () => {
-      const receipt = await this.revocations.revoke(ctx, "credential", input.path.id, input.body);
-      return receipt.state === "complete"
-        ? { status: 200, body: receipt }
-        : { status: 202, body: receipt };
-    });
+    return this.call(ctx, () => this.revokeCredentialValue(ctx, input));
+  }
+  private async revokeCredentialValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"revokeCredential">,
+  ): Promise<D.OperationResponse<"revokeCredential">> {
+    const receipt = await this.revocations.revoke(ctx, "credential", input.path.id, input.body);
+    return receipt.state === "complete"
+      ? { status: 200, body: receipt }
+      : { status: 202, body: receipt };
   }
   async revokeExecutor(
     ctx: D.AuthContext,
     input: D.OperationRequest<"revokeExecutor">,
   ): Promise<D.Outcome<D.OperationResponse<"revokeExecutor">>> {
-    return this.call(ctx, async () => {
-      const receipt = await this.revocations.revoke(ctx, "executor", input.path.id, input.body);
-      return receipt.state === "complete"
-        ? { status: 200, body: receipt }
-        : { status: 202, body: receipt };
-    });
+    return this.call(ctx, () => this.revokeExecutorValue(ctx, input));
+  }
+  private async revokeExecutorValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"revokeExecutor">,
+  ): Promise<D.OperationResponse<"revokeExecutor">> {
+    const receipt = await this.revocations.revoke(ctx, "executor", input.path.id, input.body);
+    return receipt.state === "complete"
+      ? { status: 200, body: receipt }
+      : { status: 202, body: receipt };
   }
   async rotateCredential(
     ctx: D.AuthContext,
     input: D.OperationRequest<"rotateCredential">,
   ): Promise<D.Outcome<D.OperationResponse<"rotateCredential">>> {
-    return this.call(ctx, async () => {
-      requireGrant(ctx, "credentials.rotate");
-      const old = this.store.get<import("./identity.js").CredentialRecord>(
-        "credential",
-        input.path.id,
-      );
-      check(old, "not_found", "Credential unavailable");
-      requireGrant(ctx, "credentials.revoke");
-      await this.store.arm();
-      const common = {
-        requestId: input.body.requestId,
-        grants: old.grants,
-        ...(old.expiresAt === null ? {} : { expiresAt: old.expiresAt }),
-      };
-      const body: D.CredentialMint =
-        old.role === "executor"
-          ? { ...common, role: "executor", executorId: old.executorId ?? "" }
-          : { ...common, role: old.role };
-      let rev: ReturnType<Revocations["begin"]> | undefined;
-      const rotationKey = `${ctx.principalId}:${input.path.id}:${input.body.requestId}`;
-      const previous = this.store.get<{ input: D.RevocationInput; revocationId: string }>(
-        "rotation",
-        rotationKey,
-      );
-      if (previous) check(same(previous.input, input.body), "conflict", "Rotation request changed");
-      const replacement = await this.identities.mint(
-        ctx,
-        body,
-        () => {
-          rev = this.revocations.begin(ctx, "credential", input.path.id, input.body);
-          this.store.put("rotation", rotationKey, {
-            input: input.body,
-            revocationId: rev.revocationId,
-          });
-        },
-        `rotate:${input.path.id}`,
-      );
-      const revocation = rev
-        ? await this.revocations.publish(rev)
-        : this.revocations.receipt(previous?.revocationId ?? "");
-      return { status: 201, body: { replacement, revocation } };
-    });
+    return this.call(ctx, () => this.rotateCredentialValue(ctx, input));
+  }
+  private async rotateCredentialValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"rotateCredential">,
+  ): Promise<D.OperationResponse<"rotateCredential">> {
+    requireGrant(ctx, "credentials.rotate");
+    const old = this.store.get<import("./identity.js").CredentialRecord>(
+      "credential",
+      input.path.id,
+    );
+    check(old, "not_found", "Credential unavailable");
+    requireGrant(ctx, "credentials.revoke");
+    await this.store.arm();
+    const common = {
+      requestId: input.body.requestId,
+      grants: old.grants,
+      ...(old.expiresAt === null ? {} : { expiresAt: old.expiresAt }),
+    };
+    const body: D.CredentialMint =
+      old.role === "executor"
+        ? { ...common, role: "executor", executorId: old.executorId ?? "" }
+        : { ...common, role: old.role };
+    let rev: ReturnType<Revocations["begin"]> | undefined;
+    const rotationKey = `${ctx.principalId}:${input.path.id}:${input.body.requestId}`;
+    const previous = this.store.get<{ input: D.RevocationInput; revocationId: string }>(
+      "rotation",
+      rotationKey,
+    );
+    if (previous) check(same(previous.input, input.body), "conflict", "Rotation request changed");
+    const replacement = await this.identities.mint(
+      ctx,
+      body,
+      () => {
+        rev = this.revocations.begin(ctx, "credential", input.path.id, input.body);
+        this.store.put("rotation", rotationKey, {
+          input: input.body,
+          revocationId: rev.revocationId,
+        });
+      },
+      `rotate:${input.path.id}`,
+    );
+    const revocation = rev
+      ? await this.revocations.publish(rev)
+      : this.revocations.receipt(previous?.revocationId ?? "");
+    return { status: 201, body: { replacement, revocation } };
   }
   async mintTicket(
     ctx: D.AuthContext,
     input: D.OperationRequest<"mintConnectionTicket">,
   ): Promise<D.Outcome<D.OperationResponse<"mintConnectionTicket">>> {
-    return this.call(ctx, async () => {
-      check(
-        valid("administration", "TicketInput", input.body),
-        "invalid_request",
-        "Invalid ticket request",
-      );
-      const origin = this.origins.get(ctx.requestId);
-      this.origins.delete(ctx.requestId);
-      return { status: 201, body: await this.tickets.mint(ctx, input.body, origin?.value) };
-    });
+    return this.call(ctx, () => this.mintTicketValue(ctx, input));
+  }
+  private async mintTicketValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"mintConnectionTicket">,
+  ): Promise<D.OperationResponse<"mintConnectionTicket">> {
+    check(
+      valid("administration", "TicketInput", input.body),
+      "invalid_request",
+      "Invalid ticket request",
+    );
+    const origin = this.origins.get(ctx.requestId);
+    this.origins.delete(ctx.requestId);
+    return { status: 201, body: await this.tickets.mint(ctx, input.body, origin?.value) };
   }
   async getProviderAuthStatus(
     ctx: D.AuthContext,
     input: D.OperationRequest<"getProviderAuthStatus">,
   ): Promise<D.Outcome<D.OperationResponse<"getProviderAuthStatus">>> {
-    return this.call(ctx, () => ({
+    return this.call(ctx, () => this.getProviderAuthStatusValue(ctx, input));
+  }
+  private getProviderAuthStatusValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"getProviderAuthStatus">,
+  ): D.OperationResponse<"getProviderAuthStatus"> {
+    return {
       status: 200,
       body: this.providerAuth.status(ctx, input.path.providerId),
-    }));
+    };
   }
   async putProviderAuth(
     ctx: D.AuthContext,
     input: D.OperationRequest<"putProviderAuth">,
   ): Promise<D.Outcome<D.OperationResponse<"putProviderAuth">>> {
-    return this.call(ctx, async () => ({
+    return this.call(ctx, () => this.putProviderAuthValue(ctx, input));
+  }
+  private async putProviderAuthValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"putProviderAuth">,
+  ): Promise<D.OperationResponse<"putProviderAuth">> {
+    return {
       status: 200,
       body: await this.providerAuth.put(ctx, input.path.providerId, input.body),
-    }));
+    };
   }
   async deleteProviderAuth(
     ctx: D.AuthContext,
     input: D.OperationRequest<"deleteProviderAuth">,
   ): Promise<D.Outcome<D.OperationResponse<"deleteProviderAuth">>> {
-    return this.call(ctx, async () => ({
+    return this.call(ctx, () => this.deleteProviderAuthValue(ctx, input));
+  }
+  private async deleteProviderAuthValue(
+    ctx: D.AuthContext,
+    input: D.OperationRequest<"deleteProviderAuth">,
+  ): Promise<D.OperationResponse<"deleteProviderAuth">> {
+    return {
       status: 200,
       body: await this.providerAuth.remove(ctx, input.path.providerId, input.body),
-    }));
+    };
   }
   async handleApi<K extends D.ControlOperationId>(
     ctx: D.AuthContext,
@@ -483,41 +566,37 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
         "Credential role cannot access this audience",
       );
       // Individual methods perform resource checks; management reads are installation scoped.
-      const unwrap = <T>(result: D.Outcome<T>): T => {
-        if (!result.ok) fail(result.code, result.message, result.details);
-        return result.value;
-      };
       switch (request.operationId) {
         case "listAgents":
-          return unwrap(await this.listAgents(ctx, request));
+          return this.listAgentsValue(ctx, request);
         case "createAgent":
-          return unwrap(await this.createAgent(ctx, request));
+          return this.createAgentValue(ctx, request);
         case "describeAgent":
-          return unwrap(await this.describeAgent(ctx, request));
+          return this.describeAgentValue(ctx, request);
         case "configureAgent":
-          return unwrap(await this.configureAgent(ctx, request));
+          return this.configureAgentValue(ctx, request);
         case "acquireWorkspaceLease":
-          return unwrap(await this.acquireWorkspaceLease(ctx, request));
+          return this.acquireWorkspaceLeaseValue(ctx, request);
         case "renewWorkspaceLease":
-          return unwrap(await this.renewWorkspaceLease(ctx, request));
+          return this.renewWorkspaceLeaseValue(ctx, request);
         case "releaseWorkspaceLease":
-          return unwrap(await this.releaseWorkspaceLease(ctx, request));
+          return this.releaseWorkspaceLeaseValue(ctx, request);
         case "mintCredential":
-          return unwrap(await this.mintCredential(ctx, request));
+          return this.mintCredentialValue(ctx, request);
         case "revokeCredential":
-          return unwrap(await this.revokeCredential(ctx, request));
+          return this.revokeCredentialValue(ctx, request);
         case "rotateCredential":
-          return unwrap(await this.rotateCredential(ctx, request));
+          return this.rotateCredentialValue(ctx, request);
         case "revokeExecutor":
-          return unwrap(await this.revokeExecutor(ctx, request));
+          return this.revokeExecutorValue(ctx, request);
         case "mintConnectionTicket":
-          return unwrap(await this.mintTicket(ctx, request));
+          return this.mintTicketValue(ctx, request);
         case "getProviderAuthStatus":
-          return unwrap(await this.getProviderAuthStatus(ctx, request));
+          return this.getProviderAuthStatusValue(ctx, request);
         case "putProviderAuth":
-          return unwrap(await this.putProviderAuth(ctx, request));
+          return this.putProviderAuthValue(ctx, request);
         case "deleteProviderAuth":
-          return unwrap(await this.deleteProviderAuth(ctx, request));
+          return this.deleteProviderAuthValue(ctx, request);
         case "getConfiguration": {
           requireGrant(ctx, route.action);
           const config = this.directory.config();
@@ -800,6 +879,58 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
         headers.set("Access-Control-Allow-Headers", "Authorization,Content-Type");
         return new Response(null, { status: 204, headers });
       }
+      if (url.pathname === "/v1/stream") {
+        check(
+          [...url.searchParams].length === 1 &&
+            valid("administration", "TicketQuery", Object.fromEntries(url.searchParams)),
+          "invalid_request",
+          "Invalid stream query",
+        );
+        const [identity, auth] = await this.tickets.consumeStream(
+          url.searchParams.get("ticket") ?? "",
+          origin ? { kind: "browser", value: origin } : { kind: "native" },
+        );
+        this.identities.current(auth);
+        check(
+          request.method === "GET" &&
+            request.headers.get("Upgrade")?.toLowerCase() === "websocket" &&
+            !request.headers.has("Sec-WebSocket-Protocol"),
+          "invalid_request",
+          "Native WebSocket upgrade required",
+        );
+        const forwarded = new Headers();
+        for (const name of [
+          "Upgrade",
+          "Connection",
+          "Sec-WebSocket-Key",
+          "Sec-WebSocket-Version",
+          "Sec-WebSocket-Extensions",
+          "Origin",
+        ]) {
+          const value = request.headers.get(name);
+          if (value !== null) forwarded.set(name, value);
+        }
+        const socketEnvelope = json(identity);
+        const authEnvelope = json(auth);
+        check(
+          new TextEncoder().encode(socketEnvelope).length +
+            new TextEncoder().encode(authEnvelope).length <=
+            65536,
+          "invalid_request",
+          "Stream authority headers exceed bound",
+        );
+        forwarded.set("X-Fortipi-Socket", socketEnvelope);
+        forwarded.set("X-Fortipi-Context", authEnvelope);
+        const agentId = identity.resources.agentIds[0];
+        check(agentId, "invalid_request", "Missing stream agent");
+        return this.env.AGENT_SESSIONS.getByName(agentId).fetch(
+          new Request("https://agent.internal/v1/stream", {
+            method: "GET",
+            headers: forwarded,
+            signal: request.signal,
+          }),
+        );
+      }
       if (url.pathname === "/v1/executor/session") {
         const identity = await this.tickets.consume({
           ticket: url.searchParams.get("ticket") ?? "",
@@ -823,16 +954,30 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
       const artifactMatch = /^\/internal\/artifacts\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_-]+)$/.exec(
         url.pathname,
       );
-      check(match || statusMatch || artifactMatch, "not_found", "Control route unavailable");
+      const modelMatch = /^\/internal\/agents\/([a-zA-Z0-9_-]+)\/model$/.exec(url.pathname);
+      check(
+        match || statusMatch || artifactMatch || modelMatch,
+        "not_found",
+        "Control route unavailable",
+      );
       let auth: D.AuthContext;
       if (url.pathname.startsWith("/internal/")) {
         const envelope = request.headers.get("X-Fortipi-Context");
         check(
-          envelope && envelope.length <= 65536,
+          envelope && new TextEncoder().encode(envelope).length <= 65536,
           "unauthenticated",
           "Missing internal authority",
         );
-        auth = JSON.parse(envelope) as D.AuthContext;
+        try {
+          auth = JSON.parse(envelope) as D.AuthContext;
+        } catch {
+          fail("unauthenticated", "Malformed internal authority");
+        }
+        check(
+          auth && typeof auth === "object" && typeof auth.credentialId === "string",
+          "unauthenticated",
+          "Invalid internal authority",
+        );
         this.identities.current(auth);
       } else {
         const bearer = request.headers.get("Authorization") ?? "";
@@ -844,6 +989,17 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
           deadline: Date.now() + 30000,
         });
         check(auth.role === "executor", "unauthorized", "Executor credential required");
+      }
+      if (modelMatch) {
+        this.capacity.admitRequest(auth.principalId);
+        check(
+          request.method === "GET" && request.body === null && url.search === "",
+          "invalid_request",
+          "Model resolution requires query-free GET",
+        );
+        const selected = this.directory.registeredModel(auth, modelMatch[1] ?? "");
+        headers.set("X-Fortipi-Agent-Config-Version", String(selected.agent.configVersion));
+        return Response.json(selected.model, { headers });
       }
       if (artifactMatch)
         return this.artifacts.fetch(auth, request, artifactMatch[1] ?? "", artifactMatch[2] ?? "");

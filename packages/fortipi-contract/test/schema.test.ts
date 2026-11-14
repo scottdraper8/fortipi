@@ -475,6 +475,26 @@ test("local states retain identity; receipts differ from transport acknowledgeme
     deadline: 100,
   });
 });
+test("only applied local observations may carry the retained complete post-manifest", () => {
+  const applied = {
+    ...observation,
+    postManifest: { version: 1 as const, entries: [] },
+  } satisfies Executor.LocalObservation;
+  accepted("LocalObservation", observation); // Legacy hash-only observations remain wire-compatible.
+  accepted("LocalObservation", applied);
+  for (const state of ["prepared", "applying", "partial", "unknown", "drift"])
+    rejected("LocalObservation", { ...applied, state });
+  rejected("LocalObservation", { ...applied, postManifest: { version: 1 } });
+  rejected("LocalObservation", { ...applied, postManifest: { version: 2, entries: [] } });
+  rejected("LocalObservation", { ...applied, postManifestHash: undefined });
+  const nonApplied: Exclude<Executor.LocalObservation, { state: "applied" }> = {
+    ...observation,
+    state: "unknown",
+    // @ts-expect-error Incomplete or drifted operations cannot attest a post-manifest.
+    postManifest: applied.postManifest,
+  };
+  rejected("LocalObservation", nonApplied);
+});
 test("explicit approval and reconciliation bind exact operations and new-job authorization", () => {
   accepted("Grant", { grantId: "grant_1", version: 3, resources });
   const operation = {

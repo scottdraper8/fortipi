@@ -92,6 +92,16 @@ contains a complete renewed lease. Native local commits may omit uploadId: their
 preparation and observation identify the effect without inventing an upload.
 Computer commit digests require the actual upload and immutable seal.
 
+An `applied` local observation may include `postManifest`, the complete retained
+manifest for that operation. Legacy hash-only observations remain valid, but a
+changed native result cannot commit without the complete matching manifest.
+Other observation states forbid this field. The executor revalidates the root,
+current authority and actual hash; the service verifies the manifest digest and
+operation/base/execution/intent correlation before workspace commit validation.
+Existing manifest and complete-frame limits still apply; oversized observations
+fail closed without truncation or replay. Closed older validators reject the new
+field, so consumers must qualify the same contract revision together.
+
 Every wire Assignment requires closed `operationContext` with exactly deploymentId,
 agentId, conversationId and safe nonnegative policyVersion. Private ExecutionRequest
 requires that same context type, including for cloud backends. After exact schema

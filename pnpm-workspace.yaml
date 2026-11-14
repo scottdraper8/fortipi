@@ -4,14 +4,7 @@ packages:
 saveExact: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
-minimumReleaseAgeExclude:
-  - "@earendil-works/chord@1.5.2"
-  - "@earendil-works/pi-ai@1.5.2"
-  - "@earendil-works/pi-codemode@1.5.2"
-  - "@earendil-works/pi-durable@1.5.2"
-  - "@earendil-works/pi-schema@1.5.2"
-  - "@earendil-works/pi-telemetry@1.5.2"
-  - "@earendil-works/pi-tui@1.5.2"
+minimumReleaseAgeExclude: []
 trustPolicy: no-downgrade
 trustLockfile: false
 verifyDepsBeforeRun: error

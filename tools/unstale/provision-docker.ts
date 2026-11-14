@@ -32,15 +32,21 @@ assert.equal(
 );
 const directory = resolve(repository, "dist/toolchain/docker");
 await mkdir(directory, { recursive: true });
+const archive = resolve(repository, "dist/toolchain/docker-29.9.3.tgz");
 let raw: Buffer;
+let downloaded = false;
 try {
-  raw = await readFile(resolve(repository, "dist/toolchain/docker-29.9.3.tgz"));
-} catch {
+  raw = await readFile(archive);
+} catch (error) {
+  if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
   const response = await fetch(policy.docker.url, { signal: AbortSignal.timeout(60_000) });
   assert.ok(response.ok);
   raw = Buffer.from(await response.arrayBuffer());
+  downloaded = true;
 }
 assert.equal(hash(raw), policy.docker.sha256, "Docker archive identity changed");
+// The rootless launcher independently checks its daemon against this exact archive.
+if (downloaded) await writeFile(archive, raw, { flag: "wx", mode: 0o600 });
 for (const [path, bytes] of archiveEntries(raw)) {
   assert.match(path, /^docker\/[a-z0-9-]+$/);
   const target = resolve(directory, basename(path));

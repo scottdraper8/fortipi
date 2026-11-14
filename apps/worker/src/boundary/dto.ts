@@ -176,7 +176,7 @@ export type CancelDisposition = T.CancellationDisposition;
 export type ExecutorDelivery = {
   executorId: string;
   generation: number;
-  connectionEpoch: number;
+  connectionEpoch?: number;
   frame: T.ExecutorFrame;
 };
 export type DeliveryAck = T.TransportAck;

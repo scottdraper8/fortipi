@@ -1708,6 +1708,9 @@
             "postManifestHash": {
               "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
             },
+            "postManifest": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Manifest"
+            },
             "appliedAt": {
               "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp"
             },

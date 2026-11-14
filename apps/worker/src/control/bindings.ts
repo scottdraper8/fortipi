@@ -1,7 +1,7 @@
-import { incrementSafe, manifestDigest } from "fortipi-contract";
+import { incrementSafe, manifestDigest, validateExecutorTransferLimits } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
-import { emptyScope, permits, requireGrant } from "./authorization.js";
+import { contains, emptyScope, permits, requireGrant, roleAllows } from "./authorization.js";
 import { type Directory, valid } from "./directory.js";
 import type { Identities } from "./identity.js";
 import { postponeRepair, repairAccepted } from "./repair.js";
@@ -88,17 +88,64 @@ export class Bindings {
     transferLimits: D.ExecutorTransferLimits | null;
   } {
     this.identities.current(ctx);
-    requireGrant(ctx, "workspace.read", {
+    const readScope = {
       ...emptyScope(),
       workspaceIds: [input.workspaceId],
       executorIds: [input.executorId],
-    });
+    };
+    const legacyRead =
+      roleAllows(ctx, "workspace.read") && permits(ctx.grants, readScope, "workspace.read");
+    const registration = this.directory.registeredAuthority(ctx);
+    const resources = registration?.resources;
+    const agentId = resources?.agentIds[0];
+    const operational = !!(
+      registration &&
+      resources &&
+      agentId &&
+      resources.agentIds.length === 1 &&
+      valid("common", "Id", agentId) &&
+      this.store.get("agent", agentId) &&
+      resources.conversationIds.length === 1 &&
+      valid("common", "Id", resources.conversationIds[0]) &&
+      resources.workspaceIds.length === 1 &&
+      resources.workspaceIds[0] === input.workspaceId &&
+      resources.executorIds.length === 1 &&
+      resources.executorIds[0] === input.executorId &&
+      resources.backendIds.length === 0 &&
+      (registration.recipient.kind === "workspace"
+        ? resources.tools.length <= 1 && resources.tools[0] !== "*"
+        : resources.tools.length === 1 && resources.tools[0] && resources.tools[0] !== "*") &&
+      resources.actions.every(
+        (action) => action === "jobs.dispatch" || action === "workspace.write",
+      ) &&
+      (registration.recipient.kind === "agent"
+        ? registration.recipient.id === agentId && resources.actions.includes("jobs.dispatch")
+        : registration.recipient.id === input.workspaceId &&
+          resources.actions.includes("workspace.write")) &&
+      roleAllows(ctx, "jobs.dispatch") &&
+      roleAllows(ctx, "workspace.write") &&
+      ctx.grants.some(
+        (grant) =>
+          (grant.expiresAt === undefined || Date.now() < grant.expiresAt) &&
+          contains(grant.resources, {
+            ...resources,
+            actions: ["jobs.dispatch", "workspace.write"],
+          }),
+      )
+    );
+    check(
+      legacyRead || operational,
+      "unauthorized",
+      "Executor metadata requires its current registered write operation and one covering grant",
+    );
     const current = this.current(input.workspaceId);
     const pending = this.store.get<BindingRequest>("binding_pending", input.workspaceId);
     const binding =
       current?.bindingVersion === input.bindingVersion
         ? current
-        : pending &&
+        : !operational &&
+            legacyRead &&
+            pending &&
             same(ref(pending.ctx), ref(ctx)) &&
             pending.ctx.principalId === ctx.principalId &&
             pending.ctx.registrationId === ctx.registrationId &&
@@ -106,17 +153,37 @@ export class Bindings {
           ? pending.application.binding
           : undefined;
     check(
-      binding?.config.kind === "local" && binding.config.executorId === input.executorId,
+      binding &&
+        ((registration?.recipient.kind === "agent" && operational) ||
+          (binding.config.kind === "local" && binding.config.executorId === input.executorId)),
       "conflict",
       "Binding generation resolution scope mismatch",
     );
     const executor = this.executor(ctx, input.executorId);
+    check(
+      Number.isSafeInteger(executor.generation) && executor.generation > 0,
+      "unavailable_executor",
+      "Executor generation is not current",
+    );
     const observed = this.store.get<ExecutorState>("executor", executor.executorId)?.description;
+    let transferLimits =
+      observed?.generation === executor.generation &&
+      observed.executorId === executor.executorId &&
+      observed.transferLimits &&
+      valid("administration", "ExecutorTransferLimits", observed.transferLimits)
+        ? observed.transferLimits
+        : null;
+    if (transferLimits) {
+      try {
+        validateExecutorTransferLimits(transferLimits);
+      } catch {
+        transferLimits = null;
+      }
+    }
     return {
       executorId: executor.executorId,
       executorGeneration: executor.generation,
-      transferLimits:
-        observed?.generation === executor.generation ? (observed.transferLimits ?? null) : null,
+      transferLimits,
     };
   }
   validateLocalRead(ctx: D.AuthContext, input: D.LocalWorkspaceRequest): void {
