@@ -750,6 +750,9 @@ async function controlled() {
         updated_at: new Date(now - 1000).toISOString(),
       });
     };
+    let selectionCalls = 0;
+    let refuseSelection = false;
+    const selectionMarker = Object.freeze({ source: "controlled-selection-authenticator" });
     const evidence: typeof prepare.runEvidence = async (
       mode,
       candidatePath,
@@ -757,8 +760,15 @@ async function controlled() {
       out,
       deployment,
       recovery,
+      _devices,
+      selection,
     ) => {
       childCalls++;
+      assert.equal(
+        selection,
+        selectionMarker,
+        "Authenticated selection reaches the child unchanged",
+      );
       assert.equal(mode, "live");
       assert.equal(candidatePath, manifestPath);
       assert.equal(fixturePath, resolve(repository, "tests/clients/fixtures/local.json"));
@@ -876,6 +886,27 @@ async function controlled() {
         },
       },
     });
+    // This outer coordinator test controls the selection authenticator, like
+    // the provider/child ports above. It proves refusal order and forwarding;
+    // it does not qualify real selection artifacts or LIVE selection behavior.
+    const selectionUrl = new URL("../../live-selection-evidence.ts", import.meta.url);
+    const originalSelection = await import(selectionUrl.href);
+    mock.module(selectionUrl, {
+      cache: true,
+      exports: {
+        ...originalSelection,
+        async authenticateSelectionEvidence(input: {
+          loaded: { hash: string };
+          deployment: DeploymentIdentity;
+        }) {
+          selectionCalls++;
+          assert.equal(input.loaded.hash, manifestHash);
+          assert.equal(input.deployment.candidateSha256, manifestHash);
+          if (refuseSelection) throw Error("Controlled selection authentication refusal");
+          return selectionMarker;
+        },
+      },
+    });
     const { runLiveRecoveryEvidence } = await import("../../live-recovery-evidence.ts");
     // The outer privacy boundary intentionally hides causes. In this controlled
     // subprocess, retain only assertion method + allowlisted source locations.
@@ -960,6 +991,18 @@ async function controlled() {
       await writeFile(resolve(cliRoot, "dist/wrangler.js"), installedBytes);
       await chmod(resolve(cliRoot, "dist/wrangler.js"), 0o444);
     }
+    const selectionBefore = selectionCalls;
+    refuseSelection = true;
+    failures.length = 0;
+    await assert.rejects(
+      runLiveRecoveryEvidence({ ...common, out: resolve(root, "selection-refused") }),
+      /unavailable/,
+    );
+    assert.equal(selectionCalls, selectionBefore + 1);
+    assert.equal(credentialReads, 0);
+    assert.equal(cloudReads, 0);
+    assert.equal(childCalls, 0);
+    refuseSelection = false;
     const out = resolve(root, "claims");
     const result = await successful({ ...common, out });
     assert.equal(
