@@ -2,39 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resourceId } from "../../src/api/common.ts";
 import type * as D from "../../src/boundary/dto.js";
-import { eventually, harness, setup } from "../agent/harness.ts";
-import type { TestAgentSession } from "../agent/runtime-worker.js";
+import { eventually } from "../agent/harness.ts";
+import { nativeService } from "./native-service.ts";
 
 test("real Pi tool attaches one child and waits without acquiring execution before approval", {
   timeout: 25000,
 }, async () => {
-  const h = await harness();
+  const n = await nativeService({ approve: false });
+  const { h, agent, conversation, probe, sent, state } = n;
   try {
-    const { agent, conversation } = await setup(h);
-    const binding = await h.api<D.WorkspaceBinding>("/v1/workspaces", {
-      requestId: crypto.randomUUID(),
-      config: { kind: "computer" },
-    });
-    assert.equal(binding.status, 201, JSON.stringify(binding.body));
-    const probe = h.env.AGENT_SESSIONS.getByName(agent.agentId);
-    const state = async () =>
-      JSON.parse(await probe.toolStateJson(conversation.conversationId)) as Awaited<
-        ReturnType<TestAgentSession["toolState"]>
-      >;
-    await probe.queueTool(
-      JSON.stringify({
-        tool: "javascript",
-        arguments: { code: "return 42" },
-        workspaceId: binding.body.workspaceId,
-        baseRevision: binding.body.revision,
-        target: { kind: "backend", backendId: "cloud", generation: 1 },
-        capabilities: ["javascript"],
-      }),
-    );
-    const sent = await h.api<D.AdmissionReceipt>(
-      `/v1/conversations/${conversation.conversationId}/messages`,
-      { clientRequestId: crypto.randomUUID(), content: "request a tool", busyBehavior: "followUp" },
-    );
     assert.equal(sent.status, 202);
     const waiting = await eventually(
       state,
@@ -66,7 +42,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
     assert.ok(approvalId);
     const approval = await h.api<D.Approval>(`/v1/approvals/${approvalId}`);
     assert.equal(approval.status, 200);
-    assert.equal(approval.body.operation.tool, "javascript");
+    assert.equal(approval.body.operation.tool, "shell");
     const decision: D.OperationRequest<"decideApproval">["body"] = {
       requestId: crypto.randomUUID(),
       expectedVersion: approval.body.version,
@@ -137,10 +113,10 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
           resources: {
             agentIds: [agent.agentId],
             conversationIds: [conversation.conversationId],
-            workspaceIds: [binding.body.workspaceId],
-            executorIds: [],
-            backendIds: ["cloud"],
-            tools: ["javascript"],
+            workspaceIds: [n.workspaceId],
+            executorIds: [n.f.profile.executorId],
+            backendIds: [],
+            tools: ["shell"],
             actions: [
               "jobs.reconcile",
               "jobs.dispatch",
@@ -266,10 +242,10 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
           resources: {
             agentIds: [agent.agentId],
             conversationIds: [conversation.conversationId],
-            workspaceIds: [binding.body.workspaceId],
-            executorIds: [],
-            backendIds: ["cloud"],
-            tools: ["javascript"],
+            workspaceIds: [n.workspaceId],
+            executorIds: [n.f.profile.executorId],
+            backendIds: [],
+            tools: ["shell"],
             actions: ["jobs.reconcile"],
           },
         },
@@ -387,6 +363,6 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
     assert.equal(noExecution.body.state, "cancelled");
     assert.equal(noExecution.body.execution, undefined);
   } finally {
-    await h.close();
+    await n.close();
   }
 });

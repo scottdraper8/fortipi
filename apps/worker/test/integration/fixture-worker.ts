@@ -28,6 +28,7 @@ export class TestAgentSession extends ExistingTestAgentSession {
     const original = this.authority.control;
     const control: ControlPort = {
       fetch: (request) => original.fetch(request),
+      toolTopology: (ctx, input) => original.toolTopology(ctx, input),
       reserveCapacity: (ctx, input) => original.reserveCapacity(ctx, input),
       settleCapacity: (ctx, input) => original.settleCapacity(ctx, input),
       reserveTarget: (ctx, input) => original.reserveTarget(ctx, input),

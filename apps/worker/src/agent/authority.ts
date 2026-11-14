@@ -7,6 +7,7 @@ export type ControlPort = Pick<
   ControlPlaneRpc,
   | "fetch"
   | "authorize"
+  | "toolTopology"
   | "reserveCapacity"
   | "settleCapacity"
   | "reserveTarget"

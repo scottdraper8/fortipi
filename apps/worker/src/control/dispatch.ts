@@ -371,6 +371,15 @@ export class Dispatch {
         "Assignment lease expired",
       );
       this.executors.channel(target.executorId, target.generation);
+      const description = this.store.get<ExecutorState>("executor", target.executorId)?.description;
+      check(
+        description?.generation === target.generation &&
+          [input.tool, ...(input.approval?.capabilities ?? [])].every((capability) =>
+            description.capabilities.includes(capability),
+          ),
+        "unavailable_executor",
+        "Dispatch target no longer advertises the required capabilities",
+      );
       current.attempted = true;
       this.store.put("dispatch", identity.executionId, current);
       first = true;

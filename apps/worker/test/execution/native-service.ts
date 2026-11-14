@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { canonicalJson } from "fortipi-contract";
+import { canonicalJson, freeInfrastructurePolicy } from "fortipi-contract";
 import {
   ExecutorRuntime,
   HttpTransport,
@@ -31,6 +31,9 @@ export async function nativeService(
     main?: string;
     control?: boolean;
     reconciliation?: boolean;
+    ordinary?: boolean;
+    automatic?: boolean;
+    routingFixtureHeadroom?: boolean;
     observeHttp?: (value: {
       path: string;
       method: string;
@@ -63,8 +66,10 @@ export async function nativeService(
     await f.cleanup();
   };
   try {
-    const { agent, conversation } = await setup(h),
-      executorId = crypto.randomUUID();
+    const initial = await setup(h),
+      agent = initial.agent;
+    let conversation = initial.conversation;
+    const executorId = crypto.randomUUID();
     const issue = async (role: "client" | "executor", resources: D.ResourceScope) => {
       const result = await h.api<D.CredentialReceipt>("/v1/admin/credentials", {
         requestId: crypto.randomUUID(),
@@ -129,6 +134,40 @@ export async function nativeService(
         body: await computerBase(h, created.body, writer.token, options.computerFiles),
       };
     }
+    if (options.ordinary || options.automatic) {
+      // Controlled routing experiments may isolate selection from Free cadence.
+      // No capability/binding is added and this is not Paid execution evidence.
+      const infrastructure = structuredClone(freeInfrastructurePolicy);
+      if (options.routingFixtureHeadroom) {
+        infrastructure.profile = "verified";
+        infrastructure.accountPlan = "paid";
+        infrastructure.bounds.requestsPerPrincipalMinute = 1000;
+        infrastructure.bounds.requestsPerInstallMinute = 1000;
+      }
+      const configured = await h.api(
+        "/v1/admin/configuration",
+        {
+          requestId: crypto.randomUUID(),
+          expectedVersion: 1,
+          configuration: {
+            version: 2,
+            workspace: created.body.config,
+            execution: { kind: "native", executorId, trust: "host" },
+            routing: { kind: "prefer-local", targetIds: [executorId] },
+            models: [{ providerId: "cloudflare", modelId: "@cf/zai-org/glm-5.3-flash" }],
+            infrastructure,
+          },
+        },
+        "PATCH",
+      );
+      assert.equal(configured.status, 200, JSON.stringify(configured.body));
+      const fresh = await h.api<D.Conversation>(`/v1/agents/${agent.agentId}/conversations`, {
+        requestId: crypto.randomUUID(),
+        title: "ordinary workspace prompt",
+      });
+      assert.equal(fresh.status, 201);
+      conversation = fresh.body;
+    }
     const resources: D.ResourceScope = {
       agentIds: [agent.agentId],
       conversationIds: [conversation.conversationId],
@@ -174,7 +213,11 @@ export async function nativeService(
     const script = options.changed
       ? `import{appendFileSync,writeFileSync}from'node:fs';appendFileSync(${JSON.stringify(marker)},'start\\n');writeFileSync('native-result.txt','actual native change');process.stdout.write('changed');`
       : `import{appendFileSync,existsSync}from'node:fs';appendFileSync(${JSON.stringify(marker)},'start\\n');const timer=setInterval(()=>{if(existsSync(${JSON.stringify(gate)})){clearInterval(timer);process.stdout.write('done');}},50);`;
-    const command = nodeCommand("--input-type=module", "-e", script);
+    const command = options.ordinary
+      ? process.platform === "win32"
+        ? "Get-ChildItem -Name"
+        : "ls"
+      : nodeCommand("--input-type=module", "-e", script);
     const operationArguments = {
       command,
       ...(options.maximumToolModel ? { padding: "a".repeat(62000) } : {}),
@@ -301,16 +344,20 @@ export async function nativeService(
       arguments: operationArguments,
       workspaceId,
       baseRevision: binding.revision,
-      target: { kind: "executor", executorId, generation: f.profile.executorGeneration },
+      ...(options.automatic
+        ? {}
+        : { target: { kind: "executor", executorId, generation: f.profile.executorGeneration } }),
       capabilities: ["shell"],
     });
     if (options.maximumToolModel) {
       await probe.queueNearLimitRounds(toolInput);
       await probe.releaseCompletion();
-    } else await probe.queueTool(toolInput);
+    } else await probe.queueTool(options.ordinary ? "context" : toolInput);
     const input: D.MessageSubmit = {
       clientRequestId: crypto.randomUUID(),
-      content: "run actual native process",
+      content: options.ordinary
+        ? "List files in the configured workspace."
+        : "run actual native process",
       busyBehavior: "followUp",
     };
     const sent = await h.api<D.AdmissionReceipt>(
@@ -390,6 +437,10 @@ export async function nativeService(
       state,
       marker,
       gate,
+      disconnect: async () => {
+        stop.abort();
+        await connection;
+      },
       close,
     };
   } catch (error) {

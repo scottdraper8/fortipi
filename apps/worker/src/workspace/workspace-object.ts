@@ -2763,13 +2763,16 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
         const keys = ["revision", "agentId", "conversationId"];
         requireThat(
           [...url.searchParams.keys()].every((key) => keys.includes(key)) &&
-            keys.every(
+            ["agentId", "conversationId"].every(
               (key) =>
                 url.searchParams.getAll(key).length === 1 &&
                 /^[A-Za-z0-9_-]{1,128}$/.test(url.searchParams.get(key) ?? ""),
-            ),
+            ) &&
+            (url.searchParams.getAll("revision").length === 0 ||
+              (url.searchParams.getAll("revision").length === 1 &&
+                /^[A-Za-z0-9_-]{1,128}$/.test(url.searchParams.get("revision") ?? ""))),
           "invalid_request",
-          "Operational metadata requires an exact base and agent scope",
+          "Operational metadata requires exact agent scope and an optional base",
         );
         const metadata = await this.mutex.run(() => {
           const authority = this.current();
@@ -2797,7 +2800,8 @@ export class WorkspaceObject extends DurableObject<Env> implements WorkspaceObje
           );
           const binding = authority.binding;
           requireThat(
-            binding.revision === url.searchParams.get("revision") &&
+            (!url.searchParams.has("revision") ||
+              binding.revision === url.searchParams.get("revision")) &&
               this.revision(binding.revision).manifestHash === binding.manifestHash,
             "workspace.conflict",
             "Operational metadata base revision changed",

@@ -5,10 +5,10 @@ import type * as D from "../boundary/dto.js";
 export async function operationalMetadata(
   workspace: { fetch(request: Request): Promise<Response> },
   auth: D.AuthContext,
-  known: { agentId: string; conversationId: string; workspaceId: string; baseRevision: string },
+  known: { agentId: string; conversationId: string; workspaceId: string; baseRevision?: string },
 ): Promise<D.WorkspaceBinding> {
   const url = new URL("https://workspace.internal/__fortipi/operational-metadata");
-  url.searchParams.set("revision", known.baseRevision);
+  if (known.baseRevision !== undefined) url.searchParams.set("revision", known.baseRevision);
   url.searchParams.set("agentId", known.agentId);
   url.searchParams.set("conversationId", known.conversationId);
   const signal = AbortSignal.timeout(Math.max(1, Math.min(30000, auth.deadline - Date.now())));
@@ -30,7 +30,8 @@ export async function operationalMetadata(
   const binding: unknown = await boundedJson({ body: response.body, signal }, 65536);
   validate<D.WorkspaceBinding>("WorkspaceBinding", binding);
   check(
-    binding.workspaceId === known.workspaceId && binding.revision === known.baseRevision,
+    binding.workspaceId === known.workspaceId &&
+      (known.baseRevision === undefined || binding.revision === known.baseRevision),
     "workspace.conflict",
     "Workspace base changed",
   );
