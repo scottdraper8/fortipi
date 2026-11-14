@@ -253,6 +253,9 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    /^# \{"diagnostic":"source-native-ordering","mode":"(?:running|seed|attached|attempted|assign-ack|result|receipt)","queryBeforeReconnect":(?:true|false|null),"queryEpochMatchesSession":(?:true|false|null),"currentCPOnline":(?:true|false|null),"currentCPEpochMatchesSession":(?:true|false|null),"currentCPGenerationMatches":(?:true|false|null),"currentCPChannel":(?:true|false|null),"nativeConnected":(?:true|false),"sessionRegistered":(?:true|false)\}$/.test(
+      line,
+    ) ||
     /^# \{"diagnostic":"source-pi-open-stage","invocation":\d{1,3},"stage":"(?:last-close|session-store|factory|root|resume|turn|wake)\.(?:enter|exit)"\}$/.test(
       line,
     ) ||

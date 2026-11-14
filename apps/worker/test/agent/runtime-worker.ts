@@ -94,11 +94,17 @@ export class ControlPlane extends RealControlPlane {
     return super.settleCapacity(ctx, input);
   }
   override async queryExecution(ctx: D.AuthContext, input: D.ExecutionIdentity) {
-    const startedAt = Date.now(),
-      sockets =
-        input.target.kind === "executor"
-          ? this.ctx.getWebSockets(input.target.executorId).length
-          : 0;
+    const startedAt = Date.now();
+    let epochAtStart: number | null = null;
+    try {
+      if (input.target.kind === "executor")
+        epochAtStart =
+          this.store.get<{ epoch: number }>("executor", input.target.executorId)?.epoch ?? null;
+    } catch {
+      // An unavailable observation cannot replace the actual query outcome.
+    }
+    const sockets =
+      input.target.kind === "executor" ? this.ctx.getWebSockets(input.target.executorId).length : 0;
     const result = await super.queryExecution(ctx, input);
     if (!this.store.get("fixture", "trace-dispatch")) return result;
     const record = this.store.get<{ attempted: boolean; intent: D.DispatchIntent }>(
@@ -109,6 +115,7 @@ export class ControlPlane extends RealControlPlane {
     this.store.put("fixture-query", input.jobId, {
       startedAt,
       finishedAt: Date.now(),
+      epochAtStart,
       sockets,
       ...(result.ok
         ? {
@@ -182,6 +189,37 @@ export class ControlPlane extends RealControlPlane {
     if (path === "/__test/dispatch-trace") {
       if (request.method === "PUT") this.store.put("fixture", "trace-dispatch", true);
       const jobId = new URL(request.url).searchParams.get("job") ?? "";
+      const traceExecutorId = new URL(request.url).searchParams.get("executor"),
+        traceGeneration = Number(new URL(request.url).searchParams.get("generation"));
+      let connection: {
+        online: boolean;
+        epoch: number | null;
+        generationMatches: boolean;
+        channel: boolean;
+      } | null = null;
+      if (traceExecutorId && Number.isSafeInteger(traceGeneration) && traceGeneration > 0) {
+        try {
+          const current = this.store.get<{ epoch: number; status: string; generation: number }>(
+            "executor",
+            traceExecutorId,
+          );
+          let channel = false;
+          try {
+            this.executors.channel(traceExecutorId, traceGeneration);
+            channel = true;
+          } catch {
+            // Read-only channel validation; no exception or identity is exposed.
+          }
+          connection = {
+            online: current?.status === "online",
+            epoch: current?.epoch ?? null,
+            generationMatches: current?.generation === traceGeneration,
+            channel,
+          };
+        } catch {
+          // Keep the existing trace response if these additional facts are unavailable.
+        }
+      }
       const terminal = this.store.get<{
         executorId: string;
         generation: number;
@@ -202,6 +240,7 @@ export class ControlPlane extends RealControlPlane {
         : false;
       return Response.json({
         query: this.store.get("fixture-query", jobId) ?? null,
+        connection,
         local:
           this.store.get(
             "fixture-local",

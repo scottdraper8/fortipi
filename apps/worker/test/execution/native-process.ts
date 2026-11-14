@@ -806,10 +806,19 @@ export async function nativeProcessRecovery(
         sockets?: number;
         startedAt?: number;
         finishedAt?: number;
+        epochAtStart?: number | null;
         resultPresent?: boolean;
         lateResult?: boolean;
       };
-    }>(`/__test/dispatch-trace?job=${job.jobId}`);
+      connection?: {
+        online?: boolean;
+        epoch?: number | null;
+        generationMatches?: boolean;
+        channel?: boolean;
+      } | null;
+    }>(
+      `/__test/dispatch-trace?${new URLSearchParams({ job: job.jobId, executor: executorId, generation: "1" })}`,
+    );
     try {
       const q = controlTrace.body?.query;
       const duration =
@@ -864,6 +873,39 @@ export async function nativeProcessRecovery(
             : null,
       });
       if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+      const c = controlTrace.body?.connection,
+        session = native.session,
+        currentEpoch =
+          session?.registered &&
+          Number.isSafeInteger(session.connectionEpoch) &&
+          session.connectionEpoch > 0
+            ? session.connectionEpoch
+            : null;
+      const ordering = JSON.stringify({
+        diagnostic: "source-native-ordering",
+        mode,
+        queryBeforeReconnect:
+          Number.isSafeInteger(q?.finishedAt) &&
+          Number.isSafeInteger(reconnectedAt) &&
+          reconnectedAt > 0
+            ? q!.finishedAt! <= reconnectedAt
+            : null,
+        queryEpochMatchesSession:
+          Number.isSafeInteger(q?.epochAtStart) && currentEpoch !== null
+            ? q!.epochAtStart === currentEpoch
+            : null,
+        currentCPOnline: typeof c?.online === "boolean" ? c.online : null,
+        currentCPEpochMatchesSession:
+          Number.isSafeInteger(c?.epoch) && currentEpoch !== null
+            ? c!.epoch === currentEpoch
+            : null,
+        currentCPGenerationMatches:
+          typeof c?.generationMatches === "boolean" ? c.generationMatches : null,
+        currentCPChannel: typeof c?.channel === "boolean" ? c.channel : null,
+        nativeConnected: native.connected,
+        sessionRegistered: session?.registered === true,
+      });
+      if (sourceTestDiagnostic(`# ${ordering}`)) console.log(ordering);
     } catch {
       // Reuse the original diagnostic reads without exposing their raw payload.
     }
