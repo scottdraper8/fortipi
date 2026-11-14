@@ -253,6 +253,9 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    /^# \{"diagnostic":"source-integration-phase","event":"(?:enter|error)","phase":"(?:initial\.start|agent\.create|canary\.(?:write|crash|restart|read)|(?:before-submit|after-submit)\.(?:arm|wait|inspect|crash|lost|restart|retry|complete|repeat)|cleanup)","kind":(?:null|"(?:request-deadline|boundary-timeout|other)"),"elapsedMs":\d{1,8}\}$/.test(
+      line,
+    ) ||
     /^# \{"diagnostic":"source-runtime-startup","invocation":\d{1,3},"checkpoint":"(?:ready|readiness-end|request-failure)","stages":(?:\d|[1-9]\d|1\d{2}|2[0-4]\d|25[0-5])\}$/.test(
       line,
     ) ||

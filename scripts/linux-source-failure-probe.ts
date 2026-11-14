@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import type { ProcessResult } from "./prepare-release.ts";
 
-const baseProductSource1d = "1d1b8774bf2d09ac3a95cee44d42792ce851c092";
+const productSource = "cc2a6633f0104de00a664b9b9796b4ff441ad9ce";
 const files = [
   "apps/worker/test/agent/process-recovery.test.ts",
   "apps/worker/test/control/tickets.test.ts",
@@ -26,18 +26,16 @@ try {
   actualhead = head;
   if (head !== process.env.GITHUB_SHA || git("status", "--porcelain") !== "") throw new Error();
   const allowed = new Set([
-    "scripts/build-workspaces.ts",
-    "scripts/prepare-release.ts",
     "scripts/source-test-processes.ts",
-    "scripts/test/release/source-failure-diagnostics.test.ts",
     "scripts/linux-source-failure-probe.ts",
     ".github/workflows/linux-source-failure-probe.yml",
     "apps/worker/test/agent/process-harness.ts",
     "apps/worker/test/agent/runtime-worker.ts",
+    "apps/worker/test/integration/oracles.ts",
     "apps/worker/test/execution/native-process.ts",
   ]);
   if (
-    git("diff", "--name-only", baseProductSource1d, head)
+    git("diff", "--name-only", productSource, head)
       .split("\n")
       .some((path) => !allowed.has(path))
   )
@@ -84,6 +82,6 @@ try {
   // Keep all exceptions, child output, argv and environment private.
 }
 process.stdout.write(
-  `${JSON.stringify({ actualhead, baseProductSource1d, requestedFiles: files.length, complete, code: result?.code ?? null, timedOut: result?.timedOut ?? false })}\n`,
+  `${JSON.stringify({ actualhead, productSource, requestedFiles: files.length, complete, code: result?.code ?? null, timedOut: result?.timedOut ?? false })}\n`,
 );
 process.exitCode = !complete || result?.timedOut ? 1 : (result?.code ?? 1);

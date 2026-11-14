@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { provision } from "./fixture-state.ts";
 import { poll, type Runtime, type RuntimeOptions, start } from "./runtime.ts";
@@ -14,14 +15,55 @@ interface State {
   }[];
 }
 export async function admissionRecovery(supplied?: Runtime): Promise<Record<string, unknown>> {
-  const runtime = supplied ?? (await start());
+  const began = performance.now();
+  let phase = "initial.start";
+  const emit = (event: "enter" | "error", error?: unknown) => {
+    try {
+      const kind =
+        event === "enter"
+          ? null
+          : error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)
+            ? "request-deadline"
+            : error instanceof Error &&
+                error.message ===
+                  "Expected durable boundary did not become observable before its deadline"
+              ? "boundary-timeout"
+              : "other";
+      const line = JSON.stringify({
+        diagnostic: "source-integration-phase",
+        event,
+        phase,
+        kind,
+        elapsedMs: Math.round(performance.now() - began),
+      });
+      if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+    } catch {
+      // Only fixed classifications are observable; diagnostics cannot replace failures.
+    }
+  };
+  const mark = (next: string) => {
+    phase = next;
+    emit("enter");
+  };
+  emit("enter");
+  const runtime =
+    supplied ??
+    (await start().catch((error) => {
+      emit("error", error);
+      throw error;
+    }));
   try {
+    mark("agent.create");
     const fixture = await provision(runtime);
     const probe = `/__test/agents/${fixture.agent.agentId}`;
     const canary = { seed: 1010, nonce: randomUUID() };
+    mark("canary.write");
     assert.deepEqual((await runtime.api(`${probe}/canary`, canary, "PUT")).body, canary);
+    mark("canary.crash");
     await runtime.stopAbruptly();
+    mark("canary.restart");
     await runtime.reopenSameStorage();
+    mark("canary.read");
     assert.deepEqual(
       (await runtime.api(`${probe}/canary`)).body,
       canary,
@@ -36,19 +78,26 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
         content: `seed1010-${point}`,
         busyBehavior: "followUp",
       };
+      mark(`${point}.arm`);
       const previous = (await runtime.api<State>(`${probe}/state`)).body.admissions.map(
         (a) => a.operationId,
       );
       assert.equal((await runtime.api(`${probe}/fault`, point)).status, 200);
       const lost = runtime.api(path, input, "POST", fixture.client.token).catch(() => undefined);
+      mark(`${point}.wait`);
       await runtime.barrier(fixture.agent.agentId, point);
+      mark(`${point}.inspect`);
       const before = (await runtime.api<State>(`${probe}/state`)).body;
       const identity = before.admissions.find((a) => !previous.includes(a.operationId));
       assert.ok(identity);
       assert.equal(identity.receipt, null);
+      mark(`${point}.crash`);
       await runtime.stopAbruptly();
+      mark(`${point}.lost`);
       await lost;
+      mark(`${point}.restart`);
       await runtime.reopenSameStorage();
+      mark(`${point}.retry`);
       const accepted = await runtime.api<D.AdmissionReceipt>(
         path,
         input,
@@ -59,6 +108,7 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
       assert.equal(accepted.body.operationId, identity.operationId);
       assert.equal(accepted.body.messageId, identity.messageId);
       assert.equal(accepted.body.taskId, identity.taskId);
+      mark(`${point}.complete`);
       const projection = await poll(
         async () =>
           (
@@ -75,6 +125,7 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
         projection.messages.filter((m) => m.role === "user" && m.content === input.content).length,
         1,
       );
+      mark(`${point}.inspect`);
       const actualPi = (
         await runtime.api<{ entries: { kind: string; text: string }[] }>(
           `${probe}/inspect?cid=${cid}`,
@@ -85,6 +136,7 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
         1,
         "Stable admission must leave one actual Pi input after runtime death",
       );
+      mark(`${point}.repeat`);
       const duplicates = await Promise.all([
         runtime.api(path, input, "POST", fixture.client.token),
         runtime.api(path, input, "POST", fixture.client.token),
@@ -108,7 +160,11 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
       identicalConcurrentReceipts: true,
       changedPayloadStatus: 409,
     };
+  } catch (error) {
+    emit("error", error);
+    throw error;
   } finally {
+    mark("cleanup");
     if (!supplied) await runtime.dispose();
   }
 }
