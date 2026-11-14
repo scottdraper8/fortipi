@@ -22,26 +22,14 @@ import { nativeContext, nativeProof } from "../../src/execution/native-proof.js"
 import { FreshJobDoc } from "../../src/execution/new-job.js";
 import { defaultModel } from "../../src/models/factory.js";
 import { configuredModel } from "../../src/models/selection.js";
+import type { ProcessArm, ProcessWitness } from "./process-observation.ts";
 import { samplingOracle } from "./sampling-oracle.js";
 
 export { WorkspaceProxy } from "@cloudflare/computer";
 export { LinuxContainerHost } from "../../src/container/linux-container-host.js";
+export type { ProcessArm, ProcessWitness } from "./process-observation.ts";
 export { StorageGuardProbe } from "./storage-guard-worker.js";
-export interface ProcessArm {
-  runId: string;
-  agentId: string;
-  point: "before-submit" | "after-submit";
-  armId: string;
-  generation: string;
-}
-export interface ProcessWitness extends ProcessArm {
-  admissions: {
-    operationId: string;
-    messageId: string;
-    taskId: string;
-    receipt: D.AdmissionReceipt | null;
-  }[];
-}
+
 type ProcessFault = ProcessArm & { fault?: "hold" | "reject" };
 // Only the native executor-first fixture build enables this startup ordering barrier.
 const nativeExecutorFirstGate = false;

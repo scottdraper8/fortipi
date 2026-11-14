@@ -30,7 +30,7 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
     const cid = fixture.conversations[0]!.conversationId;
     const path = `/v1/conversations/${cid}/messages`;
     const points: string[] = [];
-    for (const point of ["before-submit", "after-submit"]) {
+    for (const point of ["before-submit", "after-submit"] as const) {
       const input = {
         clientRequestId: randomUUID(),
         content: `seed1010-${point}`,
@@ -39,16 +39,16 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
       const previous = (await runtime.api<State>(`${probe}/barrier`)).body.admissions.map(
         (a) => a.operationId,
       );
-      assert.equal((await runtime.api(`${probe}/fault`, point)).status, 200);
+      const observation = await runtime.armBarrier(fixture.agent.agentId, point);
       const lost = runtime.api(path, input, "POST", fixture.client.token).catch(() => undefined);
-      await runtime.barrier(fixture.agent.agentId, point);
-      const before = (await runtime.api<State>(`${probe}/barrier`)).body;
-      const identity = before.admissions.find((a) => !previous.includes(a.operationId));
-      assert.ok(identity);
-      assert.equal(identity.receipt, null);
+      await poll(async () => observation.cue(), Boolean);
       await runtime.stopAbruptly();
       await lost;
       await runtime.reopenSameStorage();
+      const before = await runtime.readWitness(observation.arm);
+      const identity = before.admissions.find((a) => !previous.includes(a.operationId));
+      assert.ok(identity);
+      assert.equal(identity.receipt, null);
       const accepted = await runtime.api<D.AdmissionReceipt>(
         path,
         input,

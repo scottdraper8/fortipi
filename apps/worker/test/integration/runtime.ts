@@ -6,11 +6,18 @@ import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { freeInfrastructurePolicy } from "fortipi-contract";
 import {
   offlineWranglerEnvironment,
   verifyOfflineWranglerAuth,
 } from "../../../../tests/clients/offline-wrangler.ts";
+import {
+  armProcessBarrier,
+  type ProcessArm,
+  processCueMatches,
+  readProcessWitness,
+} from "../agent/process-observation.ts";
 import { killRuntime } from "./runtime-child.ts";
 
 const repository = resolve(import.meta.dirname, "../../../..");
@@ -121,9 +128,17 @@ export async function start(options: RuntimeOptions = {}) {
   const require = createRequire(join(repository, "apps/worker/package.json"));
   const manifestPath = require.resolve("wrangler/package.json");
   const wrangler = options.wranglerBin ?? join(dirname(manifestPath), "bin/wrangler.js");
+  const runId = randomUUID();
+  const armLaunches = new WeakMap<ProcessArm, number>();
   let child: ChildProcess | undefined;
+  let invocation = 0,
+    expectedArm: ProcessArm | undefined,
+    cueSeen = false;
   async function launch() {
     assert.ok(!child, "Stop the previous runtime before reopening identical storage");
+    invocation++;
+    expectedArm = undefined;
+    cueSeen = false;
     child = spawn(
       process.execPath,
       [
@@ -159,10 +174,45 @@ export async function start(options: RuntimeOptions = {}) {
         },
       },
     );
-    // Never retain raw runtime output: it may contain synthetic role values or
-    // request payloads. The evidence contains only bounded public observations.
-    child.stdout?.resume();
-    child.stderr?.resume();
+    const current = child,
+      launched = invocation;
+    // Parse bounded private cue lines only; retain a match boolean, never logs.
+    for (const stream of [child.stdout, child.stderr]) {
+      const decoder = new StringDecoder("utf8");
+      const prefix = "FORTIPI_PROCESS_CUE ";
+      let partial = "",
+        dropping = false;
+      let lineArm: ProcessArm | undefined;
+      stream?.on("data", (data: Buffer) => {
+        if (child !== current || invocation !== launched) return;
+        for (const character of decoder.write(data)) {
+          if (character === "\n") {
+            if (
+              lineArm &&
+              lineArm === expectedArm &&
+              !dropping &&
+              processCueMatches(partial.replace(/\r$/, ""), lineArm)
+            )
+              cueSeen = true;
+            partial = "";
+            dropping = false;
+            lineArm = undefined;
+          } else if (!dropping) {
+            if (!partial) lineArm = expectedArm;
+            if (!lineArm || lineArm !== expectedArm || partial.length + character.length > 512) {
+              partial = "";
+              dropping = true;
+            } else {
+              partial += character;
+              if (partial.length <= prefix.length && !prefix.startsWith(partial)) {
+                partial = "";
+                dropping = true;
+              }
+            }
+          }
+        }
+      });
+    }
     let spawnError = false;
     child.once("error", () => {
       spawnError = true;
@@ -231,6 +281,48 @@ export async function start(options: RuntimeOptions = {}) {
     api,
     stopAbruptly: () => stop(true),
     reopenSameStorage: launch,
+    async armBarrier(agentId: string, point: ProcessArm["point"], fault?: "hold" | "reject") {
+      const current = child,
+        launched = invocation;
+      assert.ok(current);
+      expectedArm = undefined;
+      cueSeen = false;
+      const arm = await armProcessBarrier(api, runId, agentId, point, fault);
+      assert.equal(child, current);
+      assert.equal(invocation, launched);
+      expectedArm = arm;
+      armLaunches.set(arm, launched);
+      let consumed = false;
+      return {
+        arm,
+        cue: () => {
+          if (
+            consumed ||
+            child !== current ||
+            invocation !== launched ||
+            expectedArm !== arm ||
+            !cueSeen
+          )
+            return false;
+          consumed = true;
+          cueSeen = false;
+          return true;
+        },
+      };
+    },
+    async readWitness(arm: ProcessArm) {
+      const current = child,
+        launched = invocation,
+        armed = armLaunches.get(arm);
+      assert.ok(
+        current && armed !== undefined && launched > armed,
+        "Historical proof requires reopening the runtime that armed the boundary",
+      );
+      const witness = await readProcessWitness(api, arm);
+      assert.equal(child, current);
+      assert.equal(invocation, launched);
+      return witness;
+    },
     barrier: async (agentId: string, name: string) =>
       poll(
         async () =>
