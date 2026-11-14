@@ -26,9 +26,17 @@ export async function poll<T>(
   while (Date.now() < end) {
     const value = await read();
     if (ready(value)) return value;
-    observePause?.("pause.enter");
+    try {
+      observePause?.("pause.enter");
+    } catch {
+      // Diagnostic callbacks cannot replace the original polling outcome.
+    }
     await new Promise<void>((accept) => setTimeout(accept, 25));
-    observePause?.("pause.exit");
+    try {
+      observePause?.("pause.exit");
+    } catch {
+      // Diagnostic callbacks cannot replace the original polling outcome.
+    }
   }
   throw new Error("Expected durable boundary did not become observable before its deadline");
 }
