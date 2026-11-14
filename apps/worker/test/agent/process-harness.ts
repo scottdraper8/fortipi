@@ -9,7 +9,10 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
-import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
+import {
+  sourceRecoveryPath,
+  sourceTestDiagnostic,
+} from "../../../../scripts/source-test-processes.ts";
 import {
   armProcessBarrier,
   type ProcessArm,
@@ -21,6 +24,8 @@ import {
 const pause = (ms: number) => new Promise<void>((accept) => setTimeout(accept, ms));
 export const processBootstrap = "synthetic-process-thread5-bootstrap-000000000000";
 export { processCueMatches } from "./process-observation.ts";
+
+let harnessOrdinal = 0;
 
 interface RequestFailure {
   operation: "state" | "barrier" | "submission" | "other";
@@ -46,6 +51,8 @@ async function freePort() {
 }
 /** A real standalone Wrangler/workerd process. createTestHarness cannot persist. */
 export async function processHarness(main = resolve("apps/worker/test/agent/runtime-worker.ts")) {
+  const sourcePath = sourceRecoveryPath();
+  const currentHarness = ++harnessOrdinal;
   const runId = randomUUID();
   const directory = await mkdtemp(join(tmpdir(), "fortipi-process-"));
   const port = await freePort(),
@@ -194,6 +201,8 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       try {
         const code = child?.exitCode,
           signal = child?.signalCode;
+        const announced =
+          /\bReady on\s+http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})(?=\s|$)/.exec(output);
         const line = JSON.stringify({
           diagnostic: "source-recovery-start",
           event,
@@ -218,6 +227,9 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
             : output.includes("Starting local server")
               ? "starting-log"
               : "unobserved",
+          sourcePath,
+          harnessOrdinal: currentHarness,
+          announcedPortMatches: announced ? Number(announced[1]) === port : null,
         });
         if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
       } catch {

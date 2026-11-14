@@ -9,7 +9,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { observeCandidateDiagnostics, observeSourceTestFailures } from "../../build-workspaces.ts";
-import { sourceTestDiagnostic } from "../../source-test-processes.ts";
+import { sourceRecoveryPath, sourceTestDiagnostic } from "../../source-test-processes.ts";
 
 const reviewedName =
   "SIGKILL/reopen preserves canary, allocation provenance and stable accepted input";
@@ -156,5 +156,37 @@ test("bounded TAP and closed-record validation discard unknown/private fields an
     false,
   );
   assert.equal(sourceTestDiagnostic(JSON.stringify(safe)), true);
+  const startup = {
+    diagnostic: "source-recovery-start",
+    event: "ready",
+    invocation: 1,
+    elapsedMs: 100,
+    attempts: 1,
+    deadlines: 0,
+    transports: 0,
+    status: 200,
+    exitCode: null,
+    signal: null,
+    logStage: "ready-log",
+  };
+  assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(startup)}`), true);
+  const path = "apps/worker/test/agent/process-recovery.test.ts";
+  assert.equal(sourceRecoveryPath(path), path);
+  assert.equal(sourceRecoveryPath(join(tmpdir(), `${canary}.test.ts`)), null);
+  const attributed = {
+    ...startup,
+    sourcePath: path,
+    harnessOrdinal: 1,
+    announcedPortMatches: true,
+  };
+  assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(attributed)}`), true);
+  for (const changed of [
+    { ...attributed, sourcePath: canary },
+    { ...attributed, sourcePath: "apps/worker/test/../private.test.ts" },
+    { ...attributed, announcedPortMatches: canary },
+    { ...attributed, harnessOrdinal: canary },
+    { ...attributed, port: 12345 },
+  ])
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
   assert.ok(!output.join("").includes(canary));
 });

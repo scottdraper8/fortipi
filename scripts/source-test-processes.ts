@@ -8,6 +8,14 @@ import { fileURLToPath } from "node:url";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const testPath =
   /^(?:packages\/fortipi-[a-z]+\/test|apps\/worker\/test|scripts\/test\/release|tests\/clients)\/[A-Za-z0-9._/-]+\.(?:test|spec)\.ts$/;
+
+/** Repository test paths only; callers outside these roots stay unidentified. */
+export function sourceRecoveryPath(argument = process.argv[1]): string | null {
+  if (!argument) return null;
+  const path = relative(root, resolve(argument)).replaceAll("\\", "/");
+  return testPath.test(path) && !path.split("/").includes("..") ? path : null;
+}
+
 const selected = new Map<string, string>();
 for (const argument of process.argv.slice(1)) {
   const path = relative(root, argument).replaceAll("\\", "/");
@@ -251,9 +259,10 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
-    /^# \{"diagnostic":"source-recovery-start","event":"(?:spawned|probe|ready|end)","invocation":\d{1,3},"elapsedMs":\d{1,8},"attempts":\d{1,3},"deadlines":\d{1,3},"transports":\d{1,3},"status":(?:null|[1-5]\d{2}),"exitCode":(?:null|-?\d{1,3}),"signal":(?:null|"(?:SIG[A-Z0-9]{1,8}|other)"),"logStage":"(?:ready-log|starting-log|unobserved)"\}$/.test(
+    (/^# \{"diagnostic":"source-recovery-start","event":"(?:spawned|probe|ready|end)","invocation":\d{1,3},"elapsedMs":\d{1,8},"attempts":\d{1,3},"deadlines":\d{1,3},"transports":\d{1,3},"status":(?:null|[1-5]\d{2}),"exitCode":(?:null|-?\d{1,3}),"signal":(?:null|"(?:SIG[A-Z0-9]{1,8}|other)"),"logStage":"(?:ready-log|starting-log|unobserved)"(?:,"sourcePath":(?:null|"(?:packages\/fortipi-[a-z]+\/test|apps\/worker\/test|scripts\/test\/release|tests\/clients)\/[A-Za-z0-9._/-]+\.(?:test|spec)\.ts"),"harnessOrdinal":\d{1,6},"announcedPortMatches":(?:true|false|null))?\}$/.test(
       line,
-    ) ||
+    ) &&
+      !line.includes("../")) ||
     /^# \{"diagnostic":"source-recovery-phase","event":"(?:enter|abort)","phase":"(?:initial\.start|agent\.create|canary\.(?:write|crash|restart|read)|allocation\.(?:initial|arm|wait|crash|lost|restart|retry)|(?:before-submit|after-submit)\.(?:arm|wait|crash|lost|restart|witness|retry|complete|inspect|repeat)|cleanup)","elapsedMs":\d{1,8},"phaseMs":\d{1,8}\}$/.test(
       line,
     )
