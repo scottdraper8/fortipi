@@ -34,6 +34,14 @@ const stages = [
   "wake.exit",
 ] as const;
 const mains = { agent: "agent-runtime.mjs", integration: "integration-fixture.mjs" } as const;
+const barrierPhases = [
+  "forward.enter",
+  "entered",
+  "page.enter",
+  "page.exit",
+  "marker.enter",
+  "marker.exit",
+] as const;
 const enabled = () => process.env.FORTIPI_SOURCE_PI_OPEN_DIAGNOSTICS === "1";
 
 /** Explicit existing caller mains take precedence over this test-only default. */
@@ -151,10 +159,17 @@ export function observePiOpenStages(
     const line = partial.endsWith("\r") ? partial.slice(0, -1) : partial;
     if (!dropping && records < 1024) {
       const stage = stages.find((tag) => line === `FORTIPI_PI_OPEN_STAGE ${tag}`);
-      if (stage) {
+      const phase = barrierPhases.find((tag) => line === `FORTIPI_INTEGRATION_BARRIER ${tag}`);
+      if (stage || phase) {
         records++;
         try {
-          emit(JSON.stringify({ diagnostic: "source-pi-open-stage", invocation, stage }));
+          emit(
+            JSON.stringify(
+              stage
+                ? { diagnostic: "source-pi-open-stage", invocation, stage }
+                : { diagnostic: "source-integration-barrier", invocation, phase },
+            ),
+          );
         } catch {
           /* Diagnostic delivery cannot change the child result. */
         }

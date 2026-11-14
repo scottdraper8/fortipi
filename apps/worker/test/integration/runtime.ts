@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { freeInfrastructurePolicy } from "fortipi-contract";
 import { diagnosticPiMain, observePiOpenStages } from "../../../../scripts/source-pi-open-probe.ts";
+import { observeSourceProcessCompute } from "../../../../scripts/source-test-processes.ts";
 import {
   offlineWranglerEnvironment,
   verifyOfflineWranglerAuth,
@@ -213,14 +214,20 @@ export async function start(options: RuntimeOptions = {}) {
     token = admin,
   ) => {
     assert.ok(path.startsWith("/") && !path.startsWith("//"));
-    const response = await fetch(`${endpoint}${path}`, {
-      method,
-      redirect: "error",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(30000),
-    });
-    return { status: response.status, body: (await response.json()) as T };
+    const signal = AbortSignal.timeout(30000);
+    try {
+      const response = await fetch(`${endpoint}${path}`, {
+        method,
+        redirect: "error",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal,
+      });
+      return { status: response.status, body: (await response.json()) as T };
+    } catch (error) {
+      if (signal.aborted && child?.pid) observeSourceProcessCompute(child.pid, "request-deadline");
+      throw error;
+    }
   };
   try {
     await verifyOfflineWranglerAuth(wrangler);

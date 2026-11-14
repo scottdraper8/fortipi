@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 // Disposable local composition only. These existing adapters retain the real
 // PiHarness, queued SQLite, application authority and Computer implementation.
 // The faux model and acknowledged barriers never enter installed/live assets.
@@ -20,11 +21,50 @@ export {
   StorageGuardProbe,
   WorkspaceProxy,
 } from "../agent/runtime-worker.ts";
+
+type BarrierPhase =
+  | "forward.enter"
+  | "entered"
+  | "page.enter"
+  | "page.exit"
+  | "marker.enter"
+  | "marker.exit";
+function observeBarrier(phase: BarrierPhase, seen: Set<BarrierPhase>): void {
+  if (seen.has(phase)) return;
+  seen.add(phase);
+  try {
+    console.log(`FORTIPI_INTEGRATION_BARRIER ${phase}`);
+  } catch {
+    /* An observation cannot replace the original result or rejection. */
+  }
+}
 export class TestAgentSession extends ExistingTestAgentSession {
+  #barrierReads = new AsyncLocalStorage<Set<BarrierPhase>>();
   #authorityGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
   #invalidationGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    const page = this.store.page.bind(this.store),
+      get = this.store.get.bind(this.store);
+    this.store.page = <T>(...input: Parameters<typeof page>) => {
+      const seen = this.#barrierReads.getStore();
+      if (input[0] !== "admission" || !seen) return page<T>(...input);
+      observeBarrier("page.enter", seen);
+      return page<T>(...input).then((value) => {
+        observeBarrier("page.exit", seen);
+        return value;
+      });
+    };
+    this.store.get = <T>(...input: Parameters<typeof get>) => {
+      const seen = this.#barrierReads.getStore();
+      if (input[0] !== "fixture" || input[1] !== "barrier" || !seen) return get<T>(...input);
+      observeBarrier("marker.enter", seen);
+      return get<T>(...input).then((value) => {
+        observeBarrier("marker.exit", seen);
+        return value;
+      });
+    };
+
     const original = this.authority.control;
     const control: ControlPort = {
       fetch: (request) => original.fetch(request),
@@ -75,6 +115,16 @@ export class TestAgentSession extends ExistingTestAgentSession {
     return super.invalidateGeneration(ctx, input);
   }
   override async onRequest(request: Request) {
+    if (
+      request.method === "GET" &&
+      new URL(request.url).pathname === "/__test/barrier" &&
+      request.headers.get("Authorization") === `Bearer ${this.env.FORTIPI_ADMIN_TOKEN}`
+    ) {
+      const seen = new Set<BarrierPhase>();
+      observeBarrier("entered", seen);
+      return this.#barrierReads.run(seen, () => super.onRequest(request));
+    }
+
     if (new URL(request.url).pathname === "/__integration/control") {
       if (request.headers.get("Authorization") !== `Bearer ${this.env.FORTIPI_ADMIN_TOKEN}`)
         return new Response(null, { status: 403 });
@@ -221,6 +271,12 @@ export default {
       url.pathname = "/__integration/control";
       return env.AGENT_SESSIONS.getByName(actor[1]!).fetch(new Request(url, request));
     }
+    if (
+      request.method === "GET" &&
+      /^\/__test\/agents\/[A-Za-z0-9_-]+\/barrier$/.test(new URL(request.url).pathname) &&
+      request.headers.get("Authorization") === `Bearer ${env.FORTIPI_ADMIN_TOKEN}`
+    )
+      observeBarrier("forward.enter", new Set<BarrierPhase>());
     return worker.fetch(request, env);
   },
 } satisfies ExportedHandler<Env>;

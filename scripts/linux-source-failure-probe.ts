@@ -30,6 +30,7 @@ try {
     "apps/worker/test/integration/oracles.ts",
     "apps/worker/test/execution/native-process.ts",
     "apps/worker/test/integration/runtime.ts",
+    "apps/worker/test/integration/fixture-worker.ts",
     "scripts/source-pi-open-probe.ts",
   ]);
   if (
