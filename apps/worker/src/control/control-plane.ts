@@ -22,6 +22,7 @@ import { Revocations } from "./revocation.js";
 import { readStorageSample } from "./storage-budget.js";
 import { ControlError, check, fail, id, json, outcome, Store, same } from "./store.js";
 import { type ExecutorState, Tickets } from "./tickets.js";
+import { currentToolContext } from "./tool-context.js";
 import { WorkspaceLeases } from "./workspace-leases.js";
 
 export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc {
@@ -177,6 +178,14 @@ export class ControlPlane extends DurableObject<Env> implements ControlPlaneRpc 
             grantVersion: input.principal.grantVersion,
           }
         : { allowed: false, reason: "scope" },
+    );
+  }
+  async toolTopology(
+    ctx: D.AuthContext,
+    input: D.ToolContextRequest,
+  ): Promise<D.Outcome<D.CurrentToolContext>> {
+    return this.#call(ctx, () =>
+      currentToolContext(this.directory, this.executors, this.tickets, this.env, ctx, input),
     );
   }
   async registerAuthorityRecipient(

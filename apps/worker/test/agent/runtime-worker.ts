@@ -331,7 +331,7 @@ export class TestAgentSession extends AgentSession {
   async releaseNativeCommit() {
     this.#nativeCommitRelease?.();
   }
-  private faux: FauxProviderHandle | undefined;
+  protected faux: FauxProviderHandle | undefined;
   private diagnostic = "";
   private readonly completion: ReturnType<typeof Promise.withResolvers<void>>;
   private readonly oldRepair = Promise.withResolvers<void>();
@@ -1336,6 +1336,7 @@ export class TestAgentSession extends AgentSession {
       const original = this.authority.control;
       const control: ControlPort = {
         fetch: (request) => original.fetch(request),
+        toolTopology: (ctx, input) => original.toolTopology(ctx, input),
         authorize: (input) => original.authorize(input),
         reserveCapacity: (ctx, input) => original.reserveCapacity(ctx, input),
         settleCapacity: (ctx, input) => original.settleCapacity(ctx, input),

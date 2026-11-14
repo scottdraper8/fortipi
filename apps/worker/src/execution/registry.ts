@@ -17,12 +17,15 @@ import { operationDigest } from "fortipi-contract";
 import type { Admission, Conversations } from "../agent/conversations.js";
 import type { Projection } from "../agent/projection.js";
 import { repairRetryAt } from "../agent/repair-retry.js";
-import { check, digest, resourceId, ServiceError, scope, unwrap } from "../api/common.js";
+import { check, digest, resourceId, ServiceError, same, scope, unwrap } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
+import { currentToolContext } from "./context.js";
 import type { Dispatch } from "./dispatch.js";
 import { isTerminal, type Jobs } from "./jobs.js";
 import { operationalMetadata } from "./metadata.js";
+import { configuredRouting } from "./routing.js";
+import { acceptsArguments, argumentContracts } from "./tool-arguments.js";
 
 export const ChildDoc = defineDoc({
   kind: "fortipi.dispatch-child",
@@ -36,7 +39,16 @@ const parameters = {
   additionalProperties: false,
   properties: {
     tool: { type: "string", minLength: 1, maxLength: 128 },
-    arguments: { type: "object", additionalProperties: true },
+    arguments: {
+      type: "object",
+      additionalProperties: true,
+      description: Object.values(argumentContracts).join("\n"),
+      properties: {
+        command: { type: "string", maxLength: 65536 },
+        source: { type: "string", maxLength: 65536 },
+        input: {},
+      },
+    },
     workspaceId: { type: "string", minLength: 1, maxLength: 128 },
     baseRevision: { type: "string", minLength: 1, maxLength: 128 },
     target: {
@@ -65,17 +77,34 @@ const parameters = {
     },
     capabilities: { type: "array", items: { type: "string" }, maxItems: 100 },
   },
-  required: ["tool", "arguments", "workspaceId", "baseRevision", "target", "capabilities"],
+  required: ["tool", "arguments", "workspaceId", "baseRevision", "capabilities"],
 } as const;
 interface ToolInput {
   tool: string;
   arguments: D.JsonObject;
   workspaceId: string;
   baseRevision: string;
-  target: D.BackendRef;
+  target?: D.BackendRef;
   capabilities: string[];
 }
 const validTool = new Ajv({ strict: true }).compile<ToolInput>(parameters);
+const contextParameters = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    tool: parameters.properties.tool,
+    capabilities: parameters.properties.capabilities,
+    workspaceId: parameters.properties.workspaceId,
+    pageToken: { type: "string", maxLength: 1024 },
+    executorPageToken: { type: "string", maxLength: 1024 },
+    limit: { type: "integer", minimum: 1, maximum: 100 },
+    target: parameters.properties.target,
+  },
+  required: ["tool", "capabilities"],
+} as const;
+const validContext = new Ajv({ strict: true }).compile<
+  Omit<D.ToolContextRequest, "agentId" | "conversationId">
+>(contextParameters);
 interface DispatchResult {
   output: string;
   isError: boolean;
@@ -91,6 +120,8 @@ interface Intent {
   auth: D.AuthContext;
   conversationId: string;
   taskId: string;
+  /** Resolved once, before child creation. Older retained intents recover it from their existing job. */
+  target?: D.BackendRef;
 }
 export function buildRegistry(deps: {
   jobs: Jobs;
@@ -211,10 +242,37 @@ export function buildRegistry(deps: {
     },
   });
   deps.dispatchReady?.(dispatchTask);
+  const contextTool = defineTool({
+    name: "fortipi_context",
+    description:
+      "Discover current scoped workspaces, revisions, eligible targets and their argument contracts for shell or javascript. Follow nextPageToken for workspace pages and nextExecutorPageToken for target pages, preserving the other token; workspaceId narrows a known workspace and limit lowers page size. Use the configured workspace when unambiguous, otherwise ask which to use. Facts confer no authority; dispatch rechecks them. No physical roots or credentials are returned.",
+    parameters: contextParameters,
+    replay: "safe",
+    execute: async (input, api, context) => {
+      check(validContext(input), "invalid_request", "Invalid context request");
+      const owner = await initiatingAdmission(api, context, conversations);
+      const value = await currentToolContext(
+        jobs.authority,
+        { ...owner.auth, deadline: Date.now() + 30000 },
+        {
+          agentId: jobs.authority.agentId,
+          conversationId: owner.conversationId,
+          tool: input.tool as string,
+          capabilities: input.capabilities as string[],
+          ...(typeof input.workspaceId === "string" ? { workspaceId: input.workspaceId } : {}),
+          ...(input.pageToken ? { pageToken: input.pageToken } : {}),
+          ...(input.executorPageToken ? { executorPageToken: input.executorPageToken } : {}),
+          ...(input.limit ? { limit: input.limit } : {}),
+          ...(input.target ? { target: input.target } : {}),
+        },
+      );
+      return { output: [{ type: "text" as const, text: JSON.stringify(value) }] };
+    },
+  });
   const tool = defineTool({
     name: "fortipi_dispatch",
     description:
-      "Request an exact authorized workspace tool operation. Host execution requires independent executor consent. Mutations wait for approval; uncertain dispatch is queried, never rerun.",
+      "Request an authorized workspace operation. First use fortipi_context for workspaceId/baseRevision; omit target to use configured routing, or pass a discovered target for an explicit override. Host execution requires independent executor consent. Mutations wait for approval; uncertain dispatch is queried, never rerun.",
     parameters,
     replay: "safe",
     execute: async (input, api, context) => {
@@ -247,7 +305,88 @@ export function buildRegistry(deps: {
           return candidate;
         });
       }
-      const target = args.target as D.BackendRef;
+      const existing = await jobs.store.get<{ jobId: string; digest: string }>("job-task", key);
+      if (!intent.target) {
+        let target: D.BackendRef;
+        if (existing) target = (await jobs.state(existing.jobId)).operation.target;
+        else {
+          const request: D.ToolContextRequest = {
+            agentId: jobs.authority.agentId,
+            conversationId: intent.conversationId,
+            workspaceId: args.workspaceId,
+            tool: args.tool,
+            capabilities: args.capabilities,
+            ...(args.target ? { target: args.target } : {}),
+          };
+          const discoveryAuth = { ...intent.auth, deadline: Date.now() + 30000 };
+          const cursors = new Set<string>();
+          let preference: D.Configuration["routing"] | undefined;
+          let best: D.CurrentToolContext["targets"][number] | undefined;
+          do {
+            const topology = await currentToolContext(jobs.authority, discoveryAuth, request);
+            if (preference)
+              check(
+                same(preference, topology.routing),
+                "conflict",
+                "Routing changed while selecting a target",
+              );
+            preference = topology.routing;
+            const workspace = topology.workspaces.find((w) => w.workspaceId === args.workspaceId);
+            if (workspace) {
+              check(
+                workspace.baseRevision === args.baseRevision,
+                "workspace.conflict",
+                "Workspace base changed",
+              );
+              const members = new Set(workspace.targets.map((ref) => JSON.stringify(ref)));
+              const candidates = topology.targets.filter(
+                (candidate) =>
+                  members.has(JSON.stringify(candidate.target)) &&
+                  acceptsArguments(candidate.argumentFormat, args.arguments),
+              );
+              if (best) candidates.push(best);
+              const selected = configuredRouting.select({
+                operation: args,
+                preference: topology.routing,
+                ...(args.target ? { explicitTarget: args.target } : {}),
+                eligible: candidates.map((candidate) => ({
+                  ...candidate,
+                  grants: intent!.auth.grants,
+                  reachable: true,
+                  revisionCompatible: true,
+                })),
+              });
+              if (selected.kind === "selected")
+                best = candidates.find((c) => same(c.target, selected.target));
+            }
+            const cursor = topology.nextExecutorPageToken;
+            if (!cursor) break;
+            check(!cursors.has(cursor), "conflict", "Target discovery cursor did not advance");
+            cursors.add(cursor);
+            request.executorPageToken = cursor;
+          } while (request.executorPageToken !== undefined);
+          check(
+            best,
+            "unavailable_executor",
+            "No currently eligible configured target accepts these tool arguments",
+          );
+          target = best.target;
+        }
+        intent = await jobs.store.transaction(async (tx) => {
+          const current = await jobs.store.get<Intent>("tool-intent", key, tx);
+          check(
+            current && current.argumentDigest === argumentDigest,
+            "conflict",
+            "Tool intent changed",
+          );
+          if (current.target) return current;
+          const resolved = { ...current, target };
+          await jobs.store.put("tool-intent", key, resolved, tx);
+          return resolved;
+        });
+      }
+      const target = intent.target;
+      check(target, "conflict", "Resolved tool target missing");
       const arguments_ = args.arguments as D.JsonObject;
       const auth = { ...intent.auth, deadline: Date.now() + 30000 };
       const resources = scope({
@@ -301,7 +440,6 @@ export function buildRegistry(deps: {
         grantVersion: auth.grantVersion,
         expiresAt: intent.deadline,
       };
-      const existing = await jobs.store.get<{ jobId: string; digest: string }>("job-task", key);
       if (!existing) {
         await jobs.authority.physical.beforeGrowth(auth, resources);
         const capacity = unwrap(
@@ -434,7 +572,7 @@ export function buildRegistry(deps: {
   const registry = createRegistry();
   registry.install({
     name: "fortipi",
-    tools: [tool],
+    tools: [contextTool, tool],
     tasks: [dispatchTask, projectTask],
     hooks: [
       hook(GenerationTask, {
