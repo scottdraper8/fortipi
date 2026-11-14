@@ -382,7 +382,7 @@ test("native reconnect replays durable deliveries and answers server queries wit
   }
 });
 
-test("local-stage status waits for actual empty or multichunk durable consumer proof and current authority", async () => {
+test("local-stage status waits for actual empty or multichunk durable consumer proof and current authority", async (t) => {
   for (const mode of ["empty", "multichunk", "revoked", "fenced"] as const) {
     const f = await fixture();
     const bytes = mode === "empty" ? Buffer.alloc(0) : Buffer.alloc(393217, 0x71);
@@ -454,7 +454,9 @@ test("local-stage status waits for actual empty or multichunk durable consumer p
       runtime.session = session;
       const receive = runtime.staging.receive.bind(runtime.staging),
         chunk = http.chunk.bind(http);
-      let delayed = true;
+      let delayed = true,
+        chunkCalls = 0,
+        completedChunks = 0;
       if (mode === "empty")
         runtime.staging.receive = async (value) => {
           if (delayed) {
@@ -465,7 +467,9 @@ test("local-stage status waits for actual empty or multichunk durable consumer p
         };
       else
         http.chunk = async (value, index, data) => {
+          chunkCalls++;
           const result = await chunk(value, index, data);
+          completedChunks++;
           // Actual HTTP body has completed, but the consumer has not returned to persist bytes/proof.
           if (delayed && index === chunkHashes.length - 1) {
             entered.resolve();
@@ -533,7 +537,69 @@ test("local-stage status waits for actual empty or multichunk durable consumer p
         assert.equal(after.ino, before.ino);
         assert.equal(after.mtimeMs, before.mtimeMs);
         const wrong = { ...descriptor, attemptId: "wrong_whole_hash", fileSha256: "0".repeat(64) };
-        await assert.rejects(runtime.transfer(wrong, "bad_open"), /file integrity/);
+        const started = performance.now(),
+          openedAt = Date.now(),
+          callsBefore = chunkCalls,
+          completedBefore = completedChunks;
+        await assert.rejects(
+          runtime.transfer(wrong, "bad_open").catch((error: unknown) => {
+            // Native TAP omits fetch's nested cause. Emit only closed classifications
+            // and timing bounds, then let the original integrity oracle judge it.
+            const cause = error instanceof Error ? error.cause : undefined,
+              causeCode =
+                cause !== null && typeof cause === "object" && "code" in cause
+                  ? cause.code
+                  : undefined,
+              message = error instanceof Error ? error.message : undefined;
+            t.diagnostic(
+              JSON.stringify({
+                diagnostic: "local-stage-integrity-probe",
+                mode,
+                elapsedMs: Math.ceil(performance.now() - started),
+                transferRemainingAtOpenMs: wrong.expiresAt - openedAt,
+                transferRemainingAtErrorMs: wrong.expiresAt - Date.now(),
+                leaseRemainingAtOpenMs: wrong.lease.expiresAt - openedAt,
+                deadlineRemainingAtOpenMs: wrong.deadline - openedAt,
+                chunkCalls: chunkCalls - callsBefore,
+                completedChunks: completedChunks - completedBefore,
+                errorKind:
+                  error instanceof TypeError
+                    ? "TypeError"
+                    : error instanceof Error
+                      ? "Error"
+                      : "other",
+                messageKind:
+                  message === "transfer file integrity"
+                    ? "file-integrity"
+                    : message === "fetch failed"
+                      ? "fetch-failed"
+                      : message === "expired transfer"
+                        ? "expired-transfer"
+                        : message === "transfer lease"
+                          ? "transfer-lease"
+                          : message === "request deadline expired"
+                            ? "request-deadline-expired"
+                            : message === "input chunk integrity"
+                              ? "input-chunk-integrity"
+                              : "other",
+                causeCode:
+                  [
+                    "UND_ERR_SOCKET",
+                    "UND_ERR_CONNECT_TIMEOUT",
+                    "UND_ERR_HEADERS_TIMEOUT",
+                    "UND_ERR_BODY_TIMEOUT",
+                    "ECONNRESET",
+                    "ECONNREFUSED",
+                    "ETIMEDOUT",
+                    "EPIPE",
+                  ].find((known) => known === causeCode) ??
+                  (causeCode === undefined ? "absent" : "other"),
+              }),
+            );
+            throw error;
+          }),
+          /file integrity/,
+        );
         const rejected = captured.at(-1);
         assert.equal(rejected?.type, "transfer.status");
         if (rejected?.type === "transfer.status") {
