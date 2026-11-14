@@ -186,8 +186,16 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       },
     );
     const current = child;
+    let announcedPort: number | undefined;
+    const announcementMatches = () => (announcedPort === undefined ? null : announcedPort === port);
     const retain = (data: Buffer) => {
-      if (child === current) output = (output + String(data)).slice(-12000);
+      if (child !== current) return;
+      output = (output + String(data)).slice(-12000);
+      if (announcedPort === undefined) {
+        const announced =
+          /\bReady on\s+http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})(?=\s|$)/.exec(output);
+        if (announced) announcedPort = Number(announced[1]);
+      }
     };
     child.stdout?.on("data", retain);
     child.stderr?.on("data", retain);
@@ -201,8 +209,6 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       try {
         const code = child?.exitCode,
           signal = child?.signalCode;
-        const announced =
-          /\bReady on\s+http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})(?=\s|$)/.exec(output);
         const line = JSON.stringify({
           diagnostic: "source-recovery-start",
           event,
@@ -229,7 +235,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
               : "unobserved",
           sourcePath,
           harnessOrdinal: currentHarness,
-          announcedPortMatches: announced ? Number(announced[1]) === port : null,
+          announcedPortMatches: announcementMatches(),
         });
         if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
       } catch {
@@ -241,12 +247,17 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       for (let i = 0; i < 300; i++) {
         assert.equal(child.exitCode, null, "Wrangler exited before readiness");
         assert.equal(child.signalCode, null, "Wrangler terminated by signal");
+        assert.notEqual(
+          announcementMatches(),
+          false,
+          "Owned Wrangler announced a different readiness endpoint",
+        );
         const signal = AbortSignal.timeout(300);
         attempts++;
         try {
           const response = await fetch(`${origin}/__test/ping`, { signal });
           status = response.status;
-          if (response.ok) {
+          if (response.ok && announcementMatches() === true) {
             ready = true;
             return;
           }

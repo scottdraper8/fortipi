@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import test from "node:test";
+import { setTimeout as pause } from "node:timers/promises";
 import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually } from "./harness.ts";
@@ -16,6 +18,57 @@ interface ProbeState {
   creations: { conversationId: string }[];
   piIds: string[];
 }
+test("standalone readiness refuses a foreign listener after actual runtime death", {
+  timeout: 45000,
+}, async (t) => {
+  const h = await processHarness();
+  const foreign = createServer((_request, response) => {
+    response.setHeader("Connection", "close");
+    response.end("foreign-ready");
+  });
+  let listening = false;
+  let failure: { error: unknown } | undefined;
+  try {
+    await h.crash(); // Verifies that the killed group included the real workerd.
+    for (let attempt = 0; attempt < 100 && !listening; attempt++) {
+      try {
+        await new Promise<void>((accept, reject) => {
+          const failed = (error: Error) => reject(error);
+          foreign.once("error", failed);
+          foreign.listen(Number(new URL(h.origin).port), "127.0.0.1", () => {
+            foreign.off("error", failed);
+            listening = true;
+            accept();
+          });
+        });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
+        await pause(50);
+      }
+    }
+    assert.equal(listening, true, "The controlled foreign listener must own the endpoint");
+    const check = await fetch(`${h.origin}/__test/ping`, { signal: t.signal });
+    assert.equal(check.status, 200);
+    assert.equal(await check.text(), "foreign-ready");
+    await assert.rejects(
+      h.start(),
+      /Wrangler (?:exited before readiness|terminated by signal|not ready)|Owned Wrangler announced a different readiness endpoint/,
+    );
+  } catch (error) {
+    failure = { error };
+  }
+  const results = await Promise.allSettled([
+    h.close(),
+    new Promise<void>((accept, reject) => {
+      if (!listening) return accept();
+      foreign.close((error) => (error ? reject(error) : accept()));
+      foreign.closeAllConnections();
+    }),
+  ]);
+  for (const result of results)
+    if (result.status === "rejected") failure ??= { error: result.reason };
+  if (failure) throw failure.error;
+});
 test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted input", {
   timeout: 90000,
 }, async (t) => {

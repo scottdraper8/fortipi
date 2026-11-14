@@ -76,6 +76,7 @@ if (process.execArgv.includes("--test") && selected.size > 0 && selected.size <=
 // Reviewed literal names only. New/dynamic/private names remain null; this is
 // diagnostic data, never an assertion result or release authority.
 const failureNames = new Set<string>([
+  "standalone readiness refuses a foreign listener after actual runtime death",
   "SIGKILL/reopen preserves canary, allocation provenance and stable accepted input",
   "premature cues from held or rejected marker transactions cannot become historical proof",
   "kill cues match only the exact run, agent, phase, arm and actor generation; no storage proof",
