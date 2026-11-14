@@ -2191,8 +2191,10 @@ export async function runEvidence(
   deployment?: string,
   recovery?: EvidenceRecovery,
   devices?: DeviceEvidenceData,
+  selection?: import("./live-selection-evidence.ts").SelectionAcceptanceData,
 ): Promise<void> {
   assert.ok(mode === "live" || devices === undefined, "Device history is live-only");
+  assert.ok(mode === "live" || selection === undefined, "Selection history is live-only");
   if (recovery) {
     assert.equal(mode, "live");
     assert.equal(recovery.checkpointDirectory, resolve(out, "application-recovery"));
@@ -2210,6 +2212,10 @@ export async function runEvidence(
   const env = evidenceEnvironment(expectedProducer, mode, context);
   const devicesPath = devices ? resolve(dirname(out), `${basename(out)}.devices.json`) : undefined;
   if (devicesPath) await saveJson(devicesPath, devices);
+  const selectionPath = selection
+    ? resolve(dirname(out), `${basename(out)}.selection.json`)
+    : undefined;
+  if (selectionPath) await saveJson(selectionPath, selection);
   let channel: ReturnType<typeof attachApplicationRecoveryChannel> | undefined;
   let childError: unknown;
   try {
@@ -2222,6 +2228,7 @@ export async function runEvidence(
         resolve(candidate),
         ...(deployment ? ["--deployment", resolve(deployment)] : []),
         ...(devicesPath ? ["--devices", devicesPath] : []),
+        ...(selectionPath ? ["--selection", selectionPath] : []),
         "--fixture",
         resolve(fixture),
         "--out",

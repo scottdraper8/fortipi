@@ -17,6 +17,7 @@ import {
   readDeviceCustodyArtifact,
   readDeviceOwnershipArtifact,
   readDevicePhaseArtifact,
+  readSelectionOwnershipArtifacts,
 } from "../../device-phase-artifacts.ts";
 import {
   type ArtifactReference,
@@ -42,12 +43,41 @@ const jobNames = {
   cleanup: "live-device-cleanup",
 } as const;
 const names = {
-  initial: ["deployment.json", "deployment.cli.json", "seed.json", "ownership.json"],
+  initial: [
+    "deployment.json",
+    "deployment.cli.json",
+    "seed.json",
+    "ownership.json",
+    "selection.json",
+  ],
   a: ["device-a.json"],
   b: ["device-b.json"],
   cleanup: ["device-cleanup.json"],
 } as const;
-async function fixture(t: TestContext, phase: DevicePhase = "a", ownershipOnly = false) {
+test("selection ownership and custody authenticate the failed initial job window before any decryption", async (t) => {
+  const f = await fixture(t, "initial", true, true);
+  f.fault("failed-job");
+  const actual = await readSelectionOwnershipArtifacts(f.selectionInput, f.request);
+  assert.equal(actual.conclusion, "failure");
+  assert.deepEqual(actual.ownership.value, f.ownershipJournal);
+  assert.equal(actual.custody.value.jobId, f.ownershipJournal.jobId);
+  for (const fault of [
+    "wrong-window",
+    "attempt-after-zip",
+    "foreign-repo",
+    "skipped-job",
+    "workflow-bytes",
+  ]) {
+    f.fault(fault);
+    await assert.rejects(readSelectionOwnershipArtifacts(f.selectionInput, f.request));
+  }
+});
+async function fixture(
+  t: TestContext,
+  phase: DevicePhase = "a",
+  ownershipOnly = false,
+  selectionOwnership = false,
+) {
   const root = await temporary("fortipi-device-artifacts-");
   t.after(() => rm(root, { recursive: true, force: true }));
   const c = candidate();
@@ -97,7 +127,7 @@ async function fixture(t: TestContext, phase: DevicePhase = "a", ownershipOnly =
     aReference = ref(41, "device-a"),
     bReference = ref(42, "device-b");
   const primary = ownershipOnly
-    ? ref(44, "device-ownership")
+    ? ref(44, selectionOwnership ? "selection-ownership" : "device-ownership")
     : phase === "initial"
       ? initialReference
       : phase === "a"
@@ -105,7 +135,7 @@ async function fixture(t: TestContext, phase: DevicePhase = "a", ownershipOnly =
         : phase === "b"
           ? bReference
           : ref(43, "device-cleanup");
-  const custodyRef = ref(39, "device-custody");
+  const custodyRef = ref(39, selectionOwnership ? "selection-custody" : "device-custody");
   const directory = resolve(root, "phase");
   await mkdir(directory);
   const cipherDirectory = resolve(root, "cipher");
@@ -117,9 +147,12 @@ async function fixture(t: TestContext, phase: DevicePhase = "a", ownershipOnly =
     sha256: sha256(bytes),
   });
   const cipherBytes = Buffer.from(
-    `${canonicalJson({ schemaVersion: 1, nonce: "synthetic-encrypted-envelope", ciphertext: "opaque-authenticated-ciphertext" })}\n`,
+    `${canonicalJson(selectionOwnership ? { schemaVersion: 1, sourceCommit: c.sourceCommit, candidateSha256: hash, scope: c.scope, producer, jobId: 91, checkedAt: new Date(now - 2500).toISOString(), body: { roles: {} } } : { schemaVersion: 1, nonce: "synthetic-encrypted-envelope", ciphertext: "opaque-authenticated-ciphertext" })}\n`,
   );
-  await writeFile(resolve(cipherDirectory, "custody.json"), cipherBytes);
+  await writeFile(
+    resolve(cipherDirectory, selectionOwnership ? "selection-custody.json" : "custody.json"),
+    cipherBytes,
+  );
   const cipherZip = await directoryArchive(cipherDirectory);
   t.after(cipherZip.close);
   custodyRef.artifactDigest = `sha256:${sha256(cipherZip.bytes)}`;
@@ -168,7 +201,9 @@ async function fixture(t: TestContext, phase: DevicePhase = "a", ownershipOnly =
     },
   };
   const metaName = ownershipOnly
-    ? "ownership.json"
+    ? selectionOwnership
+      ? "selection-ownership.json"
+      : "ownership.json"
     : phase === "initial"
       ? "device-initial.json"
       : "device-phase.json";
@@ -417,6 +452,7 @@ async function fixture(t: TestContext, phase: DevicePhase = "a", ownershipOnly =
     metadata,
     ownershipJournal,
     ownershipInput: { loaded: input.loaded, reference: primary, context },
+    selectionInput: { loaded: input.loaded, ownership: primary, custody: custodyRef, context },
     expectedPayloads,
     cipherBytes,
     counts: () => ({ reads, selected, apiCalls, artifactLookups }),

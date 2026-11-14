@@ -26,7 +26,266 @@ import type { ScenarioEvidence } from "./evidence.ts";
 import { deviceCanonicalBytes, deviceEventPrefix, deviceReadRequests } from "./live-device.ts";
 import { runOrdinaryTools } from "./live-ordinary-tools.ts";
 import type { RecoveryWorkspaceCanary } from "./platform-recovery.ts";
-import type { RoleContext } from "./roles.ts";
+import type { IssuedRole, RoleContext } from "./roles.ts";
+
+/** Supplied, journaled roles only. Used by the fixed A/B selection scenario;
+ * changing a provider rollout never rewrites this logical profile/ledger. */
+export async function openSelectionNativePeer(input: {
+  installed: Installed;
+  roles: RoleContext;
+  role: IssuedRole;
+  executorId: string;
+  resources: ResourceScope;
+  logicalApplicationId: string;
+  workspace: RecoveryWorkspaceCanary;
+}) {
+  assert.equal(process.platform, "linux");
+  const { installed, roles, role, workspace } = input;
+  assert.equal(role.role, "executor");
+  const native = (await import(
+    pathToFileURL(installed.resolveExport(`@${installed.candidate.scope}/fortipi-executor`)).href
+  )) as typeof import("../../packages/fortipi-executor/dist/index.js");
+  const platform = native.adapter();
+  const directory = await realpath(await mkdtemp(resolve(tmpdir(), "fortipi-selection-peer-")));
+  const root = resolve(directory, "workspace"),
+    state = resolve(directory, "private"),
+    profilePath = resolve(state, "executor.json");
+  const bin = installed.bins["fortipi-executor"];
+  assert.ok(bin);
+  const profile: Profile = {
+    version: 1,
+    origin: roles.endpoint,
+    deploymentId: input.logicalApplicationId,
+    executorId: input.executorId,
+    executorGeneration: 1,
+    credential: role.credential,
+    token: role.token,
+    ledgerId: `selection_${randomUUID().replaceAll("-", "")}`,
+    bindings: [
+      {
+        rootBindingId: "selection-root",
+        path: root,
+        workspaceId: workspace.binding.workspaceId,
+        bindingVersion: workspace.binding.bindingVersion,
+        revision: workspace.binding.revision,
+        manifestHash: workspace.binding.manifestHash,
+        providerKind: "computer",
+      },
+    ],
+    resources: input.resources,
+    policy: { version: 1, trustedHost: false, requireConfinement: false, rules: [] },
+    limits: {},
+  };
+  const environment = {
+    PATH: process.env.PATH,
+    LANG: "C.UTF-8",
+    XDG_STATE_HOME: resolve(directory, "xdg-state"),
+  };
+  let daemon: ReturnType<typeof spawn> | undefined, exit: Promise<number | null> | undefined;
+  async function command(args: string[]) {
+    const child = spawn(process.execPath, [bin!, ...args, "--profile", profilePath], {
+      cwd: directory,
+      env: environment,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "",
+      length = 0;
+    child.stdout.on("data", (chunk: Buffer) => {
+      length += chunk.length;
+      if (length > 65536) child.kill("SIGKILL");
+      else output += chunk.toString();
+    });
+    child.stderr.resume();
+    const timer = setTimeout(() => child.kill("SIGKILL"), 30000);
+    try {
+      await new Promise<void>((accept, reject) => {
+        child.once("error", reject);
+        child.once("close", (code, signal) =>
+          code === 0 && signal === null && length <= 65536
+            ? accept()
+            : reject(new Error("Selection installed native command unavailable")),
+        );
+      });
+      roles.assertSanitized(output, [role.token]);
+      return output;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  async function ledgerRead() {
+    const safeRoot = await native.SafeRoot.open(root, platform);
+    const ledger = await native.Ledger.open(
+      resolve(state, profile.ledgerId),
+      profile.ledgerId,
+      native.effectiveLimits(profile.limits),
+      platform,
+    );
+    try {
+      const executions = [];
+      for (const identity of ledger.identities()) {
+        const row = ledger.get(identity.jobId);
+        assert.ok(row);
+        const scratch = ledger.record<{ path: string }>(
+          "stages",
+          `scratch_${identity.executionId}`,
+        );
+        const scratchRoot = ledger.record<{ key: string }>(
+          "stages",
+          `scratch_root_${identity.executionId}`,
+        );
+        const cleanup = ledger.record<{ manifestHash: string }>(
+          "stages",
+          `cleanup_done_${identity.executionId}`,
+        );
+        let absent = false;
+        if (scratch) {
+          assert.ok(scratch.path.startsWith(`${resolve(state, profile.ledgerId, "scratch")}/`));
+          absent = await lstat(scratch.path).then(
+            () => false,
+            (error: NodeJS.ErrnoException) => {
+              if (error.code === "ENOENT") return true;
+              throw error;
+            },
+          );
+        }
+        executions.push({
+          identity,
+          state: row.state,
+          committed: row.committed ?? null,
+          cleanup: cleanup ?? null,
+          scratchAbsent: absent,
+          scratchReleased: !!scratchRoot && ledger.rootAvailable(scratchRoot.key),
+        });
+      }
+      return {
+        ledgerId: ledger.ledgerId,
+        ledgerInstanceId: ledger.ledgerInstanceId,
+        outbox: ledger.outbox().length,
+        pending: ledger.pending().length,
+        rootAvailable: ledger.rootAvailable(safeRoot.key),
+        executions,
+      };
+    } finally {
+      ledger.close();
+    }
+  }
+  async function closePeer() {
+    try {
+      if (daemon) {
+        if (daemon.exitCode === null && daemon.signalCode === null) daemon.kill("SIGTERM");
+        assert.ok(exit);
+        assert.equal(
+          await Promise.race([
+            exit,
+            delay(15000, undefined, { ref: false }).then(() => {
+              throw new Error("Selection native closure unavailable");
+            }),
+          ]),
+          0,
+        );
+        daemon = undefined;
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+  try {
+    await platform.protect(directory, true);
+    for (const path of [root, state]) {
+      await mkdir(path, { mode: 0o700 });
+      await platform.protect(path, true);
+    }
+    await native.privateWrite(profilePath, JSON.stringify(profile), platform, true);
+    await command(["init"]);
+    const initial = await ledgerRead();
+    await command(["policy", "--trusted-host", "--accept-daemon-user-files-and-network"]);
+    daemon = spawn(process.execPath, [bin, "start", "--profile", profilePath], {
+      cwd: directory,
+      env: environment,
+      stdio: "ignore",
+    });
+    exit = new Promise((accept, reject) => {
+      daemon!.once("error", reject);
+      daemon!.once("close", (code) => accept(code));
+    });
+    void exit.catch(() => {});
+    return {
+      target: { kind: "executor" as const, executorId: input.executorId, generation: 1 },
+      async consent(approval: Approval) {
+        const local = await until(async () => {
+          const rows: unknown = JSON.parse(await command(["approvals", "list"]));
+          assert.ok(Array.isArray(rows));
+          return rows.find((row) => row?.jobId === approval.jobId) as
+            | { digest: string; assignment: { identity: { executionId: string } } }
+            | undefined;
+        }, Boolean);
+        assert.ok(local && typeof local.digest === "string");
+        await command(["approve", approval.jobId, "--digest", local.digest]);
+        return local.assignment.identity.executionId;
+      },
+      async settled() {
+        return until(
+          async () => {
+            const now = await ledgerRead();
+            assert.equal(now.ledgerId, initial.ledgerId);
+            assert.equal(now.ledgerInstanceId, initial.ledgerInstanceId);
+            return now;
+          },
+          (now) =>
+            now.outbox === 0 &&
+            now.pending === 0 &&
+            now.rootAvailable &&
+            now.executions.every(
+              (row) =>
+                row.state === "closed" &&
+                row.committed !== null &&
+                row.cleanup !== null &&
+                row.scratchAbsent &&
+                row.scratchReleased,
+            ),
+        );
+      },
+      snapshot: ledgerRead,
+      async observeNotes(jobId: string, expected: Buffer, signal: AbortSignal) {
+        return until(async () => {
+          signal.throwIfAborted();
+          const ledger = await native.Ledger.open(
+            resolve(state, profile.ledgerId),
+            profile.ledgerId,
+            native.effectiveLimits(profile.limits),
+            platform,
+          );
+          let scratch: { path: string } | undefined, executionId: string | undefined;
+          try {
+            const identity = ledger.identities().find((i) => i.jobId === jobId);
+            if (identity) {
+              executionId = identity.executionId;
+              scratch = ledger.record("stages", `scratch_${identity.executionId}`);
+            }
+          } finally {
+            ledger.close();
+          }
+          if (!scratch || !executionId) return undefined;
+          assert.ok(scratch.path.startsWith(`${resolve(state, profile.ledgerId, "scratch")}/`));
+          try {
+            const actualRoot = await native.SafeRoot.open(scratch.path, platform);
+            const bytes = await actualRoot.read("notes.txt", 4096);
+            if (!bytes.equals(expected)) return undefined;
+            assert.deepEqual(await actualRoot.entries(), ["notes.txt"]);
+            return { jobId, executionId, size: bytes.length, sha256: sha256(bytes) };
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+            throw error;
+          }
+        }, Boolean);
+      },
+      close: closePeer,
+    };
+  } catch {
+    await closePeer();
+    throw new Error("Selection installed native setup unavailable");
+  }
+}
 
 const quote = (s: string) => `'${s.replaceAll("'", `'"'"'`)}'`;
 const unchangedIdentity = (job: Job) => ({

@@ -209,8 +209,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
         run:
-          node scripts/deploy-smoke.ts operate --installation "$RUNNER_TEMP/installation.json" --out
-          "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json" --confirm "$CONFIRM"
+          node scripts/live-selection-evidence.ts operate --installation "$RUNNER_TEMP/installation.json" --out
+          "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json" --confirm "$CONFIRM" --directory
+          "$RUNNER_TEMP/selection"
       - name: Provision bounded device roles and public ownership journal
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -220,6 +221,7 @@ jobs:
         run:
           node scripts/live-device-evidence.ts initial --installation "$RUNNER_TEMP/installation.json" --deployment
           "$RUNNER_TEMP/deployment.json" --proofs "$RUNNER_TEMP/proofs.json" --out "$RUNNER_TEMP/devices"
+          --selection "$RUNNER_TEMP/selection/selection.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         id: custody
         with:
@@ -251,6 +253,20 @@ jobs:
             github.run_attempt }}
           path: ${{ runner.temp }}/devices/ownership
           if-no-files-found: warn
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && fromJSON(inputs.target).backend == 'free'
+        with:
+          name: selection-custody-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/selection/custody
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && fromJSON(inputs.target).backend == 'free'
+        with:
+          name: selection-ownership-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/selection/ownership
+          if-no-files-found: error
           retention-days: 30
   live-device-a:
     needs: initial-installed-deployment
@@ -490,6 +506,21 @@ jobs:
         run:
           node scripts/live-device-evidence.ts cleanup --installation "$RUNNER_TEMP/installation.json" --out
           "$RUNNER_TEMP/devices"
+      - name: Independently settle selection ownership even without device allocation
+        if: always() && fromJSON(inputs.target).backend == 'free'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FORTIPI_ADMIN_TOKEN: ${{ secrets.FORTIPI_ADMIN_TOKEN }}
+        run:
+          node scripts/live-selection-evidence.ts cleanup --installation "$RUNNER_TEMP/installation.json" --out
+          "$RUNNER_TEMP/selection-cleanup"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && fromJSON(inputs.target).backend == 'free'
+        with:
+          name: selection-cleanup-${{ inputs.commit_sha }}-${{ inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/selection-cleanup
+          if-no-files-found: error
+          retention-days: 30
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:

@@ -3,6 +3,10 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open, realpath, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve, sep } from "node:path";
 import {
+  assertSelectionAcceptanceData,
+  type SelectionAcceptanceData,
+} from "../../scripts/live-selection-evidence.ts";
+import {
   applicableLiveClaims,
   assertDeployment,
   assertProducer,
@@ -25,6 +29,7 @@ export interface EvidenceInput {
   candidateManifest: string;
   deploymentReceipt?: string;
   devicesReceipt?: string;
+  selectionReceipt?: string;
   fixture: string;
   out: string;
 }
@@ -110,6 +115,27 @@ export async function readDeviceEvidenceData(
   out: string,
   current: DeploymentIdentity,
 ): Promise<DeviceEvidenceData> {
+  return readLiveSidecar(path, out, current, (value) => {
+    const data = value as DeviceEvidenceData;
+    assertDeployment(data.initial.deployment);
+    assertDeviceEvidenceData(data, current);
+  }) as Promise<DeviceEvidenceData>;
+}
+export async function readSelectionEvidenceData(
+  path: string,
+  out: string,
+  current: DeploymentIdentity,
+): Promise<SelectionAcceptanceData> {
+  return readLiveSidecar(path, out, current, (value): asserts value is SelectionAcceptanceData =>
+    assertSelectionAcceptanceData(value, current),
+  ) as Promise<SelectionAcceptanceData>;
+}
+async function readLiveSidecar(
+  path: string,
+  out: string,
+  current: DeploymentIdentity,
+  validate: (value: unknown) => void,
+): Promise<unknown> {
   assertDeployment(current);
   assert.ok(
     isAbsolute(path) && resolve(path) === path,
@@ -157,11 +183,10 @@ export async function readDeviceEvidenceData(
     assert.equal(after.mtimeMs, before.mtimeMs);
     assert.equal(after.nlink, 1);
     assert.equal(after.mode & 0o777, 0o600);
-    const data: DeviceEvidenceData = JSON.parse(
+    const data: unknown = JSON.parse(
       new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes.subarray(0, length)),
     );
-    assertDeployment(data.initial.deployment);
-    assertDeviceEvidenceData(data, current);
+    validate(data);
     return data;
   } finally {
     await handle.close();

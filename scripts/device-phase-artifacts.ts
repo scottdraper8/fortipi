@@ -155,6 +155,11 @@ const phaseFiles: Readonly<Record<DevicePhase, readonly string[]>> = {
   b: ["device-b.json"],
   cleanup: ["device-cleanup.json"],
 };
+function selectedPhaseFiles(bound: DevicePhaseReadInput) {
+  return bound.phase === "initial" && bound.deployment.backend === "free"
+    ? [...phaseFiles.initial, "selection.json"]
+    : phaseFiles[bound.phase];
+}
 const metadataFile = (phase: DevicePhase) =>
   phase === "initial" ? "device-initial.json" : "device-phase.json";
 const artifactPrefix: Readonly<Record<DevicePhase, string>> = {
@@ -550,7 +555,7 @@ async function completed(
       request,
       { producer, job: priorJob, checkedAt: new Date().toISOString() },
       artifactPrefix[phase],
-      (phaseFiles[phase].length + 1) * maximum + 65_536,
+      (selectedPhaseFiles({ ...bound, phase }).length + 1) * maximum + 65_536,
     );
   }
   const { sourceCommit: _source, ...publicJob } = observed;
@@ -693,8 +698,8 @@ function metadata(
     record(selected.record as FileRecord, "custody.json", cipherMaximum);
   }
   assert.ok(Array.isArray(value.files));
-  assert.equal(value.files.length, phaseFiles[bound.phase].length);
-  for (const name of phaseFiles[bound.phase]) {
+  assert.equal(value.files.length, selectedPhaseFiles(bound).length);
+  for (const name of selectedPhaseFiles(bound)) {
     const selected: unknown[] = value.files.filter((file) => object(file).path === name);
     assert.equal(selected.length, 1);
     record(selected[0] as FileRecord, name, maximum);
@@ -741,7 +746,7 @@ export async function readDevicePhaseArtifact(
     const observed = await completed(bound, request);
     const name = metadataFile(bound.phase);
     const bounds = Object.fromEntries(
-      [name, ...phaseFiles[bound.phase]].map((path) => [path, maximum]),
+      [name, ...selectedPhaseFiles(bound)].map((path) => [path, maximum]),
     );
     const wire = await savedArtifact(
       bound.loaded,
@@ -947,6 +952,154 @@ export async function readDeviceOwnershipArtifact(
       job: observed,
       conclusion,
     });
+  } catch {
+    throw new Error(reason);
+  }
+}
+
+/** Selection cleanup has no successful-initial dependency. Authenticate the
+ * exact original failed/successful job and BOTH archives before decryption. */
+export async function readSelectionOwnershipArtifacts(
+  input: {
+    loaded: LoadedDeviceCandidate;
+    context: CurrentDeviceJobContext;
+    ownership: ArtifactReference;
+    custody: ArtifactReference;
+  },
+  request: DevicePhaseRequest,
+) {
+  try {
+    const bound = immutable(input);
+    closed(bound, ["loaded", "context", "ownership", "custody"]);
+    loadedCandidate(bound.loaded);
+    assert.ok(bound.context.job === "cleanup" || bound.context.job === "operate");
+    const current = await authorizeCurrentDeviceJob(bound, request);
+    const original = await ownershipJob(request, current.producer);
+    assert.equal(original.sourceCommit, bound.loaded.candidate.sourceCommit);
+    assert.ok(original.completedAt && time(original.completedAt) <= time(current.job.startedAt));
+    const { sourceCommit: _source, conclusion, ...publicJob } = original;
+    const observed = {
+      producer: current.producer,
+      job: publicJob,
+      checkedAt: new Date().toISOString(),
+    };
+    const selected: Record<string, { value: Record<string, unknown>; sha256: string }> = {};
+    for (const [key, prefix, member] of [
+      ["ownership", "selection-ownership", "selection-ownership.json"],
+      ["custody", "selection-custody", "selection-custody.json"],
+    ] as const) {
+      const ref = bound[key];
+      reference(ref, bound.loaded.hash);
+      assert.equal(ref.runId, bound.context.runId);
+      assert.equal(ref.runAttempt, bound.context.runAttempt);
+      await savedArtifact(bound.loaded, ref, request, observed, prefix, maximum + 65536);
+      const members = await memberSet(ref, { [member]: maximum }, member, request);
+      await privilegedCheckout(bound.loaded.candidate);
+      await trustedMain(bound.loaded.candidate, request);
+      await run(bound.loaded, request, current.producer, "in_progress");
+      await savedArtifact(bound.loaded, ref, request, observed, prefix, maximum + 65536);
+      const bytes = members[member];
+      assert.ok(bytes);
+      const value = canonical(bytes, maximum);
+      assert.equal(value.schemaVersion, 1);
+      assert.equal(value.sourceCommit, bound.loaded.candidate.sourceCommit);
+      assert.equal(value.candidateSha256, bound.loaded.hash);
+      assert.equal(value.scope, bound.loaded.candidate.scope);
+      assertProducer(value.producer);
+      assert.deepEqual(value.producer, observed.producer);
+      assert.equal(value.jobId, original.id);
+      assert.ok(
+        time(value.checkedAt) >= time(original.startedAt) &&
+          time(value.checkedAt) <= time(original.completedAt),
+      );
+      selected[key] = { value, sha256: sha256(bytes) };
+    }
+    assert.notEqual(bound.ownership.artifactId, bound.custody.artifactId);
+    freshness(original.completedAt, 6);
+    return immutable({ ownership: selected.ownership!, custody: selected.custody!, conclusion });
+  } catch {
+    throw new Error(reason);
+  }
+}
+
+/** Fixed successful cleanup record, independent of device allocation. */
+export async function readSelectionCleanupArtifact(
+  input: {
+    loaded: LoadedDeviceCandidate;
+    context: CurrentDeviceJobContext;
+    reference: ArtifactReference;
+  },
+  request: DevicePhaseRequest,
+) {
+  try {
+    const bound = immutable(input);
+    closed(bound, ["loaded", "context", "reference"]);
+    loadedCandidate(bound.loaded);
+    assert.equal(bound.context.job, "operate");
+    const current = await authorizeCurrentDeviceJob(bound, request);
+    reference(bound.reference, bound.loaded.hash);
+    assert.equal(bound.reference.runId, bound.context.runId);
+    assert.equal(bound.reference.runAttempt, bound.context.runAttempt);
+    const selected = await job(request, current.producer, jobs.cleanup, "completed");
+    const { sourceCommit: _source, ...publicJob } = selected;
+    assert.equal(selected.sourceCommit, bound.loaded.candidate.sourceCommit);
+    assert.ok(selected.completedAt && time(selected.completedAt) <= time(current.job.startedAt));
+    const observed = {
+      producer: current.producer,
+      job: publicJob,
+      checkedAt: new Date().toISOString(),
+    };
+    await savedArtifact(
+      bound.loaded,
+      bound.reference,
+      request,
+      observed,
+      "selection-cleanup",
+      maximum + 65536,
+    );
+    const members = await memberSet(
+      bound.reference,
+      { "selection-cleanup.json": maximum },
+      "selection-cleanup.json",
+      request,
+    );
+    await privilegedCheckout(bound.loaded.candidate);
+    await trustedMain(bound.loaded.candidate, request);
+    await savedArtifact(
+      bound.loaded,
+      bound.reference,
+      request,
+      observed,
+      "selection-cleanup",
+      maximum + 65536,
+    );
+    const bytes = members["selection-cleanup.json"];
+    assert.ok(bytes);
+    const value = canonical(bytes, maximum);
+    closed(value, [
+      "schemaVersion",
+      "sourceCommit",
+      "candidateSha256",
+      "scope",
+      "producer",
+      "jobId",
+      "checkedAt",
+      "ownership",
+      "custody",
+      "body",
+    ]);
+    assert.equal(value.schemaVersion, 1);
+    assert.equal(value.sourceCommit, bound.loaded.candidate.sourceCommit);
+    assert.equal(value.candidateSha256, bound.loaded.hash);
+    assert.equal(value.scope, bound.loaded.candidate.scope);
+    assert.deepEqual(value.producer, current.producer);
+    assert.equal(value.jobId, selected.id);
+    assert.ok(
+      time(value.checkedAt) >= time(selected.startedAt) &&
+        time(value.checkedAt) <= time(selected.completedAt),
+    );
+    freshness(string(value.checkedAt), 6);
+    return immutable(value);
   } catch {
     throw new Error(reason);
   }

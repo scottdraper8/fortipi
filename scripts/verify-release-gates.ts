@@ -176,6 +176,7 @@ export const integratedClaims = requiredClaims.filter(
 );
 export const liveClaims = [
   "ordinary-tools",
+  "selection-acceptance",
   "pi-lifecycle",
   "ticket-grants-revoke",
   "workspace-atomicity",
@@ -195,7 +196,7 @@ export function applicableLiveClaims(deployments: readonly DeploymentIdentity[])
       (id !== "real-cloud-tools" ||
         deployments.length === 0 ||
         deployments.some((d) => d.backend !== "free")) &&
-      (id !== "ordinary-tools" ||
+      (!["ordinary-tools", "selection-acceptance"].includes(id) ||
         deployments.length === 0 ||
         deployments.some((d) => d.backend === "free")),
   );

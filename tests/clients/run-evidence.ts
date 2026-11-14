@@ -59,6 +59,7 @@ import {
   type Identity,
   liveRecoveryReady,
   readDeviceEvidenceData,
+  readSelectionEvidenceData,
   releaseSet,
   type ScenarioEvidence,
   writeEvidence,
@@ -99,6 +100,10 @@ export async function runEvidence(
   assert.ok(
     devices === undefined || input.devicesReceipt === undefined,
     "Use exactly one device data transport",
+  );
+  assert.ok(
+    input.mode === "live" || input.selectionReceipt === undefined,
+    "Selection evidence is live-only",
   );
   if (recovery) {
     if (recovery.mode === "perform") {
@@ -898,6 +903,39 @@ export async function runEvidence(
     assert.ok(admin, "Trusted live coordinator admin role is required");
     const roles = new RoleContext(deployment.origin, admin);
     try {
+      if (deployment.backend === "free") {
+        await measure(
+          "selection-acceptance",
+          [
+            "authenticated-fixed-selection-sidecar",
+            "public-export-raw-call-witness",
+            "fresh-F-reads",
+          ],
+          "Authenticated A/B/F identities and two installed peers prove omitted configured selection, explicit override, three valid cached refusals without effects, fresh public exports/receipts/bytes and complete independent cleanup",
+          async () => {
+            assert.ok(input.selectionReceipt, "Required Free selection sidecar is unavailable");
+            const selected = await readSelectionEvidenceData(
+              input.selectionReceipt,
+              input.out,
+              deployment,
+            );
+            return {
+              ...selected.observation,
+              initialReference: selected.initial,
+              cleanupReference: selected.cleanup,
+              historicalPhases: selected.history.phases,
+              caseNames: selected.history.cases.map((c) => c.name),
+            };
+          },
+          [
+            "Original performed A/B/F history and fresh reads under the current initial rollout; no second flip or physical-host-loss claim",
+            "Provider/Actions proof is pending until this required protected LIVE gate actually runs",
+          ],
+          [
+            "Missing claim, malformed/coercion-dependent raw call, incompatible payload, association mismatch, unknown issuance/cleanup or uncertain F blocks recovery and release",
+          ],
+        );
+      }
       if (devices) {
         const history = devices;
         const deviceInstallation = installed;
@@ -1402,7 +1440,9 @@ export function argumentsFor(argv: string[]): EvidenceInput {
       value = args[i + 1];
     assert.ok(
       key &&
-        ["--candidate", "--fixture", "--out", "--deployment", "--devices"].includes(key) &&
+        ["--candidate", "--fixture", "--out", "--deployment", "--devices", "--selection"].includes(
+          key,
+        ) &&
         value &&
         !values.has(key),
       "Invalid or duplicate evidence argument",
@@ -1414,6 +1454,11 @@ export function argumentsFor(argv: string[]): EvidenceInput {
     out = values.get("--out");
   assert.ok(candidateManifest && fixture && out, "Candidate, fixture and output are required");
   const devicesReceipt = values.get("--devices");
+  const selectionReceipt = values.get("--selection");
+  if (selectionReceipt !== undefined) {
+    assert.equal(mode, "live");
+    assert.ok(isAbsolute(selectionReceipt));
+  }
   if (devicesReceipt !== undefined) {
     assert.equal(mode, "live", "Device receipt is live-only");
     assert.ok(isAbsolute(devicesReceipt), "Device receipt path must be absolute");
@@ -1427,6 +1472,7 @@ export function argumentsFor(argv: string[]): EvidenceInput {
       ? { deploymentReceipt: resolve(values.get("--deployment")!) }
       : {}),
     ...(devicesReceipt !== undefined ? { devicesReceipt } : {}),
+    ...(selectionReceipt !== undefined ? { selectionReceipt } : {}),
   };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

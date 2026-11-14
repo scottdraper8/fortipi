@@ -23,6 +23,7 @@ import { readInfrastructureNamespaces } from "./live-infrastructure-identity.ts"
 import { readLocalInfrastructureProof } from "./live-infrastructure-local.ts";
 import { createInfrastructureObserver } from "./live-infrastructure-observer.ts";
 import { createInfrastructureAnalyticsReader } from "./live-infrastructure-provider.ts";
+import { authenticateSelectionEvidence } from "./live-selection-evidence.ts";
 import type { ProviderPhaseResult } from "./platform-recovery.ts";
 import { evidenceProducer, loadWorkflowCandidate, runEvidence } from "./prepare-release.ts";
 import {
@@ -240,6 +241,7 @@ export async function runLiveRecoveryEvidence(
       ? ((await canonicalFile(bound.devicesPath)).value as unknown as DeviceEvidenceData)
       : undefined;
     if (devices) assertDeviceEvidenceData(devices, before);
+    const selection = await authenticateSelectionEvidence({ loaded, deployment: before });
     assert.equal(before.candidateSha256, loaded.hash);
     assert.equal(before.sourceCommit, loaded.candidate.sourceCommit);
     assert.equal(before.accountBindingSha256, target.accountBindingSha256);
@@ -426,6 +428,7 @@ export async function runLiveRecoveryEvidence(
           ...infrastructure(before),
         },
         devices,
+        selection,
       );
       assert.ok(confirmed?.status === "operation-confirmed" && qualified?.status === "qualified");
       const proofFile = await canonicalFile(
@@ -563,6 +566,7 @@ export async function runLiveRecoveryEvidence(
             ...infrastructure(current),
           },
           devices,
+          selection,
         );
         assert.ok(delivered);
         const originalRecord = originalProof.value as ApplicationRecoveryProof;

@@ -523,6 +523,15 @@ async function controlled(which: string) {
       },
     },
   });
+  // Selection owns its separate controls. This pre-existing device coordinator
+  // fixture substitutes that already-qualified sidecar seam, never LIVE proof.
+  mock.module(new URL("../../live-selection-evidence.ts", import.meta.url), {
+    exports: {
+      assertSelectionEvidence(value: unknown) {
+        assert.deepEqual(value, { controlledSelectionHistory: 1010 });
+      },
+    },
+  });
   mock.module(new URL("../../../packages/fortipi-cli/dist/assets.js", import.meta.url), {
     exports: {
       async verifyPrepared(path: string) {
@@ -863,8 +872,14 @@ async function controlled(which: string) {
   const coordinator = await import("../../live-device-evidence.ts");
   const installationPath = resolve(root, "installed-substitution.json"),
     deploymentPath = resolve(root, "deployment.json"),
-    proofsPath = resolve(root, "proofs.json");
+    proofsPath = resolve(root, "proofs.json"),
+    selectionPath = resolve(root, "selection.json");
   const prepareDeployment = async () => {
+    await gates.saveJson(
+      selectionPath,
+      { history: { controlledSelectionHistory: 1010 }, observation: { controlledOnly: true } },
+      false,
+    );
     await gates.saveJson(deploymentPath, current, false);
     await gates.saveJson(
       `${deploymentPath}.cli.json`,
@@ -930,7 +945,13 @@ async function controlled(which: string) {
   const initialize = async () => {
     setJob("initial");
     await prepareDeployment();
-    await coordinator.initializeLiveDevices({ installationPath, deploymentPath, proofsPath, out });
+    await coordinator.initializeLiveDevices({
+      installationPath,
+      deploymentPath,
+      proofsPath,
+      out,
+      selectionPath,
+    });
     await publishOwnership();
     const bytes = await readFile(resolve(out, "custody/custody.json")),
       ref = reference("device-custody", bytes);
@@ -1057,7 +1078,13 @@ async function controlled(which: string) {
         mintsBeforeReplay = mintRequests.length,
         keysBeforeReplay = protectedReads;
       await assert.rejects(
-        coordinator.initializeLiveDevices({ installationPath, deploymentPath, proofsPath, out }),
+        coordinator.initializeLiveDevices({
+          installationPath,
+          deploymentPath,
+          proofsPath,
+          out,
+          selectionPath,
+        }),
         /EEXIST/,
       );
       assert.deepEqual(await readFile(journalPath), journalBytes);
@@ -1137,7 +1164,13 @@ async function controlled(which: string) {
       auth = false;
       const before = protectedReads;
       await assert.rejects(
-        coordinator.initializeLiveDevices({ installationPath, deploymentPath, proofsPath, out }),
+        coordinator.initializeLiveDevices({
+          installationPath,
+          deploymentPath,
+          proofsPath,
+          out,
+          selectionPath,
+        }),
       );
       assert.equal(protectedReads, before);
       assert.equal(mintRequests.length, 0);
@@ -1176,7 +1209,13 @@ async function controlled(which: string) {
       assert.equal(which, "journal");
       rejectReplacement = true;
       await assert.rejects(
-        coordinator.initializeLiveDevices({ installationPath, deploymentPath, proofsPath, out }),
+        coordinator.initializeLiveDevices({
+          installationPath,
+          deploymentPath,
+          proofsPath,
+          out,
+          selectionPath,
+        }),
       );
       assert.equal(replacementRejected, true);
       assert.equal(mintRequests.length, 0);
@@ -1186,7 +1225,13 @@ async function controlled(which: string) {
       journalPath = resolve(out, "ownership/ownership.json");
       mintFault = "a";
       await assert.rejects(
-        coordinator.initializeLiveDevices({ installationPath, deploymentPath, proofsPath, out }),
+        coordinator.initializeLiveDevices({
+          installationPath,
+          deploymentPath,
+          proofsPath,
+          out,
+          selectionPath,
+        }),
       );
       await publishOwnership();
       initialConclusion = "failure";

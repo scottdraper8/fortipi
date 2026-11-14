@@ -136,7 +136,7 @@ function name(
 ) {
   return `${prefix}-${loaded.candidate.sourceCommit}-${loaded.candidate.scope}-${context.runId}-${context.runAttempt}`;
 }
-async function findReference(
+export async function findReference(
   prefix: string,
   loaded: LoadedDeviceCandidate,
   context: CurrentDeviceJobContext,
@@ -181,7 +181,7 @@ function payload(phase: DevicePhaseArtifact, path: string) {
   assert.ok(result);
   return result.data;
 }
-async function initial(loaded: LoadedDeviceCandidate, context: CurrentDeviceJobContext) {
+export async function initial(loaded: LoadedDeviceCandidate, context: CurrentDeviceJobContext) {
   const reference = await findReference("deployment-initial", loaded, context);
   // Bootstrap an expected identity as DATA, then authenticate the entire phase.
   // It authorizes no provider/role operation; fresh provider observation follows.
@@ -386,6 +386,7 @@ export async function initializeLiveDevices(input: {
   deploymentPath: string;
   proofsPath: string;
   out: string;
+  selectionPath?: string;
 }) {
   const state = await setup(input.installationPath, "initial");
   await mkdir(resolve(input.out), { mode: 0o700 });
@@ -403,6 +404,15 @@ export async function initializeLiveDevices(input: {
   const secret = await keys(state);
   const current = await observe(state, cli, secret);
   assert.deepEqual(stable(current), stable(deployment));
+  const selection =
+    current.backend === "free" ? await readJson(string(input.selectionPath)) : undefined;
+  if (current.backend === "free") {
+    const selectionModule = await import("./live-selection-evidence.ts");
+    const validate: typeof selectionModule.assertSelectionEvidence =
+      selectionModule.assertSelectionEvidence;
+    validate(object(selection).history, current);
+    assert.ok(object(selection).observation);
+  }
   const roles = new RoleContext(current.origin, secret.admin);
   const ownershipDirectory = resolve(input.out, "ownership");
   await mkdir(ownershipDirectory, { mode: 0o700 });
@@ -487,6 +497,7 @@ export async function initializeLiveDevices(input: {
     ...(history ? { history } : {}),
   });
   await saveJson(resolve(publicDirectory, "ownership.json"), ownership);
+  if (selection) await saveJson(resolve(publicDirectory, "selection.json"), selection);
   await state.installed.verifyUnchanged();
 }
 
@@ -846,6 +857,7 @@ if (import.meta.main) {
           out,
           deploymentPath: resolve(string(args.deployment)),
           proofsPath: resolve(string(args.proofs)),
+          ...(args.selection ? { selectionPath: resolve(string(args.selection)) } : {}),
         });
       else if (operation === "initial-metadata")
         await finalizeInitialDevices({

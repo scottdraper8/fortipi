@@ -614,6 +614,17 @@ export async function retainEvidence(
         assert.ok(row && row.outcome === "pass");
         const record = object(await readJson(resolve(claimsDirectory, row.result.path)));
         assert.deepEqual(object(record.observation).references, result.devices.references);
+        if (deployment.backend === "free") {
+          const { authenticateSelectionEvidence } = await import("./live-selection-evidence.ts");
+          const selection = await authenticateSelectionEvidence({ loaded, deployment });
+          assert.ok(selection);
+          const claim = child.claims.find((claim) => claim.id === "selection-acceptance");
+          assert.ok(claim?.outcome === "pass");
+          const saved = object(await readJson(resolve(claimsDirectory, claim.result.path)));
+          assert.deepEqual(object(saved.observation).initialReference, selection.initial);
+          assert.deepEqual(object(saved.observation).cleanupReference, selection.cleanup);
+          assert.equal(object(saved.observation).casesSha256, selection.observation.casesSha256);
+        }
         return { helpers, result };
       })()
     : undefined;
