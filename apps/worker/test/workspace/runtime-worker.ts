@@ -638,7 +638,11 @@ export default {
               "workspaces.rebind",
               "artifacts.read",
             ],
-            tools: ["javascript"],
+            tools: [
+              "execution" in env.FORTIPI_CONFIG && env.FORTIPI_CONFIG.execution?.kind === "linux"
+                ? "shell"
+                : "javascript",
+            ],
             executorIds: ["executor"],
             backendIds: ["backend"],
           },
