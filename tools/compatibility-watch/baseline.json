@@ -120,12 +120,12 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "97d539ce4c2c7db681bf7acdbbb07ca09533400d",
+        "commit": "ec337279f57ff21c6cb2fc4a9d0bfb91378bd3e0",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "e652db83ded3d9c94ca33424ffeb500f36c648d83bcc76c4c30c5a8a190fdced",
           "packages/ai": "dd5216cb54ef3a58eb5678b39331ab14def178462e8d0c42194eebe12f63456f",
-          "packages/chord": "126d093e96da99ffb6d00ad17d63c61795053b32feb426c14a85d9e56538cc8d",
+          "packages/chord": "a462e3e2a817521b075400b35039d2601d482c6f0b08227929b771097289c2fa",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "759478deff2efd0baf4fa4e3671414f47c7ee3a9336c4a7575bb3820a74a9ab9",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
@@ -135,7 +135,7 @@
           "packages/tui": "5483c0578f10b3c4346666658e4486062e9ad03707c10ded58ccf59eddf318d9",
           "packages/durable/package.json": "72d84b37c6174f71383014c08326aa090bac61a96ee3b14e0949488dda33990e"
         },
-        "sha256": "8ca2c532ce434075d0c17469816095faa90546a096ba7d876c0472324d867908"
+        "sha256": "6cc1cddbd4105bce282e8978b0c35e75dd0dbe6c2393a21f76c5d1dc268aac05"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-13T22:59:52.847Z",
-      "reviewNote": "Reviewed b4899f59..97d539ce exact6commits/10files; all3 selected AI patches complete/Git-SHA authenticated,475/478 AI blobs and9other watched trees/manifest unchanged. Copilot catalog enables reasoning_effort only for advertised effort options; completions usage adds top-level reasoning_tokens fallback; two upstream cases cover both. FortiPi supports Cloudflare/OpenAI/Anthropic/Codex, not Copilot; WorkersAI has its own usage parser. No durable/replay/SQLite/cancellation/auth/export changes. Installed1.5.2 archives/three pnpm patches unchanged; later main source is NOT installed adoption. Retain prior AI retry/read, app-kit rename and shared-hold fresh-authority caveats. Reference only, no runtime/security/provider/Root clearance. Evidence:phase3/thread-9/compatibility-current-ledger-build.md."
+      "reviewedAt": "2026-11-14T11:56:25.724Z",
+      "reviewNote": "Reviewed 97d539ce..ec337279 exact scoped trees: only docs/{design,decisions}.md and docs/admission/design.md;1012 other Chord blobs/10other watched identities unchanged. Group commit/owner-stopped sync documented; onCommitted/retry docs describe later source, not installed1.5.2. Admission proposed/unbuilt: admit/level API, denied healing, immediate sealing/holder value removal. A>B>C binding-ack/name-table race remains open, also in installed remote/hold. Own d86 Worker graph has13 Chord context/delta/sqlite inputs, no remote/app/surfaces/sync/store; uses Harness.observeCommits. No new installed blocker established; no exploit test/security clearance. Pins/archives/patches unchanged; unreleased path review != installed runtime compatibility. Retain prior AI retry/read, app-kit rename/shared-hold authority caveats; review admission/rebind and runtime/provider/Free/Paid gates before adoption. Evidence:phase3/thread-9/pi-chord-upstream-review-build.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
