@@ -150,6 +150,8 @@ export async function nativeProcessRecovery(
   let reconnectedAt = 0,
     offlineReleasedAt = 0;
   try {
+    const gateStartup =
+      activation === "executor-first" && ["assign-ack", "result", "receipt"].includes(mode);
     let wrappers = 0;
     let phaseBarriers = 0;
     await build({
@@ -169,8 +171,14 @@ export async function nativeProcessRecovery(
           name: "owned-production-safe-wrapper",
           setup(builder) {
             builder.onLoad({ filter: /test\/agent\/runtime-worker\.ts$/ }, async (args) => {
-              if (mode !== "assign-ack") return;
+              if (mode !== "assign-ack" && !gateStartup) return;
               let contents = await readFile(args.path, "utf8");
+              if (gateStartup) {
+                const flag = "const nativeExecutorFirstGate = false;";
+                assert.equal(contents.split(flag).length, 2);
+                contents = contents.replace(flag, "const nativeExecutorFirstGate = true;");
+              }
+              if (mode !== "assign-ack") return { contents, loader: "ts" };
               const method = "  override reserveCapacity(",
                 fetch = "    const path = new URL(request.url).pathname;",
                 route = '    if (url.pathname === "/__test/ping") return new Response("ready");';
@@ -665,13 +673,45 @@ export async function nativeProcessRecovery(
       );
       assert.equal((await view()).jobs[0]?.state, "dispatch_attempted");
     }
-    if (mode === "running" || mode === "assign-ack") {
+    const restartExecutorFirst = async () => {
+      const arm = { agentId, armId: crypto.randomUUID() };
+      assert.equal((await service.api("/__test/native-startup-gate", arm, "PUT")).status, 200);
       await service.crash();
       await connection;
       await service.start();
-      if (activation === "executor-first") await connect();
-      assert.deepEqual((await service.api(`${probe}/canary`)).body, canary);
-      if (activation === "agent-first") await reconnectAfterOutage();
+      // Force Pi startup before reconnect; its event barrier protects this ordering.
+      const pendingCanary = service.api(`${probe}/canary`);
+      try {
+        const entered = await service.api<{ entered: boolean; released: boolean }>(
+          `/__test/native-startup-gate?${new URLSearchParams({ agent: agentId, arm: arm.armId, entered: "1" })}`,
+        );
+        assert.equal(entered.status, 200);
+        assert.equal(entered.body.entered, true);
+        assert.equal(entered.body.released, false);
+        await connect();
+        assert.equal(native.connected, true);
+        assert.ok(native.session?.registered);
+        assert.ok(
+          Number.isSafeInteger(native.session.connectionEpoch) &&
+            native.session.connectionEpoch > 0,
+        );
+        assert.equal((await service.api("/__test/native-startup-gate", arm, "DELETE")).status, 200);
+        assert.deepEqual((await pendingCanary).body, canary);
+      } finally {
+        await service.api("/__test/native-startup-gate", arm, "DELETE").catch(() => {});
+        await pendingCanary.catch(() => {});
+      }
+    };
+    if (mode === "running" || mode === "assign-ack") {
+      if (gateStartup) await restartExecutorFirst();
+      else {
+        await service.crash();
+        await connection;
+        await service.start();
+        if (activation === "executor-first") await connect();
+        assert.deepEqual((await service.api(`${probe}/canary`)).body, canary);
+        if (activation === "agent-first") await reconnectAfterOutage();
+      }
     }
     assert.equal((await readFile(marker, "utf8")).match(/start/g)?.length, 1);
     await writeFile(gate, "finish");
@@ -688,12 +728,15 @@ export async function nativeProcessRecovery(
           "Real Workspace pointer must already commit before Agent finalization",
         );
       }
-      await service.crash();
-      await connection;
-      await service.start();
-      if (activation === "executor-first") await connect();
-      assert.deepEqual((await service.api(`${probe}/canary`)).body, canary);
-      if (activation === "agent-first") await reconnectAfterOutage();
+      if (gateStartup) await restartExecutorFirst();
+      else {
+        await service.crash();
+        await connection;
+        await service.start();
+        if (activation === "executor-first") await connect();
+        assert.deepEqual((await service.api(`${probe}/canary`)).body, canary);
+        if (activation === "agent-first") await reconnectAfterOutage();
+      }
     }
     if (recover) {
       const disposition = await recover.verify({
