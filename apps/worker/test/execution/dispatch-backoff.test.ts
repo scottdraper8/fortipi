@@ -3,12 +3,14 @@ import { resolve } from "node:path";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, harness, setup } from "../agent/harness.ts";
+import { routingPeer } from "./routing-peer.ts";
 
 for (const mode of ["declared", "unspecified", "unknown"] as const)
   test(`actual Pi dispatch sleep honors ${mode} retry timing without losing ordinary recovery`, async () => {
     const h = await harness({
       main: resolve("apps/worker/test/execution/dispatch-backoff-worker.ts"),
     });
+    let native: Awaited<ReturnType<typeof routingPeer>> | undefined;
     try {
       const { agent, conversation } = await setup(h),
         probe = h.env.AGENT_SESSIONS.getByName(agent.agentId);
@@ -20,14 +22,15 @@ for (const mode of ["declared", "unspecified", "unknown"] as const)
         config: { kind: "computer" },
       });
       assert.equal(binding.status, 201);
+      native = await routingPeer(h, binding.body, agent.agentId, conversation.conversationId);
       await probe.queueTool(
         JSON.stringify({
-          tool: "javascript",
-          arguments: { code: "return 42" },
+          tool: "shell",
+          arguments: { command: "echo awaiting-approval" },
           workspaceId: binding.body.workspaceId,
           baseRevision: binding.body.revision,
-          target: { kind: "backend", backendId: "cloud", generation: 1 },
-          capabilities: ["javascript"],
+          target: { kind: "executor", executorId: native.executorId, generation: 1 },
+          capabilities: ["shell"],
         }),
       );
       const sent = await h.api<D.AdmissionReceipt>(
@@ -70,6 +73,7 @@ for (const mode of ["declared", "unspecified", "unknown"] as const)
         JSON.stringify({ mode, calls: actual.calls, persistedSleepMs: until - actual.failedAt }),
       );
     } finally {
+      await native?.close();
       await h.close();
     }
   });

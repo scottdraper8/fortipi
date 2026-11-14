@@ -301,8 +301,8 @@ test("actual native preparation binds the Host before contact and current write-
       policyVersion: 1,
       workspaceId: "workspace",
       baseRevision: binding.revision,
-      tool: "javascript",
-      arguments: { source: "never execute this metadata-only probe" },
+      tool: "shell",
+      arguments: { source: "printf metadata-only-probe" },
       target: { kind: "backend", backendId: "backend", generation: 1 },
       grantVersion: 1,
       deadline,
@@ -355,7 +355,7 @@ test("actual native preparation binds the Host before contact and current write-
       arguments: operation.arguments,
       workspaceId: "workspace",
       bindingVersion: 1,
-      capabilities: ["javascript", "workspace.write"],
+      capabilities: ["shell", "workspace.write"],
     };
     await rpc("prepare-execution", request);
     const db = await server

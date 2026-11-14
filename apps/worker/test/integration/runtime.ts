@@ -241,7 +241,8 @@ export async function start(options: RuntimeOptions = {}) {
     reopenSameStorage: launch,
     barrier: async (agentId: string, name: string) =>
       poll(
-        async () => (await api<{ barrier: string | null }>(`/__test/agents/${agentId}/state`)).body,
+        async () =>
+          (await api<{ barrier: string | null }>(`/__test/agents/${agentId}/barrier`)).body,
         (state) => state.barrier === name,
       ),
     dispose: async () => {

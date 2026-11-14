@@ -59,11 +59,43 @@ test("Free maximum encoded tool response retains cancel and known receipts under
     assert.equal(settled.jobs[0]?.hasExecution, false);
     assert.equal(await readFile(n.marker, "utf8").catch(() => ""), "");
     assert.equal(n.f.ledger.get(n.job.jobId), undefined);
-    assert.deepEqual(
-      await n.h.api(`/v1/tasks/${n.sent.body.taskId}/cancel`, control, "POST", n.actor.token),
-      receipt,
-    );
     const cp = n.h.env.CONTROL_PLANE.getByName("control");
+    const beforeControlRetry = await cp.ingressCounts();
+    const controlRetry = await n.h.api<D.ControlReceipt | D.ErrorBody>(
+      `/v1/tasks/${n.sent.body.taskId}/cancel`,
+      control,
+      "POST",
+      n.actor.token,
+    );
+    const afterControlRetry = await cp.ingressCounts();
+    t.diagnostic(
+      JSON.stringify({
+        firstControlRetry: {
+          status: controlRetry.status,
+          authenticateCalls:
+            (afterControlRetry.authenticate ?? 0) - (beforeControlRetry.authenticate ?? 0),
+          authenticateDenied:
+            (afterControlRetry["authenticate.denied"] ?? 0) -
+            (beforeControlRetry["authenticate.denied"] ?? 0),
+          authorizeCalls: (afterControlRetry.authorize ?? 0) - (beforeControlRetry.authorize ?? 0),
+          registrationCalls:
+            (afterControlRetry.registerAuthorityRecipient ?? 0) -
+            (beforeControlRetry.registerAuthorityRecipient ?? 0),
+        },
+      }),
+    );
+    if (controlRetry.status === 202) assert.deepEqual(controlRetry, receipt);
+    else {
+      // Setup and current-authority RPCs share this actor's ordinary Free
+      // allowance. A known receipt does not bypass authentication/authorization.
+      assert.equal(controlRetry.status, 429);
+      assert.ok("error" in controlRetry.body);
+      assert.equal(controlRetry.body.error.code, "rate_limited");
+      assert.equal(controlRetry.body.error.retryable, true);
+      const retryAfterMs = controlRetry.body.error.details?.retryAfterMs;
+      assert.ok(Number.isInteger(retryAfterMs));
+      assert.ok(retryAfterMs && retryAfterMs > 0 && retryAfterMs <= 60000);
+    }
     let beforeRetry = await cp.ingressCounts();
     const known = () =>
       n.h.api<D.AdmissionReceipt | D.ErrorBody>(
@@ -151,10 +183,12 @@ test("Free maximum encoded tool response retains cancel and known receipts under
         policy: "actual Free; explicit256B progress",
       }),
     );
+    assert.ok("error" in retried.body, "Ordinary refusal must provide the typed backoff contract");
     if (retried.status === 429 && "error" in retried.body) {
       assert.equal(retried.body.error.code, "rate_limited");
       assert.equal(retried.body.error.retryable, true);
       const retryAfterMs = retried.body.error.details?.retryAfterMs;
+      assert.ok(Number.isInteger(retryAfterMs));
       assert.ok(retryAfterMs && retryAfterMs > 0 && retryAfterMs <= 60000);
       // Ordinary authentication quota applies even to known receipt reads.
       // Wait the actual declared window; storage pressure never changes caps.
@@ -169,6 +203,11 @@ test("Free maximum encoded tool response retains cancel and known receipts under
         recovered,
         n.sent,
         "The exact receipt must recover after actual advertised backoff",
+      );
+      assert.deepEqual(
+        await n.h.api(`/v1/tasks/${n.sent.body.taskId}/cancel`, control, "POST", n.actor.token),
+        receipt,
+        "The same cancel intent must recover its exact receipt after ordinary backoff",
       );
       const recoveredPi = JSON.parse(
         await n.probe.inspectionJson(n.conversation.conversationId),

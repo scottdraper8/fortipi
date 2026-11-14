@@ -79,7 +79,7 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
         busyBehavior: "followUp",
       };
       mark(`${point}.arm`);
-      const previous = (await runtime.api<State>(`${probe}/state`)).body.admissions.map(
+      const previous = (await runtime.api<State>(`${probe}/barrier`)).body.admissions.map(
         (a) => a.operationId,
       );
       assert.equal((await runtime.api(`${probe}/fault`, point)).status, 200);
@@ -87,7 +87,7 @@ export async function admissionRecovery(supplied?: Runtime): Promise<Record<stri
       mark(`${point}.wait`);
       await runtime.barrier(fixture.agent.agentId, point);
       mark(`${point}.inspect`);
-      const before = (await runtime.api<State>(`${probe}/state`)).body;
+      const before = (await runtime.api<State>(`${probe}/barrier`)).body;
       const identity = before.admissions.find((a) => !previous.includes(a.operationId));
       assert.ok(identity);
       assert.equal(identity.receipt, null);
