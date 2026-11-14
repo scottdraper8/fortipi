@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
+import { x as extract } from "tar";
 import { canonicalJson } from "../../packages/fortipi-contract/src/canonical-json.ts";
+import { checkPins, type SupplyChain } from "../../scripts/check-pins.ts";
 import {
   CompatibilityPreparationFailure,
   retainCompatibilityReport,
@@ -74,6 +76,7 @@ test("real watched Wrangler feature drift remains an alert while installed asses
 test("required current references, source bindings, fresh evidence and detail2 remain fail closed", async () => {
   const { basis, baseline, report } = await controlledCompatibility(root);
   assessReleaseReport(report, basis, baseline);
+  assessReleaseReport(JSON.parse(canonicalJson(report)), basis, baseline);
   const changed = structuredClone(report),
     row = changed.lookahead.results.find((r) => r.id === "workers-policy")!;
   row.observed = { ...row.observed!, paths: { ...row.observed!.paths } };
@@ -199,6 +202,83 @@ test("normal current-policy checks and closed spawn/parse/write/assessment failu
     const original = await readFile(path);
     await assert.rejects(retainCompatibilityReport(root, path, run), refusal("report-write"));
     assert.deepEqual(await readFile(path), original);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// This is a disposable validation fixture, never a candidate or an installed runtime.
+test("expired source observation and absent ignored inputs require bound fresh retained security data", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "fortipi-retained-policy-"));
+  try {
+    const archive = await promisify(execFile)("git", ["archive", "--format=tar", "HEAD"], {
+      cwd: root,
+      encoding: "buffer",
+      maxBuffer: 32_000_000,
+    });
+    const path = resolve(directory, "source.tar");
+    await writeFile(path, archive.stdout);
+    await extract({ file: path, cwd: directory });
+    await rm(path);
+    // ONLY reviewed patch members are copied as validator input facts; no package is executed.
+    const patches = JSON.parse(await readFile(resolve(root, "patches/review.json"), "utf8"));
+    for (const [id, patch] of Object.entries(patches) as [
+      string,
+      { files: Record<string, unknown> },
+    ][]) {
+      const name = id.slice(0, id.lastIndexOf("@"));
+      for (const member of Object.keys(patch.files)) {
+        const relative = `apps/worker/node_modules/${name}/${member}`,
+          target = resolve(directory, relative);
+        await mkdir(resolve(target, ".."), { recursive: true });
+        await copyFile(resolve(root, relative), target);
+      }
+    }
+    const policyPath = resolve(directory, "tools/unstale/supply-chain.json");
+    const policy = JSON.parse(await readFile(policyPath, "utf8")) as SupplyChain;
+    policy.advisory.checkedAt = new Date(Date.now() - 25 * 3600000).toISOString();
+    const policyBytes = Buffer.from(JSON.stringify(policy));
+    await writeFile(policyPath, policyBytes);
+    // Intentionally no dist/image or ignored receipt. Original source-side observation is expired.
+    await assert.rejects(checkPins(directory), /Advisory graph review/);
+    const receipt = JSON.parse(
+      await readFile(resolve(root, "dist/supply-chain/advisory-review.json"), "utf8"),
+    );
+    const { createHash } = await import("node:crypto");
+    receipt.reviewSha256 = createHash("sha256").update(policyBytes).digest("hex");
+    await checkPins(directory, receipt);
+    // Invalid supplied data must not fall back even when the real default path is fresh.
+    await checkPins(root);
+    for (const invalid of [null, false, {}, []]) await assert.rejects(checkPins(root, invalid));
+    for (const mutate of [
+      (r: typeof receipt) => {
+        r.reviewSha256 = "0".repeat(64);
+      },
+      (r: typeof receipt) => {
+        r.locks["pnpm-lock.yaml"] = "0".repeat(64);
+      },
+      (r: typeof receipt) => {
+        r.locks["tools/unstale/pnpm-lock.yaml"] = "0".repeat(64);
+      },
+      (r: typeof receipt) => {
+        r.advisory.identities++;
+      },
+      (r: typeof receipt) => {
+        r.advisory.findings = ["synthetic-actionable-advisory"];
+      },
+      (r: typeof receipt) => {
+        r.advisory.checkedAt = new Date(Date.now() - 25 * 3600000).toISOString();
+      },
+      (r: typeof receipt) => {
+        r.advisory.checkedAt = new Date(Date.now() + 120000).toISOString();
+      },
+    ]) {
+      const bad = structuredClone(receipt);
+      mutate(bad);
+      await assert.rejects(checkPins(directory, bad));
+    }
+    for (const invalid of [null, false, {}, []])
+      await assert.rejects(checkPins(directory, invalid));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

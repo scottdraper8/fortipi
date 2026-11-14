@@ -253,9 +253,13 @@ function snapshot(value: unknown, source: (typeof sources)[number]): asserts val
   const s = closed(value, ["commit", "version", "sha256", "paths"]);
   assert.match(String(s.commit), commit);
   assert.match(String(s.sha256), digest);
-  assert.deepEqual(Object.keys(object(s.paths)), source.paths);
+  assert.deepEqual(Object.keys(object(s.paths)).sort(), [...source.paths].sort());
   for (const h of Object.values(object(s.paths))) assert.match(String(h), digest);
-  if (source.paths.length) assert.equal(hash(s.paths), s.sha256);
+  if (source.paths.length)
+    assert.equal(
+      hash(Object.fromEntries(source.paths.map((path) => [path, object(s.paths)[path]]))),
+      s.sha256,
+    );
   if (source.manifest || !source.paths.length)
     assert.ok(typeof s.version === "string" && s.version.length > 0);
   else assert.equal(s.version, null);
@@ -364,14 +368,19 @@ export function assessReleaseReport(
   assert.deepEqual(required.installed, refs);
 }
 
+/** Bytes must first be bound to the actual candidate producer/payload by the caller. */
+export interface RetainedCompatibilityInputs {
+  imageMetadata: Uint8Array;
+  advisoryReview: Uint8Array;
+}
 export async function validateReleaseReport(
   root: string,
   value: unknown,
   sourceCommit: string,
   now = Date.now(),
-  retainedImageMetadata?: Uint8Array,
+  retained?: RetainedCompatibilityInputs,
 ): Promise<CompatibilityReport> {
-  const basis = await releaseBasis(root, sourceCommit, retainedImageMetadata);
+  const basis = await releaseBasis(root, sourceCommit, retained?.imageMetadata);
   const baselinePath = "tools/compatibility-watch/baseline.json";
   const rawBaseline = await readFile(resolve(root, baselinePath), "utf8");
   const committed = await promisify(execFile)("git", ["show", `${sourceCommit}:${baselinePath}`], {
@@ -382,7 +391,18 @@ export async function validateReleaseReport(
   assert.equal(rawBaseline, committed.stdout, "Release references must be source-committed");
   const baseline = JSON.parse(rawBaseline);
   // Reuse the full current age/expiry/lock/signature/lifecycle/patch/advisory enforcement.
-  await checkPins(root);
+  let advisory: unknown;
+  if (retained) {
+    closed(retained, ["imageMetadata", "advisoryReview"]);
+    assert.ok(
+      retained.advisoryReview.byteLength > 0 && retained.advisoryReview.byteLength <= 1_000_000,
+    );
+    advisory = JSON.parse(Buffer.from(retained.advisoryReview).toString());
+    const receipt = closed(advisory, ["format", "reviewSha256", "locks", "advisory"]);
+    closed(receipt.locks, ["pnpm-lock.yaml", "tools/unstale/pnpm-lock.yaml"]);
+    closed(receipt.advisory, ["checkedAt", "identities", "findings"]);
+  }
+  await checkPins(root, advisory);
   assessReleaseReport(value, basis, baseline, now);
   return value;
 }

@@ -88,12 +88,16 @@ export async function compatibilityReview(path: string, context?: CandidateReadC
     8_000_000,
   );
   assert.equal(sha256(imageMetadata), candidate.image.metadataSha256);
+  const advisoryReview = await regularBytes(
+    resolve(dirname(resolve(path)), "supply-chain/advisory-review.json"),
+    1_000_000,
+  );
   const report = await validateReleaseReport(
     root,
     JSON.parse(bytes.toString()),
     candidate.sourceCommit,
     Date.now(),
-    imageMetadata,
+    { imageMetadata, advisoryReview },
   );
   assert.equal(candidate.hashes.toolchainPolicy, report.validationInputs.sourcePolicySha256);
   assert.equal(candidate.hashes.lock, sha256(await regularBytes(resolve(root, "pnpm-lock.yaml"))));

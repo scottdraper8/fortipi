@@ -928,9 +928,19 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
     mode: 0o600,
     sha256: sha256(imageMetadata),
   });
+  const advisoryReview = await regularBytes(
+    resolve(repository, "dist/supply-chain/advisory-review.json"),
+  );
+  c.files.push({
+    path: "supply-chain/advisory-review.json",
+    size: advisoryReview.length,
+    mode: 0o600,
+    sha256: sha256(advisoryReview),
+  });
   const candidateZip = await metadataArchive(c, {
     "compatibility.json": compatibilityBytes,
     "image/image-metadata.json": imageMetadata,
+    "supply-chain/advisory-review.json": advisoryReview,
   });
   const hash = candidateZip.metadataSha256;
   const now = Date.now();
@@ -1205,18 +1215,56 @@ test("complete API/ZIP proof set requires all three target rows with distinct ac
     // No canonical generated image input remains; the authenticated ZIP is the only source.
     const canonicalMetadata = resolve(repository, "apps/worker/dist/container/image-metadata.json");
     const withheld = resolve(root, "withheld-image-metadata.json");
+    const canonicalAdvisory = resolve(repository, "dist/supply-chain/advisory-review.json");
+    const withheldAdvisory = resolve(root, "withheld-advisory-review.json");
     await rename(canonicalMetadata, withheld);
     try {
-      await verifyReleaseGates(
-        c,
-        hash,
-        candidateRef,
-        proofs,
-        githubRequest(undefined, server.transport),
-        now,
-      );
+      await rename(canonicalAdvisory, withheldAdvisory);
+      try {
+        await verifyReleaseGates(
+          c,
+          hash,
+          candidateRef,
+          proofs,
+          githubRequest(undefined, server.transport),
+          now,
+        );
+      } finally {
+        await rename(withheldAdvisory, canonicalAdvisory);
+      }
     } finally {
       await rename(withheld, canonicalMetadata);
+    }
+
+    // A valid ZIP digest/producer does not authorize a changed retained member.
+    const changedReview = JSON.parse(advisoryReview.toString());
+    changedReview.advisory.checkedAt = new Date(
+      Date.parse(changedReview.advisory.checkedAt) + 1000,
+    ).toISOString();
+    const altered = await metadataArchive(c, {
+      "compatibility.json": compatibilityBytes,
+      "image/image-metadata.json": imageMetadata,
+      "supply-chain/advisory-review.json": Buffer.from(`${canonicalJson(changedReview)}\n`),
+    });
+    const originalDigest = candidateRef.artifactDigest;
+    packets.set(70, altered);
+    candidateRef.artifactDigest = `sha256:${sha256(altered.bytes)}`;
+    try {
+      await assert.rejects(
+        verifyReleaseGates(
+          c,
+          hash,
+          candidateRef,
+          proofs,
+          githubRequest(undefined, server.transport),
+          now,
+        ),
+        /Authenticated candidate advisory review differs/,
+      );
+    } finally {
+      packets.set(70, candidateZip);
+      candidateRef.artifactDigest = originalDigest;
+      await altered.close();
     }
 
     const account = freeDecision.accountBindingSha256;

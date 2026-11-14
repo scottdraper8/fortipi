@@ -147,3 +147,11 @@ without rewriting their hashes or times. Missing/foreign/superseded provenance
 cannot clear required Free evidence. An operator-confirmed plan still requires
 the existing authenticated provider deployment, actual workload and freshness
 proofs. No Billing permission, new secret, model budget or plan change is implied.
+
+Retained consumers read image metadata and advisory review from authenticated
+candidate members, checking the declared file hashes before validation. They do
+not require or reconstruct ignored canonical image/advisory files. Supplied
+security data passes the same complete source-policy, both-lock, coverage,
+findings, age/future, signature, lifecycle and policy checks as ordinary pins;
+invalid supplied data never falls back to a fresh default. Missing mandatory
+retained members refuse. The default current-source writer/path is unchanged.

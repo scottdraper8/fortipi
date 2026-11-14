@@ -1104,12 +1104,29 @@ export async function readCompatibilityGate(
       sha256(imageMetadata) === candidate.image.metadataSha256,
     "Authenticated candidate image metadata differs",
   );
+  const advisoryRecord = candidate.files.find(
+    (f) => f.path === "supply-chain/advisory-review.json",
+  );
+  assert.ok(
+    advisoryRecord && advisoryRecord.size <= 1_000_000,
+    "Missing required retained advisory review",
+  );
+  const advisoryReview = await request.verifyArtifact(
+    candidateArtifact,
+    "supply-chain/advisory-review.json",
+  );
+  assert.ok(
+    advisoryReview &&
+      advisoryReview.length === advisoryRecord.size &&
+      sha256(advisoryReview) === advisoryRecord.sha256,
+    "Authenticated candidate advisory review differs",
+  );
   const report = await validateReleaseReport(
     repository,
     JSON.parse(bytes.toString()),
     candidate.sourceCommit,
     now,
-    imageMetadata,
+    { imageMetadata, advisoryReview },
   );
   assert.equal(report.validationInputs.sourcePolicySha256, candidate.hashes.toolchainPolicy);
   const baseline = object(
