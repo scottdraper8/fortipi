@@ -2,7 +2,7 @@ name: Measured original Root context
 on:
   push:
     branches:
-      - ci/fortipi-root-context-diagnostic-20261114-1
+      - ci/fortipi-root-context-diagnostic-20261114-2
 permissions:
   contents: read
 concurrency:
@@ -20,7 +20,7 @@ jobs:
   policy-and-integration:
     if: github.repository == 'scottdraper8/fortipi' && !github.event.repository.fork
       && github.ref ==
-      'refs/heads/ci/fortipi-root-context-diagnostic-20261114-1'
+      'refs/heads/ci/fortipi-root-context-diagnostic-20261114-2'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
