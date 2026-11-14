@@ -88,6 +88,12 @@ async function execute(
   args: string[],
   timeout = 45_000,
 ): Promise<{ code: number; output: string }> {
+  const operation = args[0];
+  assert.ok(
+    operation &&
+      ["--version", "init", "notify", "status", "sync", "advisories"].includes(operation),
+    "Unknown public unstale operation",
+  );
   return new Promise((accept, reject) => {
     // Public registry/catalog queries receive no registry or application credentials.
     const env: NodeJS.ProcessEnv = {};
@@ -133,7 +139,7 @@ async function execute(
       if (timedOut || output.length > 2_000_000)
         reject(
           new Error(
-            "unstale timeout/output limit; coverage unavailable; retry after checking service",
+            `unstale ${operation} timeout/output limit; coverage unavailable; retry after checking service`,
           ),
         );
       else accept({ code: code ?? 1, output });

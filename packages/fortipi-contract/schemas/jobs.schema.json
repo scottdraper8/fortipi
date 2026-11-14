@@ -369,6 +369,40 @@
           },
           "required": ["identity", "state"],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "FortiPi native executor observation of an existing durable assignment awaiting local approval. Never a no-start proof or authority to dispatch again; cloud adapters do not emit this state.",
+          "properties": {
+            "identity": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+            },
+            "state": {
+              "const": "waiting_for_local_policy"
+            },
+            "operation": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation"
+            }
+          },
+          "required": ["identity", "state", "operation"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "FortiPi native executor has the existing durable allowed assignment queued for preparation or materializing its working copy in the current process incarnation, before the winning start claim. No process-running or safe-restart proof; never emitted after an uncertain claim or by cloud adapters.",
+          "properties": {
+            "identity": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity"
+            },
+            "state": {
+              "const": "preparing"
+            },
+            "operation": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation"
+            }
+          },
+          "required": ["identity", "state", "operation"],
+          "additionalProperties": false
         }
       ]
     },
@@ -419,6 +453,7 @@
             },
             {
               "type": "object",
+              "description": "Fresh retry: authorizationId is a caller-chosen business/idempotency identity that the server binds to the original job/version, new operation and one current covering grant/credential; it grants no permission and is not an external authorization token. Omit newJobId for durable server allocation before asynchronous work. An explicit newJobId must belong to the selected Agent and be unique.",
               "properties": {
                 "kind": {
                   "const": "new-job"
@@ -430,7 +465,7 @@
                   "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
                 }
               },
-              "required": ["kind", "newJobId", "authorizationId"],
+              "required": ["kind", "authorizationId"],
               "additionalProperties": false
             }
           ]

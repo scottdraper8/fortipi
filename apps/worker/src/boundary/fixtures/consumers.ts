@@ -32,8 +32,120 @@ import type {
   WorkspaceProviderFactory,
 } from "../env.js";
 import type { ExecutionBackend } from "../execution-backend.js";
+import type {
+  RuntimeHostContext,
+  RuntimeHostStorageSample,
+  RuntimeHostStorageSampleInput,
+  StorageSampleInput,
+  WorkspaceStorageSample,
+  WorkspaceStorageSampleInput,
+} from "../infrastructure.js";
 import type { JobStore } from "../job-store.js";
 import type { WorkspaceObjectRpc } from "../workspace-object.js";
+
+export function storageSamplePorts(lookup: D.StoreLookup): void {
+  const authority: WorkspaceStorageSampleInput = {
+    kind: "authority",
+    sampleId: "authority_sample",
+    policyVersion: 1,
+  };
+  const child: WorkspaceStorageSampleInput = {
+    kind: "child",
+    sampleId: "child_sample",
+    policyVersion: 1,
+    lookup,
+    registryVersion: 2,
+  };
+  const observation: WorkspaceStorageSample = {
+    kind: "child",
+    sampleId: child.sampleId,
+    lookup,
+    registryVersion: 2,
+    bytes: 4096,
+    observedAt: 1000,
+  };
+  // @ts-expect-error A child lookup alone does not bind a registry observation.
+  const unversioned: WorkspaceStorageSampleInput = { ...child, registryVersion: undefined };
+  // @ts-expect-error Authority sampling cannot select a child through structural assignment.
+  const redirected: WorkspaceStorageSampleInput = { ...authority, lookup, registryVersion: 2 };
+  // @ts-expect-error A child response must retain its exact lookup/version pair.
+  const anonymous: WorkspaceStorageSample = { ...observation, lookup: undefined };
+  const incomplete = {
+    sampleId: "census_sample",
+    policyVersion: 1,
+    sampleSeq: 1,
+    observedAt: 1000,
+    coverage: { kind: "workspace" as const, bytes: 4096 },
+    coveredReservationIds: [],
+  };
+  // @ts-expect-error Workspace coverage requires a completed census identity.
+  const census: StorageSampleInput = incomplete;
+  void [authority, child, observation, unversioned, redirected, anonymous, census];
+}
+
+export function runtimeQuiescencePort(input: D.RuntimeQuiesceRequest): D.RuntimeQuiescence {
+  const stopped: D.RuntimeQuiescence = { ...input, stopped: true, observedAt: 1000 };
+  // @ts-expect-error A disconnect or pending stop is not evidence that the native runtime stopped.
+  const pending: D.RuntimeQuiescence = { ...input, stopped: false, observedAt: 1000 };
+  // @ts-expect-error Cleanup cannot select an unbound image or replacement runtime.
+  const unbound: D.RuntimeQuiesceRequest = { requestId: input.requestId };
+  void [pending, unbound];
+  return stopped;
+}
+
+export function runtimeHostStoragePort(
+  context: RuntimeHostContext,
+  runtimeId: string,
+): RuntimeHostStorageSample {
+  const input: RuntimeHostStorageSampleInput = {
+    sampleId: "host_sample",
+    policyVersion: 1,
+    context,
+    runtimeId,
+    registryVersion: 1,
+  };
+  const sample: RuntimeHostStorageSample = {
+    sampleId: input.sampleId,
+    context,
+    runtimeId,
+    registryVersion: input.registryVersion,
+    bytes: 4096,
+    observedAt: 1000,
+  };
+  // @ts-expect-error An unacknowledged runtime cannot select a Host to observe.
+  const unknown: RuntimeHostStorageSampleInput = { ...input, runtimeId: undefined };
+  // @ts-expect-error A physical sample must retain its exact registry observation.
+  const unversioned: RuntimeHostStorageSample = { ...sample, registryVersion: undefined };
+  // @ts-expect-error Host ownership cannot be inferred from an image or child alone.
+  const unowned: RuntimeHostContext = { ...context, ownershipNonce: undefined };
+  // @ts-expect-error A separate Host measurement is never a Computer child measurement.
+  const child: WorkspaceStorageSample = { ...sample, kind: "child" };
+  void [unknown, unversioned, unowned, child];
+  return sample;
+}
+
+export async function adminExportPorts(
+  agent: AgentSessionRpc,
+  workspace: WorkspaceObjectRpc,
+  auth: D.AuthContext,
+  input: D.ExportRequest,
+): Promise<void> {
+  await agent.exportData(auth, { ...input, action: "exports.create" });
+  const result = await workspace.exportData(auth, { ...input, action: "backups.create" });
+  if (result.ok)
+    for (const reference of result.value.artifacts) {
+      if ("scope" in reference) {
+        const admin: D.AdminArtifactReference = reference;
+        void admin;
+      } else {
+        const legacy: D.ByteReference = reference;
+        void legacy;
+      }
+    }
+  const { action: _action, ...missingAction } = input;
+  // @ts-expect-error A private producer must receive the actual initiating action.
+  await agent.exportData(auth, missingAction);
+}
 
 function value<T>(outcome: D.Outcome<T>): T {
   if (!outcome.ok) throw new Error(outcome.code);

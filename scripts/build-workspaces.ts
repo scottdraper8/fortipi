@@ -1,14 +1,72 @@
 import { execFile, spawn } from "node:child_process";
 import { chmod, copyFile, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import type { Readable } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
+import { sourceFailureLines, sourceTestDiagnostic } from "./source-test-processes.ts";
 
 export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const publicPackages = ["contract", "client", "tui", "executor", "cli"] as const;
 export const packagePaths = publicPackages.map((name) => `packages/fortipi-${name}`);
 export const projects = [...packagePaths, "apps/worker"];
+export const FULL_SOURCE_TEST_TIMEOUT_MS = 30 * 60_000;
+
+/** Observe only complete closed stderr records; leave execFile's capture/error handling alone. */
+export function observeCandidateDiagnostics(
+  stderr: Readable,
+  emit: (line: string) => void = (line) => {
+    process.stderr.write(line);
+  },
+): void {
+  observeDiagnosticLines(stderr, (line) => {
+    if (sourceTestDiagnostic(line)) emit(`${line}\n`);
+  });
+}
+
+/** Classify private TAP at its existing capture boundary, before wrapper truncation. */
+export function observeSourceTestFailures(stdout: Readable, emit: (line: string) => void): void {
+  observeDiagnosticLines(stdout, sourceFailureLines(emit));
+}
+
+function observeDiagnosticLines(stream: Readable, acceptLine: (line: string) => void): void {
+  const decoder = new StringDecoder("utf8");
+  let partial = "",
+    dropping = false;
+  const flush = () => {
+    const line = partial.endsWith("\r") ? partial.slice(0, -1) : partial;
+    const eligible = !dropping;
+    partial = "";
+    dropping = false;
+    try {
+      if (eligible) acceptLine(line);
+    } catch {
+      /* Diagnostics cannot replace the child result. */
+    }
+  };
+  const accept = (text: string) => {
+    for (const character of text) {
+      if (character === "\n") flush();
+      else if (!dropping) {
+        // The classifier allows512 characters; retain one possible CR terminator.
+        if (partial.length + character.length > 513) {
+          partial = "";
+          dropping = true;
+        } else partial += character;
+      }
+    }
+  };
+  stream.on("data", (chunk: Buffer | string) =>
+    accept(typeof chunk === "string" ? chunk : decoder.write(chunk)),
+  );
+  stream.once("end", () => {
+    accept(decoder.end());
+    flush();
+  });
+  // A close without end is not a complete final line and deliberately does not flush.
+}
 
 /** Argument arrays only. A timeout terminates the child and remains a failure. */
 export async function run(
@@ -61,17 +119,61 @@ export async function filesBelow(path: string): Promise<string[]> {
   return result.sort();
 }
 
-async function tests(roots: string[]): Promise<void> {
-  const paths: string[] = [];
+export async function tests(
+  roots: string[],
+  observeProcesses = false,
+  totalTimeout?: number,
+  {
+    directory = repository,
+    execute = run,
+    now = () => performance.now(),
+  }: {
+    directory?: string;
+    execute?: typeof run;
+    now?: () => number;
+  } = {},
+): Promise<void> {
+  const deadline = totalTimeout === undefined ? undefined : now() + totalTimeout;
+  const remainingTimeout = (): number => {
+    if (deadline === undefined) return 900_000;
+    const remaining = deadline - now();
+    if (remaining <= 0) throw new Error("Full source test deadline exhausted");
+    return remaining;
+  };
+  const paths = new Set<string>();
   for (const root of roots) {
     // Missing required suites fail. Never turn a partial checkout into green CI.
-    const found = (await filesBelow(join(repository, root))).filter((p) =>
+    const found = (await filesBelow(join(directory, root))).filter((p) =>
       /(?:\.test|\.spec)\.ts$/.test(p),
     );
     if (found.length === 0) throw new Error(`Required test suite has no tests: ${root}`);
-    paths.push(...found);
+    for (const path of found) paths.add(path);
   }
-  await run(process.execPath, ["--test", ...paths], repository, 900_000);
+  // This fixture mutates the canonical AD context and replaces shared CLI assets.
+  // Finish readers from every selected root before running it in its own process.
+  const provenance = join(
+    directory,
+    "packages/fortipi-cli/test/enforcer-context-provenance.test.ts",
+  );
+  const gates = join(directory, "scripts/test/release/gates.test.ts");
+  const parallel = [...paths].filter((path) => path !== gates && path !== provenance);
+  const diagnostics = observeProcesses
+    ? ["--require", join(directory, "scripts/source-test-processes.ts")]
+    : [];
+  // Emit each assertion immediately, even if another file outlives the aggregate runner.
+  // Keep the complete native aggregation file separate; shared-context mutation stays last.
+  for (const selected of [
+    parallel,
+    paths.has(gates) ? [gates] : [],
+    paths.has(provenance) ? [provenance] : [],
+  ])
+    if (selected.length)
+      await execute(
+        process.execPath,
+        [...diagnostics, "--test", "--test-reporter=tap", ...selected],
+        directory,
+        remainingTimeout(),
+      );
 }
 
 async function compile(path: string): Promise<void> {
@@ -101,7 +203,7 @@ export async function main(command: string | undefined): Promise<void> {
       const manifest = JSON.parse(await readFile(join(repository, "package.json"), "utf8")) as {
         version: string;
       };
-      const output = await promisify(execFile)(
+      const pending = promisify(execFile)(
         process.execPath,
         [
           "scripts/prepare-release.ts",
@@ -113,8 +215,38 @@ export async function main(command: string | undefined): Promise<void> {
           "--scope",
           "fortipi-ci-test",
         ],
-        { cwd: repository, timeout: 900_000, maxBuffer: 8_000_000 },
+        // This wraps build, checks, the 30-minute test stage and packing. Keep
+        // the existing 40-minute candidate ceiling; individual stage limits remain.
+        { cwd: repository, timeout: 40 * 60_000, maxBuffer: 8_000_000 },
       );
+      if (pending.child.stderr) observeCandidateDiagnostics(pending.child.stderr);
+      const output = await pending.catch((error: unknown) => {
+        // Node may truncate a large captured test log while printing an error.
+        // Surface only the fixed failure record; raw tail/argv/env stay private.
+        try {
+          const stderr =
+            error !== null && typeof error === "object"
+              ? Object.getOwnPropertyDescriptor(error, "stderr")?.value
+              : undefined;
+          if (typeof stderr === "string") {
+            for (const line of stderr.split("\n").filter(sourceTestDiagnostic).slice(-1028))
+              process.stderr.write(`${line}\n`);
+            const records = stderr
+              .slice(-8192)
+              .split("\n")
+              .filter((line) =>
+                /^\{"diagnostic":"required-command-failure","exitCode":(?:null|-?\d{1,10}),"limitHit":(?:true|false)\}$/.test(
+                  line,
+                ),
+              )
+              .slice(-4);
+            for (const record of records) process.stderr.write(`${record}\n`);
+          }
+        } catch {
+          /* Preserve the original failure even if diagnostics cannot be read. */
+        }
+        throw error;
+      });
       const receipt = JSON.parse(output.stdout.trim()) as {
         schemaVersion: number;
         candidateManifestPath: string;
@@ -153,6 +285,11 @@ export async function main(command: string | undefined): Promise<void> {
       await run(process.execPath, ["packages/fortipi-contract/scripts/generate.ts"]);
       await compile("packages/fortipi-contract");
       await compile("packages/fortipi-executor");
+      return;
+    case "build:evidence":
+      // Retained-candidate evidence needs source-side TS ports, never a new Worker/image/pack.
+      await run(process.execPath, ["packages/fortipi-contract/scripts/generate.ts"]);
+      for (const path of packagePaths) await compile(path);
       return;
     case "build": {
       await run(process.execPath, ["packages/fortipi-contract/scripts/generate.ts"]);
@@ -200,11 +337,16 @@ export async function main(command: string | undefined): Promise<void> {
       await typecheck(["packages/fortipi-contract", "packages/fortipi-executor"]);
       return;
     case "test":
-      await tests([
-        ...packagePaths.map((p) => `${p}/test`),
-        "apps/worker/test",
-        "scripts/test/release",
-      ]);
+      await tests(
+        [
+          ...packagePaths.map((p) => `${p}/test`),
+          "apps/worker/test",
+          "scripts/test/release",
+          "tests/clients",
+        ],
+        true,
+        FULL_SOURCE_TEST_TIMEOUT_MS,
+      );
       return;
     case "test:executor":
       await tests(["packages/fortipi-executor/test"]);
@@ -228,14 +370,16 @@ export async function main(command: string | undefined): Promise<void> {
         }
         await run(
           process.execPath,
-          ["tests/clients/run-evidence.ts", "local", ...extra],
+          ["scripts/prepare-release.ts", "evidence", "--mode", "local", ...extra],
           repository,
           900_000,
         );
       }
       return;
     default:
-      throw new Error("Expected build, typecheck, test, test:executor, test:browser or test:pty");
+      throw new Error(
+        "Expected build, build:evidence, typecheck, test, test:executor, test:browser or test:pty",
+      );
   }
 }
 

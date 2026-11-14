@@ -86,6 +86,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/core@3.981.0": {
+      "name": "@aws-sdk/core",
+      "version": "3.981.0",
+      "integrity": "sha512-Mnu7gaDrC5UCdyH8uLxLfB2eWbjE/HbjKX1U1J2VQxG3TTATUDObW2wU3I8iH3e9YH5NN2CY6w1mlAIe2XJ3jg==",
+      "published": "2026-11-10T19:40:34.393Z",
+      "reviewedAt": "2026-11-12T12:14:56.215Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "f8ee54a7caed44032988fc757c0f1df42d755117ac0ba9467cfd8d2e2d5da4b1",
+      "manifestSha256": "920876e6431c6f1f256366ba9460bc2c4f7e29372265454e9f2ad54457bcd891",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "edea91454b811f127fbdea3d86f378f6719bd372ed440abf82b232f6fca06c3d"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/credential-provider-env@3.972.83": {
       "name": "@aws-sdk/credential-provider-env",
       "version": "3.972.83",
@@ -95,6 +116,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "8dd818c0ba3fbcf6ffd2806f78cbd0de9b7d390d30b73d575672c4abc7148e87",
       "manifestSha256": "3a2f465fab61019f167eb4e8678a9499585114114b7306be7ffe1bb7698a9f24",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-env@3.972.84": {
+      "name": "@aws-sdk/credential-provider-env",
+      "version": "3.972.84",
+      "integrity": "sha512-akZJetiMVeLRHsKzYh3LamDCo74ZUCeo0XoyRKMEMZT5qP7ReM6LhpioBCyuqKP5Vav5gEOeCmaQV0VVQr1Meg==",
+      "published": "2026-11-10T19:40:12.819Z",
+      "reviewedAt": "2026-11-12T12:14:56.273Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "f058b161ec86746f43cd12b27d17d2274fda52e2c7f6a400bb04a8213d9cd1f3",
+      "manifestSha256": "61c632c456ea826d84f950e21d87f6b21e923261885b8f5e9c0a1dc38d9e1e49",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -126,6 +168,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/credential-provider-http@3.972.86": {
+      "name": "@aws-sdk/credential-provider-http",
+      "version": "3.972.86",
+      "integrity": "sha512-U4mHaDRPWAn63yhl7FXIzbppNmW1F+4dSLeuiUpej2v3Xb6rGwvayEJ8SdlrdMV+/mZtd+GStTEP2HqurEzXtw==",
+      "published": "2026-11-10T19:41:10.983Z",
+      "reviewedAt": "2026-11-12T12:14:56.208Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "739a39264af7286bfb3ead359b5e0b6247886234ad8c143c59e5dcb2104808c2",
+      "manifestSha256": "eeb379f6d195b0b6a3f809b0801c4009b12ef5ece882f978e7a8856f83f59b9c",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/credential-provider-ini@3.973.28": {
       "name": "@aws-sdk/credential-provider-ini",
       "version": "3.973.28",
@@ -135,6 +196,48 @@
       "license": "Apache-2.0",
       "archiveSha256": "c3f5f04fbda1a3a419ec3af5485ff2aecbf5cb21379734736104f0b72800862c",
       "manifestSha256": "925de754d1a2798bc1e77f51142e936c5e8b979e784b9fb4cf74224cd149ed41",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-ini@3.973.29": {
+      "name": "@aws-sdk/credential-provider-ini",
+      "version": "3.973.29",
+      "integrity": "sha512-/idO4bVjw34b1OiNxDqFNr3BsPg9dRm1iS6XM/rTqA33RfUgTuwBCFFCz/TwxNHkrQ45tp+RpKE8P609Ino8XQ==",
+      "published": "2026-11-10T19:40:20.108Z",
+      "reviewedAt": "2026-11-12T12:14:56.285Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "25f4b52878f03abd881927536158ed3c1742037c67e76030fb7db38d195fbb4b",
+      "manifestSha256": "603577b46cadef97e895a3d26df7537125a87dd78e98c7fe5167a5a050172016",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-ini@3.973.30": {
+      "name": "@aws-sdk/credential-provider-ini",
+      "version": "3.973.30",
+      "integrity": "sha512-r6r6499GWoGN943NA5YEhBEQ6TEOGTf7tTOBhHd/zw0UbNvSzd1/zPCNcDkPmRarA+e24X7KgxutqxjoWcskBg==",
+      "published": "2026-11-11T20:10:10.284Z",
+      "reviewedAt": "2026-11-12T20:41:08.024Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "df282b5f01107df262ac47ecbca6c28b22113e04d4f983ecaf72fb1cfcc3d894",
+      "manifestSha256": "60f66866ffd48085ef054323d4d3f7009114255f06fa0a5bccbe22c52fe19657",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -166,6 +269,44 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/credential-provider-login@3.972.91": {
+      "name": "@aws-sdk/credential-provider-login",
+      "version": "3.972.91",
+      "integrity": "sha512-MujcVZc7mnodrsp85NX0QpnQrt7kY6zbVUl+TcvzJEZzgEQkRj4iopj0kNs3uXJUArpkA64Rxa0ga86qdx0gag==",
+      "published": "2026-11-10T19:40:19.784Z",
+      "reviewedAt": "2026-11-12T12:14:56.452Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "bc561506c3a19af0b4ed7c881d497655197cb15148a9ab907acd40f1f16d8f45",
+      "manifestSha256": "efb873629c190ad247989da7cb56b4e2795f9221ebb211f775198daa2ec1ba7a",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-login@3.972.92": {
+      "name": "@aws-sdk/credential-provider-login",
+      "version": "3.972.92",
+      "integrity": "sha512-96bcp9Pe/Xd60OEwncZ+kAQTQSu+fJnpUGz1qE6ghF5jnETmrk8XMU86mIP3lolvnCgR61XbZ+Ht6hdBjiQOmQ==",
+      "published": "2026-11-11T20:10:09.625Z",
+      "reviewedAt": "2026-11-12T20:41:07.999Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "62e6bfe3bcf433dbe5ac6210bde78895c503631cffa3eb08400ae7d332893232",
+      "manifestSha256": "5f718f49db914811070d96e4e88840e91e3c2d3f5b599285a01c2543e0b1bc43",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/credential-provider-node@3.972.95": {
       "name": "@aws-sdk/credential-provider-node",
       "version": "3.972.95",
@@ -175,6 +316,48 @@
       "license": "Apache-2.0",
       "archiveSha256": "0a5f41c2228d1399f2646c71b6f7d429ee92b0781b8d1fab75a33066bf2c6cc2",
       "manifestSha256": "e9dcb3c54c55077c4deb2ee3583baab4c8195a04bae1f5cca1a25c5b1116ae8b",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-node@3.972.96": {
+      "name": "@aws-sdk/credential-provider-node",
+      "version": "3.972.96",
+      "integrity": "sha512-tBunyyRnxMvKsCn/pu1QrIxUYZ4Z25LkV8zGkFGpSE/YmI2W4m8SLQzloG/hZlelGP2vLRGtIQc5w1+DoXCK1A==",
+      "published": "2026-11-10T19:40:41.591Z",
+      "reviewedAt": "2026-11-12T12:14:56.450Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "15db328cf481e19f83229467f9948d04920a8e1044e87ebf82c18b5ec1d2621f",
+      "manifestSha256": "16347b08a81af040db3ec32f7dcc73c0a5fcec63345e0559002e897e6d316c14",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-node@3.972.97": {
+      "name": "@aws-sdk/credential-provider-node",
+      "version": "3.972.97",
+      "integrity": "sha512-E4a0IXXJVsIdo/K9roX4JAEfI0JJr7KTPymkbKgETRDqEcLygE4ZlLTe24+7Qkh8Dl5YpnPd+Tt0DOPJDFXIwA==",
+      "published": "2026-11-11T20:11:01.360Z",
+      "reviewedAt": "2026-11-12T20:41:07.989Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "d5acf9718ed4b88c032f387d036c93a402472276d66664cd7f15c5d6c808dda4",
+      "manifestSha256": "2d44a9de496124611f32b9f59ef0f340f3e46136170276bfab4ead3e73060933",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -208,6 +391,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/credential-provider-process@3.972.84": {
+      "name": "@aws-sdk/credential-provider-process",
+      "version": "3.972.84",
+      "integrity": "sha512-199C6OpNejd0nq9GFAkEFIKids1FL0R6LJtL9c1OTiDOXki7S1OduuPxW4+hE0LwndcYJ7YHOuYTlqScfpCocA==",
+      "published": "2026-11-10T19:40:20.188Z",
+      "reviewedAt": "2026-11-12T12:14:56.457Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "c817567a7cbfec490a2fa9b8cf9b97ddb83e1495d802409125d2edcfd6207cc3",
+      "manifestSha256": "baae9db22248e234d781a3ece0b665c2932b1911ba1a561c6cbf65d2ee908fff",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "2ef1e48ea743d9c82313e6887858f7c1feaddd636f5a3f43926aab0143e67ebd"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/credential-provider-sso@3.973.27": {
       "name": "@aws-sdk/credential-provider-sso",
       "version": "3.973.27",
@@ -217,6 +421,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "159b2d18b253577da2be4664d81f26981fcdf89163e6a15981b767d983783a2a",
       "manifestSha256": "90b6939afc2368526c85aa901a172892c8f13842ef4e8d9849c8b0d5de54fbde",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "2ef1e48ea743d9c82313e6887858f7c1feaddd636f5a3f43926aab0143e67ebd"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/credential-provider-sso@3.973.28": {
+      "name": "@aws-sdk/credential-provider-sso",
+      "version": "3.973.28",
+      "integrity": "sha512-bGg7wH8wVDJQIcJggO9lg1ZYbG7l+PbLwHuM3Bi/e1TlCZhU712JS1W3tdRpyptdJD1UGyhBNGO/YrhrQCHKbg==",
+      "published": "2026-11-10T19:41:11.838Z",
+      "reviewedAt": "2026-11-12T12:14:56.482Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "3197bdf9a4b80dadb74f4f49c9bee17ee111662ff5755ff27d92d87f35ecb343",
+      "manifestSha256": "563cd49025991c00538565dd8feca7cdf2eb4d5f5c98fdfe850c06b91be3a707",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -250,6 +475,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/credential-provider-web-identity@3.972.90": {
+      "name": "@aws-sdk/credential-provider-web-identity",
+      "version": "3.972.90",
+      "integrity": "sha512-duLeE3xlf0viHeH+1RM4z5duR3b32BCZTWVMu+MbxFPjQBxy7hmIGEqt5hekuFPRuXoyhMovjNl+PNNsb5oiGQ==",
+      "published": "2026-11-10T19:40:19.563Z",
+      "reviewedAt": "2026-11-12T12:14:56.771Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "9f99e9b5c876b9e0d80ae4dddbfeef2c936d9c0ef51aad4d705defcdc5b05554",
+      "manifestSha256": "5cb3d9780cd50ceece5d2b225d43745af556d77293df954401c68349925bbc0e",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "2ef1e48ea743d9c82313e6887858f7c1feaddd636f5a3f43926aab0143e67ebd"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/eventstream-handler-node@3.972.41": {
       "name": "@aws-sdk/eventstream-handler-node",
       "version": "3.972.41",
@@ -259,6 +505,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "a910f8baa0beb2b5f42fb6664891d698e8f014236e96ae0fe644f6360abdddd4",
       "manifestSha256": "ed8102c00ff74551ba44e4219f6edcc6774c1f08f75abd5b53016b7ee8251c2a",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "07364a5f7d0177a59a05a0002187431f8f899320983c0dc049d72df015e8064c"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/eventstream-handler-node@3.972.42": {
+      "name": "@aws-sdk/eventstream-handler-node",
+      "version": "3.972.42",
+      "integrity": "sha512-YVB1wrpE1WF8NvMpaRyhwm9XBYl3HTbPNEIgybi0b0XpmBrJ7Y3Y/drbxh9qAVMbR+0hcwM63GPWzhOVRuerfg==",
+      "published": "2026-11-10T19:40:31.542Z",
+      "reviewedAt": "2026-11-12T12:14:56.616Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "98e953df2672322d2dee5891123fdae269277bf163b86785a81ec3d984fdf0e3",
+      "manifestSha256": "76fba4af3d9526a8396498c1f30c310ba425378f0f34d74fa73238e55f3d1d67",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -292,6 +559,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/middleware-eventstream@3.972.38": {
+      "name": "@aws-sdk/middleware-eventstream",
+      "version": "3.972.38",
+      "integrity": "sha512-4K6FDz2BxH3rve8Hw/8uApWXKCuKKMeYKzY23PoiGqUBWaA23eAy+GzW9aoG3Cm7HqgYzqkljl3ECJRJCxGs7g==",
+      "published": "2026-11-10T19:40:58.126Z",
+      "reviewedAt": "2026-11-12T12:14:56.665Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "b54b7dfb2fe940cecc3f9e785da0a3d741070c26b06ec1b23204eb0df05906f8",
+      "manifestSha256": "c7a3f5db9134f88a536c8dac1bbb75e322aed0af03d8b64fb6f4d7fe8639136d",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "e345c2ee7df4446e739de7b91535f0c10ddcd909b9753889e943ee637b05db8c"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/middleware-websocket@3.972.65": {
       "name": "@aws-sdk/middleware-websocket",
       "version": "3.972.65",
@@ -313,6 +601,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@aws-sdk/middleware-websocket@3.972.66": {
+      "name": "@aws-sdk/middleware-websocket",
+      "version": "3.972.66",
+      "integrity": "sha512-feGNDB15ZgqX4DTsUykkgj7d8hzfzx03v80EIyRA1FTbsbAJQKxYB50kRbrrpE5WeFaWhgk+p5YHlsoyXrI2/g==",
+      "published": "2026-11-10T19:40:49.767Z",
+      "reviewedAt": "2026-11-12T12:14:56.642Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "09176843bf8dd0338ea9817f5ac51e4b571aa5251be5688b0f30a2167cef621d",
+      "manifestSha256": "57bdc0248dfdf2eaa61ed1582f66eaf246d18f652c7dcedf5beaba263fdf1432",
+      "engines": {
+        "node": ">= 14.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "07364a5f7d0177a59a05a0002187431f8f899320983c0dc049d72df015e8064c"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@aws-sdk/nested-clients@3.998.2": {
       "name": "@aws-sdk/nested-clients",
       "version": "3.998.2",
@@ -322,6 +631,25 @@
       "license": "Apache-2.0",
       "archiveSha256": "50ea0041665f74f5866de26c85db431b794e661ac5eb284f7633d8a095d524d4",
       "manifestSha256": "e539d863be18b6e5a57ce41c637b418cf0151997b99999d56e003a9bb780ecb8",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/nested-clients@3.998.3": {
+      "name": "@aws-sdk/nested-clients",
+      "version": "3.998.3",
+      "integrity": "sha512-acHTTzMB13CU6dU4sxABYExMI3PQM2zStWH2MiUwJp/7QKTrLg2f7mbzSXoegW2kYOk2tdqQYagsZrWB8Xv7eA==",
+      "published": "2026-11-10T19:41:05.944Z",
+      "reviewedAt": "2026-11-12T12:14:56.779Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "30b5f1ff913a8b8ecabfbcd650beb4581d77cffe4fee3621d65949137ae1aad1",
+      "manifestSha256": "756480d422c005e6a3f22f5ba573c58d4f81579ae709767e9f8fccbdbad67d7c",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -383,6 +711,27 @@
       "license": "Apache-2.0",
       "archiveSha256": "7b797a8dc28d8bcc1cc14f4cbd2bee0814ece2240afa384b3b77401be5e33c9e",
       "manifestSha256": "daa9ccc4e947a1b98d61546f0fb6ce3a3ce9a164a2ba8f2fafa0848901ac7b17",
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d82ceb8cbd004a2d4834085c557d55459f528e30268d95159ee1e4030a693a6e"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@aws-sdk/token-providers@3.1166.0": {
+      "name": "@aws-sdk/token-providers",
+      "version": "3.1166.0",
+      "integrity": "sha512-ngJ8mxXqtQ9mnp7QV6TWKJCxkpjVfPWxKQSc2FYhCyCfOVFIGdFv7P+/RqVffFrJAorwBPpktnv32gNlcEgF4g==",
+      "published": "2026-11-10T19:40:20.510Z",
+      "reviewedAt": "2026-11-12T12:14:56.903Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "408def505f451716c8f9ad064a77af3c56f8156e22b3f36e0f0cedb5ecbe69be",
+      "manifestSha256": "21351b0d3703188e8423d4a486ca6f37d214cd9d233303a9c55bdde4d4718ab7",
       "engines": {
         "node": ">=20.0.0"
       },
@@ -1222,21 +1571,21 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cfworker%2fjson-schema@4.1.6; Sigstore transparency verification required at release"
     },
-    "@cloudflare/computer@0.10.0": {
+    "@cloudflare/computer@0.11.1": {
       "name": "@cloudflare/computer",
-      "version": "0.10.0",
-      "integrity": "sha512-M0CdY44QrhQaKNh3GSapxykl9P9H3XV6ErdQbSonzwiZrPYlvhj6d2OCQKHPdOeGqvE61DIo4+RS1b2gRjRw2w==",
-      "published": "2026-11-05T10:25:31.949Z",
-      "reviewedAt": "2026-11-11T00:15:18.490Z",
+      "version": "0.11.1",
+      "integrity": "sha512-f+UFzVb1mjAX9yxr1b8o3T1bWpQ8SAhxv4H2Vv5TqpoLBCu0d24SsseUlOMeoYH/xHMKTyIoW/d/A/mdKiDX/Q==",
+      "published": "2026-11-11T20:08:41.359Z",
+      "reviewedAt": "2026-11-12T10:18:43.098Z",
       "license": "MIT",
-      "archiveSha256": "9775475a1ae19ca660ec3d30c9df63cf0978d80c2d643c774d8993e4b225ce9c",
-      "manifestSha256": "47c931cfd84185a307d33580818e75dd46eb973eff990b828549778ef384538a",
+      "archiveSha256": "fdcfad1b6f27b9133597c8355dca3ec3311207c5f51f9b7e3538c467ce4ed7cb",
+      "manifestSha256": "9e797728d4a887a1df82624fdf36dfb1650a2ed64d4f40137a5ca8d2233ce0ff",
       "engines": {},
       "peers": {
         "ai": "^6.0.196 || ^7.0.0",
-        "zod": "^4.4.3",
+        "zod": "^4.6.6",
         "vite": "^6.0.0 || ^7.0.0 || ^8.0.0",
-        "just-bash": "^3.0.1",
+        "just-bash": "^3.6.0",
         "@platformatic/vfs": "*",
         "@cloudflare/workers-types": "^4.20260616.1 || ^5.20260921.1"
       },
@@ -1244,7 +1593,7 @@
       "scriptFiles": {},
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fcomputer@0.10.0; Sigstore transparency verification required at release"
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fcomputer@0.11.1; Sigstore transparency verification required at release"
     },
     "@cloudflare/kv-asset-handler@0.5.0": {
       "name": "@cloudflare/kv-asset-handler",
@@ -1304,6 +1653,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-64@1.20261110.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workerd-darwin-64@1.20261113.1": {
+      "name": "@cloudflare/workerd-darwin-64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-UcShHyWJVZNbuI8jL3F5QZXMrJm7oScge33D5p3hAyhIIkoVj72+bior+VcUcr1SBWkh5w3Umnrx179WE7Wvpw==",
+      "published": "2026-11-13T01:00:02.439Z",
+      "reviewedAt": "2026-11-13T20:06:59.666Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "0a2f5f7e9c3768c1c86b6ad2cba7828d93322e6a0c9d21e51c997ee7680809ba",
+      "manifestSha256": "5fbc3df57751e2bb401cdac04e6792fb6a3e57089541498b7b7cc6778ea81220",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-64@1.20261113.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workerd-darwin-arm64@1.20261110.1": {
       "name": "@cloudflare/workerd-darwin-arm64",
       "version": "1.20261110.1",
@@ -1322,6 +1690,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-arm64@1.20261110.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workerd-darwin-arm64@1.20261113.1": {
+      "name": "@cloudflare/workerd-darwin-arm64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-bKfFcpueb9GOg0NZSR4x7dpEJZMsQOwCk0XzsAoXoBfG4osFRQcFxtAhrXvB1y445zXFLhrEkDJ/+LvGAMkPSg==",
+      "published": "2026-11-13T01:02:04.579Z",
+      "reviewedAt": "2026-11-13T20:07:00.204Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "b4e484a973092dd6c2d7ebb3642fd2e84a1fa258e8e52c0d3e2c02c26831f541",
+      "manifestSha256": "3c022387d2bad444f0de8d11ffb843a421fc1f6fc60f67c43302bbcbf80075e7",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-arm64@1.20261113.1; Sigstore transparency verification required at release"
     },
     "@cloudflare/workerd-linux-64@1.20261110.1": {
       "name": "@cloudflare/workerd-linux-64",
@@ -1342,6 +1729,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-64@1.20261110.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workerd-linux-64@1.20261113.1": {
+      "name": "@cloudflare/workerd-linux-64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-3VCnXzi7apwPSMwkiTIeEc5z/UWWGQXBZZNHCBBCXPlavWCR06SQ77tO0rEoKonfjBGW0MQaHNZ7U1pCPe4v3g==",
+      "published": "2026-11-13T01:01:11.748Z",
+      "reviewedAt": "2026-11-13T20:07:01.223Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "754d8e9f3e21e0bae048ed8dc2f9fe3f3ea25326ac7d8ab24436319812502f19",
+      "manifestSha256": "97b8d3d9e4c3467b419cafb0c11639e1929cca1041bc8ecd35309564cf54a033",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-64@1.20261113.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workerd-linux-arm64@1.20261110.1": {
       "name": "@cloudflare/workerd-linux-arm64",
       "version": "1.20261110.1",
@@ -1360,6 +1766,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-arm64@1.20261110.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workerd-linux-arm64@1.20261113.1": {
+      "name": "@cloudflare/workerd-linux-arm64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-phnb1686FTIVSr4qxQFOt7MyiWMotqsVUyZVnQl579/bCrqWaYUcRnikN5f6bBpDbxCk1OvOvYz0ykjT1lvYpg==",
+      "published": "2026-11-13T01:01:00.851Z",
+      "reviewedAt": "2026-11-13T20:07:01.498Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "4abc6ce84f874005b8fb33017b238f90adbc43093ee65879a8f454e31a53aedc",
+      "manifestSha256": "d4300433eae88228c230f031766e91ff1a6077e23d99ba0dd8336aba907a4d01",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-arm64@1.20261113.1; Sigstore transparency verification required at release"
     },
     "@cloudflare/workerd-windows-64@1.20261110.1": {
       "name": "@cloudflare/workerd-windows-64",
@@ -1380,6 +1805,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-windows-64@1.20261110.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workerd-windows-64@1.20261113.1": {
+      "name": "@cloudflare/workerd-windows-64",
+      "version": "1.20261113.1",
+      "integrity": "sha512-WtQakCAIzUQJ6dQDPn7kIGlFJ9yjB0ooNx2WFqEHLYNAT7TLCNyaORem2WVM38TceVR8flCP5UWgYm6ht3dlIw==",
+      "published": "2026-11-13T00:59:57.201Z",
+      "reviewedAt": "2026-11-13T20:07:04.691Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "2787c56d7fe091639b7ffe5dcef341158ce42cbda1aa3b7b7b2d78a755f87305",
+      "manifestSha256": "2a348faecd1943ad719cd19f373615548638fee231ae16e862033acacef94f3b",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-windows-64@1.20261113.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workers-types@5.20261110.1": {
       "name": "@cloudflare/workers-types",
       "version": "5.20261110.1",
@@ -1396,6 +1840,40 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261110.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workers-types@5.20261112.1": {
+      "name": "@cloudflare/workers-types",
+      "version": "5.20261112.1",
+      "integrity": "sha512-FhkAlCQ+J/pV89nhehVaarhlvZFz+ybUsePmIDN1yfI7PMmpjwdxV663e9qu+G+oQSw9oM8u5sVmheNBFn4tnw==",
+      "published": "2026-11-12T01:00:52.446Z",
+      "reviewedAt": "2026-11-12T12:45:14.384Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "91e157eb6a2396931c2fcc3fd582a86d2077253a7f610cd8664f31216c2c1b9f",
+      "manifestSha256": "14eb704f337594c16c0f3ecc9039162be8759afdea1af1e9b89a97fde8f88e26",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261112.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workers-types@5.20261113.1": {
+      "name": "@cloudflare/workers-types",
+      "version": "5.20261113.1",
+      "integrity": "sha512-FhF8hRtsQCr/BWZyUN7wm2x+jqAOkRIpLOW+2fJu5OQyIDOv+c3PxY8duEAkOYXuprLImxjW+PHTbvz9+Px5cw==",
+      "published": "2026-11-13T01:03:46.000Z",
+      "reviewedAt": "2026-11-13T20:07:00.790Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "cef32e75d5876601ea2b17e48f76ed9aded000984bfcf3000be9cdd71d8db5b7",
+      "manifestSha256": "7e4653713ce9b44ef842d70b3e526d5473b10d90e7d82380b9fc7cd8d8ff5234",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261113.1; Sigstore transparency verification required at release"
     },
     "@cspotcode/source-map-support@0.8.1": {
       "name": "@cspotcode/source-map-support",
@@ -3825,6 +4303,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@smithy%2fcore@3.39.0; Sigstore transparency verification required at release"
     },
+    "@smithy/core@3.40.0": {
+      "name": "@smithy/core",
+      "version": "3.40.0",
+      "integrity": "sha512-DssGno52pzZ5m6RlDtyKuBIpZNPg9pqgs0CnNDKz9IatxCsmvNmJNn5Zn6rf77MthZo9wf89OvZFhTY/RwxhxQ==",
+      "published": "2026-11-10T13:09:17.854Z",
+      "reviewedAt": "2026-11-12T12:14:56.952Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "2ad837471a245ea5b7557467076800e573d661e8c85935e7e94507446acf2390",
+      "manifestSha256": "cebbdc3db20cb2fc9dbe780dd488014c193693dd1f9dd09dceb11ba39de4e26a",
+      "engines": {
+        "node": ">=18.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "07364a5f7d0177a59a05a0002187431f8f899320983c0dc049d72df015e8064c"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@smithy%2fcore@3.40.0; Sigstore transparency verification required at release"
+    },
     "@smithy/credential-provider-imds@4.5.2": {
       "name": "@smithy/credential-provider-imds",
       "version": "4.5.2",
@@ -5053,6 +5552,27 @@
       "scriptFiles": {},
       "licenses": {
         "package/LICENSE.md": "a49c9ba464796f65b59fca3f1e6ca40912df1e859f575383223f7ec6c5baae09"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "commander@9.5.0": {
+      "name": "commander",
+      "version": "9.5.0",
+      "integrity": "sha512-KRs7WVDKg86PWiuAqhDrAQnTXZKraVcCc6vFdL14qrZ/DcWwuRo7VoiYXalXO7S5GKpqYiVEwCbgFDfxNHKJBQ==",
+      "published": "2023-01-07T07:04:45.771Z",
+      "reviewedAt": "2026-11-12T10:20:35.443Z",
+      "license": "MIT",
+      "archiveSha256": "b64948bf68db38c26002a1a4b63b8ecb9a80e497e308fdaccbb179cf05142f52",
+      "manifestSha256": "a1f1a163d7958e8b8cbb5fe56f7dbf90b084c301725a523fa0335d1296e469b7",
+      "engines": {
+        "node": "^12.20.0 || >=14"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "04512a63dce4d2d506ad612dc0bd7681ccf6e3655f7b6eaef7dfac8323d1ec0b"
       },
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
@@ -6343,15 +6863,15 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
-    "miniflare@5.20261110.0-beta": {
+    "miniflare@5.20261110.1-beta": {
       "name": "miniflare",
-      "version": "5.20261110.0-beta",
-      "integrity": "sha512-UiJRL6D4pNkHxgZ3QXDCaz/N27FFuuHRRgOmD/SucEZIwDOfWwX7s/n8ZrFemFlURRfnQpBfAdWy8ixsW0yJWA==",
-      "published": "2026-11-10T10:58:00.738Z",
-      "reviewedAt": "2026-11-11T00:18:25.003Z",
+      "version": "5.20261110.1-beta",
+      "integrity": "sha512-CO8T1DO3/JFxEWvJ7yaHiPx5Ph/5FhRzYKve6cM8O2frHmY7yWudV5p8FU11bfGRAerChGpuK+l0HoxOCw2nFw==",
+      "published": "2026-11-11T14:37:43.184Z",
+      "reviewedAt": "2026-11-12T09:22:30.201Z",
       "license": "MIT",
-      "archiveSha256": "5471b28120d1dad3168d850d7f4a3380e5b0eacffb5fb2ed9eb5637b028bb513",
-      "manifestSha256": "7e9ccbd31863ab92149e91aabee9e8bb80a9f0a69f304e237ac26ab4fec303dd",
+      "archiveSha256": "4b9c60deebe05a096054e0ebe0e31b8516274e168afe243564eb05ecca807301",
+      "manifestSha256": "47c970f0a9110cfdffbae91eef79deda486958a647014a8bd853d49eb74942cb",
       "engines": {
         "node": ">=22.12.0"
       },
@@ -6362,7 +6882,49 @@
       "scriptFiles": {},
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261110.0-beta; Sigstore transparency verification required at release"
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261110.1-beta; Sigstore transparency verification required at release"
+    },
+    "miniflare@5.20261110.2-beta": {
+      "name": "miniflare",
+      "version": "5.20261110.2-beta",
+      "integrity": "sha512-vzUwcal5OtR/1nr5cmjCbZSrsR3QRA1cDnRUDVgET17HeDkdpQNG2QxeIkuHFLyszjdBqme59w8Nrrj4FkuFsQ==",
+      "published": "2026-11-12T13:37:00.282Z",
+      "reviewedAt": "2026-11-12T14:30:35.959Z",
+      "license": "MIT",
+      "archiveSha256": "74321b618e743c48726a31faa9dfafc44db2a212d31260d358741832ec250cf7",
+      "manifestSha256": "65d012e323d3befb99a71484291737edf851b0954bd59a45add8eadfbf010bb4",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "kerberos": "^2.0.0"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261110.2-beta; Sigstore transparency verification required at release"
+    },
+    "miniflare@5.20261113.0-beta": {
+      "name": "miniflare",
+      "version": "5.20261113.0-beta",
+      "integrity": "sha512-Kg+SarKNSn0lkhR88OHI29rIXJvmKs/c9hmxFXvEqK1J9aHu+AFl6CdaBq/k3iOTyMbm2p4h1HGLs7vXaLYMWA==",
+      "published": "2026-11-13T16:58:59.894Z",
+      "reviewedAt": "2026-11-13T20:07:02.305Z",
+      "license": "MIT",
+      "archiveSha256": "4777f56bb9e822fd249b05929dec2a82e1c9b9fc4cf5a757f7ef15cb9bd34785",
+      "manifestSha256": "31afefc4d0ccf2747ccb3478ffc41c032b47a1d62dbf2545054386c819bb837b",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "kerberos": "^2.0.0"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261113.0-beta; Sigstore transparency verification required at release"
     },
     "minimist@1.2.8": {
       "name": "minimist",
@@ -6965,6 +7527,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/postal-mime@2.7.6; Sigstore transparency verification required at release"
+    },
+    "postject@1.0.0-alpha.6": {
+      "name": "postject",
+      "version": "1.0.0-alpha.6",
+      "integrity": "sha512-b9Eb8h2eVqNE8edvKdwqkrY6O7kAwmI8kcnBv1NScolYJbo59XUF0noFq+lxbC1yN20bmC0WBEbDC5H/7ASb0A==",
+      "published": "2023-05-19T06:25:32.487Z",
+      "reviewedAt": "2026-11-12T10:20:35.597Z",
+      "license": "MIT",
+      "archiveSha256": "d1447b53e87d49ddaf7fb3350c870afafa72760eca47f6d5cce4cefd537e7d92",
+      "manifestSha256": "3b98182548c0ddbd955d9a0b9fe21f6bf09106d261465ac1e1f6d842026f9d7f",
+      "engines": {
+        "node": ">=14.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "6546657539feb5b454f400db317e71fa39ff5cd048fa5d78ae0ada2df72f1ea7"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
     },
     "prettier@3.9.10": {
       "name": "prettier",
@@ -7593,15 +8176,38 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/workerd@1.20261110.1; Sigstore transparency verification required at release"
     },
-    "wrangler@4.160.0": {
+    "workerd@1.20261113.1": {
+      "name": "workerd",
+      "version": "1.20261113.1",
+      "integrity": "sha512-FJP8Bm1jiiJTE2xpSIhT9JkMaKzU54y9Jk0q7n3BLWyWdUNsn35QGCqARcqXGwO3FGkvahhYqUEG2bJzlgcfhw==",
+      "published": "2026-11-13T01:04:23.219Z",
+      "reviewedAt": "2026-11-13T20:07:02.025Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "e52d9df647b4e15bbef09a2cc603e9fd9d1d665176c15f22ebdec56947869d90",
+      "manifestSha256": "8035c608f71c7d7df53dc1ac562bb84c150b5bb4c354101e76fa466633e6be38",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {
+        "postinstall": "node install.js"
+      },
+      "scriptFiles": {
+        "package/install.js": "08fd02b29c75d41fb3e48f2b9fd2a925becdc4e8ea40c65d0a467828e2f2bb7a"
+      },
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/workerd@1.20261113.1; Sigstore transparency verification required at release"
+    },
+    "wrangler@4.160.1": {
       "name": "wrangler",
-      "version": "4.160.0",
-      "integrity": "sha512-nwzmpu7Hd5Csax02twpCNRAloC+kduXKw9rjfq+oEuo8RnjWRaahSV+qk+p0w88EgafMcDE0XnZRSfOM3lKEKg==",
-      "published": "2026-11-10T11:03:23.517Z",
-      "reviewedAt": "2026-11-11T00:18:29.840Z",
+      "version": "4.160.1",
+      "integrity": "sha512-gM8daj5geYTEw+038dV5OQAmrSIo/9e97FoJuNf+r9PllWR0ZnqMI2LXZZDSHpGsMez3mKKFYH5o/hBsf1ZTHg==",
+      "published": "2026-11-11T14:45:38.079Z",
+      "reviewedAt": "2026-11-12T09:22:12.409Z",
       "license": "MIT OR Apache-2.0",
-      "archiveSha256": "380377ff348ae45b1ee13b26db6a79c3f91a667ac38b10820ffc54a1fd996554",
-      "manifestSha256": "bdb9204c2477ef9005ea62e5c75cec71b4886d28781c89bbd50ab291bda2edf2",
+      "archiveSha256": "55ac7568281e4c7f54250dfdf9cd9de431856b713071a021240e7df32f3fd90d",
+      "manifestSha256": "16f13ef7e432e6fcdc5410349a33d5516b8218a3e5ea377540d7b96923ba900d",
       "engines": {
         "node": ">=22.12.0"
       },
@@ -7612,7 +8218,49 @@
       "scriptFiles": {},
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.160.0; Sigstore transparency verification required at release"
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.160.1; Sigstore transparency verification required at release"
+    },
+    "wrangler@4.161.0": {
+      "name": "wrangler",
+      "version": "4.161.0",
+      "integrity": "sha512-yOHZUYEq9AP7vutWmkCADzCKAH9ynfvZdoKJRIGTzkiailf9/L+jhT7WRb+9p6jRDtuBXVFtCzLo7kGAcGw+pA==",
+      "published": "2026-11-12T13:40:34.590Z",
+      "reviewedAt": "2026-11-12T14:30:36.220Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "60e778b3469468bb17cad4add9ef41245b6f13942fa3b94a420ff9c49a00cb7a",
+      "manifestSha256": "60b74f2d2dee8cd0185f6e8e4e89b717041f775e5ae316297292e6f51664c9e3",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "@cloudflare/workers-types": "^5.20261110.1"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.161.0; Sigstore transparency verification required at release"
+    },
+    "wrangler@4.162.0": {
+      "name": "wrangler",
+      "version": "4.162.0",
+      "integrity": "sha512-jUnlzHKlWdW4MFXPgeYbe0+c4oTy/AAZfL/IUz921+dZBY5nJ48xjpvwff5djUR1MXoJRevzntAP/U97TUhPEw==",
+      "published": "2026-11-13T17:04:39.586Z",
+      "reviewedAt": "2026-11-13T20:07:02.654Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "bdc0366417fbeea506296931be1c5dd91c131043f8873e31601e03ed4c31956a",
+      "manifestSha256": "b3e7622a04ebd3a711993c35a29966668f11db64b55a06ecb5bf024caf6120ed",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "@cloudflare/workers-types": "^5.20261113.1"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.162.0; Sigstore transparency verification required at release"
     },
     "ws@8.21.0": {
       "name": "ws",
@@ -7763,74 +8411,19 @@
     }
   },
   "exemptions": {
-    "@earendil-works/chord@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:22:18.789Z",
-      "integrity": "sha512-3g088g7qVXL2cpRAKWjj9za6RLls9FBnuUo5c0hBZ0xCftBQjae0opS+34M22vdXTVE7BNqkRG/FPc9BsM7eEg=="
+    "miniflare@5.20261113.0-beta": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T16:58:59.894Z",
+      "integrity": "sha512-Kg+SarKNSn0lkhR88OHI29rIXJvmKs/c9hmxFXvEqK1J9aHu+AFl6CdaBq/k3iOTyMbm2p4h1HGLs7vXaLYMWA=="
     },
-    "@earendil-works/pi-ai@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:20:46.480Z",
-      "integrity": "sha512-2tWPSnV3qzfiDIY3aWluBag3vC++Vs+VsXt/UquSU5onPMohPih72FUhIhaqmDdMYubOgB3Byl9uF4Vk40JLvQ=="
-    },
-    "@earendil-works/pi-codemode@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:21:47.420Z",
-      "integrity": "sha512-HoZQ40a9RgdZ1VgmrX6x8887cNXedaRJT1l+Ie5YRIMK4gY7v0EpsiNqf6dmixrKylZlTgUSyR+vE8xhjfkr+w=="
-    },
-    "@earendil-works/pi-durable@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:21:58.246Z",
-      "integrity": "sha512-zDB3anbI/yD0IG+VVY+g5tU+c5XOVqQAFwLkXRMiqZb4p/afWro0voZtLNoRAWcDA2r73kvmH6kKin9Ka8l55g=="
-    },
-    "@earendil-works/pi-schema@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:24:21.986Z",
-      "integrity": "sha512-hJoyCXWUhsSrXY5wJo2Q4kHXUsR51pNhkJHAMkWRwVMLDRtMDPkKNaa+JlVRVqTw1hjdSxcVVaFLSDbKlaTXEQ=="
-    },
-    "@earendil-works/pi-telemetry@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:21:57.013Z",
-      "integrity": "sha512-m+cumjIqNh1aMISi/9ttcG3ZOwIdriPbz/eMyWmRMJCGa/WcgY1RX4lrb7HvsHhSfI/JUeBESA4nOCr8C3y5ow=="
-    },
-    "@earendil-works/pi-tui@1.5.2": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T12:21:46.597Z",
-      "integrity": "sha512-WK8ih+c88GWizaB79y7Pq3PV7ySf5VI1pZ1i/6aBBjDOAiG2EE3ojKjl+pxQqLfyQGnzHYu4VfakOBJgumuoyw=="
-    },
-    "@unstale/cli-darwin-arm64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:10:04.621Z",
-      "integrity": "sha512-DFW8XPHq4mmrF5ikQHsO2uH0P0HxUW4Oq9R9839AsqvBNi0+xiss41hmY5DfSa4KSsucTbOnxBEm55ElKJI5Gw=="
-    },
-    "@unstale/cli-darwin-x64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:09:08.126Z",
-      "integrity": "sha512-dMPwjCmfAJPJrPIQY+ifb2C+cKS1pz+wLBP+P3GyzNVaiRTcEv1hrq/QF9V1I1mf/QCCwT1m+tGIFW+qxv7aJA=="
-    },
-    "@unstale/cli-linux-arm64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:09:22.116Z",
-      "integrity": "sha512-yV58+ZQFuCBhpGLebAp3Ir+RbwA0af0zd13bRsDrWhffF9O+4leSEgk63Pz+xtPNNTBXnr+xt0CXdGZrCV+XZg=="
-    },
-    "@unstale/cli-linux-x64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:07:23.542Z",
-      "integrity": "sha512-HuVv/qK6KqRrXm7ugckaVllahCKju8hmeMO+Cw9uZpUmfGHhggutl2o0mW9eA6xblZJ3V340qX2MTIymzgCzcg=="
-    },
-    "@unstale/cli-win32-x64@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:07:53.527Z",
-      "integrity": "sha512-2R93KzKWxkeX3TsAGfXRUfj3XYqQoNtmI4ctOZky72+Z5KlY30DOXVD8kTlQuXjAMOzvZQpkTYiq5bTtkD7osw=="
-    },
-    "@unstale/cli@0.2.12": {
-      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
-      "expires": "2026-11-11T16:08:27.771Z",
-      "integrity": "sha512-bg4rFUiut6gzpNZlF3sZIPFMjeCVLphy8hVVQ2XpiQxmlPhGDQkBOCargFV5ygdAGmo8mdNjYrkUwLRB8LWaFw=="
+    "wrangler@4.162.0": {
+      "reason": "Parent-authorized early coherent published Wrangler4.162 SDK cohort: exact archive SRI/registry ECDSA, source/provenance subject+leaf signature, lifecycle, full attribution and current exact OSV reviewed before install. Workerd installer denied; exact mdream dependency member separately source/legal checked. Remove at publication+24h; no global policy waiver.",
+      "expires": "2026-11-14T17:04:39.586Z",
+      "integrity": "sha512-jUnlzHKlWdW4MFXPgeYbe0+c4oTy/AAZfL/IUz921+dZBY5nJ48xjpvwff5djUR1MXoJRevzntAP/U97TUhPEw=="
     }
   },
   "advisory": {
-    "checkedAt": "2026-11-11T01:19:13.255Z",
+    "checkedAt": "2026-11-13T20:53:21.337Z",
     "identities": 381,
     "findings": []
   }

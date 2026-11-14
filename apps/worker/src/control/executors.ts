@@ -4,7 +4,7 @@ import { emptyScope, requireGrant } from "./authorization.js";
 import { valid } from "./directory.js";
 import type { Identities } from "./identity.js";
 import { ControlError, check, id, json, next, type Store } from "./store.js";
-import type { ExecutorState } from "./tickets.js";
+import { type ExecutorState, requireExecutorInstance, requireExecutorScope } from "./tickets.js";
 
 interface Attachment {
   identity: D.SocketIdentity;
@@ -28,6 +28,13 @@ export class Executors {
   readonly store: Store;
   readonly identities: Identities;
   readonly receive: (ctx: D.AuthContext, frame: D.ExecutorDelivery) => Promise<D.DeliveryAck>;
+  readonly recoverTerminal: (
+    ctx: D.AuthContext,
+    executorId: string,
+    generation: number,
+    epoch: number,
+    registration: boolean,
+  ) => Promise<void>;
   private beats = new Map<string, number>();
   private waiters = new Map<string, Waiter>();
   constructor(
@@ -35,11 +42,13 @@ export class Executors {
     store: Store,
     identities: Identities,
     receive: (ctx: D.AuthContext, frame: D.ExecutorDelivery) => Promise<D.DeliveryAck>,
+    recoverTerminal: Executors["recoverTerminal"] = async () => {},
   ) {
     this.state = state;
     this.store = store;
     this.identities = identities;
     this.receive = receive;
+    this.recoverTerminal = recoverTerminal;
   }
   attachment(socket: WebSocket): Attachment | undefined {
     try {
@@ -68,7 +77,7 @@ export class Executors {
       }
     });
   }
-  context(identity: D.SocketIdentity): D.AuthContext {
+  context(identity: D.SocketIdentity, allowUnbound = false): D.AuthContext {
     const c = this.store.get<import("./identity.js").CredentialRecord>(
       "credential",
       identity.credentialId,
@@ -83,11 +92,22 @@ export class Executors {
       deadline: Date.now() + 30000,
     };
     this.identities.current(ctx);
+    check(
+      identity.executor && c.role === "executor" && c.executorId === identity.executor.executorId,
+      "unauthorized",
+      "Executor identity required",
+    );
+    requireExecutorScope(ctx, identity.resources, identity.executor.executorId);
+    requireExecutorInstance(
+      this.store.get<ExecutorState>("executor", identity.executor.executorId),
+      identity.executor,
+      allowUnbound,
+    );
     check(identity.expiresAt > Date.now(), "unauthenticated", "Socket authority expired");
     return ctx;
   }
   async upgrade(identity: D.SocketIdentity): Promise<Response> {
-    this.context(identity);
+    this.context(identity, true);
     check(
       identity.role === "executor" && identity.executor,
       "unauthorized",
@@ -96,19 +116,25 @@ export class Executors {
     const executor = identity.executor;
     await this.store.arm(Date.now() + 45000);
     const epoch = this.store.tx(() => {
-      this.context(identity);
+      this.context(identity, true);
       const e = this.store.get<ExecutorState>("executor", executor.executorId);
       check(
         e && e.status !== "revoked" && e.generation === executor.generation,
         "unauthenticated",
         "Executor revoked",
       );
+      requireExecutorInstance(e, executor, true);
       const epoch = next(e.epoch);
       this.store.put(
         "executor",
         executor.executorId,
         {
           ...e,
+          ledger: {
+            kind: "bound",
+            ledgerId: executor.ledgerId,
+            ledgerInstanceId: executor.ledgerInstanceId,
+          },
           epoch,
           credentialId: identity.credentialId,
           status: "offline",
@@ -168,7 +194,10 @@ export class Executors {
         row.status !== "revoked" &&
         row.generation === generation &&
         row.description?.generation === generation &&
-        row.description.transferLimits,
+        row.description.transferLimits &&
+        row.ledger?.kind === "bound" &&
+        row.description.ledgerId === row.ledger.ledgerId &&
+        row.description.ledgerInstanceId === row.ledger.ledgerInstanceId,
       "unavailable_executor",
       "Executor has no current validated transfer limits",
     );
@@ -290,7 +319,9 @@ export class Executors {
       check(
         !a.registered &&
           frame.payload.executorId === executor.executorId &&
-          frame.payload.generation === executor.generation,
+          frame.payload.generation === executor.generation &&
+          frame.payload.ledgerId === executor.ledgerId &&
+          frame.payload.ledgerInstanceId === executor.ledgerInstanceId,
         "unauthorized",
         "Registration identity mismatch",
       );
@@ -311,7 +342,11 @@ export class Executors {
         ...publicDescription
       } = description as D.ExecutorDescription & { protocolVersion: string; schemaVersion: string };
       this.store.tx(() => {
-        this.context(a.identity);
+        const currentContext = this.context(a.identity);
+        requireGrant(currentContext, "executors.register", {
+          ...emptyScope(),
+          executorIds: [executor.executorId],
+        });
         const current = this.store.get<ExecutorState>("executor", executor.executorId);
         check(
           current &&
@@ -338,11 +373,20 @@ export class Executors {
           payload: {
             executorId: executor.executorId,
             generation: executor.generation,
+            ledgerId: executor.ledgerId,
+            ledgerInstanceId: executor.ledgerInstanceId,
             connectionEpoch: a.epoch,
             heartbeatMs: 15000,
           },
         } satisfies D.ExecutorFrame),
       );
+      await this.recoverTerminal(
+        { ...ctx, deadline: Math.min(ctx.deadline, a.identity.expiresAt) },
+        executor.executorId,
+        executor.generation,
+        a.epoch,
+        true,
+      ).catch(() => {});
       return;
     }
     check(a.registered, "unauthorized", "Executor must register first");
@@ -358,6 +402,13 @@ export class Executors {
       socket.serializeAttachment(a);
       this.beats.set(this.key(executor.executorId, a.epoch), a.lastBeat);
       socket.send(json({ ...frame, payload: { ...frame.payload, timestamp: Date.now() } }));
+      await this.recoverTerminal(
+        { ...ctx, deadline: Math.min(ctx.deadline, a.identity.expiresAt) },
+        executor.executorId,
+        executor.generation,
+        a.epoch,
+        false,
+      ).catch(() => {});
       return;
     }
     check(
@@ -367,6 +418,7 @@ export class Executors {
         "job.cancel_ack",
         "job.output",
         "job.prepared_result",
+        "job.committed_ack",
         "local_policy.pending",
         "local_policy.decision",
         "workspace.response",
@@ -380,12 +432,18 @@ export class Executors {
       !this.waiters.has(frame.requestId)
     )
       return;
-    const ack = await this.receive(ctx, {
-      executorId: executor.executorId,
-      generation: executor.generation,
-      connectionEpoch: a.epoch,
-      frame,
-    });
+    const ack = await this.receive(
+      frame.type === "job.committed_ack"
+        ? { ...ctx, deadline: Math.min(ctx.deadline, a.identity.expiresAt) }
+        : ctx,
+      {
+        executorId: executor.executorId,
+        generation: executor.generation,
+        connectionEpoch: a.epoch,
+        frame,
+      },
+    );
+    if (frame.type === "job.committed_ack") return;
     const waiter = this.waiters.get(frame.requestId);
     if (waiter) {
       clearTimeout(waiter.timer);
@@ -421,11 +479,26 @@ export class Executors {
     const a = this.attachment(socket);
     if (!a?.identity.executor) return;
     const key = a.identity.executor.executorId;
-    this.beats.delete(this.key(key, a.epoch));
     const e = this.store.get<ExecutorState>("executor", key);
+    if (
+      e?.epoch === a.epoch &&
+      (e.generation !== a.identity.executor.generation ||
+        e.ledger?.kind !== "bound" ||
+        e.ledger.ledgerId !== a.identity.executor.ledgerId ||
+        e.ledger.ledgerInstanceId !== a.identity.executor.ledgerInstanceId)
+    )
+      return;
+    this.beats.delete(this.key(key, a.epoch));
     for (const waiter of this.waiters.values())
       if (waiter.executorId === key && waiter.epoch === a.epoch) waiter.reject();
-    if (e?.epoch === a.epoch && e.status !== "revoked")
+    if (
+      e?.epoch === a.epoch &&
+      e.status !== "revoked" &&
+      e.generation === a.identity.executor.generation &&
+      e.ledger?.kind === "bound" &&
+      e.ledger.ledgerId === a.identity.executor.ledgerId &&
+      e.ledger.ledgerInstanceId === a.identity.executor.ledgerInstanceId
+    )
       this.transition(key, {
         ...e,
         status: "offline",

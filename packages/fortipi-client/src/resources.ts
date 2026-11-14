@@ -149,7 +149,7 @@ export function resources(client: FortiPiClient) {
       ) => call("getCommitReceipt", { workspaceId, commitId }, query, undefined, options),
     },
     tickets: {
-      mint: (conversationId: string, options?: RequestOptions) =>
+      mint: (agentId: string, conversationId: string, options?: RequestOptions) =>
         call(
           "mintConnectionTicket",
           {},
@@ -162,7 +162,7 @@ export function resources(client: FortiPiClient) {
                 ? { kind: "browser", value: client.http.options.originMode.origin }
                 : { kind: "native" },
             resources: {
-              agentIds: [],
+              agentIds: [agentId],
               conversationIds: [conversationId],
               workspaceIds: [],
               actions: ["events.read"],

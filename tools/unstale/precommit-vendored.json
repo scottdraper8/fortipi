@@ -1,0 +1,218 @@
+{
+  "format": 1,
+  "components": [
+    {
+      "name": "CacheControl",
+      "version": "0.14.4",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "distlib",
+      "version": "0.4.4",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "distro",
+      "version": "1.9.0",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "msgpack",
+      "version": "1.2.4",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.12.4",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "pyproject-hooks",
+      "version": "1.3.3",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "certifi",
+      "version": "2026.10.23",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "rich",
+      "version": "15.0.0",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "pygments",
+      "version": "2.21.0",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "resolvelib",
+      "version": "1.2.1",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "setuptools",
+      "version": "70.3.0",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "tomli",
+      "version": "2.3.2",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "tomli-w",
+      "version": "1.2.0",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "truststore",
+      "version": "0.10.5",
+      "archive": "pip-26.3-py3-none-any.whl",
+      "source": "pip/_vendor/vendor.txt"
+    },
+    {
+      "name": "autocommand",
+      "version": "2.2.2",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/autocommand-2.2.2.dist-info/METADATA"
+    },
+    {
+      "name": "backports.tarfile",
+      "version": "1.2.0",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/backports.tarfile-1.2.0.dist-info/METADATA"
+    },
+    {
+      "name": "importlib_metadata",
+      "version": "8.7.1",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/importlib_metadata-8.7.1.dist-info/METADATA"
+    },
+    {
+      "name": "jaraco.text",
+      "version": "4.0.0",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/jaraco.text-4.0.0.dist-info/METADATA"
+    },
+    {
+      "name": "jaraco.context",
+      "version": "6.1.0",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/jaraco_context-6.1.0.dist-info/METADATA"
+    },
+    {
+      "name": "jaraco.functools",
+      "version": "4.4.0",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/jaraco_functools-4.4.0.dist-info/METADATA"
+    },
+    {
+      "name": "more-itertools",
+      "version": "10.8.0",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/more_itertools-10.8.0.dist-info/METADATA"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/packaging-26.3.dist-info/METADATA"
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.4.0",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/platformdirs-4.4.0.dist-info/METADATA"
+    },
+    {
+      "name": "tomli",
+      "version": "2.4.0",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/tomli-2.4.0.dist-info/METADATA"
+    },
+    {
+      "name": "wheel",
+      "version": "0.46.3",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/wheel-0.46.3.dist-info/METADATA"
+    },
+    {
+      "name": "zipp",
+      "version": "3.23.0",
+      "archive": "setuptools-84.2.1-py3-none-any.whl",
+      "source": "setuptools/_vendor/zipp-3.23.0.dist-info/METADATA"
+    }
+  ],
+  "pipSubset": {
+    "archiveSha256": "f3b60b20ffaadd4415ed7957212a38ac63fa4c5fa375bd0f4a797777940fad13",
+    "files": ["pip/_vendor/pkg_resources/LICENSE", "pip/_vendor/pkg_resources/__init__.py"],
+    "absentAffectedModules": [
+      "setuptools/package_index.py",
+      "setuptools/command/egg_info.py",
+      "setuptools/_distutils/filelist.py",
+      "setuptools/wheel.py"
+    ],
+    "advisories": [
+      {
+        "id": "GHSA-5rjg-fvgr-3xxf",
+        "sha256": "bc2355779352e3b233b9e24505adef4b298394b65f8afc832d0c8789c3d4d1f8"
+      },
+      {
+        "id": "GHSA-h35f-9h28-mq5c",
+        "sha256": "ca534d3228cbd3f958ba0ddcdd221bc686bbca41102e634ca2da3130d61bdc68"
+      },
+      {
+        "id": "GHSA-xmj3-9gf7-h52w",
+        "sha256": "92987652792d2709c8b6ed2d5f29371d8d89fc67c37a6266ecea2a76db9e7614"
+      },
+      {
+        "id": "PYSEC-2025-49",
+        "sha256": "45c4e387916d6d2ad92edf3ab46f77f5f5eb8b8861acc8507bc085bfc26a6f9d"
+      },
+      {
+        "id": "PYSEC-2026-3447",
+        "sha256": "c1e4710ebe0fe4097bc6de077ef95b42fd0892000fc19fd0f5410f85a4ef85e4"
+      }
+    ],
+    "disposition": "The vendor.txt setuptools70.3 marker describes pkg_resources only: two retained members, no setuptools implementation. The three reported flaws concern PackageIndex download paths, sdist MANIFEST matching and legacy setuptools.wheel installation, none present in this pip wheel. Actual installed build backend setuptools84.2.1 is fixed. No affected full setuptools70.3 distribution is installed; no pip vendor patch or broad finding suppression."
+  }
+}

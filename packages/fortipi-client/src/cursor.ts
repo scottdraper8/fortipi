@@ -7,6 +7,7 @@ export function cursorScopeKey(scope: CursorScope): string {
   const identity = scope.identity;
   return canonicalJson({
     origin: scope.origin,
+    agentId: scope.agentId,
     conversationId: scope.conversationId,
     deploymentId: identity.deploymentId,
     principalId: identity.principalId,

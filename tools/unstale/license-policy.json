@@ -36,154 +36,154 @@
     },
     "@img/sharp-libvips-darwin-arm64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-darwin-x64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-arm@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-arm64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-ppc64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-riscv64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-s390x@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-x64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linuxmusl-arm64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linuxmusl-x64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-win32-arm64@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-win32-ia32@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-win32-x64@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-wasm32@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.162.0 -> miniflare@5.20261113.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
@@ -706,19 +706,19 @@
         }
       ]
     },
-    "miniflare@5.20261110.0-beta": {
-      "source": "https://github.com/cloudflare/workers-sdk/tree/2674eefba808df5ef027572ede4cea377fb8e138",
-      "evidence": "Published exact-version SLSA source claim; archive registry signature/SRI separately verified; transparency proof remains release verification",
+    "miniflare@5.20261110.1-beta": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/cc238b23844081895df4145172512bb34e9be87a",
+      "evidence": "Published exact-version SLSA source claim at cc238b23844081895df4145172512bb34e9be87a; subject digest matched reviewed archive; archive registry signature/SRI separately verified; Sigstore transparency proof remains release verification",
       "files": [
         {
-          "path": "tools/unstale/licenses/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-MIT",
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-MIT",
           "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
-          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-MIT"
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-MIT"
         },
         {
-          "path": "tools/unstale/licenses/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-APACHE",
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-APACHE"
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-APACHE"
         }
       ]
     },
@@ -744,19 +744,19 @@
         }
       ]
     },
-    "wrangler@4.160.0": {
-      "source": "https://github.com/cloudflare/workers-sdk/tree/2674eefba808df5ef027572ede4cea377fb8e138",
-      "evidence": "Published exact-version SLSA source claim; archive registry signature/SRI separately verified; transparency proof remains release verification",
+    "wrangler@4.160.1": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/cc238b23844081895df4145172512bb34e9be87a",
+      "evidence": "Published exact-version SLSA source claim at cc238b23844081895df4145172512bb34e9be87a; subject digest matched reviewed archive; archive registry signature/SRI separately verified; Sigstore transparency proof remains release verification",
       "files": [
         {
-          "path": "tools/unstale/licenses/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-MIT",
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-MIT",
           "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
-          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-MIT"
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-MIT"
         },
         {
-          "path": "tools/unstale/licenses/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-APACHE",
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-APACHE"
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-APACHE"
         }
       ]
     },
@@ -942,7 +942,199 @@
           "url": "https://raw.githubusercontent.com/lovell/sharp-libvips/ebb95f8add54eee8bed840e3fb587e4cbec857d7/THIRD-PARTY-NOTICES.md"
         }
       ]
+    },
+    "@aws-sdk/credential-provider-http@3.972.86": {
+      "source": "@aws-sdk/core@3.981.0",
+      "inheritedFrom": "@aws-sdk/core@3.981.0",
+      "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
+      "files": []
+    },
+    "@aws-sdk/credential-provider-login@3.972.91": {
+      "source": "@aws-sdk/core@3.981.0",
+      "inheritedFrom": "@aws-sdk/core@3.981.0",
+      "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
+      "files": []
+    },
+    "@aws-sdk/credential-provider-login@3.972.92": {
+      "source": "@aws-sdk/core@3.981.0",
+      "inheritedFrom": "@aws-sdk/core@3.981.0",
+      "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
+      "files": []
+    },
+    "@aws-sdk/nested-clients@3.998.3": {
+      "source": "@aws-sdk/core@3.981.0",
+      "inheritedFrom": "@aws-sdk/core@3.981.0",
+      "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
+      "files": []
+    },
+    "@cloudflare/workers-types@5.20261112.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/e0240debf4d6a5042a02a45311b51c61d13bd0fb",
+      "evidence": "Exact npm gitHead and generated declarations matched published workerd release; archive omits legal text. Full source LICENSE preserved; registry signature/SRI verified separately, Sigstore transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/e0240debf4d6a5042a02a45311b51c61d13bd0fb/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/e0240debf4d6a5042a02a45311b51c61d13bd0fb/LICENSE"
+        }
+      ]
+    },
+    "wrangler@4.161.0": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/1e688baedfe8b61b091043832b438c362590953a",
+      "evidence": "Exact published release tag and SLSA source claim at 1e688baedfe8b61b091043832b438c362590953a; subject digest matched reviewed archive; registry signature/SRI independently verified. Original project dual license texts retained; Sigstore transparency remains release verification. Bundled Netlify build-info11.3.1 MIT archive/text reviewed and retained separately; no native/tool copying authorization.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/netlify-build-info/11.3.1/LICENSE",
+          "sha256": "4a370afa20e5f2f64b911a864bdf19632f5ac98931c56527d7e594b8f8d7f50f",
+          "url": "https://registry.npmjs.org/@netlify/build-info/-/build-info-11.3.1.tgz#package/LICENSE"
+        }
+      ]
+    },
+    "miniflare@5.20261110.2-beta": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/1e688baedfe8b61b091043832b438c362590953a",
+      "evidence": "Exact published release tag and SLSA source claim at 1e688baedfe8b61b091043832b438c362590953a; subject digest matched reviewed archive; registry signature/SRI independently verified. Original project dual license texts retained; Sigstore transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@cloudflare/computer@0.11.1": {
+      "source": "https://github.com/cloudflare/computer/tree/812bce58d2ea3735c12e6f6181c269c4010293df",
+      "evidence": "Exact npm gitHead/source archive and reviewed published source maps; MIT source license unchanged. remote-exec-only capnp-es0.0.16/picomatch4.0.7 notice scope reviewed separately; no new API enabled.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/computer/812bce58d2ea3735c12e6f6181c269c4010293df/LICENSE",
+          "sha256": "df3e141c129d1804bea95fe087b157b156241b3bb1a4664808630aa85f2cd8fc",
+          "url": "https://raw.githubusercontent.com/cloudflare/computer/812bce58d2ea3735c12e6f6181c269c4010293df/LICENSE"
+        }
+      ]
+    },
+    "wrangler@4.162.0": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/79b890ab89a62823198a0c551c44ff647c80de4d",
+      "evidence": "Exact published release/source79b890 and archive-subject/source/DSSE leaf-signature checks; registry ECDSA/SRI verified separately. Sigstore trust-chain/transparency remains release verification. Original source license texts match prior reviewed bytes; no owned output conveyance permission.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/netlify-build-info/11.3.1/LICENSE",
+          "sha256": "4a370afa20e5f2f64b911a864bdf19632f5ac98931c56527d7e594b8f8d7f50f",
+          "url": "https://registry.npmjs.org/@netlify/build-info/-/build-info-11.3.1.tgz#package/LICENSE"
+        }
+      ]
+    },
+    "miniflare@5.20261113.0-beta": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/79b890ab89a62823198a0c551c44ff647c80de4d",
+      "evidence": "Exact published release/source79b890 and archive-subject/source/DSSE leaf-signature checks; registry ECDSA/SRI verified separately. Sigstore trust-chain/transparency remains release verification. Original source license texts match prior reviewed bytes; no owned output conveyance permission. Includes exact unmodified mdream2.0.3 MIT WASM member239214B/db48fb63, its source/copyright and conservative checksum-authenticated Rust source/build-candidate notices; candidates are not asserted exact compiled inventory.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.0.3/LICENSE.md",
+          "sha256": "b5a7e0557d37c8ccf1b1cbcda1842b8c4535d217f81f97c1cbad579042269cad",
+          "url": "https://registry.npmjs.org/mdream/-/mdream-2.0.3.tgz#package/LICENSE.md"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.0.3/CORE-LICENSE",
+          "sha256": "d06451530138de11ec5cee38b458f1aa4259ada5587dc5317c225196d26914d6",
+          "url": "https://raw.githubusercontent.com/harlan-zw/mdream/a7a88026a221126b7e21c579ed41dd2ebb6cb809/crates/core/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.0.3/RUST-NOTICES.md",
+          "sha256": "786b5b98e134b6d2c038e1156647096a502c2732b56184c88d4af021429c5846",
+          "url": "https://github.com/harlan-zw/mdream/blob/a7a88026a221126b7e21c579ed41dd2ebb6cb809/crates/Cargo.lock"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.0.3/component.json",
+          "sha256": "7aa18c9e3bf3fd5cff72e87911d8d7c64f23851ef1cec84b0879a8b9ae7e6012",
+          "url": "https://github.com/harlan-zw/mdream/blob/a7a88026a221126b7e21c579ed41dd2ebb6cb809/crates/Cargo.lock"
+        }
+      ]
+    },
+    "workerd@1.20261113.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29",
+      "evidence": "Exact published gitHead/release/SLSA source and archive subject/DSSE leaf signature checked; registry signature/SRI verified separately. Full immutable source LICENSE matches prior reviewed bytes; all four generated type files match source. Sigstore trust/transparency remains release gate.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29/LICENSE"
+        }
+      ]
+    },
+    "@cloudflare/workers-types@5.20261113.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29",
+      "evidence": "Exact published gitHead/release/SLSA source and archive subject/DSSE leaf signature checked; registry signature/SRI verified separately. Full immutable source LICENSE matches prior reviewed bytes; all four generated type files match source. Sigstore trust/transparency remains release gate.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29/LICENSE"
+        }
+      ]
+    },
+    "@cloudflare/workerd-darwin-64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
+    },
+    "@cloudflare/workerd-darwin-arm64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
+    },
+    "@cloudflare/workerd-linux-64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
+    },
+    "@cloudflare/workerd-linux-arm64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
+    },
+    "@cloudflare/workerd-windows-64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
     }
   },
-  "externalToolChain": ["wrangler@4.160.0", "miniflare@5.20261110.0-beta", "sharp@0.35.5"]
+  "externalToolChain": ["wrangler@4.162.0", "miniflare@5.20261113.0-beta", "sharp@0.35.5"]
 }

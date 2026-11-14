@@ -1,27 +1,168 @@
-import { DurableObject } from "cloudflare:workers";
+import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Workspace, WorkspaceProxy } from "@cloudflare/computer";
 import { CodemodeBackend } from "@cloudflare/computer/backends/codemode";
 import { ContainerBackend, WorkspaceContainerAPI } from "@cloudflare/computer/backends/container";
+import { linuxHostId } from "../../src/backends/linux.js";
+import {
+  type RuntimeHostContext,
+  runtimeHostOwnershipLabel,
+} from "../../src/boundary/infrastructure.js";
 import {
   containerRequestFailureStage,
   FencedContainerAPI,
 } from "../../src/container/host-adapter.js";
+import { hostContext, hostOwnershipDigest } from "../../src/container/host-context.js";
 import { ContainerHostTransport } from "../../src/container/host-transport.js";
+import { requireThat } from "../../src/workspace/errors.js";
+import {
+  cancellationDiagnostic,
+  cancellationGroupSource,
+  cancellationObserverSource,
+} from "./cancellation-fixture.ts";
+import {
+  bindLocalImage,
+  type LocalImageBinding,
+  normalizeLocalInspection,
+} from "./local-image-binding.ts";
 
 export { WorkspaceProxy };
 
-export class ProbeHost extends DurableObject {
+// Both probe targets use the same host fetch; StepSecurity supplies the policy.
+export class ProbeGateway extends WorkerEntrypoint {
+  override async fetch(request: Request): Promise<Response> {
+    const target =
+      request.url === "https://registry.npmjs.org/pnpm/12.18.0"
+        ? "allowed-registry"
+        : request.url === "https://example.com/"
+          ? "denied-example"
+          : undefined;
+    if (request.method !== "HEAD" || !target) return new Response(null, { status: 400 });
+    try {
+      const response = await fetch(request, {
+        redirect: "manual",
+        signal: AbortSignal.any([request.signal, AbortSignal.timeout(4000)]),
+      });
+      console.log(
+        `fortipi-gateway:${JSON.stringify({ target, forwarded: true, outcome: "response", status: response.status })}`,
+      );
+      return response;
+    } catch (error: unknown) {
+      console.log(
+        `fortipi-gateway:${JSON.stringify({
+          target,
+          forwarded: true,
+          outcome:
+            error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)
+              ? "aborted"
+              : "upstream-error",
+          status: null,
+        })}`,
+      );
+      // This status alone never establishes policy denial.
+      return new Response(null, { status: 502 });
+    }
+  }
+}
+
+const probeChildId = "fortipi:child:00000000-0000-4000-8000-000000000001";
+
+/** Standalone ABI probe; this context is not a real parent Workspace allocation/pool. */
+export class ProbeHost extends DurableObject<ProbeEnv> {
   #transport: ContainerHostTransport | undefined;
-  preparedImage(): string {
+  #localImage: LocalImageBinding | undefined;
+  #ownership: string | undefined;
+  preparedReference(): string {
     const image = this.ctx.container?.images.computerd;
-    if (!image) throw new Error("Prepared computerd image required");
+    requireThat(image, "unsupported", "Actual prepared computerd image required");
     return image;
   }
+  async bindImage(value: unknown): Promise<void> {
+    requireThat(
+      !this.#transport && !this.#localImage && this.ctx.container,
+      "conflict",
+      "Local image can only bind before a native launch",
+    );
+    requireThat(
+      this.env.LOCAL_PROBE_IMAGE_ID && this.env.LOCAL_PROBE_MANIFEST,
+      "unsupported",
+      "Explicit local recipient binding required",
+    );
+    const reference = this.preparedReference();
+    const binding = bindLocalImage(
+      value,
+      this.env.LOCAL_PROBE_IMAGE_ID,
+      this.env.LOCAL_PROBE_MANIFEST,
+      reference,
+    );
+    requireThat(
+      (await this.ctx.container.inspect()) === null,
+      "conflict",
+      "Cannot bind an existing native container",
+    );
+    requireThat(
+      !this.#transport && !this.#localImage && this.preparedReference() === reference,
+      "conflict",
+      "Local binding changed while inspecting native state",
+    );
+    this.#localImage = binding;
+  }
+  preparedImage(): string {
+    const image = this.preparedReference();
+    if (this.#localImage) {
+      normalizeLocalInspection(this.#localImage, image, null);
+      return this.#localImage.logicalReference;
+    }
+    if (!image || !/@sha256:[a-f0-9]{64}$/.test(image))
+      throw new Error("Actual immutable prepared computerd image required");
+    return image;
+  }
+  async imageObservation() {
+    const actual = await this.ctx.container?.inspect();
+    requireThat(
+      actual && this.#ownership && actual.labels[runtimeHostOwnershipLabel] === this.#ownership,
+      "interrupted",
+      "Actual native image/ownership observation required",
+    );
+    if (this.#localImage)
+      normalizeLocalInspection(this.#localImage, this.preparedReference(), actual);
+    return actual;
+  }
   #host(): ContainerHostTransport {
+    const container = this.ctx.container;
+    requireThat(container, "unsupported", "Actual owning container context required");
     this.#transport ??= new ContainerHostTransport(
       this.ctx.storage,
       new WorkspaceContainerAPI(this.ctx),
       () => this.preparedImage(),
+      {
+        inspect: async () => {
+          const actual = await container.inspect();
+          return this.#localImage
+            ? normalizeLocalInspection(this.#localImage, this.preparedReference(), actual)
+            : actual;
+        },
+        destroy: () => container.destroy(),
+      },
+      {
+        policyVersion: () => 1,
+        validate: (context) => {
+          requireThat(
+            this.env.LINUX_CONTAINERS?.idFromName(context.hostId).equals(this.ctx.id) &&
+              context.childId === probeChildId &&
+              context.hostId ===
+                linuxHostId("probe", this.env.WORKSPACES.idFromName(context.childId).toString()),
+            "unauthorized",
+            "Actual standalone probe namespace/child mismatch",
+          );
+          const ownership = hostOwnershipDigest(context);
+          requireThat(
+            !this.#ownership || this.#ownership === ownership,
+            "conflict",
+            "Probe ownership changed",
+          );
+          this.#ownership = ownership;
+        },
+      },
     );
     return this.#transport;
   }
@@ -37,24 +178,52 @@ interface ProbeEnv {
   LINUX_CONTAINERS?: DurableObjectNamespace<ProbeHost>;
   LOADER?: WorkerLoader;
   REQUIRE_FUSE?: string;
+  LOCAL_PROBE_IMAGE_ID?: string;
+  LOCAL_PROBE_MANIFEST?: string;
 }
 export class BackendProbe extends DurableObject<ProbeEnv> {
   private workspace: Workspace | undefined;
   private container: ContainerBackend | undefined;
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname !== "/run")
+    if (url.pathname !== "/run" && url.pathname !== "/prepare-linux")
       return this.container
         ? this.container.handleFetch(request)
         : new Response(null, { status: 403 });
     const linux = url.searchParams.get("backend") === "linux";
+    requireThat(
+      !this.workspace || linux === Boolean(this.container),
+      "conflict",
+      "Probe cannot change backend after preparation",
+    );
+    if (this.workspace) return this.#execute(url, this.workspace);
     let containerHost: FencedContainerAPI | undefined;
     if (linux) {
       if (!this.env.LINUX_CONTAINERS) throw new Error("Container binding required");
-      containerHost = new FencedContainerAPI(
-        await this.env.LINUX_CONTAINERS.getByName("probe-host").getWorkspaceContainer(),
-        this.env.LINUX_CONTAINERS.getByName("probe-host"),
+      const hostId = linuxHostId("probe", this.ctx.id.toString());
+      const host = this.env.LINUX_CONTAINERS.getByName(hostId);
+      const image = await host.preparedImage();
+      const imageDigest = image.slice(image.lastIndexOf("@") + 1);
+      const prior = await this.ctx.storage.get<RuntimeHostContext>("fortipi-probe-context");
+      const context =
+        prior ??
+        hostContext({
+          hostId,
+          authorityId: "controlled-probe",
+          allocationId: "controlled-probe-allocation",
+          childId: probeChildId,
+          imageDigest,
+          ownershipNonce: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex"),
+        });
+      requireThat(
+        context.hostId === hostId &&
+          context.imageDigest === imageDigest &&
+          this.env.WORKSPACES.idFromName(context.childId).equals(this.ctx.id),
+        "conflict",
+        "Standalone probe context changed; do not infer replacement ownership",
       );
+      if (!prior) await this.ctx.storage.put("fortipi-probe-context", context);
+      containerHost = new FencedContainerAPI(await host.getWorkspaceContainer(), host, context);
     }
     const backend = linux
       ? new ContainerBackend({
@@ -67,7 +236,14 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
           id: "probe",
           name: "computerd",
           restartAttempts: 0,
-          egress: { mode: "direct" },
+          egress: {
+            mode: "http-gateway",
+            gateway: (
+              this.ctx.exports as unknown as {
+                ProbeGateway(options: Record<string, never>): Fetcher;
+              }
+            ).ProbeGateway({}),
+          },
           connectTimeoutMs: 20_000,
           healthProbeTimeoutMs: 1000,
         })
@@ -94,7 +270,95 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
       output: { maxBytes: 32768, maxLines: 100, keep: 1 },
     });
     this.workspace = ws;
+    return this.#execute(url, ws);
+  }
+  async #execute(url: URL, ws: Workspace): Promise<Response> {
+    const linux = url.searchParams.get("backend") === "linux";
     await ws.fs.mkdir("/workspace", { recursive: true });
+    if (url.pathname === "/prepare-linux") {
+      requireThat(linux && this.container, "unsupported", "Actual Linux backend required");
+      await this.container.connect();
+      return Response.json({ connected: true });
+    }
+    if (linux && url.searchParams.has("process-group")) {
+      const pending = await ws.runtime.exec(cancellationGroupSource, {
+        id: "probe-process-group",
+        backend: "probe",
+        cwd: "/workspace",
+        encoding: "utf8",
+        onInterrupt: "fail",
+        sync: "wait",
+        timeoutMs: 10000,
+      });
+      const terminal = pending.result();
+      void terminal.catch(() => {});
+      const readinessStarted = Date.now();
+      const deadline = readinessStarted + 5000;
+      let readyPulls = 0;
+      for (;;) {
+        // fs reads the host store; a running command has not reached its automatic post-drain pull.
+        for await (const progress of ws.pull("probe")) {
+          readyPulls++;
+          requireThat(
+            progress.skipped === 0,
+            "conflict",
+            "Cancellation readiness pull skipped scratch changes",
+          );
+          if (Date.now() >= deadline)
+            throw new Error("Actual process group readiness pull exceeded its deadline");
+        }
+        try {
+          if ((await ws.fs.readFile("/workspace/pg-ready", "utf8")) === "ready") break;
+        } catch (error) {
+          if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        }
+        if (Date.now() >= deadline) throw new Error("Actual process group did not reach readiness");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      const readyElapsedMs = Date.now() - readinessStarted;
+      await ws.runtime.killExec("probe-process-group", { backend: "probe", signal: "SIGTERM" });
+      const cancelled = await terminal;
+      console.log(
+        JSON.stringify(cancellationDiagnostic("cancel", cancelled, readyPulls, readyElapsedMs)),
+      );
+      if (
+        cancelled.status !== "cancelled" ||
+        cancelled.sync.status !== "complete" ||
+        cancelled.skipped.length !== 0 ||
+        cancelled.sync.skipped.length !== 0
+      )
+        throw new Error("Cancelled group did not settle with complete scratch synchronization");
+      const observer = await ws.runtime.exec(cancellationObserverSource, {
+        id: "probe-process-group-observer",
+        backend: "probe",
+        cwd: "/workspace",
+        encoding: "utf8",
+        onInterrupt: "fail",
+        sync: "wait",
+        timeoutMs: 8000,
+      });
+      const observed = await observer.result();
+      console.log(
+        JSON.stringify(cancellationDiagnostic("observer", observed, readyPulls, readyElapsedMs)),
+      );
+      if (
+        observed.status !== "completed" ||
+        observed.exitCode !== 0 ||
+        observed.sync.status !== "complete" ||
+        observed.skipped.length !== 0 ||
+        observed.sync.skipped.length !== 0
+      )
+        throw new Error(
+          "A descendant survived group cancellation or synchronization was incomplete",
+        );
+      return Response.json({
+        cancelled: cancelled.status,
+        observer: observed.status,
+        stdout: observed.stdout,
+        sync: observed.sync.status,
+        skipped: observed.skipped.length,
+      });
+    }
     await ws.fs.writeFile("/workspace/input.txt", "fortipi-mount-canary", { mode: 420 });
     const source = linux
       ? "set -eu\ncat /workspace/input.txt\nprintf 'fortipi-result' > /workspace/result.txt\ncat /workspace/result.txt\ncat /proc/self/mountinfo\n"
@@ -139,10 +403,36 @@ export class BackendProbe extends DurableObject<ProbeEnv> {
 }
 export default {
   async fetch(request: Request, env: ProbeEnv): Promise<Response> {
-    if (new URL(request.url).pathname === "/prepared-image") {
+    const path = new URL(request.url).pathname;
+    if (["/prepared-image", "/bind-local-image", "/native-image"].includes(path)) {
       if (!env.LINUX_CONTAINERS) return new Response(null, { status: 404 });
-      return Response.json(await env.LINUX_CONTAINERS.getByName("probe-host").preparedImage());
+      const host = env.LINUX_CONTAINERS.getByName(
+        linuxHostId("probe", env.WORKSPACES.idFromName(probeChildId).toString()),
+      );
+      if (path === "/bind-local-image") {
+        const length = request.headers.get("content-length");
+        requireThat(
+          request.method === "POST" &&
+            length !== null &&
+            /^\d{1,4}$/.test(length) &&
+            Number(length) > 0 &&
+            Number(length) <= 1024,
+          "invalid_request",
+          "Bounded local binding POST required",
+        );
+        const text = await request.text();
+        requireThat(
+          new TextEncoder().encode(text).byteLength === Number(length),
+          "invalid_request",
+          "Local binding body length changed",
+        );
+        await host.bindImage(JSON.parse(text));
+        return Response.json({ bound: true });
+      }
+      return Response.json(
+        path === "/prepared-image" ? await host.preparedReference() : await host.imageObservation(),
+      );
     }
-    return env.WORKSPACES.getByName("backend-probe").fetch(request);
+    return env.WORKSPACES.getByName(probeChildId).fetch(request);
   },
 };

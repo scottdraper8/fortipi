@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-assert.equal(process.versions.node, "26.13.0");
+assert.equal(process.versions.node, "26.13.1");
 const pnpm = await pnpmExecutable();
 await verifyPnpmExecutable(pnpm);
 assert.ok(

@@ -103,7 +103,7 @@ void test("native one-use upgrade failures are redacted and an aborted attempt d
         error.message === "FortiPi: handshake_failed" &&
         !JSON.stringify(error).includes("invalid_fixture_ticket"),
     );
-    const ticket = await client.tickets.mint("conv_1");
+    const ticket = await client.tickets.mint("agent_1", "conv_1");
     const connection = await client.operations.getClientStream({
       path: {},
       query: { ticket: ticket.ticket },

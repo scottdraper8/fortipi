@@ -168,6 +168,12 @@
                 },
                 "transferLimits": {
                   "$ref": "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits"
+                },
+                "ledgerId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "ledgerInstanceId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
                 }
               },
               "required": [
@@ -180,7 +186,9 @@
                 "caseBehavior",
                 "rootBindingIds",
                 "confinement",
-                "transferLimits"
+                "transferLimits",
+                "ledgerId",
+                "ledgerInstanceId"
               ],
               "additionalProperties": false
             }
@@ -215,9 +223,22 @@
                 },
                 "heartbeatMs": {
                   "const": 15000
+                },
+                "ledgerId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+                },
+                "ledgerInstanceId": {
+                  "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
                 }
               },
-              "required": ["executorId", "generation", "connectionEpoch", "heartbeatMs"],
+              "required": [
+                "executorId",
+                "generation",
+                "connectionEpoch",
+                "heartbeatMs",
+                "ledgerId",
+                "ledgerInstanceId"
+              ],
               "additionalProperties": false
             }
           },
@@ -522,6 +543,23 @@
         },
         {
           "type": "object",
+          "description": "Executor-to-control-plane acknowledgment of the exact retained terminal proof after durable local application. It retires delivery recovery only and grants no execution or workspace authority.",
+          "properties": {
+            "type": {
+              "const": "job.committed_ack"
+            },
+            "requestId": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+            },
+            "payload": {
+              "$ref": "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/JobCommitted"
+            }
+          },
+          "required": ["type", "requestId", "payload"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "properties": {
             "type": {
               "const": "local_policy.pending"
@@ -673,6 +711,52 @@
           "additionalProperties": false
         }
       ]
+    },
+    "ExecutorJobQuery": {
+      "title": "ExecutorJobQuery",
+      "type": "object",
+      "properties": {
+        "executionId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "assignmentDigest": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "connectionEpoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["executionId", "assignmentDigest", "connectionEpoch"],
+      "additionalProperties": false
+    },
+    "ExecutorJobChunkQuery": {
+      "title": "ExecutorJobChunkQuery",
+      "type": "object",
+      "properties": {
+        "executionId": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id"
+        },
+        "assignmentDigest": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        },
+        "connectionEpoch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 262144
+        },
+        "sha256": {
+          "$ref": "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256"
+        }
+      },
+      "required": ["executionId", "assignmentDigest", "connectionEpoch", "length", "sha256"],
+      "additionalProperties": false
     }
   }
 }

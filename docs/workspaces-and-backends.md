@@ -43,6 +43,11 @@ across a runtime wait. Only an active scratch backend accepts upstream transport
 callbacks, through Computer's authentication checks. No generic Computer proxy or
 raw Workspace stub is a public API.
 
+WorkspaceObject's implementation helpers and export/child backing fields use
+ECMAScript `#private`. TypeScript `private` alone erases at runtime and would leave
+helper methods callable through Durable Object RPC outside the declared port.
+The existing WorkspaceObjectRpc operations retain their signatures and guards.
+
 The service uses flat RPC ports where their platform types compile. For recursive
 execution DTOs it uses the existing authenticated private fetch lane:
 `POST /__fortipi/authority/{prepare,start,query,collect}` with the exact respective
@@ -58,6 +63,78 @@ workspace action and the saved allocation/lease/reservation scope. A writer can
 copy retained bytes into a full new revision and recover its publication receipt
 without receiving public read permission. Public file/stat/manifest/receipt reads
 still require `workspace.read`.
+
+Private workspace exports use the initiating `exports.create` or `backups.create`
+action and one current registered grant covering all concrete requested resources,
+including this workspace. They do not call public read methods or borrow write or
+capacity permissions. The first request durably captures the committed revision,
+manifest, exact sealed allocation and member list. The export ID binds principal,
+action, scope and byte budget; a transport retry cannot select a newer revision or
+extend the original retention deadline. Missing local retained bytes return
+`unavailable`; size/reference overflow returns `partial`, with no ready artifacts.
+
+Before advertising ready, exports copy and verify actual member size/SHA into the
+authority's own `fp_ws_export_chunk` BLOB table. The first admin artifact contains
+canonical UTF8 JSON `{version:1,workspaceId,revision,manifestHash,manifest,files}`;
+each file lists `{path,parts:[{artifactId,offset,size,sha256}]}`. Remaining artifacts
+are raw file parts. All references use the real workspace/revision scope; at most
+16 include the index, and every part obeys the effective artifact bound. The
+retained manifest preserves directories, modes and file membership for recovery.
+No host paths, auth context or credential tables enter the payload.
+Index artifact IDs identify source-local peers. CP creates distinct public copy
+IDs; recipients match retained parts by SHA/size and exact workspace/revision
+scope. The immutable index payload is not rewritten to refer to public IDs.
+
+The existing service-only `GET /v1/admin/artifacts/{peerId}` with the server-created
+workspace context supplies these retained bytes to CP under the saved logical
+action/scope. Public admin downloads remain CP's separately authorized path.
+Private source acquisition uses the existing store `/read` path with exact retained
+export membership proof; ordinary child/public read authority is unchanged. Peer
+full/range/empty bodies preserve known length, backpressure, deadline, cancellation
+and current credential floors. No live device/root fallback is attempted.
+
+Copies reserve bounded local retained bytes/count and check actual SQLite size
+against the configured object, workspace and install ceilings plus headroom before
+and after transactional writes. This is an own-object physical limit, not evidence
+of remaining aggregate installation capacity. Existing capacity calls require
+other actions; global accounting remains a separate integration prerequisite.
+The existing bounded Workspace alarm deletes expired BLOBs and artifact indexes,
+releases retention accounting, and retains a discriminated compact intent/ID
+tombstone. Expired rows release captured manifests, member layouts and descriptor
+payloads; they cannot acquire a newer cut under the same export ID. SQLite page
+reuse is not a claim that allocated database pages shrink.
+
+Private `getReceipt` can also recover an exact known commit with the current
+registered writer's retained reservation scope. It verifies the saved upload or
+local intent, original job/operation/base/lease identity, current agent/conversation/
+target grant and credential/executor floors. Historical expiry does not renew or
+rewrite that authority. Receipt lookup is observational and does not initiate
+publication or cleanup. The public `getCommitReceipt` path always requires read.
+
+When a commit reply is lost before its computed digest is known, private fact
+paging can expose only the intended recipient's actual retained publication fact
+under that same write authority. The fact must match the stored receipt and its
+original reservation; write does not authorize arbitrary facts. Read-authorized
+fact pages and acknowledgments also require one current grant covering the actual
+workspace, action, recipient agent and fact conversation. Acknowledgments retain
+their original event coordinates on retry. The service still compares each
+receipt/fact with its known job and binding: `CommitLookup` carries only workspace,
+commit ID and digest, not independent job or binding coordinates.
+
+Before reserving a job target, the service can use the existing private fetch lane
+`GET /__fortipi/operational-metadata?revision=BASE&agentId=AGENT&conversationId=CONVERSATION`
+with the same server-constructed workspace context header. Exactly these three
+query fields are required, once each. One current grant must cover the workspace,
+agent and conversation with both `jobs.dispatch` and `workspace.write`. The
+authority checks current credential/floors inside its FIFO, compares the expected
+revision with its current binding and retained manifest hash, then returns the
+existing `WorkspaceBinding` JSON with `Cache-Control: no-store`. It includes only
+binding metadata and opaque provider IDs, without a file tree or host paths.
+This observation does not reserve, acquire, mutate, renew or clean up anything.
+Public descriptor/manifest reads retain their existing permissions. The service
+must compare the returned base and resolve/register the actual current target
+before mutation. The binding has no executor-generation field; metadata is not
+execution or mutation authority. CP owns current registration-record binding.
 
 `POST /__fortipi/terminal-proof` accepts at most 64 KiB of the existing
 `JobCommitted` JSON, with the same server-constructed context header. It checks
@@ -178,6 +255,10 @@ With the reviewed Node/pnpm toolchain first on `PATH`:
 ```sh
 node packages/fortipi-contract/scripts/generate.ts --check
 pnpm exec tsc -p packages/fortipi-contract/tsconfig.json
+node apps/worker/container/build.ts --prepare-inputs
+# On trusted Linux x64, for a new reviewed source/runtime identity:
+node apps/worker/container/build.ts --freeze-embedded
+# Review and commit the actual generated freeze before the final build.
 node apps/worker/container/build.ts --prepare
 node apps/worker/container/build.ts --verify
 node apps/worker/test/backends/linux-image.ts --require-fuse
@@ -187,10 +268,17 @@ The build requires reviewed Docker 29.9.3, Buildx 0.38.2 and embedded BuildKit
 0.34.2 using the default driver. The parent owns their installation and isolated
 Docker configuration. No local VM is installed by this tranche.
 
-The exact computerd 0.10.0 and Debian image manifests/configs/layers are verified
-against foundation metadata. Debian packages use the dated
+Computer **0.11.1** is paired with its exact source. Its daemon bundle is compiled
+from that source using the upstream esbuild/SEA bootstrap and addon shim. The
+actual SEA blob is generated and injected with signed official **Node22.23.5** on
+Linux x64; build-only postject1.0.0-alpha.6 and commander9.5.0 remain isolated.
+The historical computerd image supplies only the unchanged, source-checked FUSE
+addon, never its old SEA. Missing new output digests block complete preparation.
+Debian packages retain the dated
 `20261110T000000Z` snapshot, with exact base versions resolved through immutable
-snapshot content addresses where necessary. The freeze includes `Built-Using`
+snapshot content addresses where necessary, plus one authenticated trixie-security
+zlib1g/source overlay at `1:1.3.dfsg+really1.3.1-1+deb13u1`. All other installed
+versions and the 79-package boundary remain frozen. The freeze includes `Built-Using`
 and `Static-Built-Using` source identities, matching archives and source license
 hashes. Installation is offline. Raw content-addressed cache entries are rehashed
 before reuse; independent archive downloads have bounded concurrency.
@@ -199,7 +287,15 @@ before reuse; independent archive downloads have bounded concurrency.
 JavaScript assets, their exact source-lock dependencies, native header source and
 complete upstream license texts. The modified vendored addon has a separate
 source-file inventory. Computer's matching source archive and embedded Node
-22.23.4 license are pinned. These observations establish provenance inputs;
+22.23.5 aggregate license are pinned. The signed runtime/source archives, bounded
+build adapter, actual build receipt and effective zlib quilt patch inventory are
+included in the source kit. Historical AD image/runtime results apply only to AD.
+Computer's three new pending-sync tables are included in actual databaseSize
+observations; policy bounds are unchanged. Its replay fingerprint changes to2;
+FortiPi retains `onInterrupt:fail` and `modules:{}`, with no old-journal replay or
+new grant enabled. The real Loader close/reconnect and complete-sync tests cover
+the used lifecycle; native process-group cancellation requires the new Linux image.
+These observations establish provenance inputs;
 reproducible build/relink rights, vulnerability review and license compliance of
 the final distribution remain independent release gates.
 
@@ -226,8 +322,9 @@ access to that kit alongside the image. See
 
 Required public build egress: `ghcr.io`, its public layer CDN,
 `registry-1.docker.io`, `auth.docker.io`, Docker's public layer CDN,
-`snapshot.debian.org`, `codeload.github.com`, `raw.githubusercontent.com` and
-`registry.npmjs.org`. The Docker build itself has no network access.
+`snapshot.debian.org`, `security.debian.org`, `nodejs.org`, `codeload.github.com`,
+`raw.githubusercontent.com` and `registry.npmjs.org`. The Docker build itself has no
+network access.
 
 ## Evidence boundaries
 

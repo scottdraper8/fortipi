@@ -1,0 +1,42 @@
+{
+  "@earendil-works/pi-durable@1.5.2": {
+    "path": "patches/@earendil-works__pi-durable@1.5.2.patch",
+    "sha256": "2e4a878a49ac70b158956b55e1131dd595b91a88fe86de2cacfae2f1c7abe536",
+    "source": "https://github.com/earendil-works/pi/blob/9b88b94e2c48086f38002d551dc8e0343923505e/packages/durable/src/harness/util.ts",
+    "reason": "observe waiter rejection before queued delivery while preserving cancellation",
+    "files": {
+      "dist/harness/util.js": {
+        "originalSha256": "5519388f097d51fbf8f5811edd11d04076523253a2a11ae8689082ae8e2df4d9",
+        "patchedSha256": "8f7cbbc462e18ec73a7fc8030b438626c7dc556a71de83003e4b3c477d166656"
+      },
+      "dist/harness/util.js.map": {
+        "originalSha256": "fba82e87b6ef5680e470ee7b5cda15f650f9b2255486403982c875395dc54461",
+        "patchedSha256": "9ed4d82141254dbfceab5757659e480979cb1a5a2dcd24cbbf0fb6a63f4a67d8"
+      }
+    }
+  },
+  "agents@0.33.0": {
+    "path": "patches/agents@0.33.0.patch",
+    "sha256": "be9cf2adb5bb78fb438c17555aeaf048e9b6f07f9760f1edf61af47c9ad50528",
+    "source": "https://github.com/cloudflare/agents/commit/5071d3cda939972fb532c93e9b46942b36d8f5d7",
+    "reason": "fence Lifecycle retries and outcomes after supersession; modified chunk source map disabled",
+    "files": {
+      "dist/lifecycle-v1rKHV2C.js": {
+        "originalSha256": "0af41bb3bea705431fd67fc944e364433a8e8e64c27c4a4d4aa291840776ecd7",
+        "patchedSha256": "08b96dcd4929f8a766d94a0504e5e6f6319a80ee496137857a8e535fd7b21e6e"
+      }
+    }
+  },
+  "@earendil-works/pi-ai@1.5.2": {
+    "path": "patches/@earendil-works__pi-ai@1.5.2.patch",
+    "sha256": "966118ea7d110bd1b0368f17cf3f8d144a2d9b260ed91ea043e53ffbbc1dec21",
+    "source": "https://github.com/earendil-works/pi/commit/aa47cedce0a5347232ac2ad04c67594f4b3ad5cc",
+    "reason": "preserve declared root additionalProperties in Anthropic tool schemas; modified-file source map disabled",
+    "files": {
+      "dist/api/anthropic-messages.js": {
+        "originalSha256": "47cce5fb2770f6ffde0268cfb6549c4839af04129f776149bd60e04555c584dc",
+        "patchedSha256": "a2d4ada91d88a35fd276649d25ed246208947d0dde80418f2bbc8e233154651b"
+      }
+    }
+  }
+}

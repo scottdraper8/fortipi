@@ -31,6 +31,10 @@ export const administrationSchema = {
         transferLimits: {
           $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits",
         },
+        ledgerId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        ledgerInstanceId: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+        },
       },
       required: [
         "executorId",
@@ -43,6 +47,8 @@ export const administrationSchema = {
         "rootBindingIds",
         "state",
         "transferLimits",
+        "ledgerId",
+        "ledgerInstanceId",
       ],
       additionalProperties: false,
     },
@@ -84,8 +90,14 @@ export const administrationSchema = {
                   $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
                 },
                 generation: { type: "integer", minimum: 0, maximum: 9007199254740991 },
+                ledgerId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
+                ledgerInstanceId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
               },
-              required: ["executorId", "generation"],
+              required: ["executorId", "generation", "ledgerId", "ledgerInstanceId"],
               additionalProperties: false,
             },
           },
@@ -290,6 +302,55 @@ export const administrationSchema = {
       required: ["providerId", "version", "generation", "state"],
       additionalProperties: false,
     },
+    AdminArtifactReference: {
+      title: "AdminArtifactReference",
+      type: "object",
+      properties: {
+        artifactId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        sha256: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256" },
+        size: { type: "integer", minimum: 0, maximum: 16777216 },
+        endpoint: {
+          type: "string",
+          maxLength: 148,
+          pattern: "^/v1/admin/artifacts/[A-Za-z0-9_-]{1,128}$",
+        },
+        scope: {
+          oneOf: [
+            {
+              type: "object",
+              properties: {
+                kind: { const: "agent" },
+                agentId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+                conversationIds: {
+                  type: "array",
+                  items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+                  uniqueItems: true,
+                  maxItems: 100,
+                },
+              },
+              required: ["kind", "agentId", "conversationIds"],
+              additionalProperties: false,
+            },
+            {
+              type: "object",
+              properties: {
+                kind: { const: "workspace" },
+                workspaceId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
+                revision: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Revision",
+                },
+              },
+              required: ["kind", "workspaceId", "revision"],
+              additionalProperties: false,
+            },
+          ],
+        },
+      },
+      required: ["artifactId", "sha256", "size", "endpoint", "scope"],
+      additionalProperties: false,
+    },
     AdminOperation: {
       title: "AdminOperation",
       type: "object",
@@ -300,7 +361,7 @@ export const administrationSchema = {
         artifacts: {
           type: "array",
           items: {
-            $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ByteReference",
+            $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/AdminArtifactReference",
           },
           maxItems: 16,
         },
@@ -3888,6 +3949,12 @@ export const executorMessagesSchema = {
                 transferLimits: {
                   $ref: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExecutorTransferLimits",
                 },
+                ledgerId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
+                ledgerInstanceId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
               },
               required: [
                 "executorId",
@@ -3900,6 +3967,8 @@ export const executorMessagesSchema = {
                 "rootBindingIds",
                 "confinement",
                 "transferLimits",
+                "ledgerId",
+                "ledgerInstanceId",
               ],
               additionalProperties: false,
             },
@@ -3921,8 +3990,21 @@ export const executorMessagesSchema = {
                 generation: { type: "integer", minimum: 0, maximum: 9007199254740991 },
                 connectionEpoch: { type: "integer", minimum: 0, maximum: 9007199254740991 },
                 heartbeatMs: { const: 15000 },
+                ledgerId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
+                ledgerInstanceId: {
+                  $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
+                },
               },
-              required: ["executorId", "generation", "connectionEpoch", "heartbeatMs"],
+              required: [
+                "executorId",
+                "generation",
+                "connectionEpoch",
+                "heartbeatMs",
+                "ledgerId",
+                "ledgerInstanceId",
+              ],
               additionalProperties: false,
             },
           },
@@ -4149,6 +4231,20 @@ export const executorMessagesSchema = {
         },
         {
           type: "object",
+          description:
+            "Executor-to-control-plane acknowledgment of the exact retained terminal proof after durable local application. It retires delivery recovery only and grants no execution or workspace authority.",
+          properties: {
+            type: { const: "job.committed_ack" },
+            requestId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+            payload: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/JobCommitted",
+            },
+          },
+          required: ["type", "requestId", "payload"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
           properties: {
             type: { const: "local_policy.pending" },
             requestId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
@@ -4274,6 +4370,34 @@ export const executorMessagesSchema = {
           additionalProperties: false,
         },
       ],
+    },
+    ExecutorJobQuery: {
+      title: "ExecutorJobQuery",
+      type: "object",
+      properties: {
+        executionId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        assignmentDigest: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+        },
+        connectionEpoch: { type: "integer", minimum: 1, maximum: 9007199254740991 },
+      },
+      required: ["executionId", "assignmentDigest", "connectionEpoch"],
+      additionalProperties: false,
+    },
+    ExecutorJobChunkQuery: {
+      title: "ExecutorJobChunkQuery",
+      type: "object",
+      properties: {
+        executionId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+        assignmentDigest: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
+        },
+        connectionEpoch: { type: "integer", minimum: 1, maximum: 9007199254740991 },
+        length: { type: "integer", minimum: 1, maximum: 262144 },
+        sha256: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256" },
+      },
+      required: ["executionId", "assignmentDigest", "connectionEpoch", "length", "sha256"],
+      additionalProperties: false,
     },
   },
 } as const;
@@ -4708,6 +4832,38 @@ export const jobsSchema = {
           required: ["identity", "state"],
           additionalProperties: false,
         },
+        {
+          type: "object",
+          description:
+            "FortiPi native executor observation of an existing durable assignment awaiting local approval. Never a no-start proof or authority to dispatch again; cloud adapters do not emit this state.",
+          properties: {
+            identity: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity",
+            },
+            state: { const: "waiting_for_local_policy" },
+            operation: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation",
+            },
+          },
+          required: ["identity", "state", "operation"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          description:
+            "FortiPi native executor has the existing durable allowed assignment queued for preparation or materializing its working copy in the current process incarnation, before the winning start claim. No process-running or safe-restart proof; never emitted after an uncertain claim or by cloud adapters.",
+          properties: {
+            identity: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/jobs.schema.json#/$defs/ExecutionIdentity",
+            },
+            state: { const: "preparing" },
+            operation: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/approvals.schema.json#/$defs/ApprovalOperation",
+            },
+          },
+          required: ["identity", "state", "operation"],
+          additionalProperties: false,
+        },
       ],
     },
     ReconcileInput: {
@@ -4743,6 +4899,8 @@ export const jobsSchema = {
             },
             {
               type: "object",
+              description:
+                "Fresh retry: authorizationId is a caller-chosen business/idempotency identity that the server binds to the original job/version, new operation and one current covering grant/credential; it grants no permission and is not an external authorization token. Omit newJobId for durable server allocation before asynchronous work. An explicit newJobId must belong to the selected Agent and be unique.",
               properties: {
                 kind: { const: "new-job" },
                 newJobId: {
@@ -4752,7 +4910,7 @@ export const jobsSchema = {
                   $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id",
                 },
               },
-              required: ["kind", "newJobId", "authorizationId"],
+              required: ["kind", "authorizationId"],
               additionalProperties: false,
             },
           ],
@@ -6456,6 +6614,9 @@ export const workspacesSchema = {
             postManifestHash: {
               $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Sha256",
             },
+            postManifest: {
+              $ref: "https://fortipi.dev/schemas/1.0.0/workspaces.schema.json#/$defs/Manifest",
+            },
             appliedAt: {
               $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
             },
@@ -7204,6 +7365,8 @@ export const schemaRefs = {
     "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ProviderAuthStatus",
   ProviderAuthReceipt:
     "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ProviderAuthReceipt",
+  AdminArtifactReference:
+    "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/AdminArtifactReference",
   AdminOperation:
     "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/AdminOperation",
   ExportInput: "https://fortipi.dev/schemas/1.0.0/administration.schema.json#/$defs/ExportInput",
@@ -7322,6 +7485,10 @@ export const schemaRefs = {
     "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/JobCommitted",
   ExecutorFrame:
     "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/ExecutorFrame",
+  ExecutorJobQuery:
+    "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/ExecutorJobQuery",
+  ExecutorJobChunkQuery:
+    "https://fortipi.dev/schemas/1.0.0/executor-messages.schema.json#/$defs/ExecutorJobChunkQuery",
   CapabilityStatus:
     "https://fortipi.dev/schemas/1.0.0/infrastructure.schema.json#/$defs/CapabilityStatus",
   InfrastructurePolicy:

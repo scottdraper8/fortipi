@@ -1,6 +1,7 @@
 import { validateBrowserOrigin } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
-import { contains, requireGrant } from "./authorization.js";
+import { contains, emptyScope, requireGrant } from "./authorization.js";
+import { valid } from "./directory.js";
 import type { Identities } from "./identity.js";
 import { check, hash, id, json, next, ref, type Store, same } from "./store.js";
 
@@ -14,8 +15,39 @@ export interface ExecutorState {
   generation: number;
   epoch: number;
   status: string;
+  ledger?: { kind: "unbound" } | { kind: "bound"; ledgerId: string; ledgerInstanceId: string };
   description?: D.ExecutorDescription;
   credentialId?: string;
+}
+/** Missing enrollment metadata is legacy unknown, never evidence of a fresh generation. */
+export function requireExecutorInstance(
+  state: ExecutorState | undefined,
+  executor: NonNullable<D.SocketIdentity["executor"]>,
+  allowUnbound = false,
+): asserts state is ExecutorState {
+  check(
+    state && state.status !== "revoked" && state.generation === executor.generation,
+    "conflict",
+    "Executor revoked or generation changed",
+  );
+  check(
+    valid("common", "Id", executor.ledgerId) &&
+      valid("common", "Id", executor.ledgerInstanceId) &&
+      ((allowUnbound && state.ledger?.kind === "unbound") ||
+        (state.ledger?.kind === "bound" &&
+          state.ledger.ledgerId === executor.ledgerId &&
+          state.ledger.ledgerInstanceId === executor.ledgerInstanceId)),
+    "conflict",
+    "Executor retained ledger instance mismatch; explicit recovery required",
+  );
+}
+export function requireExecutorScope(
+  ctx: D.AuthContext,
+  resources: D.ResourceScope,
+  executorId: string,
+): void {
+  requireGrant(ctx, "tickets.mint", resources);
+  requireGrant(ctx, "executors.register", { ...emptyScope(), executorIds: [executorId] });
 }
 export class Tickets {
   readonly store: Store;
@@ -23,6 +55,15 @@ export class Tickets {
   constructor(store: Store, identities: Identities) {
     this.store = store;
     this.identities = identities;
+  }
+  private clientAgent(resources: D.ResourceScope): string {
+    const agentId = resources.agentIds[0];
+    check(
+      resources.agentIds.length === 1 && agentId !== undefined && valid("common", "Id", agentId),
+      "invalid_request",
+      "Client stream requires one concrete agent",
+    );
+    return agentId;
   }
   register(ctx: D.AuthContext, input: D.AuthorityRecipientRequest): D.AuthorityRegistration {
     return this.store.tx(() => {
@@ -111,13 +152,16 @@ export class Tickets {
         "unauthorized",
         "Executor ticket identity mismatch",
       );
-      const e = this.store.get<ExecutorState>("executor", input.executor.executorId);
-      check(
-        e && e.generation === input.executor.generation && e.status !== "revoked",
-        "conflict",
-        "Executor generation changed",
+      requireExecutorScope(ctx, input.resources, input.executor.executorId);
+      requireExecutorInstance(
+        this.store.get<ExecutorState>("executor", input.executor.executorId),
+        input.executor,
+        true,
       );
-    } else check(ctx.role !== "executor", "unauthorized", "Executor cannot acquire client stream");
+    } else {
+      check(ctx.role !== "executor", "unauthorized", "Executor cannot acquire client stream");
+      this.clientAgent(input.resources);
+    }
     const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (x) =>
       x.toString(16).padStart(2, "0"),
     ).join("");
@@ -146,7 +190,21 @@ export class Tickets {
     };
     await this.store.arm(expiresAt);
     this.store.tx(() => {
-      this.identities.current(ctx);
+      const current = this.identities.current(ctx);
+      if (input.audience === "executor-session") {
+        check(
+          current.role === "executor" && current.executorId === input.executor.executorId,
+          "unauthorized",
+          "Executor ticket identity mismatch",
+        );
+        requireExecutorScope(ctx, input.resources, input.executor.executorId);
+        requireExecutorInstance(
+          this.store.get<ExecutorState>("executor", input.executor.executorId),
+          input.executor,
+          true,
+        );
+      }
+      check(Date.now() < expiresAt, "unauthenticated", "Ticket scope expired");
       this.store.put(
         "ticket",
         digest,
@@ -170,6 +228,24 @@ export class Tickets {
     };
   }
   async consume(input: D.TicketRedemption): Promise<D.SocketIdentity> {
+    const [identity] = await this.redeem(input, input.destination);
+    return identity;
+  }
+  async consumeStream(
+    ticket: string,
+    origin: D.TicketRedemption["origin"],
+  ): Promise<[D.SocketIdentity, D.AuthContext]> {
+    return this.redeem({
+      ticket,
+      deploymentId: this.identities.deploymentId,
+      audience: "client-stream",
+      origin,
+    });
+  }
+  private async redeem(
+    input: Omit<D.TicketRedemption, "destination">,
+    destination?: D.TicketRedemption["destination"],
+  ): Promise<[D.SocketIdentity, D.AuthContext]> {
     check(
       input.ticket.length === 64 && input.deploymentId === this.identities.deploymentId,
       "unauthenticated",
@@ -190,44 +266,55 @@ export class Tickets {
       );
       check(c, "unauthenticated", "Invalid credential");
       const ctx: D.AuthContext = {
-        ...t.identity,
+        credentialId: t.identity.credentialId,
+        generation: t.identity.generation,
+        grantVersion: t.identity.grantVersion,
+        deploymentId: t.identity.deploymentId,
+        principalId: t.identity.principalId,
+        role: t.identity.role,
         grants: c.grants,
         requestId: id(),
         authenticatedAt: Date.now(),
         credentialExpiresAt: c.expiresAt,
-        deadline: Date.now() + 30000,
+        deadline: Math.min(Date.now() + 30000, t.identity.expiresAt),
       };
       this.identities.current(ctx);
       let registrationId: string;
       if (input.audience === "client-stream") {
+        check(ctx.role !== "executor", "unauthorized", "Executor cannot acquire client stream");
+        const agentId = this.clientAgent(t.identity.resources);
         check(
-          input.destination.kind === "agent" &&
-            t.identity.resources.agentIds.includes(input.destination.id),
+          destination === undefined || (destination.kind === "agent" && destination.id === agentId),
           "unauthorized",
           "Ticket destination mismatch",
         );
         registrationId = this.register(ctx, {
           credential: ref(ctx),
-          recipient: input.destination,
+          recipient: { kind: "agent", id: agentId },
           resources: t.identity.resources,
         }).registrationId;
       } else {
         check(
-          input.destination.kind === "control" && t.identity.executor,
+          destination?.kind === "control" && t.identity.executor,
           "unauthorized",
           "Ticket destination mismatch",
         );
-        const e = this.store.get<ExecutorState>("executor", t.identity.executor.executorId);
         check(
-          e && e.generation === t.identity.executor.generation && e.status !== "revoked",
-          "unauthenticated",
-          "Executor revoked",
+          c.role === "executor" && c.executorId === t.identity.executor.executorId,
+          "unauthorized",
+          "Executor ticket identity mismatch",
+        );
+        requireExecutorScope(ctx, t.identity.resources, t.identity.executor.executorId);
+        requireExecutorInstance(
+          this.store.get<ExecutorState>("executor", t.identity.executor.executorId),
+          t.identity.executor,
+          true,
         );
         registrationId = id();
       }
       const identity = { ...t.identity, registrationId };
       this.store.put("ticket", digest, { ...t, identity, used: true }, "", "", t.expiresAt);
-      return identity;
+      return [identity, { ...ctx, registrationId }];
     });
   }
   epoch(executorId: string): number {

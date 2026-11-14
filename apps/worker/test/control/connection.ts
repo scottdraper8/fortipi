@@ -12,16 +12,25 @@ export async function connected(
     workspaceIds?: string[];
     transferLimits?: D.ExecutorTransferLimits;
     generation?: number;
+    executorId?: string;
+    ledgerId?: string;
+    ledgerInstanceId?: string;
   } = {},
 ) {
+  const executorId = options.executorId ?? "executor";
+  const ledger = {
+    ledgerId: options.ledgerId ?? "fixture_ledger",
+    ledgerInstanceId: options.ledgerInstanceId ?? "fixture_instance",
+  };
   const resources = {
     ...scope(),
+    executorIds: [executorId],
     ...(options.workspaceIds ? { workspaceIds: options.workspaceIds } : {}),
   };
   const issued = await h.mint({
     requestId: uuid(),
     role: "executor",
-    executorId: "executor",
+    executorId,
     grants: [{ grantId: "executor", version: 1, resources }],
   });
   const executor = await h.auth(issued.token);
@@ -33,7 +42,7 @@ export async function connected(
         audience: "executor-session",
         resources,
         originMode: { kind: "native" },
-        executor: { executorId: "executor", generation: options.generation ?? 1 },
+        executor: { executorId, generation: options.generation ?? 1, ...ledger },
       }),
     ),
   );
@@ -78,8 +87,9 @@ export async function connected(
     type: "executor.register",
     requestId: uuid(),
     payload: {
-      executorId: "executor",
+      executorId,
       generation: options.generation ?? 1,
+      ...ledger,
       protocolVersion: "1.0",
       schemaVersion: "1.0.0",
       capabilities: ["shell"],

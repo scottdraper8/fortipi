@@ -13,6 +13,14 @@ export interface Source {
   links: string[];
 }
 
+// Fixed installed cohorts; all other catalog rows remain strict current release/policy references.
+export const installedReferenceIds = [
+  "pi-runtime",
+  "agents-lifecycle",
+  "computer-fuse",
+  "wrangler",
+] as const;
+
 const docs = "cloudflare/cloudflare-docs";
 const content = "src/content/";
 const worker = "apps/worker/package.json";
@@ -57,11 +65,18 @@ export const sources: Source[] = [
   ),
   policy(
     "durable-objects-policy",
-    ["docs/durable-objects/platform", "partials/durable-objects"],
-    "Review SQLite request/row/storage limits, Free exhaustion/reset behavior, alarms and pricing; preserve durable holds and explicit recovery.",
+    [
+      "docs/durable-objects/platform",
+      "partials/durable-objects",
+      "docs/durable-objects/deployments/durable-objects-code-updates.mdx",
+      "docs/durable-objects/concepts/durable-object-lifecycle.mdx",
+    ],
+    "Review SQLite request/row/storage limits, Free exhaustion/reset behavior, alarms and pricing; review code-update strategy/API semantics (default deferred up to 300s, single-deployment immediate override), best-effort deferral, lifecycle restarts, storage interruption and WebSocket termination. Preserve durable holds and explicit recovery; never migrate configuration automatically.",
     [
       "https://developers.cloudflare.com/durable-objects/platform/limits/",
       "https://developers.cloudflare.com/durable-objects/platform/pricing/",
+      "https://developers.cloudflare.com/durable-objects/deployments/durable-objects-code-updates/",
+      "https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/",
     ],
   ),
   policy(
@@ -181,6 +196,17 @@ export const sources: Source[] = [
       pin("tools/unstale/platform-tools.json", "fuse", "libfuse3"),
     ],
     "Review upstream FUSE API/ABI, mount/unmount, security and kernel compatibility changes against the exact packaged Debian source and patches. Computer's vendored addon is separate. Verify canonical native pins match the final image; an upstream reference alone does not establish installed-version security.",
+  ),
+  release(
+    "meson",
+    "mesonbuild/meson",
+    [
+      pin("tools/unstale/platform-tools.json", "meson", "version"),
+      pin("tools/unstale/platform-tools.json", "meson", "source"),
+      pin("tools/unstale/platform-tools.json", "meson", "sourceArchiveSha256"),
+      pin("tools/unstale/platform-tools.json", "meson", "licenseSha256"),
+    ],
+    "Review Meson build-option/API and Python requirements against the pinned source/archive and COPYING. Validate private Python executable/prefix/import/library identity and actual FUSE shared-library/static-helper rebuild, replacement/relink and I/O before adoption. A release pointer does not establish build-host compatibility or security.",
   ),
   release(
     "workerd",

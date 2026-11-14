@@ -3,10 +3,12 @@ import { freeInfrastructurePolicy, schemaRegistry } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
 import { audit } from "./audit.js";
-import { emptyScope, permits, requireGrant } from "./authorization.js";
+import { contains, emptyScope, permits, requireGrant, roleAllows } from "./authorization.js";
 import type { Identities } from "./identity.js";
 import { queueRepairResume } from "./repair.js";
-import { check, fail, hash, id, json, next, type Store } from "./store.js";
+import { StorageBudget } from "./storage-budget.js";
+import { check, fail, hash, id, json, next, ref, type Store, same } from "./store.js";
+import type { ExecutorState } from "./tickets.js";
 
 // Only fixed trusted schemas are compiled at module activation, never in request handlers.
 const ajv = new Ajv({ strict: true, allErrors: false, validateFormats: false });
@@ -17,9 +19,13 @@ const validators = new Map(
     ["agents", "AgentPatch"],
     ["configuration", "ConfigurationPatch"],
     ["administration", "TicketInput"],
+    ["administration", "TicketQuery"],
+    ["administration", "ExecutorTransferLimits"],
     ["administration", "CredentialMint"],
     ["executor-messages", "ExecutorFrame"],
     ["executor-messages", "Assignment"],
+    ["executor-messages", "ExecutorJobQuery"],
+    ["executor-messages", "ExecutorJobChunkQuery"],
     ["workspaces", "LocalWorkspaceRequest"],
     ["workspaces", "LocalWorkspaceResponse"],
     ["workspaces", "WorkspaceBindingCreate"],
@@ -28,7 +34,12 @@ const validators = new Map(
     ["workspaces", "WorkspaceLeaseRenew"],
     ["workspaces", "WorkspaceLeaseRelease"],
     ["workspaces", "Lease"],
+    ["workspaces", "ManifestResponse"],
+    ["workspaces", "UploadBegin"],
+    ["workspaces", "UploadStatus"],
+    ["workspaces", "UploadValidation"],
     ["common", "ProtocolError"],
+    ["common", "Id"],
     ["conversations", "ReplayPage"],
     ["transfers", "TransferDescriptor"],
   ].map(([schema, name]) => {
@@ -43,7 +54,15 @@ const validators = new Map(
 export function valid(schema: string, name: string, value: unknown): boolean {
   return validators.get(`${schema}/${name}`)?.(value) === true;
 }
+const modelActions = new Set([
+  "conversations.create",
+  "conversations.fork",
+  "messages.submit",
+  "conversations.steer",
+  "tasks.resume",
+]);
 export class Directory {
+  readonly budget: StorageBudget;
   readonly store: Store;
   readonly identities: Identities;
   readonly env: Env;
@@ -51,12 +70,108 @@ export class Directory {
     this.store = store;
     this.identities = identities;
     this.env = env;
+    this.budget = new StorageBudget(store, () => this.policy(), identities.deploymentId);
   }
   config(): Env["FORTIPI_CONFIG"] {
     return this.store.get<D.Configuration>("config", "active") ?? this.env.FORTIPI_CONFIG;
   }
   policy(): D.InfrastructurePolicy {
     return this.config().infrastructure ?? freeInfrastructurePolicy;
+  }
+  registeredAuthority(ctx: D.AuthContext) {
+    this.identities.current(ctx);
+    const registration = this.store.get<D.AuthorityRegistration>(
+      "recipient",
+      ctx.registrationId ?? "",
+    );
+    if (!registration || !same(registration.credential, ref(ctx))) return undefined;
+    if (registration.executor) {
+      const executor = this.store.get<ExecutorState>("executor", registration.executor.executorId);
+      if (
+        !executor ||
+        executor.status === "revoked" ||
+        executor.generation !== registration.executor.generation
+      )
+        return undefined;
+    }
+    return registration;
+  }
+  registeredOperation(ctx: D.AuthContext) {
+    const registration = this.registeredAuthority(ctx);
+    if (registration?.recipient.kind !== "agent") return undefined;
+    const resources = registration.resources;
+    const agentId = registration.recipient.id;
+    const action = resources.actions[0];
+    if (
+      resources.agentIds.length !== 1 ||
+      resources.agentIds[0] !== agentId ||
+      !valid("common", "Id", agentId) ||
+      !this.store.get("agent", agentId) ||
+      resources.actions.length !== 1 ||
+      !action ||
+      !roleAllows(ctx, action)
+    )
+      return undefined;
+    // Service registrations bind an operation; opaque operation IDs grant no authority.
+    const storageExport = action === "exports.create" || action === "backups.create";
+    if (
+      storageExport &&
+      (ctx.role !== "admin" ||
+        registration.executor !== undefined ||
+        resources.workspaceIds.length !== 0 ||
+        resources.executorIds.length !== 0 ||
+        resources.backendIds.length !== 0 ||
+        resources.tools.length !== 0 ||
+        resources.conversationIds.length > 100 ||
+        !resources.conversationIds.every((id) => id === "*" || valid("common", "Id", id)))
+    )
+      return undefined;
+    const creation = action === "conversations.create";
+    if (!modelActions.has(action) && action !== "jobs.dispatch" && !storageExport) return undefined;
+    if (
+      !storageExport &&
+      (creation
+        ? resources.conversationIds.length !== 0
+        : resources.conversationIds.length !== 1 ||
+          !valid("common", "Id", resources.conversationIds[0]))
+    )
+      return undefined;
+    if (
+      action === "jobs.dispatch" &&
+      (resources.workspaceIds.length !== 1 ||
+        !valid("common", "Id", resources.workspaceIds[0]) ||
+        resources.tools.length !== 1 ||
+        resources.tools[0] === "*" ||
+        !resources.tools[0] ||
+        !(
+          (resources.executorIds.length === 1 &&
+            valid("common", "Id", resources.executorIds[0]) &&
+            resources.backendIds.length === 0) ||
+          (resources.backendIds.length === 1 &&
+            valid("common", "Id", resources.backendIds[0]) &&
+            resources.executorIds.length === 0)
+        ))
+    )
+      return undefined;
+    const grant = ctx.grants.find(
+      (g) =>
+        (g.expiresAt === undefined || Date.now() < g.expiresAt) && contains(g.resources, resources),
+    );
+    if (!grant) return undefined;
+    return { registration, action, grant };
+  }
+  registeredModel(ctx: D.AuthContext, agentId: string) {
+    const authority = this.registeredOperation(ctx);
+    check(
+      authority &&
+        modelActions.has(authority.action) &&
+        authority.registration.recipient.id === agentId,
+      "unauthorized",
+      "Model resolution requires its current registered Agent operation",
+    );
+    const row = this.store.get<{ agent: D.Agent; model: D.ModelConfig }>("agent", agentId);
+    check(row, "not_found", "Agent unavailable");
+    return row;
   }
   async once<T>(
     ctx: D.AuthContext,
@@ -83,7 +198,7 @@ export class Directory {
     this.identities.current(ctx);
     requireGrant(ctx, "agents.create");
     check(valid("agents", "AgentCreate", body), "invalid_request", "Invalid agent configuration");
-    return this.once(ctx, "agent.create", body.requestId, body, () => {
+    const agent = await this.once(ctx, "agent.create", body.requestId, body, () => {
       const agent: D.Agent = {
         agentId: id(),
         name: body.name,
@@ -91,10 +206,14 @@ export class Directory {
         model: { providerId: body.model.providerId, modelId: body.model.modelId },
         status: "idle",
       };
+      this.budget.allocate("agent", agent.agentId);
       this.store.put("agent", agent.agentId, { agent, model: body.model });
       audit(this.store, ctx, "agents.create", agent.agentId, "allowed");
       return agent;
     });
+    // Also cover pre-ledger retained creation receipts before exposing their IDs.
+    this.store.tx(() => this.budget.allocate("agent", agent.agentId));
+    return agent;
   }
   describe(ctx: D.AuthContext, agentId: string): D.Agent {
     this.identities.current(ctx);
@@ -246,6 +365,7 @@ export class Directory {
         "Configuration must advance one version",
       );
       this.store.put("config", "active", body.configuration);
+      this.budget.retainPolicyFloors();
       queueRepairResume(this.store, "configuration");
       audit(this.store, ctx, "configuration.write", "installation", "allowed");
       return body.configuration;

@@ -35,6 +35,62 @@ import {
 } from "./fixtures/wire.ts";
 
 const { get } = validators();
+test("terminal application acknowledgment echoes the complete proof rather than a transport receipt", () => {
+  const frame: Extract<Executor.ExecutorFrame, { type: "job.committed_ack" }> = {
+    type: "job.committed_ack",
+    requestId: "terminal_ack_1",
+    payload: {
+      identity,
+      terminalVersion: 2,
+      eventSeq: 37,
+      evidence: { kind: "committed", receipt },
+    },
+  };
+  accepted("ExecutorFrame", frame);
+  rejected("ExecutorFrame", {
+    ...frame,
+    payload: { deliveryId: "delivery_1", sequence: 2, persisted: true },
+  });
+  rejected("ExecutorFrame", { ...frame, payload: { ...frame.payload, eventSeq: undefined } });
+  rejected("ExecutorFrame", { ...frame, payload: { ...frame.payload, terminalVersion: -1 } });
+  rejected("ExecutorFrame", { ...frame, payload: { ...frame.payload, applied: true } });
+});
+test("admin artifacts retain agent or workspace provenance without inventing workspace identity", () => {
+  const agent = {
+    artifactId: "export_part",
+    sha256: hash,
+    size: 0,
+    endpoint: "/v1/admin/artifacts/export_part",
+    scope: { kind: "agent", agentId: "agent_1", conversationIds: ["conversation_1"] },
+  } satisfies Client.AdminArtifactReference;
+  const response = {
+    status: 200,
+    body: { operationId: "export_1", kind: "export", state: "completed", artifacts: [agent] },
+  } satisfies Client.OperationResponse<"getAdminOperation">;
+  accepted("AdminArtifactReference", agent);
+  accepted("AdminArtifactReference", { ...agent, scope: { ...agent.scope, conversationIds: [] } });
+  accepted("AdminArtifactReference", {
+    ...agent,
+    scope: { kind: "workspace", workspaceId: "workspace_1", revision: "revision_1" },
+  });
+  accepted("AdminOperation", response.body);
+  rejected("ByteReference", agent);
+  for (const endpoint of [
+    "/v1/workspaces/workspace_1/artifacts/export_part",
+    "https://example.invalid/v1/admin/artifacts/export_part",
+    "/v1/admin/artifacts/../export_part",
+    "/v1/admin/artifacts/export_part?owner=other",
+  ])
+    rejected("AdminArtifactReference", { ...agent, endpoint });
+  rejected("AdminArtifactReference", { ...agent, scope: undefined });
+  rejected("AdminArtifactReference", { ...agent, size: 16777217 });
+  rejected("AdminArtifactReference", { ...agent, scope: { ...agent.scope, workspaceId: "fake" } });
+  rejected("AdminArtifactReference", {
+    ...agent,
+    scope: { ...agent.scope, conversationIds: ["conversation_1", "conversation_1"] },
+  });
+  rejected("AdminOperation", { ...response.body, artifacts: Array(17).fill(agent) });
+});
 test("native output artifacts carry actual stream provenance before a server can route bytes", () => {
   const reference = {
     workspaceId: "workspace_1",
@@ -243,6 +299,29 @@ function accepted(name: string, value: unknown) {
 function rejected(name: string, value: unknown) {
   assert.equal(get(name)(value), false, name);
 }
+test("executor job transfer queries cannot select another owner, base or credential", () => {
+  const query = { executionId: identity.executionId, assignmentDigest: hash, connectionEpoch: 1 };
+  accepted("ExecutorJobQuery", query);
+  for (const key of Object.keys(query))
+    rejected("ExecutorJobQuery", { ...query, [key]: undefined });
+  for (const [key, value] of Object.entries({
+    revision: "other_revision",
+    workspaceId: "other_workspace",
+    credential,
+    lease,
+    token: "not_a_credential",
+  }))
+    rejected("ExecutorJobQuery", { ...query, [key]: value });
+  for (const connectionEpoch of [0, -1, 1.5, "1", Number.MAX_SAFE_INTEGER + 1])
+    rejected("ExecutorJobQuery", { ...query, connectionEpoch });
+  const chunk = { ...query, length: 262144, sha256: hash };
+  accepted("ExecutorJobChunkQuery", chunk);
+  for (const key of Object.keys(chunk))
+    rejected("ExecutorJobChunkQuery", { ...chunk, [key]: undefined });
+  for (const length of [0, 262145, 1.5, "1"])
+    rejected("ExecutorJobChunkQuery", { ...chunk, length });
+  rejected("ExecutorJobChunkQuery", { ...chunk, revision: "other_revision" });
+});
 test("concrete provider, backend and authority configurations", () => {
   for (const c of [
     { kind: "computer" },
@@ -310,7 +389,14 @@ test("tickets, generic floors and OAuth redaction/CAS", () => {
       originMode: { kind: "native" },
       ttlMs: 60000,
       ...(audience === "executor-session"
-        ? { executor: { executorId: "executor_1", generation: 4 } }
+        ? {
+            executor: {
+              executorId: "executor_1",
+              generation: 4,
+              ledgerId: "ledger",
+              ledgerInstanceId: "instance",
+            },
+          }
         : {}),
     });
   rejected("TicketInput", {
@@ -318,7 +404,12 @@ test("tickets, generic floors and OAuth redaction/CAS", () => {
     audience: "client-stream",
     resources,
     originMode: { kind: "native" },
-    executor: { executorId: "executor_1", generation: 4 },
+    executor: {
+      executorId: "executor_1",
+      generation: 4,
+      ledgerId: "ledger",
+      ledgerInstanceId: "instance",
+    },
   });
   rejected("TicketInput", {
     requestId: "request_1",
@@ -475,6 +566,26 @@ test("local states retain identity; receipts differ from transport acknowledgeme
     deadline: 100,
   });
 });
+test("only applied local observations may carry the retained complete post-manifest", () => {
+  const applied = {
+    ...observation,
+    postManifest: { version: 1 as const, entries: [] },
+  } satisfies Executor.LocalObservation;
+  accepted("LocalObservation", observation); // Legacy hash-only observations remain wire-compatible.
+  accepted("LocalObservation", applied);
+  for (const state of ["prepared", "applying", "partial", "unknown", "drift"])
+    rejected("LocalObservation", { ...applied, state });
+  rejected("LocalObservation", { ...applied, postManifest: { version: 1 } });
+  rejected("LocalObservation", { ...applied, postManifest: { version: 2, entries: [] } });
+  rejected("LocalObservation", { ...applied, postManifestHash: undefined });
+  const nonApplied: Exclude<Executor.LocalObservation, { state: "applied" }> = {
+    ...observation,
+    state: "unknown",
+    // @ts-expect-error Incomplete or drifted operations cannot attest a post-manifest.
+    postManifest: applied.postManifest,
+  };
+  rejected("LocalObservation", nonApplied);
+});
 test("explicit approval and reconciliation bind exact operations and new-job authorization", () => {
   accepted("Grant", { grantId: "grant_1", version: 3, resources });
   const operation = {
@@ -502,11 +613,29 @@ test("explicit approval and reconciliation bind exact operations and new-job aut
     state: "pending",
   });
   rejected("ApprovalOperation", { ...operation, baseRevision: undefined });
+  const pending = { identity, state: "waiting_for_local_policy", operation };
+  accepted("ExecutionObservation", pending);
+  accepted("ExecutorFrame", { type: "job.query_result", requestId: "query_1", payload: pending });
+  rejected("ExecutionObservation", { ...pending, operation: undefined });
+  rejected("ExecutionObservation", { ...pending, proof: { kind: "durable-no-late-start" } });
+  rejected("ExecutionObservation", { ...pending, result: { state: "succeeded" } });
+  const preparing = { ...pending, state: "preparing" };
+  accepted("ExecutionObservation", preparing);
+  accepted("ExecutorFrame", { type: "job.query_result", requestId: "query_2", payload: preparing });
+  rejected("ExecutionObservation", { ...preparing, operation: undefined });
+  rejected("ExecutionObservation", { ...preparing, backendExecutionId: "not_started_yet" });
+  rejected("ExecutionObservation", { ...preparing, result: { state: "succeeded" } });
   accepted("ReconcileInput", {
     requestId: "request_1",
     expectedVersion: 4,
     reason: "Operator authorized distinct job",
     action: { kind: "new-job", newJobId: "job_2", authorizationId: "authorization_2" },
+  });
+  accepted("ReconcileInput", {
+    requestId: "request_2",
+    expectedVersion: 4,
+    reason: "Allocate a fresh opaque server job identifier",
+    action: { kind: "new-job", authorizationId: "authorization_3" },
   });
   rejected("ReconcileInput", {
     requestId: "request_1",
@@ -903,6 +1032,8 @@ test("executor numeric transfer limits are required closed registration observat
   const payload = {
     executorId: "executor_1",
     generation: 4,
+    ledgerId: "ledger",
+    ledgerInstanceId: "instance",
     protocolVersion: "1.0",
     schemaVersion: "1.0.0",
     capabilities: ["workspace"],

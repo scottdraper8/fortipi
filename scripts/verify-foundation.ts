@@ -28,17 +28,17 @@ export function createPtyProbeResponder(send: (input: string) => void): (output:
 }
 
 export async function nativeChecks(): Promise<void> {
-  assert.equal(process.versions.node, "26.13.0", "Use the exact reviewed Node runtime");
+  assert.equal(process.versions.node, "26.13.1", "Use the exact reviewed Node runtime");
   console.log("Native probe: pnpm identity");
   const pnpm = await verifyPnpmExecutable(await pnpmExecutable());
   console.log("Native probe: workerd binary");
   const workerRequire = createRequire(resolve(repository, "apps/worker/package.json"));
   const wranglerRequire = createRequire(workerRequire.resolve("wrangler"));
   const workerd = wranglerRequire("workerd") as { default: string; version: string };
-  assert.equal(workerd.version, "1.20261110.1");
+  assert.equal(workerd.version, "1.20261113.1");
   const binary = workerd.default;
   const workerVersion = await exec(binary, ["--version"], { timeout: 30_000 });
-  assert.match(workerVersion.stdout, /2026-11-10/);
+  assert.match(workerVersion.stdout, /2026-11-13/);
   console.log("Native probe: esbuild transform");
   const esbuild = await import("esbuild");
   assert.equal(esbuild.version, "0.28.2");
@@ -213,7 +213,7 @@ async function metadata(root: string): Promise<void> {
     assert.equal(manifest.license, "SEE LICENSE IN LICENSE");
     assert.equal(manifest.repository.directory, path);
     assert.equal(manifest.publishConfig.access, "public");
-    assert.equal(manifest.engines?.node, ">=26.13.0");
+    assert.equal(manifest.engines?.node, path === "packages/fortipi-cli" ? "26.13.1" : ">=26.13.1");
     for (const value of Object.values(manifest.exports))
       if (typeof value === "object" && value !== null) {
         const entry = value as { types: string; import: string };
@@ -298,12 +298,12 @@ async function metadata(root: string): Promise<void> {
   );
   for (const path of await filesBelow(root)) {
     const local = relative(root, path).split(sep).join("/");
-    const javascript = /\.[cm]?js$/.test(local);
     const python = local.endsWith(".py");
     if (
       /\.(?:[cm]?js|py|sh|bash|zsh|ps1)$/.test(local) &&
       !(python && local.startsWith("examples/python-client/")) &&
-      !(javascript && local.startsWith("packages/fortipi-cli/worker-assets/"))
+      // Generated assets include upstream legal source; bundle/license checks cover them.
+      !local.startsWith("packages/fortipi-cli/worker-assets/")
     )
       throw new Error(`Maintained automation must be TypeScript: ${path}`);
   }

@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { type Source, sources } from "./catalog.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -398,10 +398,10 @@ export function summary(results: Result[]): string {
   ].join("\n");
 }
 
-if (import.meta.main) {
+async function main(): Promise<void> {
   assert.ok(
-    process.argv.slice(2).every((arg) => arg === "--gh"),
-    "Only optional --gh (local reads) is supported; no baseline acceptance command exists",
+    process.argv.slice(2).every((arg) => arg === "--gh" || arg === "--release"),
+    "Only --gh (local reads) and --release (strict installed assessment) are supported; no acceptance command exists",
   );
   let baseline: unknown;
   try {
@@ -410,8 +410,28 @@ if (import.meta.main) {
     baseline = null;
   }
   const results = await check(baseline, observer(githubRequest(process.argv.includes("--gh"))));
-  console.log(JSON.stringify({ format: 1, checkedAt: new Date().toISOString(), results }, null, 2));
+  const checkedAt = new Date().toISOString();
+  let report: unknown = { format: 1, checkedAt, results };
+  let code = exitCode(results);
+  if (process.argv.includes("--release")) {
+    try {
+      const { createReleaseReport } = await import("./release.ts");
+      report = await createReleaseReport(root, results, checkedAt);
+      code = 0;
+    } catch {
+      console.error(
+        JSON.stringify({
+          diagnostic: "compatibility-release-failure",
+          failureClass: "required-assessment",
+        }),
+      );
+      code = 2;
+    }
+  }
+  console.log(JSON.stringify(report, null, 2));
   if (process.env.GITHUB_STEP_SUMMARY)
     await appendFile(process.env.GITHUB_STEP_SUMMARY, summary(results));
-  process.exitCode = exitCode(results);
+  process.exitCode = code;
 }
+
+if (import.meta.main) void main();
