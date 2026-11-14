@@ -10,6 +10,7 @@ import type { Env } from "../../src/boundary/env.js";
 import type { Directory } from "../../src/control/directory.js";
 import type { Executors } from "../../src/control/executors.js";
 import type { Tickets } from "../../src/control/tickets.js";
+import { backendSupportsTool } from "../../src/execution/tool-arguments.ts";
 
 await mkdir(".agent-docs/tmp", { recursive: true });
 const directoryPath = await mkdtemp(resolve(".agent-docs/tmp/routing-policy-"));
@@ -156,6 +157,26 @@ test("controlled topology fixture requires both current and deployed Paid capabi
     },
   ];
   assert.equal(count(), 1, "Positive gate control only; not actual Paid execution");
+  scope.tools = ["workspace.write"];
+  assert.equal(
+    toolTopology(directory, {} as Executors, env, auth, {
+      agentId: "agent",
+      conversationId: "conversation",
+      tool: "workspace.write",
+      capabilities: ["workspace.write"],
+    }).workspaces.length,
+    0,
+    "A workspace capability is not permission for JavaScript execution",
+  );
+  scope.tools = ["javascript"];
+  assert.equal(backendSupportsTool("cloud-js", "javascript"), true);
+  assert.equal(backendSupportsTool("linux", "shell"), true);
+  for (const name of ["workspace.read", "workspace.write", "snapshots"]) {
+    assert.equal(backendSupportsTool("cloud-js", name), false);
+    assert.equal(backendSupportsTool("linux", name), false);
+  }
+  assert.equal(backendSupportsTool("cloud-js", "shell"), false);
+  assert.equal(backendSupportsTool("linux", "javascript"), false);
   env.FORTIPI_CONFIG = { ...config, infrastructure: freeInfrastructurePolicy };
   assert.equal(count(), 0, "Saved preference cannot grant a deployment capability");
   env.FORTIPI_CONFIG = config;

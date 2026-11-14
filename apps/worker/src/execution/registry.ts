@@ -38,7 +38,7 @@ const parameters = {
   type: "object",
   additionalProperties: false,
   properties: {
-    tool: { type: "string", minLength: 1, maxLength: 128 },
+    tool: { type: "string", enum: ["shell", "javascript"], minLength: 1, maxLength: 128 },
     arguments: {
       type: "object",
       additionalProperties: true,

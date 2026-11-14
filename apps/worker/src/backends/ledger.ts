@@ -13,6 +13,7 @@ import {
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
 import type { FencedContainerAPI } from "../container/host-adapter.js";
+import { backendSupportsTool } from "../execution/tool-arguments.js";
 import {
   authorize,
   authorizeReservedAction,
@@ -137,6 +138,11 @@ export class ExecutionLedger {
     return outcome(async () => {
       const authority = await this.owner.authority(ctx, request.workspaceId, "workspace.write");
       const config = this.config(ctx);
+      requireThat(
+        backendSupportsTool(config.kind, request.tool),
+        "unsupported",
+        "Tool identity is not supported by the selected backend",
+      );
       assertUtf8Bytes(canonicalJson(request), 1_048_576);
       const assignment: D.Assignment = {
         operationContext: request.operationContext,
@@ -334,6 +340,11 @@ export class ExecutionLedger {
     prepared: D.PreparedExecution,
   ): Promise<D.Outcome<D.ExecutionObservation>> {
     return outcome(async () => {
+      requireThat(
+        backendSupportsTool(this.config(ctx).kind, prepared.request.tool),
+        "unsupported",
+        "Tool identity is not supported by the selected backend",
+      );
       const row = await this.owner.mutex.run(() =>
         this.owner.state.transaction(() => {
           const row = this.row(ctx, prepared.request.identity);
@@ -682,6 +693,11 @@ export class ExecutionLedger {
       );
       requireThat(permission.ok, "conflict", "Assignment closed or no durable start intent");
       const config = this.config(envelope.auth);
+      requireThat(
+        backendSupportsTool(config.kind, prepared.request.tool),
+        "unsupported",
+        "Tool identity is not supported by the selected backend",
+      );
       const { proof, nativeContext } = (await permission.json()) as {
         proof: string;
         nativeContext?: NativeContext;

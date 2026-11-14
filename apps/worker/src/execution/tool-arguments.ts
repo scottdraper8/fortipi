@@ -21,3 +21,8 @@ export function acceptsArguments(
     (format !== "native-shell" || !source.includes("\0"))
   );
 }
+
+/** Workspace capability names are not executable operation identities. */
+export function backendSupportsTool(kind: "cloud-js" | "linux", tool: string): boolean {
+  return tool === (kind === "cloud-js" ? "javascript" : "shell");
+}

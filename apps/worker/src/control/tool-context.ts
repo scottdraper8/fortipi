@@ -3,7 +3,7 @@ import { ServiceError } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
 import { operationalMetadata } from "../execution/metadata.js";
-import { argumentContracts } from "../execution/tool-arguments.js";
+import { argumentContracts, backendSupportsTool } from "../execution/tool-arguments.js";
 import { contains, emptyScope, permits } from "./authorization.js";
 import type { Directory } from "./directory.js";
 import { valid } from "./directory.js";
@@ -159,6 +159,7 @@ export function toolTopology(
         generation: row.value.generation,
       };
       if (
+        input.tool !== "shell" ||
         !description ||
         description.generation !== target.generation ||
         description.state !== "online" ||
@@ -229,6 +230,7 @@ export function toolTopology(
         generation: binding.bindingVersion,
       };
       if (
+        backendSupportsTool(backend.kind, input.tool) &&
         capable(capabilities) &&
         requireCapability(directory.policy(), capability, ctx.deploymentId) &&
         requireCapability(deployed.infrastructure, capability, ctx.deploymentId) &&
