@@ -35,7 +35,8 @@ type Mode =
   | "no-job"
   | "wrong-target"
   | "missing-nonce"
-  | "uncommitted-write";
+  | "uncommitted-write"
+  | "foreign-workspace";
 const wire = new Ajv2020({ strict: true, validateFormats: false });
 for (const schema of Object.values(schemaRegistry)) wire.addSchema(schema);
 function checked<T>(name: keyof typeof schemaRefs, value: T): T {
@@ -305,6 +306,8 @@ function protocol(mode: Mode = "valid") {
     },
     workspaces: {
       async get() {
+        if (consent && mode === "foreign-workspace")
+          return checked("WorkspaceBinding", { ...current, workspaceId: "foreign-workspace" });
         return consent && mode !== "uncommitted-write" ? current : workspace.binding;
       },
       async manifest() {
@@ -402,6 +405,7 @@ test("ordinary tool public oracle observes delayed genuine context before consen
     "wrong-target",
     "missing-nonce",
     "uncommitted-write",
+    "foreign-workspace",
   ] as const) {
     const failed = protocol(mode);
     await assert.rejects(() => runOrdinaryTools(failed), { name: /Error/ }, mode);

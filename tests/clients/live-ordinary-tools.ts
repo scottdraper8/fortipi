@@ -288,6 +288,8 @@ export async function runOrdinaryTools(input: {
     receipt,
   );
   const current = await request(() => client.workspaces.get(job.workspaceId));
+  assert.equal(current.workspaceId, job.workspaceId);
+  assert.deepEqual(current.config, workspace.binding.config);
   assert.equal(current.revision, receipt.revision);
   assert.equal(current.manifestHash, receipt.manifestHash);
   assert.equal(current.bindingVersion, workspace.binding.bindingVersion);
