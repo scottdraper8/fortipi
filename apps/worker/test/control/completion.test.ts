@@ -12,15 +12,36 @@ async function setup(
     leaseMs?: number;
     actions?: string[];
     deferAssignment?: boolean;
+    controlledTime?: boolean;
   } = {},
 ) {
   const h = await harness<CompletionControl>({
     fixturePath: "apps/worker/test/control/fixtures/completion.ts",
   });
+  const realNow = Date.now;
+  let now: number | undefined;
+  const setTime = async (time: number) => {
+    assert.equal(options.controlledTime, true, "Only a clock-controlled fixture may advance time");
+    await h.cp.setTime(time);
+    now = time;
+  };
+  const restoreTime = async () => {
+    if (options.controlledTime) {
+      try {
+        await h.cp.setTime(null);
+      } finally {
+        Date.now = realNow;
+      }
+    }
+  };
   let socket: WebSocket | undefined;
   try {
-    const left = 60000 - (Date.now() % 60000);
-    if (left < 12000) await new Promise((resolve) => setTimeout(resolve, left + 30));
+    if (options.controlledTime) {
+      // Start just before a minute boundary, without waiting for the wall clock.
+      await setTime((Math.floor(realNow() / 60000) + 1) * 60000 - 1);
+      // Keep the shared harness's minted timestamps/deadlines in the same clock domain.
+      Date.now = () => now ?? realNow();
+    }
     const channel = await connected(h);
     socket = channel.socket;
     const resources = {
@@ -79,14 +100,23 @@ async function setup(
       job,
       resources,
       query,
+      setTime,
       async close() {
         socket?.close();
-        await h.close();
+        try {
+          await restoreTime();
+        } finally {
+          await h.close();
+        }
       },
     };
   } catch (error) {
     socket?.close();
-    await h.close();
+    try {
+      await restoreTime();
+    } finally {
+      await h.close();
+    }
     throw error;
   }
 }
@@ -254,8 +284,29 @@ test("registered execution recovery checks its retained owner and one current lo
 });
 
 test("current registered queries use only unchanged repair headroom; wrong claims and durable terminal proof cannot borrow it", async () => {
-  const h = await setup();
+  const h = await setup({ controlledTime: true });
   try {
+    const ordinary = await h.auth();
+    const previous = { ...(await h.cp.admissionWindow()) };
+    const lifetime = { ...(await h.cp.admissions()) };
+    assert.ok(previous.application > 0, "Actual setup RPCs occupied the previous minute");
+    await h.setTime((previous.minute + 1) * 60000);
+    assert.deepEqual(
+      { ...(await h.cp.admissionWindow()) },
+      previous,
+      "Reading admission counters must not roll over the production window",
+    );
+    assert.deepEqual({ ...(await h.cp.admissions()) }, lifetime);
+    value(await h.cp.listAgents(ordinary, request("listAgents", undefined)));
+    assert.deepEqual(
+      { ...(await h.cp.admissionWindow()) },
+      { minute: previous.minute + 1, application: 1, repair: 0, install: 1 },
+      "A public ordinary request must roll over the admission window",
+    );
+    assert.deepEqual(
+      { ...(await h.cp.admissions()) },
+      { application: lifetime.application + 1, repair: lifetime.repair },
+    );
     value(await h.query()); // Actual WS evidence is now retained; subsequent calls are real CP RPCs.
     const extra = [];
     for (let n = 0; n < 3; n++) {
@@ -272,7 +323,7 @@ test("current registered queries use only unchanged repair headroom; wrong claim
         if (!result.ok && result.code === "rate_limited") break;
       }
     assert.equal(
-      (await h.cp.admissions()).application,
+      (await h.cp.admissionWindow()).application,
       90,
       "actual distinct RPCs exhaust unchanged application capacity",
     );
@@ -308,16 +359,17 @@ test("current registered queries use only unchanged repair headroom; wrong claim
       assert.equal(rejected.ok, false);
       if (!rejected.ok) assert.equal(rejected.code, "rate_limited");
     }
-    const beforeRenewal = await h.cp.admissions();
+    const beforeRenewal = await h.cp.admissionWindow();
     assert.equal(
       (await h.cp.deliverExecutorFrame(h.actor, leaseUpdate)).ok,
       true,
       "retained lease delivery must survive new application pressure",
     );
-    const afterRenewal = await h.cp.admissions();
+    const afterRenewal = await h.cp.admissionWindow();
+    assert.equal(afterRenewal.minute, beforeRenewal.minute);
     assert.equal(afterRenewal.application, beforeRenewal.application);
     assert.equal(afterRenewal.repair, beforeRenewal.repair + 1);
-    while ((await h.cp.admissions()).repair < 29)
+    while ((await h.cp.admissionWindow()).repair < 29)
       assert.equal(
         (await h.cp.queryExecution(h.actor, h.job.identity)).ok,
         true,
@@ -332,9 +384,11 @@ test("current registered queries use only unchanged repair headroom; wrong claim
       1,
       "exactly one actual query takes the final install and repair slot",
     );
-    const exhausted = await h.cp.admissions();
+    const exhausted = await h.cp.admissionWindow();
+    assert.equal(exhausted.minute, beforeRenewal.minute);
     assert.equal(exhausted.application, 90);
     assert.equal(exhausted.repair, 30);
+    assert.equal(exhausted.install, 120);
     assert.equal(
       (await h.cp.queryExecution(h.actor, h.job.identity)).ok,
       false,
@@ -344,7 +398,7 @@ test("current registered queries use only unchanged repair headroom; wrong claim
     await h.close();
   }
 
-  const closed = await setup();
+  const closed = await setup({ controlledTime: true });
   try {
     value(await closed.query());
     const proof: D.JobCommitted = {
@@ -379,7 +433,7 @@ test("current registered queries use only unchanged repair headroom; wrong claim
       const result = await closed.cp.listAgents(closed.actor, request("listAgents", undefined));
       if (!result.ok && result.code === "rate_limited") break;
     }
-    const beforeTerminal = await closed.cp.admissions();
+    const beforeTerminal = await closed.cp.admissionWindow();
     value(
       await closed.cp.deliverExecutorFrame(closed.actor, {
         executorId: "executor",
@@ -388,17 +442,19 @@ test("current registered queries use only unchanged repair headroom; wrong claim
         frame: { type: "job.committed", requestId: uuid(), payload: proof },
       }),
     );
-    const afterTerminal = await closed.cp.admissions();
+    const afterTerminal = await closed.cp.admissionWindow();
+    assert.equal(afterTerminal.minute, beforeTerminal.minute);
     assert.equal(afterTerminal.application, beforeTerminal.application);
     assert.equal(afterTerminal.repair, beforeTerminal.repair + 1);
     assert.equal(await closed.cp.rowCount("command"), 1);
-    const before = await closed.cp.admissions();
+    const before = await closed.cp.admissionWindow();
     assert.equal(
       (await closed.cp.queryExecution(closed.actor, closed.job.identity)).ok,
       false,
       "actual retained durable terminal proof closes private recovery eligibility even without transport ACK",
     );
-    const after = await closed.cp.admissions();
+    const after = await closed.cp.admissionWindow();
+    assert.equal(after.minute, before.minute);
     assert.equal(after.repair, before.repair);
     assert.equal(after.application, before.application);
   } finally {
@@ -408,7 +464,9 @@ test("current registered queries use only unchanged repair headroom; wrong claim
 
 test("registered query revalidates credential, grant and executor floors after awaited native evidence", async () => {
   for (const fault of ["credential", "executor", "grant"] as const) {
-    const h = await setup({ ...(fault === "grant" ? { grantMs: 1800 } : {}) });
+    const h = await setup({
+      ...(fault === "grant" ? { grantMs: 1800, controlledTime: true } : {}),
+    });
     try {
       h.channel.frames.splice(0);
       const pending = h.cp.queryExecution(h.actor, h.job.identity);
@@ -436,10 +494,16 @@ test("registered query revalidates credential, grant and executor floors after a
             ),
           ),
         );
-      else
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.max(0, (h.actor.grants[0]?.expiresAt ?? 0) - Date.now() + 20)),
-        );
+      else {
+        const expiresAt = h.actor.grants[0]?.expiresAt;
+        assert.equal(typeof expiresAt, "number");
+        assert.ok(expiresAt !== undefined && Date.now() < expiresAt);
+        // The real executor has received the query. Expire only its grant now,
+        // leaving the pending RPC deadline and credential current.
+        await h.setTime(expiresAt);
+        assert.ok(Date.now() >= expiresAt && Date.now() < h.actor.deadline);
+        assert.equal((await h.auth(h.issued.token)).credentialId, h.actor.credentialId);
+      }
       h.channel.send({
         type: "job.query_result",
         requestId: frame.requestId,

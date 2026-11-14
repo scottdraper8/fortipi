@@ -10,6 +10,8 @@ interface Admissions {
   repair: number;
 }
 
+const realNow = Date.now;
+
 /** Count successful admissions, including actual alarms, without changing any bound. */
 export class TestControlPlane extends BaseControlPlane {
   #counts = { application: 0, repair: 0 };
@@ -34,6 +36,27 @@ export class TestControlPlane extends BaseControlPlane {
   async admissions(): Promise<{ application: number; repair: number }> {
     return { ...this.#counts };
   }
+  // Test-only clock for this disposable Worker (including its proof recipients).
+  // Timers and transport are real. Other users of this fixture keep the real clock.
+  async setTime(now: number | null): Promise<void> {
+    if (now !== null && !Number.isSafeInteger(now)) throw new Error("Invalid fixture time");
+    Date.now = now === null ? realNow : () => now;
+  }
+  async admissionWindow() {
+    // Read the actual Capacity fields without triggering rollover or admission.
+    const capacity = this.capacity as unknown as {
+      readonly requestWindow: number;
+      readonly applicationRequests: number;
+      readonly repairRequests: number;
+      readonly installRequests: number;
+    };
+    return {
+      minute: capacity.requestWindow,
+      application: capacity.applicationRequests,
+      repair: capacity.repairRequests,
+      install: capacity.installRequests,
+    };
+  }
   // Actual super methods await initialization before admitting. Context-local
   // counters follow that await without attributing independent alarm/RPC work.
   async #observe<T>(operation: () => Promise<T>) {
@@ -51,5 +74,9 @@ export class TestControlPlane extends BaseControlPlane {
 export type CompletionControl = ArtifactControl &
   Pick<
     TestControlPlane,
-    "admissions" | "queryExecutionWithAdmissions" | "cancelExecutionWithAdmissions"
+    | "admissions"
+    | "admissionWindow"
+    | "setTime"
+    | "queryExecutionWithAdmissions"
+    | "cancelExecutionWithAdmissions"
   >;
