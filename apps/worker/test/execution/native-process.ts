@@ -4,6 +4,8 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
+import { parse } from "@babel/parser";
+import type { CallExpression, ObjectExpression } from "@babel/types";
 import { build } from "esbuild";
 import { canonicalJson } from "fortipi-contract";
 import {
@@ -20,6 +22,73 @@ import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, pause } from "../agent/harness.ts";
 import { processHarness } from "../agent/process-harness.ts";
+
+/** Pin the effectful wrapper itself; other read-only tools may independently declare SAFE. */
+export function assertDispatchSafe(source: string): void {
+  const definitions: ObjectExpression[] = [];
+  const fields = (object: ObjectExpression, name: string) =>
+    object.properties.filter(
+      (property) =>
+        property.type === "ObjectProperty" &&
+        !property.computed &&
+        (property.key.type === "Identifier"
+          ? property.key.name === name
+          : property.key.type === "StringLiteral" && property.key.value === name),
+    );
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const child of value) visit(child);
+      return;
+    }
+    const node = value as Partial<CallExpression>;
+    if (
+      node.type === "CallExpression" &&
+      node.callee?.type === "Identifier" &&
+      node.callee.name === "defineTool"
+    ) {
+      const object = node.arguments?.[0];
+      if (
+        object?.type === "ObjectExpression" &&
+        fields(object, "name").some(
+          (property) =>
+            property.type === "ObjectProperty" &&
+            property.value.type === "StringLiteral" &&
+            property.value.value === "fortipi_dispatch",
+        )
+      )
+        definitions.push(object);
+    }
+    for (const child of Object.values(value)) visit(child);
+  };
+  visit(parse(source, { sourceType: "module", plugins: ["typescript"] }));
+  assert.equal(definitions.length, 1, "Exactly one direct fortipi_dispatch definition required");
+  const definition = definitions[0]!;
+  assert.ok(
+    definition.properties.every(
+      (property) => property.type === "ObjectProperty" && !property.computed,
+    ),
+    "Dispatch policy cannot be overridden dynamically",
+  );
+  const names = fields(definition, "name");
+  assert.equal(names.length, 1, "Dispatch wrapper must declare exactly one explicit name");
+  const name = names[0];
+  assert.ok(
+    name?.type === "ObjectProperty" &&
+      name.value.type === "StringLiteral" &&
+      name.value.value === "fortipi_dispatch",
+    "Dispatch wrapper name must be the literal fortipi_dispatch",
+  );
+  const policy = fields(definition, "replay");
+  assert.equal(policy.length, 1, "Dispatch wrapper must declare its own replay policy");
+  const property = policy[0];
+  assert.ok(
+    property?.type === "ObjectProperty" &&
+      property.value.type === "StringLiteral" &&
+      property.value.value === "safe",
+    "The production fortipi_dispatch wrapper must remain SAFE",
+  );
+}
 
 export interface View {
   tasks: { id: number; kind: string; status: string }[];
@@ -165,9 +234,8 @@ export async function nativeProcessRecovery(
               };
             });
             builder.onLoad({ filter: /src\/execution\/registry\.ts$/ }, async (args) => {
-              const source = await readFile(args.path, "utf8"),
-                needle = 'replay: "safe"';
-              assert.equal(source.split(needle).length, 2);
+              const source = await readFile(args.path, "utf8");
+              assertDispatchSafe(source);
               wrappers++;
               let contents = source;
               if (mode === "attached") {

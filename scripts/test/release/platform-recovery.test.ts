@@ -24,6 +24,17 @@ import {
 } from "../../verify-release-gates.ts";
 import { candidate, discard, httpFixture, temporary } from "./fixtures.ts";
 
+// These source fixtures exercise local archives and mocked provider ports.
+// Isolate their test worker from the hosting workflow's candidate-reader context.
+const hostedWorkflow = process.env.GITHUB_ACTIONS;
+before(() => {
+  delete process.env.GITHUB_ACTIONS;
+});
+after(() => {
+  if (hostedWorkflow === undefined) delete process.env.GITHUB_ACTIONS;
+  else process.env.GITHUB_ACTIONS = hostedWorkflow;
+});
+
 const v0 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const v1 = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const other = "cccccccc-cccc-cccc-cccc-cccccccccccc";
@@ -329,6 +340,27 @@ test("provider phase retains same-byte new-version intent, never qualifies app r
 }, async () => {
   const f = await fixture();
   try {
+    // Workflow reads still require authenticated artifact authority for the same
+    // real package bytes exercised by this local provider-protocol fixture.
+    const guarded = await execute(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `
+import assert from 'node:assert/strict';
+import { loadWorkflowCandidate } from ${JSON.stringify(new URL("../../prepare-release.ts", import.meta.url).href)};
+await assert.rejects(loadWorkflowCandidate(${JSON.stringify(manifestPath)}), {
+ code: 'ERR_ASSERTION', message: 'Workflow candidate artifact reference required before payload access'
+});
+`,
+      ],
+      repository,
+      { GITHUB_ACTIONS: "true", GITHUB_JOB: "policy-and-integration" },
+      20000,
+    );
+    assert.equal(guarded.code, 0, "Missing workflow artifact authority must still refuse");
+    assert.equal(guarded.stdout, "");
     const result = await recoverProvider({ ...f.input, mode: "perform" }, f.ports);
     assert.equal(result.transition.phase, "provider-confirmed");
     assert.equal(result.transition.requiresApplicationVerification, true);

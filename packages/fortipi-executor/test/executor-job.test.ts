@@ -18,8 +18,10 @@ import {
   eventually,
   fixture,
   fixtureChild,
+  importRoot,
   jobRenewals,
   nodeCommand,
+  prepare,
 } from "./fixtures/daemon.ts";
 import { connectExecutor, sessionFixture, snapshotFixture } from "./fixtures/transport.ts";
 
@@ -234,6 +236,136 @@ test("allowed Computer materialization answers preparing before its winning clai
     await connection?.connected;
     await runtime?.shutdown();
     await peer?.close();
+    await f.cleanup();
+  }
+});
+
+test("actual post-exit collection stays pending_sync only in its owning runtime", async () => {
+  const f = await fixture(),
+    peer = await sessionFixture(f.profile, { register: true, acknowledge: true }),
+    release = Promise.withResolvers<void>();
+  let runtime: ExecutorRuntime | undefined,
+    connection: ReturnType<typeof connectExecutor> | undefined,
+    reopened: Ledger | undefined,
+    collecting = false;
+  const marker = join(f.path, "one-collected-effect"),
+    a = await assignment(nodeCommand(fixtureChild, "append-wait", marker));
+  try {
+    f.profile.origin = peer.origin;
+    runtime = nativeRuntime(f);
+    await runtime.initialize();
+    const local = runtime.locals.get("root");
+    assert.ok(local);
+    await importRoot(local);
+    await local.request(prepare(a, f.initial.manifestHash));
+    const finish = local.nativeFinished.bind(local);
+    local.nativeFinished = async (...args) => {
+      collecting = true;
+      await release.promise;
+      return finish(...args);
+    };
+    connection = connectExecutor(runtime.http, runtime);
+    await eventually(() => connection?.session.registered === true, "registration missing");
+    await runtime.assignOnce(a);
+    runtime.approvals.decide(
+      a.identity.jobId,
+      approvalKey(a, f.profile.policy, f.root.key),
+      "allow",
+    );
+    await runtime.tick();
+    await eventually(async () => {
+      try {
+        return (await readFile(marker, "utf8")) === "effect\n";
+      } catch {
+        return false;
+      }
+    }, "actual child effect missing");
+    assert.equal((await query(peer, a)).state, "running");
+    await eventually(() => collecting, "actual post-exit collection did not enter its hold");
+    assert.equal(runtime.children.get(a.identity.jobId)?.exitCode, 0);
+    assert.equal(runtime.active.has(a.identity.jobId), true);
+    assert.equal(f.ledger.get(a.identity.jobId)?.state, "running");
+    assert.equal(f.ledger.get(a.identity.jobId)?.result, undefined);
+    const held = await query(peer, a);
+    assert.equal(held.state, "pending_sync", "Owned collection is not a lost execution");
+    assert.equal("result" in held, false, "No result exists before durable collection");
+    assert.equal(f.ledger.get(a.identity.jobId)?.committed, undefined);
+    assert.equal(nativeRuntime(f).queryExisting(a.identity).state, "unknown");
+    reopened = await Ledger.open(f.directory, f.profile.ledgerId, f.ledger.limits);
+    assert.notEqual(reopened.incarnation, f.ledger.incarnation);
+    assert.equal(nativeRuntime(f, reopened).queryExisting(a.identity).state, "unknown");
+    reopened.close();
+    reopened = undefined;
+    await runtime.assignOnce(a);
+    assert.equal(await readFile(marker, "utf8"), "effect\n", "Duplicate assign cannot replay");
+    release.resolve();
+    await eventually(() => !!f.ledger.get(a.identity.jobId)?.result, "durable result missing");
+    assert.equal(f.ledger.get(a.identity.jobId)?.result?.state, "succeeded");
+    assert.equal((await query(peer, a)).state, "pending_sync");
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+  } finally {
+    release.resolve();
+    if (runtime && collecting)
+      await eventually(() => !!f.ledger.get(a.identity.jobId)?.result, "finalizer did not drain");
+    connection?.controller.abort();
+    await connection?.connected;
+    await runtime?.shutdown();
+    reopened?.close();
+    await peer.close();
+    await f.cleanup();
+  }
+});
+
+test("owned post-exit collection loses certainty at real lease expiry and revocation", async () => {
+  const f = await fixture(),
+    release = Promise.withResolvers<void>();
+  let runtime: ExecutorRuntime | undefined,
+    stopping: Promise<void> | undefined,
+    collecting = false;
+  try {
+    const marker = join(f.path, "one-expiring-effect"),
+      a = await assignment(nodeCommand(fixtureChild, "append-wait", marker));
+    a.identity.lease.expiresAt = Date.now() + 5000;
+    runtime = nativeRuntime(f);
+    await runtime.initialize();
+    const local = runtime.locals.get("root");
+    assert.ok(local);
+    await importRoot(local);
+    await local.request(prepare(a, f.initial.manifestHash));
+    const finish = local.nativeFinished.bind(local);
+    local.nativeFinished = async (...args) => {
+      collecting = true;
+      await release.promise;
+      return finish(...args);
+    };
+    runtime.connected = true;
+    await runtime.assignOnce(a);
+    runtime.approvals.decide(
+      a.identity.jobId,
+      approvalKey(a, f.profile.policy, f.root.key),
+      "allow",
+    );
+    await runtime.tick();
+    await eventually(() => collecting, "actual post-exit collection did not enter its hold");
+    assert.equal(runtime.children.get(a.identity.jobId)?.exitCode, 0);
+    assert.equal(runtime.queryExisting(a.identity).state, "pending_sync");
+    await delay(Math.max(0, a.identity.lease.expiresAt - Date.now() + 1));
+    assert.ok(Date.now() >= a.identity.lease.expiresAt);
+    assert.equal(runtime.queryExisting(a.identity).state, "unknown");
+    stopping = runtime.shutdown();
+    assert.equal(runtime.revoked, true);
+    assert.throws(() => runtime?.queryExisting(a.identity), {
+      message: "executor execution authority mismatch",
+    });
+    release.resolve();
+    await stopping;
+    assert.equal(f.ledger.get(a.identity.jobId)?.result?.state, "unknown");
+    assert.equal(f.ledger.get(a.identity.jobId)?.committed, undefined);
+    assert.equal(await readFile(marker, "utf8"), "effect\n");
+  } finally {
+    release.resolve();
+    await stopping;
+    await runtime?.shutdown();
     await f.cleanup();
   }
 });
