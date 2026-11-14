@@ -9,6 +9,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import { observeRootRuntime } from "../../../../scripts/root-runtime-observation.ts";
 import { sourceTestDiagnostic } from "../../../../scripts/source-test-processes.ts";
 import {
   armProcessBarrier,
@@ -179,6 +180,12 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       },
     );
     const current = child;
+    const diagnostic = observeRootRuntime({
+      kind: "process",
+      invocation: childInvocation,
+      child: current,
+      port,
+    });
     const retain = (data: Buffer) => {
       if (child === current) output = (output + String(data)).slice(-12000);
     };
@@ -234,11 +241,13 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
         try {
           const response = await fetch(`${origin}/__test/ping`, { signal });
           status = response.status;
+          diagnostic.response(response.status);
           if (response.ok) {
             ready = true;
             return;
           }
-        } catch {
+        } catch (error) {
+          diagnostic.failure(error, signal.aborted);
           status = null;
           if (signal.aborted) deadlines++;
           else transports++;
@@ -248,6 +257,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       }
       assert.fail("Wrangler not ready");
     } finally {
+      diagnostic.finish(ready);
       observe(ready ? "ready" : "end");
     }
   }
