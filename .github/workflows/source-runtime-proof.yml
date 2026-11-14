@@ -1,4 +1,4 @@
-name: Source runtime Linux control
+name: Source runtime Linux companion control
 on:
   push:
     branches: ["ci/fortipi-source-runtime-proof-*"]
@@ -63,12 +63,24 @@ jobs:
       - run: node tools/unstale/review-supply-chain.ts --locks --check
       - run: node scripts/check-licenses.ts --foundation
       - run: node scripts/build-workspaces.ts build:evidence
-      - name: Observe three actual source test processes directly
-        run: >-
-          node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
-          apps/worker/test/agent/admin-file-bearing.test.ts
-          apps/worker/test/agent/process-recovery.test.ts
-          apps/worker/test/api/stream-boundaries.test.ts
+      - name: Observe actual process-stall companions in Root child environment
+        env:
+          FORTIPI_ROOT_CONTEXT_DIAGNOSTICS: "1"
+        run: |
+          node --input-type=module <<'NODE'
+          import { FULL_SOURCE_TEST_TIMEOUT_MS, repository, run } from "./scripts/build-workspaces.ts";
+          import { childEnvironment } from "./scripts/prepare-release.ts";
+          try {
+            await run(process.execPath, [
+              "--require", "./scripts/source-test-processes.ts", "--test", "--test-reporter=tap",
+              "apps/worker/test/agent/process-recovery.test.ts",
+              "apps/worker/test/agent/recovery-generation.test.ts",
+              "apps/worker/test/agent/storage-guard.test.ts",
+            ], repository, FULL_SOURCE_TEST_TIMEOUT_MS, childEnvironment());
+          } catch {
+            process.exitCode = 1;
+          }
+          NODE
       - name: Require Linux hardener service still active
         if: always() && runner.os == 'Linux'
         shell: bash
