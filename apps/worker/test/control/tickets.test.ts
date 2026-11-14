@@ -82,9 +82,20 @@ test("ticket-only consume is atomic and binds audience, destination, Origin and 
       ).ok,
       false,
     );
-    const expiring = await mint({ ...input, requestId: uuid(), ttlMs: 1 });
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    const expiring = await mint({ ...input, requestId: uuid() });
+    const beforeExpiry = await h.cp.clientStreamTicketExpiry(expiring.ticket, "read");
+    assert.equal(beforeExpiry.used, false);
+    assert.ok(beforeExpiry.expiresAt > Date.now(), "the control ticket must be retained unexpired");
+    const pastExpiry = await h.cp.clientStreamTicketExpiry(expiring.ticket, "expire");
+    assert.equal(pastExpiry.used, false);
+    assert.ok(pastExpiry.expiresAt < Date.now(), "actual persisted ticket expiry must be past");
+    assert.ok(pastExpiry.expiresAt < beforeExpiry.expiresAt);
+    const recipients = await h.cp.rowCount("recipient");
     assert.equal((await h.cp.consumeTicket({ ...redemption, ticket: expiring.ticket })).ok, false);
+    const afterRefusal = await h.cp.clientStreamTicketExpiry(expiring.ticket, "read");
+    assert.equal(afterRefusal.expiresAt, pastExpiry.expiresAt);
+    assert.equal(afterRefusal.used, false, "expiry refusal must not consume the retained ticket");
+    assert.equal(await h.cp.rowCount("recipient"), recipients);
     const fresh = await mint();
     value(await h.cp.consumeTicket({ ...redemption, ticket: fresh.ticket }));
     assert.equal(
