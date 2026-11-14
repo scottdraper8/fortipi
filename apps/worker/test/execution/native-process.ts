@@ -65,9 +65,18 @@ export function assertDispatchSafe(source: string): void {
   const definition = definitions[0]!;
   assert.ok(
     definition.properties.every(
-      (property) => property.type !== "SpreadElement" && !property.computed,
+      (property) => property.type === "ObjectProperty" && !property.computed,
     ),
     "Dispatch policy cannot be overridden dynamically",
+  );
+  const names = fields(definition, "name");
+  assert.equal(names.length, 1, "Dispatch wrapper must declare exactly one explicit name");
+  const name = names[0];
+  assert.ok(
+    name?.type === "ObjectProperty" &&
+      name.value.type === "StringLiteral" &&
+      name.value.value === "fortipi_dispatch",
+    "Dispatch wrapper name must be the literal fortipi_dispatch",
   );
   const policy = fields(definition, "replay");
   assert.equal(policy.length, 1, "Dispatch wrapper must declare its own replay policy");
