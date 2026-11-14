@@ -12,6 +12,7 @@ import { Authority, type ControlPort } from "../../src/agent/authority.js";
 import type { ConversationRow } from "../../src/agent/store.js";
 import { scope, unwrap } from "../../src/api/common.js";
 import { routeRequest } from "../../src/api/router.js";
+import { boundedJson } from "../../src/api/validation.js";
 import type * as D from "../../src/boundary/dto.js";
 import type { Env } from "../../src/boundary/env.js";
 import { ControlPlane as RealControlPlane } from "../../src/control/control-plane.js";
@@ -42,7 +43,97 @@ export interface ProcessWitness extends ProcessArm {
   }[];
 }
 type ProcessFault = ProcessArm & { fault?: "hold" | "reject" };
+// Only the native executor-first fixture build enables this startup ordering barrier.
+const nativeExecutorFirstGate = false;
+interface NativeStartupArm {
+  armId: string;
+  entered: boolean;
+  released: boolean;
+  consumed: boolean;
+}
 export class ControlPlane extends RealControlPlane {
+  private readonly nativeStartupEvents = new Map<
+    string,
+    {
+      entered: ReturnType<typeof Promise.withResolvers<void>>;
+      released: ReturnType<typeof Promise.withResolvers<void>>;
+    }
+  >();
+  private async nativeStartupGate(request: Request): Promise<Response> {
+    if (request.headers.get("Authorization") !== `Bearer ${this.env.FORTIPI_ADMIN_TOKEN}`)
+      return new Response(null, { status: 403 });
+    if (!["GET", "PUT", "POST", "DELETE"].includes(request.method))
+      return new Response(null, { status: 405 });
+    const url = new URL(request.url);
+    let body: unknown;
+    try {
+      body =
+        request.method === "GET"
+          ? { agentId: url.searchParams.get("agent"), armId: url.searchParams.get("arm") }
+          : await boundedJson(request, 512);
+    } catch {
+      return new Response(null, { status: 400 });
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body))
+      return new Response(null, { status: 400 });
+    const input = body as Record<string, unknown>;
+    const waiting = request.method === "POST";
+    if (
+      Object.keys(input).sort().join(",") !== (waiting ? "agentId" : "agentId,armId") ||
+      typeof input.agentId !== "string" ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(input.agentId) ||
+      (!waiting &&
+        (typeof input.armId !== "string" ||
+          !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
+            input.armId,
+          )))
+    )
+      return new Response(null, { status: 400 });
+    const agentId = input.agentId;
+    let arm = this.store.get<NativeStartupArm>("fixture-native-startup", agentId);
+    if (request.method === "PUT") {
+      if (!this.store.get("agent", agentId)) return new Response(null, { status: 404 });
+      if (arm && (!arm.consumed || arm.armId === input.armId))
+        return new Response(null, { status: 409 });
+      arm = { armId: input.armId as string, entered: false, released: false, consumed: false };
+      this.store.put("fixture-native-startup", agentId, arm);
+      return Response.json(arm);
+    }
+    if (!arm) return waiting ? Response.json(null) : new Response(null, { status: 409 });
+    if (!waiting && arm.armId !== input.armId) return new Response(null, { status: 409 });
+    if (arm.consumed) return Response.json(arm);
+    const key = `${agentId}:${arm.armId}`;
+    let events = this.nativeStartupEvents.get(key);
+    if (!events) {
+      events = { entered: Promise.withResolvers<void>(), released: Promise.withResolvers<void>() };
+      this.nativeStartupEvents.set(key, events);
+    }
+    if (request.method === "DELETE") {
+      arm.released = true;
+      this.store.put("fixture-native-startup", agentId, arm);
+      events.released.resolve();
+      return Response.json(arm);
+    }
+    if (waiting) {
+      arm.entered = true;
+      this.store.put("fixture-native-startup", agentId, arm);
+      events.entered.resolve();
+      // These event awaits hold no SQL transaction or ControlPlane input gate.
+      if (!arm.released) await events.released.promise;
+      const current = this.store.get<NativeStartupArm>("fixture-native-startup", agentId);
+      if (!current || current.armId !== arm.armId || !current.released)
+        return new Response(null, { status: 409 });
+      current.consumed = true;
+      this.store.put("fixture-native-startup", agentId, current);
+      this.nativeStartupEvents.delete(key);
+      return Response.json(current);
+    }
+    if (request.method === "GET") {
+      if (url.searchParams.get("entered") === "1" && !arm.entered) await events.entered.promise;
+      return Response.json(this.store.get("fixture-native-startup", agentId));
+    }
+    return new Response(null, { status: 405 });
+  }
   private readonly calls: Record<string, number> = {};
   private count(name: string) {
     this.calls[name] = (this.calls[name] ?? 0) + 1;
@@ -186,6 +277,7 @@ export class ControlPlane extends RealControlPlane {
   }
   override async fetch(request: Request) {
     const path = new URL(request.url).pathname;
+    if (path === "/__test/native-startup-gate") return this.nativeStartupGate(request);
     if (path === "/__test/dispatch-trace") {
       if (request.method === "PUT") this.store.put("fixture", "trace-dispatch", true);
       const jobId = new URL(request.url).searchParams.get("job") ?? "";
@@ -420,6 +512,23 @@ export class TestAgentSession extends AgentSession {
       console.log("FORTIPI_RUNTIME_STAGE models.exit");
       return { ok: true, value: models };
     });
+    if (nativeExecutorFirstGate) {
+      const ungatedPiStart = this.pi.onStart.bind(this.pi);
+      this.pi.onStart = async (...args) => {
+        const gate = await env.CONTROL_PLANE.getByName("control").fetch(
+          new Request("https://control.internal/__test/native-startup-gate", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${env.FORTIPI_ADMIN_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ agentId: this.agentId }),
+          }),
+        );
+        if (!gate.ok) throw new Error("Native fixture startup arm changed");
+        return ungatedPiStart(...args);
+      };
+    }
     const storeOpen = this.store.open.bind(this.store);
     this.store.open = async () => {
       console.log("FORTIPI_RUNTIME_STAGE store.open.enter");
@@ -1633,7 +1742,7 @@ export default {
   fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/__test/ping") return new Response("ready");
-    if (url.pathname === "/__test/dispatch-trace")
+    if (["/__test/dispatch-trace", "/__test/native-startup-gate"].includes(url.pathname))
       return env.CONTROL_PLANE.getByName("control").fetch(request);
     const match =
       /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|barrier|inspect|tool|tool-state|job-diagnostics|repair|growth)$/.exec(

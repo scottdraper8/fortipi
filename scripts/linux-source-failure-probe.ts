@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import type { ProcessResult } from "./prepare-release.ts";
 
-const productSource = "5f48b4b12296b630486ccf5904533175b6fda913";
+const productSource = "b9c0dcd30418cfb122b6959a456f70f54453ba3a";
 const files = [
   "apps/worker/test/agent/process-recovery.test.ts",
   "apps/worker/test/execution/native-connected-recovery.test.ts",
