@@ -14,6 +14,7 @@ import {
   observeOwnedRuntimeRoles,
 } from "../../../../scripts/owned-runtime-roles.ts";
 import {
+  sourceBootLine,
   sourceKernelLine,
   sourceRecoveryPath,
   sourceTestDiagnostic,
@@ -56,7 +57,11 @@ async function freePort() {
   return address.port;
 }
 /** A real standalone Wrangler/workerd process. createTestHarness cannot persist. */
-export async function processHarness(main = resolve("apps/worker/test/agent/runtime-worker.ts")) {
+export async function processHarness(
+  main = resolve("apps/worker/test/agent/runtime-worker.ts"),
+  options: { bootTrace?: true } = {},
+) {
+  const bootTrace = options.bootTrace === true || process.env.FORTIPI_PRIVATE_BOOT_TRACE === "1";
   const sourcePath = sourceRecoveryPath();
   const currentHarness = ++harnessOrdinal;
   const runId = randomUUID();
@@ -76,6 +81,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       compatibility_date: "2026-11-10",
       compatibility_flags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
       vars: {
+        ...(bootTrace ? { FORTIPI_TEST_BOOT_TRACE: true } : {}),
         FORTIPI_ADMIN_TOKEN: processBootstrap,
         FORTIPI_CONFIG: { version: 1, infrastructure: policy },
       },
@@ -280,6 +286,14 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     } finally {
       observe(ready ? "ready" : "end");
       if (!ready) {
+        if (bootTrace) {
+          try {
+            const line = sourceBootLine(output, sourcePath, currentHarness, invocation);
+            if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+          } catch {
+            /* Preserve the original readiness error and remaining diagnostics. */
+          }
+        }
         // Observe only after the original readiness decision. Never print process
         // arguments, identifiers, environment, paths or captured child output.
         let runtimeCount: number | null = null,

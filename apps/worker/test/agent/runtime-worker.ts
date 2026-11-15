@@ -6,6 +6,7 @@ import {
   fauxProvider,
   fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
+import { Harness } from "@earendil-works/pi-durable";
 import { commitDigest } from "fortipi-contract";
 import { AgentSession } from "../../src/agent/agent-session.js";
 import { Authority, type ControlPort } from "../../src/agent/authority.js";
@@ -22,8 +23,11 @@ import { nativeContext, nativeProof } from "../../src/execution/native-proof.js"
 import { FreshJobDoc } from "../../src/execution/new-job.js";
 import { defaultModel } from "../../src/models/factory.js";
 import { configuredModel } from "../../src/models/selection.js";
+import { bootPromise, createBootTrace, installBootTrace } from "./boot-trace.ts";
 import type { ProcessArm, ProcessWitness } from "./process-observation.ts";
 import { samplingOracle } from "./sampling-oracle.js";
+
+const bootMark = createBootTrace((line) => console.log(line));
 
 export { WorkspaceProxy } from "@cloudflare/computer";
 export { LinuxContainerHost } from "../../src/container/linux-container-host.js";
@@ -389,6 +393,11 @@ export class ControlPlane extends RealControlPlane {
 export { WorkspaceObject } from "../../src/workspace/workspace-object.js";
 
 export class TestAgentSession extends AgentSession {
+  override onStart(): Promise<void> {
+    if ((this.env as Env & { FORTIPI_TEST_BOOT_TRACE?: true }).FORTIPI_TEST_BOOT_TRACE !== true)
+      return super.onStart();
+    return bootPromise(bootMark, "host", "host-done", "host-failed", () => super.onStart());
+  }
   private readonly processGeneration = crypto.randomUUID();
   #resultDelivery: { accepted: boolean; code?: D.ErrorCode } | undefined;
   override async receiveExecutorResult(ctx: D.AuthContext, input: D.ResultDelivery) {
@@ -422,8 +431,13 @@ export class TestAgentSession extends AgentSession {
     | undefined;
   constructor(
     ctx: DurableObjectState,
-    env: Env & { FORTIPI_TEST_MODEL_CHUNK_BYTES?: 256; FORTIPI_TEST_LARGE_MODEL_CONTEXT?: true },
+    env: Env & {
+      FORTIPI_TEST_MODEL_CHUNK_BYTES?: 256;
+      FORTIPI_TEST_LARGE_MODEL_CONTEXT?: true;
+      FORTIPI_TEST_BOOT_TRACE?: true;
+    },
   ) {
+    if (env.FORTIPI_TEST_BOOT_TRACE === true) installBootTrace(Harness, bootMark);
     const completion = Promise.withResolvers<void>();
     const faux = fauxProvider({
       provider: "cloudflare",
@@ -454,6 +468,11 @@ export class TestAgentSession extends AgentSession {
       models.setProvider(faux.provider);
       return { ok: true, value: models };
     });
+    if (env.FORTIPI_TEST_BOOT_TRACE === true) {
+      const start = this.pi.onStart.bind(this.pi);
+      this.pi.onStart = (...args) =>
+        bootPromise(bootMark, "pi", "pi-done", "pi-failed", () => start(...args));
+    }
     if (nativeExecutorFirstGate) {
       const ungatedPiStart = this.pi.onStart.bind(this.pi);
       this.pi.onStart = async (...args) => {

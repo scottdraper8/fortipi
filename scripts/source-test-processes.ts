@@ -4,6 +4,7 @@ import { lstatSync, readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { bootSamples, bootStages } from "../apps/worker/test/agent/boot-trace.ts";
 import type { KernelObservation } from "./owned-runtime-roles.ts";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -322,6 +323,7 @@ export function sourceTestDiagnostic(line: string): boolean {
     recoveryDiagnostic(line) ||
     roleDiagnostic(line) ||
     kernelDiagnostic(line) ||
+    bootDiagnostic(line) ||
     profileDiagnostic(line) ||
     (/^# \{"diagnostic":"source-recovery-process","sourcePath":(?:null|"(?:packages\/fortipi-[a-z]+\/test|apps\/worker\/test|scripts\/test\/release|tests\/clients)\/[A-Za-z0-9._/-]+\.(?:test|spec)\.ts"),"harnessOrdinal":\d{1,6},"invocation":\d{1,3},"runtimeCount":(?:null|\d{1,4}),"runnableCount":(?:null|\d{1,4}),"rssKiB":(?:null|\d{1,14}),"cpuMs":(?:null|\d{1,14})\}$/.test(
       line,
@@ -335,6 +337,75 @@ export function sourceTestDiagnostic(line: string): boolean {
       line,
     )
   );
+}
+
+export function sourceBootLine(
+  output: string,
+  sourcePath: string | null,
+  harnessOrdinal: number,
+  invocation: number,
+): string {
+  const samples = bootSamples(output);
+  return JSON.stringify({
+    diagnostic: "source-recovery-boot",
+    sourcePath: sourcePath !== null && sourcePath.length <= 64 ? sourcePath : null,
+    harnessOrdinal,
+    invocation,
+    status: samples.length ? "observed" : "unavailable",
+    samples,
+  });
+}
+
+function bootDiagnostic(line: string): boolean {
+  if (!line.startsWith('# {"diagnostic":"source-recovery-boot",')) return false;
+  try {
+    const r = JSON.parse(line.slice(2)) as Record<string, unknown>;
+    if (
+      !r ||
+      typeof r !== "object" ||
+      Array.isArray(r) ||
+      Object.keys(r).join(",") !==
+        "diagnostic,sourcePath,harnessOrdinal,invocation,status,samples" ||
+      line !== `# ${JSON.stringify(r)}` ||
+      (r.sourcePath !== null &&
+        (typeof r.sourcePath !== "string" ||
+          r.sourcePath.length > 64 ||
+          !testPath.test(r.sourcePath) ||
+          r.sourcePath.split("/").some((part) => part === ".." || part === "." || part === ""))) ||
+      !Number.isInteger(r.harnessOrdinal) ||
+      (r.harnessOrdinal as number) < 1 ||
+      (r.harnessOrdinal as number) > 999999 ||
+      !Number.isInteger(r.invocation) ||
+      (r.invocation as number) < 1 ||
+      (r.invocation as number) > 999 ||
+      !Array.isArray(r.samples)
+    )
+      return false;
+    if (r.status === "unavailable") return r.samples.length === 0;
+    let previous = -1;
+    return (
+      r.status === "observed" &&
+      r.samples.length > 0 &&
+      r.samples.length <= bootStages.length &&
+      r.samples.every((row: unknown) => {
+        if (!Array.isArray(row) || row.length !== 2) return false;
+        const index = bootStages.indexOf(row[0]),
+          count = row[1];
+        if (
+          index <= previous ||
+          !Number.isInteger(count) ||
+          count < 1 ||
+          count > 524288 ||
+          (count & (count - 1)) !== 0
+        )
+          return false;
+        previous = index;
+        return true;
+      })
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Closed projection only; a caller must still validate before emitting. */

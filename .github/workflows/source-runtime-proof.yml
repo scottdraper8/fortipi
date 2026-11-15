@@ -71,6 +71,8 @@ jobs:
         run: node --test --test-reporter=tap scripts/native-owned-role-control.ts
         timeout-minutes: 2
       - name: Observe three actual source test processes directly
+        env:
+          FORTIPI_PRIVATE_BOOT_TRACE: "1"
         run: >-
           node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
           apps/worker/test/agent/admin-file-bearing.test.ts

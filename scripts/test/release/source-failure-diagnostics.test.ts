@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { ChildProcess, execFile } from "node:child_process";
 import { subscribe, unsubscribe } from "node:diagnostics_channel";
 import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -10,6 +10,13 @@ import { PassThrough } from "node:stream";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import {
+  bootPrefix,
+  bootSamples,
+  bootStages,
+  createBootTrace,
+  installBootTrace,
+} from "../../../apps/worker/test/agent/boot-trace.ts";
 import { processHarness } from "../../../apps/worker/test/agent/process-harness.ts";
 import {
   processProfile,
@@ -17,6 +24,7 @@ import {
 } from "../../../apps/worker/test/agent/process-profile.ts";
 import { observeCandidateDiagnostics, observeSourceTestFailures } from "../../build-workspaces.ts";
 import {
+  sourceBootLine,
   sourceFailureLines,
   sourceRecoveryPath,
   sourceTestDiagnostic,
@@ -639,15 +647,44 @@ test("owned Wrangler returns a real bounded CPU profile after unchanged healthy 
   timeout: 45000,
 }, async (t) => {
   let discoveries = 0;
+  let privateBootOutput = "";
+  const captureBoot = (message: unknown) => {
+    const child = (message as { process?: unknown } | null)?.process;
+    if (!(child instanceof ChildProcess)) return;
+    child.once("spawn", () => {
+      if (child.spawnfile === process.execPath)
+        child.stdout?.on("data", (data: Buffer) => {
+          privateBootOutput = (privateBootOutput + String(data)).slice(-12000);
+        });
+    });
+  };
   const observed = (message: unknown) => {
     const request = (message as { request: ClientRequest }).request;
     if (request.path === "/json" && request.host === "127.0.0.1") discoveries++;
   };
   subscribe("http.client.request.start", observed);
+  subscribe("child_process", captureBoot);
   let h: Awaited<ReturnType<typeof processHarness>> | undefined;
   try {
-    h = await processHarness();
+    h = await processHarness(undefined, { bootTrace: true });
     assert.equal(discoveries, 0, "A passing original startup must not invoke the profiler");
+    const agent = await h.api<{ agentId: string }>("/v1/agents", {
+      requestId: crypto.randomUUID(),
+      name: "boot-trace-control",
+      model: { providerId: "cloudflare", modelId: "@cf/zai-org/glm-5.3-flash" },
+    });
+    assert.equal(agent.status, 201);
+    assert.equal((await h.api(`/__test/agents/${agent.body.agentId}/canary`)).status, 200);
+    const samples = bootSamples(privateBootOutput);
+    for (const stage of ["open", "opened", "resume", "observe", "host", "pi"])
+      assert.ok(
+        samples.some((row) => row[0] === stage),
+        `Actual public ${stage} probe must be observed privately`,
+      );
+    assert.ok(
+      !privateBootOutput.includes('"diagnostic":"source-recovery-boot"'),
+      "Successful startup must not forward boot diagnostics",
+    );
     const result = await processProfile(h.inspectorPort);
     assert.equal(discoveries, 1);
     assert.equal(result.status, "available");
@@ -694,6 +731,7 @@ test("owned Wrangler returns a real bounded CPU profile after unchanged healthy 
     for (const line of forwarded) t.diagnostic(line.slice(2).trimEnd());
   } finally {
     unsubscribe("http.client.request.start", observed);
+    unsubscribe("child_process", captureBoot);
     await h?.close();
   }
 });
@@ -854,6 +892,208 @@ test("failure role records forward only canonical bounded correlated facts", asy
   assert.ok(!forwarded.join("").includes(canary));
 });
 
+test("private boot probes preserve calls, receivers, values, promises and bounded private-free projection", async () => {
+  const frames: string[] = [],
+    mark = createBootTrace((line) => frames.push(line)),
+    value = { private: canary },
+    receiver = { private: canary };
+  let openOptions: { onWake: (this: object, input: object) => object } | undefined;
+  let publication: ((this: object, input: object) => object) | undefined;
+  let forwardedObserver: { advance: (this: object, input: object) => object } | undefined;
+  let wakeReceiver: object | undefined, publicationReceiver: object | undefined;
+  const observation = { detach() {} };
+  const h = {
+    resume(this: object, input: object) {
+      assert.equal(this, h);
+      assert.equal(input, value);
+      return value;
+    },
+    observeCommits(this: object, observer: { advance: (this: object, input: object) => object }) {
+      assert.equal(this, h);
+      publication = observer.advance;
+      forwardedObserver = observer;
+      return observation;
+    },
+  };
+  const promise = Promise.resolve(h);
+  const factory = {
+    open(
+      this: object,
+      storage: object,
+      options: { onWake: (this: object, input: object) => object },
+      context: object,
+    ) {
+      assert.equal(this, factory);
+      assert.equal(storage, value);
+      assert.equal(context, value);
+      openOptions = options;
+      return promise;
+    },
+  };
+  const options = Object.freeze({
+    onWake(this: object, input: object) {
+      assert.ok(this === receiver || this === options);
+      wakeReceiver = this;
+      assert.equal(input, value);
+      return value;
+    },
+  });
+  installBootTrace(factory as unknown as Parameters<typeof installBootTrace>[0], mark);
+  const result = factory.open(value, options, value);
+  assert.equal(result, promise);
+  await result;
+  assert.ok(openOptions);
+  assert.equal(openOptions.onWake.call(receiver, value), value);
+  assert.equal(openOptions.onWake.call(openOptions, value), value);
+  assert.equal(wakeReceiver, options);
+  assert.equal(h.resume(value), value);
+  const observer = Object.freeze({
+    advance(this: object, input: object) {
+      assert.ok(this === receiver || this === observer);
+      publicationReceiver = this;
+      assert.equal(input, value);
+      return value;
+    },
+  });
+  assert.equal(h.observeCommits(observer), observation);
+  assert.ok(publication);
+  assert.equal(publication.call(receiver, value), value);
+  assert.ok(forwardedObserver);
+  assert.notEqual(forwardedObserver, observer);
+  assert.equal(forwardedObserver.advance.call(forwardedObserver, value), value);
+  assert.equal(publicationReceiver, observer);
+  const originalError = new Error(canary),
+    rejection = Promise.reject(originalError),
+    failed = { open: (..._args: unknown[]) => rejection };
+  installBootTrace(failed as unknown as Parameters<typeof installBootTrace>[0], mark);
+  assert.equal(failed.open(value, options, value), rejection);
+  await assert.rejects(rejection, (error) => error === originalError);
+  assert.ok(!frames.join("").includes(canary));
+  const sparse: string[] = [],
+    tick = createBootTrace((line) => sparse.push(line));
+  for (const stage of bootStages) for (let i = 0; i < 64; i++) tick(stage);
+  assert.equal(sparse.length, 20);
+  const reserved: string[] = [],
+    reserve = createBootTrace((line) => reserved.push(line));
+  for (let i = 0; i < 10000; i++) {
+    reserve("wake");
+    reserve("publish");
+  }
+  reserve("opened");
+  reserve("pi-done");
+  for (const stage of bootStages) reserve(stage);
+  assert.ok(reserved.length <= 20);
+  const kept = bootSamples(`${reserved.join("\n")}\n`);
+  for (const stage of bootStages) assert.ok(kept.some((row) => row[0] === stage));
+  assert.ok(
+    sparse.every((line) => {
+      const r = JSON.parse(line.slice(bootPrefix.length));
+      return (r.count & (r.count - 1)) === 0;
+    }),
+  );
+  const prefix = "apps/worker/test/",
+    suffix = ".test.ts",
+    path = prefix + "x".repeat(64 - prefix.length - suffix.length) + suffix;
+  const raw =
+    bootStages.map((stage) => bootPrefix + JSON.stringify({ stage, count: 524288 })).join("\n") +
+    "\n";
+  const line = `# ${sourceBootLine(raw, path, 999999, 999)}`;
+  assert.ok(Buffer.byteLength(`${line}\n`) <= 512);
+  assert.equal(sourceTestDiagnostic(line), true);
+  const rejected =
+    bootPrefix +
+    `{"stage":"wake","count":"${canary}","count":1}\n` +
+    bootPrefix +
+    JSON.stringify({ stage: canary, count: 1 }) +
+    "\n";
+  assert.deepEqual(bootSamples(rejected), []);
+  assert.deepEqual(
+    bootSamples(frames.join("\n")),
+    bootSamples(`${frames.slice(0, -1).join("\n")}\n`),
+  );
+  const r = JSON.parse(line.slice(2)),
+    bad = [
+      { ...r, sourcePath: `/${canary}/private.test.ts` },
+      { ...r, samples: [[canary, 1]] },
+      { ...r, samples: [["wake", 3]] },
+      {
+        ...r,
+        samples: [
+          ["wake", 1],
+          ["wake", 2],
+        ],
+      },
+      {
+        ...r,
+        samples: [
+          ["opened", 1],
+          ["open", 1],
+        ],
+      },
+      { ...r, error: canary },
+    ].map((v) => `# ${JSON.stringify(v)}`);
+  const stream = new PassThrough(),
+    forwarded: string[] = [];
+  observeCandidateDiagnostics(stream, (v) => forwarded.push(v));
+  for (const v of [...bad, line])
+    for (const byte of Buffer.from(`${v}\n`)) stream.write(Buffer.from([byte]));
+  const done = once(stream, "end");
+  stream.end();
+  await done;
+  assert.deepEqual(forwarded, [`${line}\n`]);
+
+  // Execute the actual boot block at its finally boundary; the real diagnostic
+  // tail is checked separately for byte equality, without another worker run.
+  const source = await readFile(
+    new URL("../../../apps/worker/test/agent/process-harness.ts", import.meta.url),
+    "utf8",
+  );
+  const begin = source.indexOf("        if (bootTrace) {", source.indexOf("      if (!ready) {")),
+    end = source.indexOf("        // Observe only after the original readiness decision.", begin);
+  assert.ok(begin > 0 && end > begin);
+  const boundary = new Function(
+    "sourceBootLine",
+    "sourceTestDiagnostic",
+    "console",
+    "original",
+    "after",
+    `const bootTrace=true,output='',sourcePath=null,currentHarness=1,invocation=1;
+try { throw original; } finally { ${source.slice(begin, end)} after(); }`,
+  );
+  for (const throwing of ["projection", "classifier", "console", "none"]) {
+    const original = new assert.AssertionError({ message: "Wrangler not ready" }),
+      diagnosticError = new Error(canary),
+      emitted: string[] = [],
+      tail: string[] = [];
+    assert.throws(
+      () =>
+        boundary(
+          (...args: Parameters<typeof sourceBootLine>) => {
+            if (throwing === "projection") throw diagnosticError;
+            return sourceBootLine(...args);
+          },
+          (record: string) => {
+            if (throwing === "classifier") throw diagnosticError;
+            return sourceTestDiagnostic(record);
+          },
+          {
+            log(record: string) {
+              if (throwing === "console") throw diagnosticError;
+              emitted.push(record);
+            },
+          },
+          original,
+          () => tail.push("PS", "role", "kernel", "profile"),
+        ),
+      (error) => error === original,
+      `Boot ${throwing} boundary must preserve the original readiness error`,
+    );
+    assert.equal(original.code, "ERR_ASSERTION");
+    assert.deepEqual(tail, ["PS", "role", "kernel", "profile"]);
+    assert.deepEqual(emitted, throwing === "none" ? [sourceBootLine("", null, 1, 1)] : []);
+  }
+});
+
 test("kernel records are closed, bounded and explicit about unavailable data", async () => {
   const prefix = "apps/worker/test/",
     suffix = ".test.ts",
@@ -980,7 +1220,7 @@ test('original readiness error and owned child cleanup', {timeout:40000}, async 
   subscribe('child_process',observe);
   let unexpected;
   try {
-    await assert.rejects(async () => { unexpected=await processHarness(${JSON.stringify(main)}); },
+    await assert.rejects(async () => { unexpected=await processHarness(${JSON.stringify(main)}, {bootTrace:true}); },
       {name:'AssertionError',code:'ERR_ASSERTION',message:'Wrangler not ready'});
     assert.equal(owned.length,1);
     await Promise.all(closed);
@@ -1069,6 +1309,13 @@ test('original readiness error and owned child cleanup', {timeout:40000}, async 
       assert.equal(kernel.roles, null);
       assert.equal(kernel.elapsedMs, null);
     }
+    const boot = records.filter((record) => record.diagnostic === "source-recovery-boot");
+    assert.equal(boot.length, 1, "Opted-in failed readiness must project boot evidence");
+    assert.equal(boot[0].status, "unavailable");
+    assert.deepEqual(boot[0].samples, []);
+    assert.equal(boot[0].sourcePath, profile.sourcePath);
+    assert.equal(boot[0].harnessOrdinal, end.harnessOrdinal);
+    assert.equal(boot[0].invocation, end.invocation);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
