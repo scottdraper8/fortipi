@@ -120,12 +120,12 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "c3cc91632d0a1950fb122605b190233f2aa0006e",
+        "commit": "0db9861ec01842f0ade3fa93d95a59f378d92a8a",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "e652db83ded3d9c94ca33424ffeb500f36c648d83bcc76c4c30c5a8a190fdced",
           "packages/ai": "dd5216cb54ef3a58eb5678b39331ab14def178462e8d0c42194eebe12f63456f",
-          "packages/chord": "e040ffc2537247c816bee3fa5d2604f9a481b42684b8a90c9afe37e0f4d166c1",
+          "packages/chord": "c40dfc8621a2553adf8562ad6fe1d706ce0354e164fd04b5495ffab50d8a8155",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "3044b813b7368a4786ddb3436e209f223862ac08226214fa04190ca90f26c175",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
@@ -135,7 +135,7 @@
           "packages/tui": "5483c0578f10b3c4346666658e4486062e9ad03707c10ded58ccf59eddf318d9",
           "packages/durable/package.json": "36d31c40a9cfc52cd044ead2af947bca4f4ab7d9af8f5e7a82db248e1c942ff9"
         },
-        "sha256": "841a138fce2f6407f6e6c64c68706223f5d2d3c2d0d23ffac9b837b6002cbe45"
+        "sha256": "c8029a4d6bb9cdcd51d945a372dc7d0cae80297516693d466be45690d3643e23"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-15T01:59:59.000Z",
-      "reviewNote": "Reviewed ec337279..df1a6d8c complete watched delta:23 files/42 blobs; then df1a..c3cc9163:1 commit/48 P2-only files, zero watched changes; all11 c3cc identities match df1a. Optional Chord PartLimits, Durable fit-images and MCP summary remain unadopted; no new applicable installed risk. Retain installed1.5.2 archives/SRIs, pins/locks and declared Durable Waiters/AI Anthropic patches. Chord remote-hold A/B/C race remains; remote/sync/store adoption reopens review. Preserve shared-hold authority/revocation, AI retry/read and app-kit caveats. No adoption or runtime/provider/recovery/native-security/future compatibility clearance; native ABI/FUSE/image/advisory gates remain. Evidence:phase3/thread-9/upstream-pi-df1a-impact.md and upstream-pi-c3cc-impact.md."
+      "reviewedAt": "2026-11-15T08:27:08.286Z",
+      "reviewNote": "Reviewed c3cc9163..0db9861e: complete 3-commit/96-file delta;75 Chord files and21 P3 files. Only watched Chord identity changed; version1.5.2 unchanged. Installed SQLite/PiHarness closure48 Durable/13 Chord modules has unchanged source identities; Host/Store/named-query/remote changes unadopted. No new applicable installed risk or startup/recovery fix established. Keep archives/SRIs,pins/locks,declared Waiters/AI patches and installed ledger unchanged. Prior Chord remote-hold A/B/C,shared-authority/revocation,AI retry/read and app-kit caveats remain; remote/sync/store adoption reopens review. No native ABI/FUSE/image/security/future compatibility or runtime/provider/deployment clearance. Evidence:phase3/thread-9/upstream-pi-0db986-impact.md and upstream-pi-0db986-enforcer.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
