@@ -10,6 +10,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
 import {
+  beginNativeV8Profile,
+  nativeProfileSelected,
+} from "../../../../scripts/native-v8-profile.ts";
+import {
   type KernelObservation,
   observeOwnedRuntimeRoles,
 } from "../../../../scripts/owned-runtime-roles.ts";
@@ -97,6 +101,9 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
   );
   let child: ChildProcess | undefined,
     output = "";
+  let nativeProfile: Awaited<ReturnType<typeof beginNativeV8Profile>> | undefined;
+  let pendingNativeProfile: typeof nativeProfile;
+  let nativeStartupFailed = false;
   let childInvocation = 0;
   const origin = `http://127.0.0.1:${port}`;
   const api = async <T>(
@@ -164,6 +171,12 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     assert.ok(!child, "Previous process must be stopped");
     childInvocation++;
     output = "";
+    try {
+      if (nativeProfileSelected(sourcePath, currentHarness, childInvocation))
+        nativeProfile = await beginNativeV8Profile();
+    } catch {
+      /* Optional native logging must not change startup. */
+    }
     child = spawn(
       process.execPath,
       [
@@ -188,6 +201,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
           WRANGLER_SEND_METRICS: "false",
           XDG_CONFIG_HOME: join(directory, "xdg"),
           XDG_CACHE_HOME: join(directory, "cache"),
+          ...(nativeProfile ? { MINIFLARE_WORKERD_V8_FLAGS: nativeProfile.flags } : {}),
         },
       },
     );
@@ -279,6 +293,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       assert.fail("Wrangler not ready");
     } finally {
       observe(ready ? "ready" : "end");
+      if (nativeProfile) nativeStartupFailed = !ready;
       if (!ready) {
         // Observe only after the original readiness decision. Never print process
         // arguments, identifiers, environment, paths or captured child output.
@@ -420,6 +435,16 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     await exited;
     if (signal === "SIGKILL") assert.equal(current.signalCode, signal);
     child = undefined;
+    const completedProfile = nativeProfile;
+    nativeProfile = undefined;
+    if (completedProfile && !nativeStartupFailed) pendingNativeProfile = completedProfile;
+    if (completedProfile && nativeStartupFailed) {
+      try {
+        await completedProfile.collect("startup-failure-after-close");
+      } catch {
+        /* Preserve original stop/cleanup and the already-decided readiness result. */
+      }
+    }
   }
   try {
     await start();
@@ -456,6 +481,12 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
     start,
     close: async () => {
       await stop("SIGTERM");
+      try {
+        await pendingNativeProfile?.collect("post-ready-after-close");
+      } catch {
+        /* Passing comparisons run only in final harness cleanup. */
+      }
+      pendingNativeProfile = undefined;
       await rm(directory, { recursive: true, force: true });
     },
   };

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { subscribe, unsubscribe } from "node:diagnostics_channel";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { type ClientRequest, createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +16,13 @@ import {
   processProfileLines,
 } from "../../../apps/worker/test/agent/process-profile.ts";
 import { observeCandidateDiagnostics, observeSourceTestFailures } from "../../build-workspaces.ts";
+import {
+  beginNativeV8Profile,
+  filterNativeV8,
+  nativeProfileSelected,
+  nativeV8Logs,
+  sanitizeNativeV8,
+} from "../../native-v8-profile.ts";
 import {
   sourceFailureLines,
   sourceRecoveryPath,
@@ -852,6 +859,173 @@ test("failure role records forward only canonical bounded correlated facts", asy
     accepted.map((line) => `${line}\n`),
   );
   assert.ok(!forwarded.join("").includes(canary));
+});
+
+test("private native V8 projection, ownership bounds and diagnostic catch preserve private data and original errors", async () => {
+  const code = [
+    { type: "JS", name: `${canary} https://private.invalid/${canary}/runtime-worker.ts:7:11` },
+    { type: "CPP", name: canary },
+    { type: "JS", name: " worker.js:6:193" },
+    { type: "JS", name: `${canary} https://private.invalid/${canary}/runtime-worker.ts:7:11` },
+  ];
+  const raw = JSON.stringify({
+    code,
+    ticks: [{ s: [0, 1] }, { s: [0, 2, 1, 3] }, { s: [1, 0] }, { s: [2, 10] }, { s: [3, 1] }],
+    scripts: [{ source: canary }],
+  });
+  const clean = sanitizeNativeV8(raw, 5);
+  assert.deepEqual(
+    filterNativeV8(`shared-library,${canary}\nscript-source,${canary}\ntick,1\ncode-creation,JS\n`),
+    {
+      text: "tick,1\ncode-creation,JS\n",
+      strippedLibraries: 1,
+      strippedSources: 1,
+    },
+  );
+  assert.equal(clean.decodedTicks, 5);
+  assert.equal(clean.jsSelfTicks, 4);
+  assert.equal(clean.otherSelfTicks, 1);
+  assert.equal(clean.frames.length, 2);
+  assert.equal(clean.frames[0]?.selfTicks, 3);
+  assert.equal(clean.frames[0]?.file, "runtime-worker.ts");
+  assert.equal(
+    sanitizeNativeV8(raw.replaceAll("runtime-worker.ts", "runtime-worker.js"), 5).frames[0]?.file,
+    "runtime-worker.js",
+  );
+  assert.equal(
+    sanitizeNativeV8(raw.replaceAll("runtime-worker.ts", "unknown.ts"), 5).frames[0]?.file,
+    null,
+  );
+  assert.equal(clean.frames[1]?.file, "worker.js");
+  assert.equal(clean.frames[1]?.selfTicks, 1);
+  assert.match(clean.frames[0]?.functionSHA256 ?? "", /^[a-f0-9]{64}$/);
+  for (const privateText of [canary, "https://", "CPP", '"scripts":', '"code":', "0x"])
+    assert.ok(!JSON.stringify(clean).includes(privateText));
+  assert.equal(
+    sanitizeNativeV8(`Testing v8 version different from logging version\n${raw}`, 5)
+      .versionMismatch,
+    true,
+  );
+  for (const malformed of [
+    `unknown prefix\n${raw}`,
+    raw.replace('"s":[0,1]', '"s":[0]'),
+    raw.replace('"ticks":[', '"ticks":null,"private":['),
+  ])
+    assert.throws(() => sanitizeNativeV8(malformed, 5));
+  assert.throws(() => sanitizeNativeV8(raw, 4));
+  const previous = process.env.FORTIPI_PRIVATE_NATIVE_V8_PROFILE;
+  try {
+    delete process.env.FORTIPI_PRIVATE_NATIVE_V8_PROFILE;
+    assert.equal(
+      nativeProfileSelected("apps/worker/test/agent/process-recovery.test.ts", 2, 5),
+      false,
+    );
+    process.env.FORTIPI_PRIVATE_NATIVE_V8_PROFILE = "1";
+    assert.equal(
+      nativeProfileSelected("apps/worker/test/agent/process-recovery.test.ts", 2, 5),
+      true,
+    );
+    for (const [path, h, i] of [
+      [null, 2, 5],
+      [canary, 2, 5],
+      ["apps/worker/test/agent/process-recovery.test.ts", 1, 5],
+      ["apps/worker/test/agent/process-recovery.test.ts", 2, 4],
+    ] as const)
+      assert.equal(nativeProfileSelected(path, h, i), false);
+  } finally {
+    if (previous === undefined) delete process.env.FORTIPI_PRIVATE_NATIVE_V8_PROFILE;
+    else process.env.FORTIPI_PRIVATE_NATIVE_V8_PROFILE = previous;
+  }
+  const profile = await beginNativeV8Profile();
+  try {
+    const log = join(profile.directory, "isolate-0xabc-123-profile.log");
+    await writeFile(log, `tick,private\nscript-source,${canary}\n`, { mode: 0o600 });
+    assert.equal((await nativeV8Logs(profile.directory, 123))[0]?.ticks, 1);
+    await writeFile(log, `tick,1\nscript-source,${canary}\ntick,incomplete`);
+    const partial = (await nativeV8Logs(profile.directory, 123))[0];
+    assert.equal(partial?.ticks, 1);
+    assert.equal(partial?.complete, false);
+    assert.equal(partial?.raw.at(-1), 10);
+    await assert.rejects(nativeV8Logs(profile.directory, 456));
+    const linked = join(profile.directory, "isolate-0xdef-123-profile.log");
+    await symlink(log, linked);
+    await assert.rejects(nativeV8Logs(profile.directory, 123));
+    await rm(linked);
+    await truncate(log, 32 * 1024 * 1024 + 1);
+    await assert.rejects(nativeV8Logs(profile.directory, 123));
+  } finally {
+    await rm(profile.directory, { recursive: true, force: true });
+  }
+  const empty = await beginNativeV8Profile();
+  try {
+    await writeFile(
+      join(empty.directory, "isolate-0xabc-123-profile.log"),
+      "script-source,private\n",
+      { mode: 0o600 },
+    );
+    const unavailable = await empty.collect("control-after-kill", true);
+    assert.equal(unavailable.status, "unavailable");
+    assert.equal(unavailable.stage, "no-samples");
+    assert.equal(unavailable.noSamples, 1);
+    assert.deepEqual(unavailable.selected, []);
+  } finally {
+    await rm(empty.directory, { recursive: true, force: true });
+    await rm(".agent-docs/tmp/native-v8-profile/control.json", { force: true });
+  }
+  const source = await readFile(
+    new URL("../../../apps/worker/test/agent/process-harness.ts", import.meta.url),
+    "utf8",
+  );
+  const begin = source.indexOf("    const completedProfile = nativeProfile;"),
+    end = source.indexOf("\n  }\n  try {\n    await start();", begin);
+  assert.ok(begin > 0 && end > begin);
+  const boundary = new Function(
+    "nativeProfile",
+    "nativeStartupFailed",
+    "original",
+    "after",
+    `return (async()=>{let pendingNativeProfile;try{throw original;}finally{${source.slice(begin, end)}after(pendingNativeProfile);}})();`,
+  );
+  for (const throwing of [false, true]) {
+    const original = new assert.AssertionError({ message: "Wrangler not ready" });
+    let after = false,
+      collects = 0;
+    await assert.rejects(
+      boundary(
+        {
+          collect(snapshot: string) {
+            collects++;
+            assert.equal(snapshot, "startup-failure-after-close");
+            if (throwing) throw new Error(canary);
+            return Promise.resolve();
+          },
+        },
+        true,
+        original,
+        () => {
+          after = true;
+        },
+      ),
+      (error: unknown) => error === original,
+    );
+    assert.equal(after, true);
+    assert.equal(collects, 1);
+  }
+  const original = new assert.AssertionError({ message: "Wrangler not ready" });
+  const comparison = {
+    collect() {
+      assert.fail("Passing comparison must wait for final cleanup");
+    },
+  };
+  let deferred = false;
+  await assert.rejects(
+    boundary(comparison, false, original, (pending: unknown) => {
+      assert.equal(pending, comparison);
+      deferred = true;
+    }),
+    (error: unknown) => error === original,
+  );
+  assert.equal(deferred, true);
 });
 
 test("kernel records are closed, bounded and explicit about unavailable data", async () => {

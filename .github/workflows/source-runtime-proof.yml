@@ -70,12 +70,29 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-native-role-')
         run: node --test --test-reporter=tap scripts/native-owned-role-control.ts
         timeout-minutes: 2
+      - name: Prove owned native V8 ticks survive abrupt termination
+        run: node --test --test-reporter=tap scripts/native-v8-profile-control.ts
+        timeout-minutes: 2
       - name: Observe three actual source test processes directly
+        env:
+          FORTIPI_PRIVATE_NATIVE_V8_PROFILE: "1"
         run: >-
           node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
           apps/worker/test/agent/admin-file-bearing.test.ts
           apps/worker/test/agent/process-recovery.test.ts
           apps/worker/test/api/stream-boundaries.test.ts
+      - name: Upload only sanitized native V8 observations
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: private-native-v8-observations
+          path: |
+            .agent-docs/tmp/native-v8-profile/control.json
+            .agent-docs/tmp/native-v8-profile/control-proof.json
+            .agent-docs/tmp/native-v8-profile/recovery.json
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 3
       - name: Require Linux hardener service still active
         if: always() && runner.os == 'Linux'
         shell: bash
