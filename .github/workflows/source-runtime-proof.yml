@@ -44,6 +44,9 @@ jobs:
         with:
           node-version: "26.13.1"
           package-manager-cache: false
+      - name: Observe native sampling prerequisites
+        if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-native-prereq-')
+        run: node scripts/native-control-availability.ts
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: "12.18.0"
