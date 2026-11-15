@@ -7,6 +7,35 @@ import { archive, archiveEntries, hash } from "../tools/unstale/review-supply-ch
 import { repository } from "./build-workspaces.ts";
 import type { SupplyChain } from "./check-pins.ts";
 
+const cveAuthority =
+  "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/54xxx/CVE-2023-54404.json";
+const githubAuthority = "https://api.github.com/advisories/GHSA-mrhx-c7xc-m3w5";
+
+/** Authentication is confined to the fixed GitHub advisory endpoint. */
+export async function readAdvisoryAuthority(
+  url: string,
+  githubToken: string | undefined,
+  transport: typeof fetch = fetch,
+): Promise<Buffer> {
+  assert.ok(url === cveAuthority || url === githubAuthority, "Unknown advisory authority");
+  const headers: Record<string, string> = {};
+  if (url === githubAuthority) {
+    headers.Accept = "application/vnd.github+json";
+    headers["X-GitHub-Api-Version"] = "2022-11-28";
+    if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
+  }
+  const response = await transport(url, {
+    headers,
+    signal: AbortSignal.timeout(30_000),
+    redirect: "error",
+  });
+  assert.ok(
+    response.ok,
+    `${url === githubAuthority ? "GitHub" : "CVE"} advisory authority unavailable: HTTP ${response.status}${response.headers.get("x-ratelimit-remaining") === "0" ? "; quota exhausted" : ""}`,
+  );
+  return Buffer.from(await response.arrayBuffer());
+}
+
 export function validateRejectedZodAuthorities(cve: unknown, github: unknown): void {
   const authority = cve as { cveMetadata: { cveId: string; state: string } };
   const advisory = github as {
@@ -53,16 +82,11 @@ export async function rejectedZodAdvisory(output: string): Promise<boolean> {
   assert.equal(disposition.package, "zod");
   assert.equal(disposition.version, "4.6.7");
   assert.equal(disposition.cve, "CVE-2023-54404");
-  assert.equal(
-    disposition.authorityURL,
-    "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/54xxx/CVE-2023-54404.json",
-  );
-  assert.equal(disposition.githubURL, "https://api.github.com/advisories/GHSA-mrhx-c7xc-m3w5");
+  assert.equal(disposition.authorityURL, cveAuthority);
+  assert.equal(disposition.githubURL, githubAuthority);
   const observations: { url: string; sha256: string }[] = [];
   const fetchSource = async (url: string): Promise<unknown> => {
-    const response = await fetch(url, { signal: AbortSignal.timeout(30_000), redirect: "error" });
-    assert.ok(response.ok, `Advisory authority unavailable: HTTP ${response.status}`);
-    const raw = Buffer.from(await response.arrayBuffer());
+    const raw = await readAdvisoryAuthority(url, process.env.GITHUB_TOKEN);
     observations.push({ url, sha256: hash(raw) });
     return JSON.parse(raw.toString()) as unknown;
   };

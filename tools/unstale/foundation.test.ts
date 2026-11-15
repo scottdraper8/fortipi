@@ -10,7 +10,11 @@ import type { Manifest, SupplyChain } from "../../scripts/check-pins.ts";
 import { checkPins, json, manifestPaths, yaml } from "../../scripts/check-pins.ts";
 import type { DependencyPatch } from "../../scripts/dependency-patches.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "../../scripts/pnpm-executable.ts";
-import { rejectedZodAdvisory, validateRejectedZodAuthorities } from "../../scripts/run-unstale.ts";
+import {
+  readAdvisoryAuthority,
+  rejectedZodAdvisory,
+  validateRejectedZodAuthorities,
+} from "../../scripts/run-unstale.ts";
 import {
   createPtyProbeResponder,
   macosNetworkExtensionActive,
@@ -295,6 +299,65 @@ test("keep ordinary YAML single-document when relaxing only pnpm lock validation
       text.replace("exclude: '(^|/)pnpm-lock\\.yaml$'", "args: [--allow-multiple-documents]"),
     );
   }, /pnpm-lock/);
+});
+
+test("advisory authentication stays on its fixed endpoint and unavailable authorities block", async () => {
+  const token = "fixture-only-advisory-credential";
+  const github = "https://api.github.com/advisories/GHSA-mrhx-c7xc-m3w5";
+  const cve =
+    "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/54xxx/CVE-2023-54404.json";
+  const calls: {
+    url: string;
+    authorization: string | null;
+    redirect: RequestRedirect | undefined;
+  }[] = [];
+  const transport: typeof fetch = async (input, init) => {
+    const headers = new Headers(init?.headers);
+    calls.push({
+      url: String(input),
+      authorization: headers.get("authorization"),
+      redirect: init?.redirect,
+    });
+    return new Response("{}", { status: 200 });
+  };
+  await readAdvisoryAuthority(cve, token, transport);
+  await readAdvisoryAuthority(github, token, transport);
+  await readAdvisoryAuthority(github, undefined, transport);
+  assert.deepEqual(calls, [
+    { url: cve, authorization: null, redirect: "error" },
+    { url: github, authorization: `Bearer ${token}`, redirect: "error" },
+    { url: github, authorization: null, redirect: "error" },
+  ]);
+  for (const url of [
+    "https://api.github.com/advisories/other",
+    `${github}?other`,
+    "https://example.com/",
+  ])
+    await assert.rejects(
+      () => readAdvisoryAuthority(url, token, transport),
+      /Unknown advisory authority/,
+    );
+  assert.equal(calls.length, 3);
+  await assert.rejects(
+    () =>
+      readAdvisoryAuthority(
+        github,
+        token,
+        async () =>
+          new Response(token, {
+            status: 403,
+            headers: { "x-ratelimit-remaining": "0" },
+          }),
+      ),
+    (error: Error) => {
+      assert.match(
+        error.message,
+        /GitHub advisory authority unavailable: HTTP 403; quota exhausted/,
+      );
+      assert.ok(!error.message.includes(token));
+      return true;
+    },
+  );
 });
 
 test("changed or ambiguous GHSA assessments never inherit the exact Zod disposition", () => {

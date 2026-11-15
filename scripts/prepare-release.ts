@@ -1159,13 +1159,22 @@ export async function prepareCandidate(
         pnpm,
         args,
         root,
-        childEnvironment(),
+        childEnvironment(
+          args[1] === "unstale:check" ? { GITHUB_TOKEN: process.env.GITHUB_TOKEN } : {},
+        ),
         args[1] === "test" ? FULL_SOURCE_TEST_TIMEOUT_MS : 900000,
         true,
       );
     }
     phase = "pre-commit checks";
-    await checked("pre-commit", ["run", "--all-files"], root, childEnvironment(), 600000, true);
+    await checked(
+      "pre-commit",
+      ["run", "--all-files"],
+      root,
+      childEnvironment({ GITHUB_TOKEN: process.env.GITHUB_TOKEN }),
+      600000,
+      true,
+    );
     phase = "package archives";
     const packed = await stageAndPack(
       root,

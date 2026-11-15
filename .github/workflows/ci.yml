@@ -128,6 +128,8 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
       - run: pnpm run unstale:check
         if: github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Save qualified image reference
         if: github.event_name != 'workflow_dispatch'
         env:
@@ -213,6 +215,7 @@ jobs:
         env:
           PINNED_PYTHON: ${{ steps.python.outputs.python-path }}
           PRE_COMMIT_HOME: ${{ runner.temp }}/fortipi-precommit/pre-commit-home
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON" --verify "$RUNNER_TEMP/fortipi-precommit"
           "$RUNNER_TEMP/fortipi-precommit/venv/bin/pre-commit" run --all-files
