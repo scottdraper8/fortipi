@@ -103,6 +103,8 @@ const failurePaths = new Set<string>([
   "apps/worker/test/control/tickets.test.ts",
   "apps/worker/test/execution/native-connected-recovery.test.ts",
   "apps/worker/test/integration/admission-recovery.test.ts",
+  "apps/worker/test/integration/oracles.ts",
+  "apps/worker/test/integration/runtime.ts",
   "scripts/test/release/application-recovery-coordinator.test.ts",
   "scripts/test/release/application-recovery-existing.test.ts",
   "scripts/test/release/platform-recovery.test.ts",

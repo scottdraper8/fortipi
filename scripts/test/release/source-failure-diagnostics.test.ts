@@ -13,8 +13,61 @@ import { sourceRecoveryPath, sourceTestDiagnostic } from "../../source-test-proc
 
 const reviewedName =
   "SIGKILL/reopen preserves canary, allocation provenance and stable accepted input";
+const reviewedAdmissionName =
+  "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries";
 const canary = "synthetic-private-diagnostic-canary";
 const helper = new URL("../../build-workspaces.ts", import.meta.url);
+
+test("an actual admission polling failure retains its reviewed inner location without its error text", {
+  timeout: 10000,
+}, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "fortipi-admission-diagnostic-"));
+  try {
+    const runtime = new URL("../../../apps/worker/test/integration/runtime.ts", import.meta.url);
+    const childFile = join(directory, "failure.mjs");
+    await writeFile(
+      childFile,
+      `import test from 'node:test';
+import { poll } from ${JSON.stringify(runtime.href)};
+test(${JSON.stringify(reviewedAdmissionName)}, () => poll(async () => false, Boolean, 0));
+`,
+      { flag: "wx", mode: 0o600 },
+    );
+    const forwarded: string[] = [];
+    const pending = promisify(execFile)(
+      process.execPath,
+      ["--test", "--test-reporter=tap", childFile],
+      { env: { PATH: process.env.PATH }, timeout: 8000, maxBuffer: 262144 },
+    );
+    assert.ok(pending.child.stdout);
+    observeSourceTestFailures(pending.child.stdout, (line) => forwarded.push(line));
+    await assert.rejects(pending, (error: unknown) => {
+      const result = error as { code: number; stdout: string };
+      assert.equal(result.code, 1);
+      assert.ok(result.stdout.includes("Expected durable boundary"));
+      return true;
+    });
+    assert.equal(forwarded.length, 1);
+    const forwardedLine = forwarded[0];
+    assert.ok(forwardedLine);
+    const record = JSON.parse(forwardedLine);
+    const lines = (await readFile(runtime, "utf8")).split("\n");
+    const line =
+      lines.findIndex((value) => value.includes('throw new Error("Expected durable boundary')) + 1;
+    assert.deepEqual(record, {
+      diagnostic: "source-test-failure",
+      name: reviewedAdmissionName,
+      location: `apps/worker/test/integration/runtime.ts:${line}:9`,
+      category: "testCodeFailure",
+      code: "ERR_TEST_FAILURE",
+    });
+    assert.equal(sourceTestDiagnostic(forwardedLine.trimEnd()), true);
+    assert.ok(!forwardedLine.includes("Expected durable boundary"));
+    assert.ok(!forwardedLine.includes(directory));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("live failing child yields only closed reviewed facts while pass/failure and private captures survive", {
   timeout: 10000,
