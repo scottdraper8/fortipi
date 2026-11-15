@@ -10,7 +10,84 @@ import test from "node:test";
 import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { processHarness } from "../apps/worker/test/agent/process-harness.ts";
-import { observeOwnedRuntimeRoles, ownedProcStat, ownedSocketPid } from "./owned-runtime-roles.ts";
+import {
+  observeOwnedRuntimeRoles,
+  ownedProcStat,
+  ownedSocketFacts,
+  ownedSocketPid,
+} from "./owned-runtime-roles.ts";
+
+test("constructed ss facts distinguish failures and private forms without granting ownership", () => {
+  const targets = new Set([101, 102]),
+    owned = new Set([99, 101, 102]);
+  const privateName = "synthetic-private-socket-canary";
+  const row = (address: string, owners = `("${privateName}",pid=101,fd=12)`, prefix = "") =>
+    `${prefix}LISTEN 0 4096 ${address}:12345 *:*${owners ? ` users:(${owners})` : ""}\n`;
+  const facts = (text: string) =>
+    ownedSocketFacts({ tool: "ok", closed: true, text }, 12345, targets, owned, "first");
+  const base = {
+    sample: "first",
+    tool: "ok",
+    closed: true,
+    listeners: "one",
+    layout: "plain",
+    address: "ipv4-loopback",
+    owner: "target",
+  };
+  assert.deepEqual(facts(row("127.0.0.1")), base);
+  for (const [text, change] of [
+    [row("[::ffff:127.0.0.1]"), { address: "ipv6-mapped" }],
+    [row("[::ffff:7f00:1]"), { address: "ipv6-mapped" }],
+    [row("[::1]"), { address: "ipv6-loopback" }],
+    [row("0.0.0.0"), { address: "other" }],
+    [row("127.0.0.1", undefined, "tcp "), { layout: "netid" }],
+    [row("127.0.0.1", `("${privateName}",pid=99,fd=12)`), { owner: "owned-other" }],
+    [row("127.0.0.1", `("${privateName}",pid=103,fd=12)`), { owner: "foreign" }],
+    [
+      row("127.0.0.1", `("${privateName}",pid=101,fd=12),("${privateName}",pid=102,fd=13)`),
+      { owner: "multiple" },
+    ],
+    [row("127.0.0.1", ""), { owner: "unreadable" }],
+    [row("127.0.0.1") + row("127.0.0.1"), { listeners: "multiple" }],
+    [
+      row("127.0.0.1") + row("[::1]", undefined, "tcp "),
+      { listeners: "multiple", layout: "mixed", address: "mixed" },
+    ],
+  ] as const) {
+    const result = facts(text);
+    assert.deepEqual(result, { ...base, ...change });
+    assert.throws(
+      () => ownedSocketPid(text, 12345, targets),
+      "Classification must not relax the role gate",
+    );
+    assert.ok(!JSON.stringify(result).includes(privateName));
+    assert.ok(!JSON.stringify(result).includes("12345"));
+    assert.ok(!JSON.stringify(result).includes("101"));
+  }
+  assert.deepEqual(facts(""), {
+    ...base,
+    listeners: "none",
+    layout: "none",
+    address: "none",
+    owner: "none",
+  });
+  const unreadable = {
+    ...base,
+    listeners: "unreadable",
+    layout: "unreadable",
+    address: "unreadable",
+    owner: "unreadable",
+  };
+  for (const text of [privateName, "x".repeat(8193), row("127.0.0.1").replace(":12345", ":12346")])
+    assert.deepEqual(facts(text), unreadable);
+  for (const tool of ["timeout", "error", "output-limit", "cleanup-unconfirmed"] as const) {
+    const closed = tool !== "cleanup-unconfirmed";
+    assert.deepEqual(
+      ownedSocketFacts({ tool, closed, text: row("127.0.0.1") }, 12345, targets, owned, "second"),
+      { ...unreadable, sample: "second", tool, closed },
+    );
+  }
+});
 
 test("owned-role pure parsers reject ambiguity, foreign owners and out-of-bounds data", async () => {
   const fields = Array<string>(50).fill("0");
