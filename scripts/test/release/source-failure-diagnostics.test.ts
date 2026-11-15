@@ -16,7 +16,11 @@ import {
   processProfileLines,
 } from "../../../apps/worker/test/agent/process-profile.ts";
 import { observeCandidateDiagnostics, observeSourceTestFailures } from "../../build-workspaces.ts";
-import { sourceRecoveryPath, sourceTestDiagnostic } from "../../source-test-processes.ts";
+import {
+  sourceFailureLines,
+  sourceRecoveryPath,
+  sourceTestDiagnostic,
+} from "../../source-test-processes.ts";
 
 const reviewedName =
   "SIGKILL/reopen preserves canary, allocation provenance and stable accepted input";
@@ -71,6 +75,272 @@ test(${JSON.stringify(reviewedAdmissionName)}, () => poll(async () => false, Boo
     assert.equal(sourceTestDiagnostic(forwardedLine.trimEnd()), true);
     assert.ok(!forwardedLine.includes("Expected durable boundary"));
     assert.ok(!forwardedLine.includes(directory));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("admission caller records retain only two distinct reviewed frames and closed private-free facts", async () => {
+  const runtime = new URL("../../../apps/worker/test/integration/runtime.ts", import.meta.url);
+  const oracles = new URL("../../../apps/worker/test/integration/oracles.ts", import.meta.url);
+  const lines = (await readFile(runtime, "utf8")).split("\n");
+  const inner = `apps/worker/test/integration/runtime.ts:${lines.findIndex((line) => line.includes('throw new Error("Expected durable boundary')) + 1}:9`;
+  const launch = `apps/worker/test/integration/runtime.ts:${lines.indexOf("    await poll(") + 1}:5`;
+  const start = `apps/worker/test/integration/runtime.ts:${lines.indexOf("    await launch();") + 1}:5`;
+  const oracleLines = (await readFile(oracles, "utf8")).split("\n");
+  const oracle = `apps/worker/test/integration/oracles.ts:${oracleLines.findIndex((line) => line.includes("await poll(async () => observation.cue()")) + 1}:7`;
+  const summary = {
+    diagnostic: "source-test-failure",
+    name: reviewedAdmissionName,
+    location: inner,
+    category: "testCodeFailure",
+    code: "ERR_TEST_FAILURE",
+  };
+  const caller = (location: string, rank: number) => ({
+    diagnostic: "source-test-failure-caller",
+    name: reviewedAdmissionName,
+    location: inner,
+    rank,
+    caller: location,
+  });
+  const fixture = (name: string) =>
+    `not ok 1 - ${name}\n  ---\n  failureType: 'testCodeFailure'\n  code: 'ERR_TEST_FAILURE'\n  error: '${canary}'\n  stack: |-\n    private (${fileURLToPath(runtime)}:${inner.split(":").slice(-2).join(":")})\n    private (${oracle})\n    private (${oracle})\n    ${canary} (/${canary}/private.ts:1:1)\n    invalid (apps/worker/test/integration/oracles.ts:999999:1)\n    other (scripts/build-workspaces.ts:1:1)\n    private (${launch})\n    third (${start})\n  ...\n`;
+  const stdout = new PassThrough(),
+    stderr = new PassThrough(),
+    classified: string[] = [],
+    forwarded: string[] = [];
+  observeSourceTestFailures(stdout, (line) => {
+    classified.push(line);
+    stderr.write(line);
+  });
+  observeCandidateDiagnostics(stderr, (line) => forwarded.push(line));
+  stdout.write(`${canary.repeat(1000)}\n`);
+  for (const byte of Buffer.from(fixture(reviewedAdmissionName))) stdout.write(Buffer.from([byte]));
+  const done = once(stdout, "end");
+  stdout.end();
+  await done;
+  const stderrDone = once(stderr, "end");
+  stderr.end();
+  await stderrDone;
+  assert.deepEqual(
+    classified.map((line) => JSON.parse(line)),
+    [summary, caller(oracle, 0), caller(launch, 1)],
+  );
+  assert.deepEqual(forwarded, classified);
+  assert.ok(
+    forwarded.every((line) => line.trimEnd().length <= 512 && sourceTestDiagnostic(line.trimEnd())),
+  );
+  assert.ok(!forwarded.join("").includes(canary));
+  assert.ok(!forwarded.join("").includes(fileURLToPath(runtime)));
+  const boundedStack: string[] = [];
+  const acceptStack = sourceFailureLines((line) => boundedStack.push(line));
+  for (const line of [
+    `not ok 1 - ${reviewedAdmissionName}`,
+    "  ---",
+    "  failureType: 'testCodeFailure'",
+    "  code: 'ERR_TEST_FAILURE'",
+    "  stack: |-",
+    `    private (${inner})`,
+    `    private (${oracle})`,
+    "  error: |-",
+    `    ${canary} (${launch})`,
+    "  ...",
+  ])
+    acceptStack(line);
+  assert.deepEqual(
+    boundedStack.map((line) => JSON.parse(line)),
+    [summary, caller(oracle, 0)],
+  );
+  const unrelated: string[] = [];
+  const consume = sourceFailureLines((line) => unrelated.push(line));
+  for (const line of [fixture(reviewedName), fixture(canary)].join("").split("\n")) consume(line);
+  assert.deepEqual(
+    unrelated.map((line) => JSON.parse(line)),
+    [
+      { ...summary, name: reviewedName },
+      { ...summary, name: null },
+    ],
+  );
+  const safe = caller(launch, 0);
+  for (const value of [
+    { ...safe, name: reviewedName },
+    { ...safe, location: null },
+    { ...safe, rank: -1 },
+    { ...safe, rank: 2 },
+    { ...safe, rank: "0" },
+    { ...safe, caller: inner },
+    { ...safe, caller: "scripts/build-workspaces.ts:1:1" },
+    { ...safe, caller: "apps/worker/test/integration/../integration/runtime.ts:1:1" },
+    { ...safe, caller: "apps/worker/test/integration/runtime.ts:999999:1" },
+    { ...safe, caller: "apps/worker/test/integration/runtime.ts:1:999999" },
+    { ...safe, error: canary },
+  ])
+    assert.equal(sourceTestDiagnostic(JSON.stringify(value)), false);
+  assert.equal(
+    sourceTestDiagnostic(JSON.stringify(safe).replace('"rank":0', `"rank":"${canary}","rank":0`)),
+    false,
+  );
+  assert.equal(sourceTestDiagnostic(`${JSON.stringify(safe)} `), false);
+  assert.equal(sourceTestDiagnostic(`${JSON.stringify(safe)}${" ".repeat(512)}`), false);
+  assert.equal(
+    sourceTestDiagnostic(
+      JSON.stringify({
+        diagnostic: safe.diagnostic,
+        name: safe.name,
+        location: safe.location,
+        caller: safe.caller,
+        rank: safe.rank,
+      }),
+    ),
+    false,
+  );
+});
+
+test("actual startup poll retains reviewed callers with its original error and owned cleanup", {
+  timeout: 60000,
+}, async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "fortipi-admission-caller-"));
+  try {
+    const runtime = new URL("../../../apps/worker/test/integration/runtime.ts", import.meta.url);
+    const lines = (await readFile(runtime, "utf8")).split("\n");
+    const callers = ["    await poll(", "    await launch();"].map(
+      (line) => `apps/worker/test/integration/runtime.ts:${lines.indexOf(line) + 1}:5`,
+    );
+    const worker = fileURLToPath(
+      new URL("../../../apps/worker/test/integration/fixture-worker.ts", import.meta.url),
+    );
+    const main = join(directory, "worker.ts"),
+      childFile = join(directory, "failure.mjs");
+    await writeFile(
+      main,
+      `export * from ${JSON.stringify(worker)};
+import worker from ${JSON.stringify(worker)};
+export default { fetch(request, env) {
+  if (new URL(request.url).pathname === '/health') return new Response(null, {status:503});
+  return worker.fetch(request, env);
+}};
+`,
+      { flag: "wx", mode: 0o600 },
+    );
+    await writeFile(
+      childFile,
+      `import assert from 'node:assert/strict';
+import {ChildProcess,execFile} from 'node:child_process';
+import {subscribe,unsubscribe} from 'node:diagnostics_channel';
+import {once} from 'node:events';
+import test from 'node:test';
+import {start} from ${JSON.stringify(runtime.href)};
+test(${JSON.stringify(reviewedAdmissionName)}, {timeout:45000}, async t => {
+  const owned=[],closed=[];
+  let health503=0,forced=false;
+  const observe=({process:child}) => {
+    if (!(child instanceof ChildProcess)) return;
+    child.once('spawn', () => {
+      if (child.spawnfile !== process.execPath) return;
+      owned.push(child);closed.push(once(child,'close'));
+    });
+  };
+  const response=({request,response}) => {if(request.path==='/health'&&response.statusCode===503)health503++;};
+  subscribe('child_process',observe);subscribe('undici:request:headers',response);
+  const guard=setTimeout(() => {
+    for(const child of owned)if(child.exitCode===null&&child.signalCode===null){
+      forced=true;
+      if(process.platform==='win32')execFile('taskkill',['/PID',String(child.pid),'/T','/F'],()=>{});
+      else try{process.kill(-child.pid,'SIGKILL');}catch{child.kill('SIGKILL');}
+    }
+  },42000);guard.unref();
+  t.after(async () => {
+    try {
+      await Promise.all(closed);
+      assert.equal(owned.length,2);
+      assert.equal(forced,false);
+      assert.ok(health503>0);
+      assert.ok(owned.every(child=>child.exitCode!==null||child.signalCode!==null));
+      t.diagnostic('owned-startup-control '+JSON.stringify({health503,closed:true,forced}));
+    } finally {clearTimeout(guard);unsubscribe('child_process',observe);unsubscribe('undici:request:headers',response);}
+  });
+  try {
+    const unexpected=await start({main:${JSON.stringify(main)}});
+    await unexpected.dispose();
+    assert.fail('Expected original startup poll failure');
+  } catch(error) {
+    assert.ok(error instanceof Error);
+    assert.equal(error.name,'Error');
+    assert.equal(error.message,'Expected durable boundary did not become observable before its deadline');
+    assert.equal(error.code,undefined);
+    throw error;
+  }
+});
+`,
+      { flag: "wx", mode: 0o600 },
+    );
+    const classified: string[] = [],
+      forwarded: string[] = [],
+      stream = new PassThrough();
+    observeCandidateDiagnostics(stream, (line) => forwarded.push(line));
+    const pending = promisify(execFile)(
+      process.execPath,
+      ["--test", "--test-reporter=tap", childFile],
+      { env: { PATH: process.env.PATH }, timeout: 55000, maxBuffer: 262144 },
+    );
+    assert.ok(pending.child.stdout);
+    observeSourceTestFailures(pending.child.stdout, (line) => {
+      classified.push(line);
+      stream.write(line);
+    });
+    await assert.rejects(pending, (error: unknown) => {
+      const result = error as { code: number; stdout: string };
+      assert.equal(result.code, 1);
+      assert.ok(
+        result.stdout.includes(
+          "Expected durable boundary did not become observable before its deadline",
+        ),
+      );
+      assert.match(result.stdout, /# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n/);
+      assert.match(
+        result.stdout,
+        /owned-startup-control \{"health503":\d+,"closed":true,"forced":false\}/,
+      );
+      for (const caller of callers)
+        assert.ok(
+          result.stdout.includes(`${runtime.href}:${caller.split(":").slice(-2).join(":")}`),
+        );
+      return true;
+    });
+    const done = once(stream, "end");
+    stream.end();
+    await done;
+    const location = `apps/worker/test/integration/runtime.ts:${lines.findIndex((line) => line.includes('throw new Error("Expected durable boundary')) + 1}:9`;
+    const expected = {
+      diagnostic: "source-test-failure",
+      name: reviewedAdmissionName,
+      location,
+      category: "testCodeFailure",
+      code: "ERR_TEST_FAILURE",
+    };
+    const summaryLine = classified[0];
+    assert.ok(summaryLine);
+    assert.deepEqual(JSON.parse(summaryLine), expected);
+    t.diagnostic(summaryLine.trimEnd());
+    assert.deepEqual(
+      classified.slice(1).map((line) => JSON.parse(line)),
+      callers.map((caller, rank) => ({
+        diagnostic: "source-test-failure-caller",
+        name: reviewedAdmissionName,
+        location,
+        rank,
+        caller,
+      })),
+    );
+    assert.deepEqual(forwarded, classified);
+    assert.ok(
+      forwarded.every(
+        (line) => line.trimEnd().length <= 512 && sourceTestDiagnostic(line.trimEnd()),
+      ),
+    );
+    assert.ok(!forwarded.join("").includes(directory));
+    assert.ok(!forwarded.join("").includes("Expected durable boundary"));
+    for (const line of forwarded.slice(1)) t.diagnostic(line.trimEnd());
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

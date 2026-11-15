@@ -75,6 +75,8 @@ if (process.execArgv.includes("--test") && selected.size > 0 && selected.size <=
 
 // Reviewed literal names only. New/dynamic/private names remain null; this is
 // diagnostic data, never an assertion result or release authority.
+const admissionFailureName =
+  "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries";
 const failureNames = new Set<string>([
   "standalone readiness refuses a foreign listener after actual runtime death",
   "SIGKILL/reopen preserves canary, allocation provenance and stable accepted input",
@@ -82,7 +84,7 @@ const failureNames = new Set<string>([
   "kill cues match only the exact run, agent, phase, arm and actor generation; no storage proof",
   "ticket-only consume is atomic and binds audience, destination, Origin and expiry",
   "actual failed HTTP upgrade spends a ticket; CORS admits only exact configured HTTPS origins",
-  "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries",
+  admissionFailureName,
   "unfinished actual Pi task completes through Lifecycle after ungraceful same-storage reopen",
   "actual provider perform/verify plus matching files produces one closed relative combined proof, never qualifies on perform",
   "out-of-order/concurrent phases and uncertain perform never trigger automatic new effects",
@@ -192,6 +194,33 @@ function failureDiagnostic(line: string): boolean {
   }
 }
 
+function admissionCallerLocation(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^apps\/worker\/test\/integration\/(?:runtime|oracles)\.ts:/.test(value) &&
+    validSourceLocation(value)
+  );
+}
+function failureCallerDiagnostic(line: string): boolean {
+  if (!line.startsWith('{"diagnostic":"source-test-failure-caller",')) return false;
+  try {
+    const value: unknown = JSON.parse(line);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+    const record = value as Record<string, unknown>;
+    return (
+      Object.keys(record).join(",") === "diagnostic,name,location,rank,caller" &&
+      line === JSON.stringify(record) &&
+      record.name === admissionFailureName &&
+      validSourceLocation(record.location) &&
+      (record.rank === 0 || record.rank === 1) &&
+      admissionCallerLocation(record.caller) &&
+      record.caller !== record.location
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Consume bounded complete TAP lines; never retain or serialize error messages. */
 export function sourceFailureLines(emit: (line: string) => void): (line: string) => void {
   let pending:
@@ -203,14 +232,30 @@ export function sourceFailureLines(emit: (line: string) => void): (line: string)
         code: string | null;
       }
     | undefined;
+  let callers: string[] = [];
+  let callerStack = false;
   let indent = 0,
     yaml = false,
     stack = false,
     stackLocation = false,
     records = 0;
   const flush = () => {
-    if (pending && records++ < 1024) emit(`${JSON.stringify(pending)}\n`);
+    if (pending && records++ < 1024) {
+      emit(`${JSON.stringify(pending)}\n`);
+      for (const [rank, caller] of callers.entries())
+        emit(
+          `${JSON.stringify({
+            diagnostic: "source-test-failure-caller",
+            name: pending.name,
+            location: pending.location,
+            rank,
+            caller,
+          })}\n`,
+        );
+    }
     pending = undefined;
+    callers = [];
+    callerStack = false;
     yaml = stack = stackLocation = false;
   };
   return (line) => {
@@ -239,10 +284,21 @@ export function sourceFailureLines(emit: (line: string) => void): (line: string)
         if (scalar?.[1] === "code" && failureCodes.has(scalar[2] ?? ""))
           pending.code = scalar[2] as string;
         if (field.startsWith("stack:")) stack = true;
+        if (field && !field.startsWith("  ")) callerStack = field.startsWith("stack:");
         const location = field.startsWith("location:") || stack ? sourceLocation(line) : null;
         if (location && !stackLocation) {
           pending.location = location;
           stackLocation = stack;
+        } else if (
+          callerStack &&
+          field.startsWith("  ") &&
+          pending.name === admissionFailureName &&
+          admissionCallerLocation(location) &&
+          location !== pending.location &&
+          callers.length < 2 &&
+          !callers.includes(location)
+        ) {
+          callers.push(location);
         }
       }
     }
@@ -261,6 +317,7 @@ export function sourceTestDiagnostic(line: string): boolean {
     ) &&
       !line.includes("../")) ||
     failureDiagnostic(line) ||
+    failureCallerDiagnostic(line) ||
     recoveryDiagnostic(line) ||
     profileDiagnostic(line) ||
     (/^# \{"diagnostic":"source-recovery-process","sourcePath":(?:null|"(?:packages\/fortipi-[a-z]+\/test|apps\/worker\/test|scripts\/test\/release|tests\/clients)\/[A-Za-z0-9._/-]+\.(?:test|spec)\.ts"),"harnessOrdinal":\d{1,6},"invocation":\d{1,3},"runtimeCount":(?:null|\d{1,4}),"runnableCount":(?:null|\d{1,4}),"rssKiB":(?:null|\d{1,14}),"cpuMs":(?:null|\d{1,14})\}$/.test(
