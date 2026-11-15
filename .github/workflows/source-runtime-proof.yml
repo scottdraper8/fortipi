@@ -66,6 +66,10 @@ jobs:
       - run: node tools/unstale/review-supply-chain.ts --locks --check
       - run: node scripts/check-licenses.ts --foundation
       - run: node scripts/build-workspaces.ts build:evidence
+      - name: Observe owned runtime roles and CPU ticks
+        if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-native-role-')
+        run: node --test --test-reporter=tap scripts/native-owned-role-control.ts
+        timeout-minutes: 2
       - name: Observe three actual source test processes directly
         run: >-
           node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
