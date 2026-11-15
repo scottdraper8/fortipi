@@ -20,6 +20,7 @@ import {
   processCueMatches,
   readProcessWitness,
 } from "./process-observation.ts";
+import { processProfile, processProfileLines } from "./process-profile.ts";
 
 const pause = (ms: number) => new Promise<void>((accept) => setTimeout(accept, ms));
 export const processBootstrap = "synthetic-process-thread5-bootstrap-000000000000";
@@ -329,6 +330,26 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
         } catch {
           /* Preserve the original failure. */
         }
+        if (
+          announcementMatches() === true &&
+          child === current &&
+          current.exitCode === null &&
+          current.signalCode === null
+        ) {
+          try {
+            const profile = await processProfile(inspector);
+            for (const line of processProfileLines(
+              profile,
+              sourcePath,
+              currentHarness,
+              childInvocation,
+            )) {
+              if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+            }
+          } catch {
+            /* Never replace the already-decided startup error. */
+          }
+        }
       }
     }
   }
@@ -374,6 +395,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
   }
   return {
     origin,
+    inspectorPort: inspector,
     api,
     async armBarrier(agentId: string, point: ProcessArm["point"], fault?: "hold" | "reject") {
       const current = child,

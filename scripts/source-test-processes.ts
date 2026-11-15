@@ -262,6 +262,7 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    profileDiagnostic(line) ||
     (/^# \{"diagnostic":"source-recovery-process","sourcePath":(?:null|"(?:packages\/fortipi-[a-z]+\/test|apps\/worker\/test|scripts\/test\/release|tests\/clients)\/[A-Za-z0-9._/-]+\.(?:test|spec)\.ts"),"harnessOrdinal":\d{1,6},"invocation":\d{1,3},"runtimeCount":(?:null|\d{1,4}),"runnableCount":(?:null|\d{1,4}),"rssKiB":(?:null|\d{1,14}),"cpuMs":(?:null|\d{1,14})\}$/.test(
       line,
     ) &&
@@ -274,6 +275,91 @@ export function sourceTestDiagnostic(line: string): boolean {
       line,
     )
   );
+}
+
+/** One closed summary plus at most five ranked frames; each stays within512 bytes. */
+function profileDiagnostic(line: string): boolean {
+  if (!line.startsWith('# {"diagnostic":"source-recovery-profile",')) return false;
+  try {
+    const value: unknown = JSON.parse(line.slice(2));
+    const closed = (input: unknown, keys: string): input is Record<string, unknown> =>
+      input !== null &&
+      typeof input === "object" &&
+      !Array.isArray(input) &&
+      Object.keys(input).join(",") === keys;
+    const integer = (input: unknown, low: number, high: number): input is number =>
+      typeof input === "number" && Number.isSafeInteger(input) && input >= low && input <= high;
+    const hash = (input: unknown) => typeof input === "string" && /^[a-f0-9]{64}$/.test(input);
+    const identity = "diagnostic,sourcePath,harnessOrdinal,invocation";
+    if (
+      value === null ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      line !== `# ${JSON.stringify(value)}`
+    )
+      return false;
+    const record = value as Record<string, unknown>;
+    if (
+      (record.sourcePath !== null &&
+        (typeof record.sourcePath !== "string" ||
+          record.sourcePath.length > 64 ||
+          !testPath.test(record.sourcePath) ||
+          record.sourcePath.split("/").includes(".."))) ||
+      !integer(record.harnessOrdinal, 1, 999999) ||
+      !integer(record.invocation, 1, 999)
+    )
+      return false;
+    if (
+      Object.keys(record).join(",") ===
+      `${identity},profileSha256,rank,functionSha256,urlSha256,line,column,samples`
+    )
+      return (
+        hash(record.profileSha256) &&
+        integer(record.rank, 0, 4) &&
+        hash(record.functionSha256) &&
+        hash(record.urlSha256) &&
+        integer(record.line, -1, 9999999) &&
+        integer(record.column, -1, 9999999) &&
+        integer(record.samples, 1, 100000)
+      );
+    if (
+      Object.keys(record).join(",") !== `${identity},status,stage,methods,profile` ||
+      !Array.isArray(record.methods) ||
+      record.methods.length !== 4
+    )
+      return false;
+    const methods = ["Profiler.enable", "Profiler.start", "Profiler.stop", "Profiler.disable"];
+    if (
+      !record.methods.every(
+        (entry: unknown, index: number) =>
+          Array.isArray(entry) &&
+          entry.length === 3 &&
+          entry[0] === methods[index] &&
+          ["not-sent", "ok", "cdp-error", "timeout", "transport"].includes(entry[1]) &&
+          (entry[2] === null || (entry[1] === "cdp-error" && integer(entry[2], -32768, 32767))),
+      )
+    )
+      return false;
+    if (record.status === "unavailable")
+      return (
+        record.profile === null &&
+        ["discovery", "connect", "cdp", "profile"].includes(record.stage as string)
+      );
+    const profile = record.profile;
+    return (
+      record.status === "available" &&
+      record.stage === "complete" &&
+      record.methods.slice(0, 3).every((entry) => entry[1] === "ok") &&
+      closed(profile, "bytes,sha256,nodes,samples,durationUs") &&
+      integer(profile.bytes, 1, 2097152) &&
+      hash(profile.sha256) &&
+      integer(profile.nodes, 1, 30000) &&
+      integer(profile.samples, 0, 100000) &&
+      integer(profile.durationUs, 0, 5000000)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Exact process-recovery fixture output only, never an arbitrary TAP diagnostic. */
