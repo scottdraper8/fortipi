@@ -854,6 +854,90 @@ test("failure role records forward only canonical bounded correlated facts", asy
   assert.ok(!forwarded.join("").includes(canary));
 });
 
+test("kernel records are closed, bounded and explicit about unavailable data", async () => {
+  const prefix = "apps/worker/test/",
+    suffix = ".test.ts",
+    path = prefix + "x".repeat(64 - prefix.length - suffix.length) + suffix;
+  const data = {
+    status: "available",
+    stage: "complete",
+    elapsedMs: 5000,
+    roles: [
+      {
+        role: "proxy",
+        userTicks: 1000000,
+        systemTicks: 1000000,
+        majorFaults: 1000000,
+        wait: ["unavailable", "unavailable"],
+      },
+      {
+        role: "user",
+        userTicks: 1000000,
+        systemTicks: 1000000,
+        majorFaults: 1000000,
+        wait: ["writeback", "writeback"],
+      },
+    ],
+  };
+  const record = {
+    diagnostic: "source-recovery-kernel",
+    sourcePath: path,
+    harnessOrdinal: 999999,
+    invocation: 999,
+    ...data,
+  };
+  const encode = (value: unknown) => `# ${JSON.stringify(value)}`,
+    available = encode(record);
+  assert.ok(Buffer.byteLength(`${available}\n`) <= 512);
+  assert.equal(sourceTestDiagnostic(available), true);
+  const absent = { ...record, status: "unavailable", stage: "wchan", elapsedMs: null, roles: null };
+  const good = [
+    available,
+    encode(absent),
+    encode({ ...absent, sourcePath: null, stage: "unsupported" }),
+  ];
+  const bad = [
+    { ...record, sourcePath: `/${canary}/private.test.ts` },
+    { ...record, sourcePath: "apps/worker/test/../private.test.ts" },
+    { ...record, harnessOrdinal: 0 },
+    { ...record, invocation: 1000 },
+    { ...record, elapsedMs: 499 },
+    { ...record, roles: [] },
+    { ...record, roles: [record.roles[1], record.roles[0]] },
+    { ...record, roles: [{ ...record.roles[0], userTicks: -1 }, record.roles[1]] },
+    { ...record, roles: [{ ...record.roles[0], systemTicks: 1000001 }, record.roles[1]] },
+    { ...record, roles: [{ ...record.roles[0], majorFaults: 1.5 }, record.roles[1]] },
+    { ...record, roles: [{ ...record.roles[0], wait: [canary, "io"] }, record.roles[1]] },
+    { ...record, roles: [{ ...record.roles[0], pid: 123 }, record.roles[1]] },
+    { ...absent, roles: record.roles },
+    { ...absent, elapsedMs: 500 },
+    { ...absent, stage: "complete" },
+    { ...record, error: canary },
+    { ...record, stack: canary },
+    { ...record, port: 12345 },
+    { ...record, profile: canary },
+  ].map(encode);
+  bad.push(
+    available.replace('"invocation":999', `"invocation":"${canary}","invocation":999`),
+    `${available} `,
+    `${available}${" ".repeat(512)}`,
+  );
+  assert.ok(bad.every((line) => !sourceTestDiagnostic(line)));
+  const stream = new PassThrough(),
+    forwarded: string[] = [];
+  observeCandidateDiagnostics(stream, (line) => forwarded.push(line));
+  for (const line of [...bad, ...good])
+    for (const byte of Buffer.from(`${line}\n`)) stream.write(Buffer.from([byte]));
+  const done = once(stream, "end");
+  stream.end();
+  await done;
+  assert.deepEqual(
+    forwarded,
+    good.map((line) => `${line}\n`),
+  );
+  assert.ok(!forwarded.join("").includes(canary));
+});
+
 test("owned Ready with ping503 preserves the original failure, profiles automatically and closes", {
   timeout: 45000,
 }, async (t) => {
@@ -970,6 +1054,20 @@ test('original readiness error and owned child cleanup', {timeout:40000}, async 
       assert.equal(role.stage, "unsupported");
       assert.equal(role.elapsedMs, null);
       assert.equal(role.roles, null);
+    }
+    const kernels = records.filter((record) => record.diagnostic === "source-recovery-kernel");
+    assert.equal(kernels.length, 1, "Failure-only kernel record must be retained");
+    const kernel = kernels[0],
+      kernelIndex = records.indexOf(kernel);
+    assert.ok(kernelIndex > roleIndex && kernelIndex < profileIndex);
+    assert.equal(kernel.sourcePath, role.sourcePath);
+    assert.equal(kernel.harnessOrdinal, role.harnessOrdinal);
+    assert.equal(kernel.invocation, role.invocation);
+    if (process.platform !== "linux") {
+      assert.equal(kernel.status, "unavailable");
+      assert.equal(kernel.stage, "unsupported");
+      assert.equal(kernel.roles, null);
+      assert.equal(kernel.elapsedMs, null);
     }
   } finally {
     await rm(directory, { recursive: true, force: true });

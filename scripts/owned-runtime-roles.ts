@@ -18,8 +18,38 @@ type Proc = {
   ticks: bigint;
   state: State;
 };
-type Identity = Proc & { exe: string; device: number; inode: number };
+type Counters = { userTicks: bigint; systemTicks: bigint; majorFaults: bigint };
+type Identity = Proc & { exe: string; device: number; inode: number; kernel?: Counters | null };
 type Stage = "unsupported" | "owner" | "executable" | "lineage" | "socket" | "identity" | "bounds";
+export const kernelWaitClasses = [
+  "futex",
+  "event",
+  "io",
+  "page",
+  "writeback",
+  "reclaim",
+  "schedule",
+  "timer",
+  "other",
+  "zero",
+  "unavailable",
+] as const;
+type Wait = (typeof kernelWaitClasses)[number];
+/** Available qualifies owned counter deltas; each wait may independently be unavailable/zero/other. */
+export type KernelObservation = {
+  status: "available" | "unavailable";
+  stage: Stage | "counters" | "wchan" | "complete";
+  elapsedMs: number | null;
+  roles:
+    | {
+        role: "proxy" | "user";
+        userTicks: number;
+        systemTicks: number;
+        majorFaults: number;
+        wait: [Wait, Wait];
+      }[]
+    | null;
+};
 type SocketTool = "ok" | "timeout" | "error" | "output-limit" | "cleanup-unconfirmed";
 type SocketOutput = { tool: SocketTool; closed: boolean; text: string | null };
 const addressForms = ["ipv4-loopback", "ipv6-loopback", "ipv6-mapped", "other"] as const;
@@ -81,6 +111,57 @@ export function ownedProcStat(text: string): Proc {
     ticks: integer(fields[11]) + integer(fields[12]),
     state: fields[0] as State,
   };
+}
+
+/** Reuses a captured stat string; counter failure cannot change role availability. */
+export function ownedKernelCounters(text: string): Counters | null {
+  try {
+    ownedProcStat(text);
+    const fields = text
+      .slice(text.lastIndexOf(") ") + 2)
+      .trimEnd()
+      .split(" ");
+    const values = [fields[11], fields[12], fields[9]];
+    if (!values.every((value) => typeof value === "string" && /^\d{1,20}$/.test(value)))
+      return null;
+    return {
+      userTicks: BigInt(values[0] as string),
+      systemTicks: BigInt(values[1] as string),
+      majorFaults: BigInt(values[2] as string),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const waitSymbols = new Map<string, Wait>([
+  ["futex_wait_queue", "futex"],
+  ["futex_wait_queue_me", "futex"],
+  ["ep_poll", "event"],
+  ["do_epoll_wait", "event"],
+  ["do_poll", "event"],
+  ["io_schedule", "io"],
+  ["folio_wait_bit_common", "page"],
+  ["wait_on_page_bit_common", "page"],
+  ["balance_dirty_pages", "writeback"],
+  ["balance_dirty_pages_ratelimited", "writeback"],
+  ["folio_wait_writeback", "writeback"],
+  ["wait_on_page_writeback", "writeback"],
+  ["throttle_direct_reclaim", "reclaim"],
+  ["do_try_to_free_pages", "reclaim"],
+  ["shrink_node", "reclaim"],
+  ["mem_cgroup_handle_over_high", "reclaim"],
+  ["schedule_timeout", "schedule"],
+  ["hrtimer_nanosleep", "timer"],
+  ["do_nanosleep", "timer"],
+]);
+/** Never return a raw kernel symbol, including unknown/private module symbols. */
+export function ownedKernelWait(text: string | null): Wait {
+  if (text === null || Buffer.byteLength(text) > 128) return "unavailable";
+  const value = text.trim();
+  if (value === "0") return "zero";
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(value)) return "unavailable";
+  return waitSymbols.get(value) ?? "other";
 }
 
 export function ownedSocketPid(text: string, port: number, owned: ReadonlySet<number>): number {
@@ -209,25 +290,32 @@ export function ownedSocketFacts(
   };
 }
 
-async function boundedProc(path: string): Promise<string> {
+async function boundedProc(path: string, limit = 4096): Promise<string> {
   const file = await open(path, "r");
   try {
-    const buffer = Buffer.alloc(4097);
+    const buffer = Buffer.alloc(limit + 1);
     const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
-    if (bytesRead > 4096) throw new Error("proc bounds");
+    if (bytesRead > limit) throw new Error("proc bounds");
     return buffer.subarray(0, bytesRead).toString("utf8");
   } finally {
     await file.close();
   }
 }
-async function identity(pid: number): Promise<Identity> {
+async function identity(pid: number, collectKernel = false): Promise<Identity> {
   const row = ownedProcStat(await boundedProc(`/proc/${pid}/stat`));
   const exe = await readlink(`/proc/${pid}/exe`),
     metadata = await stat(`/proc/${pid}/exe`);
-  const again = ownedProcStat(await boundedProc(`/proc/${pid}/stat`));
+  const captured = await boundedProc(`/proc/${pid}/stat`),
+    again = ownedProcStat(captured);
   if (row.pid !== pid || row.start !== again.start || exe.length > 4096 || !metadata.isFile())
     throw new Error("identity changed");
-  return { ...again, exe, device: metadata.dev, inode: metadata.ino };
+  return {
+    ...again,
+    exe,
+    device: metadata.dev,
+    inode: metadata.ino,
+    ...(collectKernel ? { kernel: ownedKernelCounters(captured) } : {}),
+  };
 }
 function same(a: Identity, b: Identity): boolean {
   return (
@@ -241,13 +329,13 @@ function same(a: Identity, b: Identity): boolean {
     a.inode === b.inode
   );
 }
-async function lineage(owner: number): Promise<Map<number, Identity>> {
+async function lineage(owner: number, collectKernel = false): Promise<Map<number, Identity>> {
   const rows = new Map<number, Identity>();
   const deadline = performance.now() + 1000;
   const visit = async (pid: number, parent: number, depth: number) => {
     if (performance.now() > deadline || depth > 8 || rows.size >= 64 || rows.has(pid))
       throw new Error("lineage bounds");
-    const row = await identity(pid);
+    const row = await identity(pid, collectKernel);
     if (row.parent !== parent || row.group !== owner || row.session !== owner)
       throw new Error("foreign lineage");
     rows.set(pid, row);
@@ -272,6 +360,20 @@ async function lineage(owner: number): Promise<Map<number, Identity>> {
   };
   await visit(owner, process.pid, 0);
   return rows;
+}
+
+async function kernelWaits(rows: Identity[]): Promise<Map<number, Wait>> {
+  const result = new Map<number, Wait>();
+  for (const row of rows) {
+    let text: string | null = null;
+    try {
+      text = await boundedProc(`/proc/${row.pid}/wchan`, 128);
+    } catch {
+      /* Explicitly unavailable. */
+    }
+    result.set(row.pid, ownedKernelWait(text));
+  }
+  return result;
 }
 
 async function socketOutput(executable: string, port: number): Promise<SocketOutput> {
@@ -357,20 +459,38 @@ export async function observeOwnedRuntimeRoles(
   frontPort: number,
   phase: RoleObservation["phase"],
   beginWork?: () => void,
+  kernelSink?: (data: KernelObservation) => void,
 ): Promise<RoleObservation> {
   if (phase !== "baseline" && phase !== "busy") throw new Error("closed phase required");
   let stage: Stage = "unsupported";
   let socketFacts: SocketFacts | undefined;
-  const unavailable = (): RoleObservation => ({
-    diagnostic: "owned-runtime-role",
-    phase,
+  const collectKernel = typeof kernelSink === "function";
+  const deliver = (data: KernelObservation) => {
+    try {
+      kernelSink?.(data);
+    } catch {
+      /* Never replace role/error results. */
+    }
+  };
+  const missingKernel = (why: KernelObservation["stage"]): KernelObservation => ({
     status: "unavailable",
-    stage,
+    stage: why,
     elapsedMs: null,
     roles: null,
-    nativeFrames: "unproven",
-    ...(stage === "socket" && socketFacts ? { socket: socketFacts } : {}),
   });
+  const unavailable = (): RoleObservation => {
+    if (collectKernel) deliver(missingKernel(stage));
+    return {
+      diagnostic: "owned-runtime-role",
+      phase,
+      status: "unavailable",
+      stage,
+      elapsedMs: null,
+      roles: null,
+      nativeFrames: "unproven",
+      ...(stage === "socket" && socketFacts ? { socket: socketFacts } : {}),
+    };
+  };
   if (process.platform !== "linux") return unavailable();
   try {
     stage = "owner";
@@ -401,7 +521,7 @@ export async function observeOwnedRuntimeRoles(
       return unavailable();
     stage = "lineage";
     const began = performance.now();
-    const first = await lineage(pid),
+    const first = await lineage(pid, collectKernel),
       root = first.get(pid);
     if (root?.exe !== node || root.device !== nodeStat.dev || root.inode !== nodeStat.ino)
       return unavailable();
@@ -423,11 +543,12 @@ export async function observeOwnedRuntimeRoles(
     };
     stage = "socket";
     const proxy = await socket(first, "first");
+    const waitsBefore = collectKernel ? await kernelWaits(before) : undefined;
     stage = "identity";
     // The explicit private control starts work only after the first verified snapshot.
     beginWork?.();
     await pause(500);
-    const second = await lineage(pid),
+    const second = await lineage(pid, collectKernel),
       elapsedMs = Math.round(performance.now() - began);
     if (
       first.size !== second.size ||
@@ -439,6 +560,7 @@ export async function observeOwnedRuntimeRoles(
       return unavailable();
     stage = "socket";
     if ((await socket(second, "second")) !== proxy) return unavailable();
+    const waitsAfter = collectKernel ? await kernelWaits(before) : undefined;
     stage = "bounds";
     if (elapsedMs < 500 || elapsedMs > 5000) return unavailable();
     const roles: NonNullable<RoleObservation["roles"]> = [];
@@ -453,6 +575,45 @@ export async function observeOwnedRuntimeRoles(
     }
     if (child.exitCode !== null || child.signalCode !== null || !same(root, await identity(pid)))
       return unavailable();
+    if (collectKernel) {
+      try {
+        const kernelRows: NonNullable<KernelObservation["roles"]> = [];
+        let failure: KernelObservation["stage"] | undefined;
+        for (const role of ["proxy", "user"] as const) {
+          const row = before.find((row) => (row.pid === proxy) === (role === "proxy"));
+          const after = row ? second.get(row.pid) : undefined;
+          if (!row?.kernel || !after?.kernel) {
+            failure = "counters";
+            break;
+          }
+          const values = [
+            after.kernel.userTicks - row.kernel.userTicks,
+            after.kernel.systemTicks - row.kernel.systemTicks,
+            after.kernel.majorFaults - row.kernel.majorFaults,
+          ];
+          if (values.some((value) => value < 0n || value > 1000000n)) {
+            failure = "counters";
+            break;
+          }
+          const a = waitsBefore?.get(row.pid) ?? "unavailable",
+            b = waitsAfter?.get(row.pid) ?? "unavailable";
+          kernelRows.push({
+            role,
+            userTicks: Number(values[0]),
+            systemTicks: Number(values[1]),
+            majorFaults: Number(values[2]),
+            wait: [a, b],
+          });
+        }
+        deliver(
+          failure
+            ? missingKernel(failure)
+            : { status: "available", stage: "complete", elapsedMs, roles: kernelRows },
+        );
+      } catch {
+        deliver(missingKernel("wchan"));
+      }
+    }
     return {
       diagnostic: "owned-runtime-role",
       phase,

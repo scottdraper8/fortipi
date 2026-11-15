@@ -11,11 +11,43 @@ import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { processHarness } from "../apps/worker/test/agent/process-harness.ts";
 import {
+  type KernelObservation,
   observeOwnedRuntimeRoles,
+  ownedKernelCounters,
+  ownedKernelWait,
   ownedProcStat,
   ownedSocketFacts,
   ownedSocketPid,
 } from "./owned-runtime-roles.ts";
+import { sourceKernelLine, sourceTestDiagnostic } from "./source-test-processes.ts";
+
+test("owned kernel parsers retain only counters and closed wait categories", () => {
+  const fields = Array<string>(50).fill("0");
+  fields[0] = "S";
+  fields[1] = "99";
+  fields[2] = fields[3] = "99";
+  fields[9] = "2";
+  fields[11] = "7";
+  fields[12] = "3";
+  fields[19] = "500";
+  const row = `101 (private name) ${fields.join(" ")}\n`;
+  assert.deepEqual(ownedKernelCounters(row), { userTicks: 7n, systemTicks: 3n, majorFaults: 2n });
+  assert.equal(ownedKernelCounters(row.replace(" 2 ", " -2 ")), null);
+  assert.equal(ownedKernelCounters("private-canary".repeat(1000)), null);
+  for (const [text, expected] of [
+    ["io_schedule\n", "io"],
+    ["folio_wait_bit_common", "page"],
+    ["throttle_direct_reclaim", "reclaim"],
+    ["balance_dirty_pages", "writeback"],
+    ["futex_wait_queue", "futex"],
+    ["0\n", "zero"],
+    ["synthetic_private_symbol", "other"],
+    ["private path/stack", "unavailable"],
+    ["x".repeat(129), "unavailable"],
+    [null, "unavailable"],
+  ] as const)
+    assert.equal(ownedKernelWait(text), expected);
+});
 
 test("one verified front owner may bind IPv4 and IPv6 loopback without accepting foreign listeners", () => {
   const v4 = 'LISTEN 0 4096 127.0.0.1:12345 0.0.0.0:* users:(("private",pid=101,fd=12))\n';
@@ -239,7 +271,12 @@ export default {fetch(request,env,ctx) {
     });
     assert.equal(healthy.status, 200);
     assert.ok((await healthy.text()) === "ready", "Fixed healthy worker response");
-    const baseline = await observeOwnedRuntimeRoles(owned, port, "baseline");
+    const kernels: KernelObservation[] = [];
+    const collect = (data: KernelObservation) => {
+      kernels.push(data);
+      throw new Error("synthetic diagnostic sink failure");
+    };
+    const baseline = await observeOwnedRuntimeRoles(owned, port, "baseline", undefined, collect);
     t.diagnostic(JSON.stringify(baseline));
     if (process.platform === "linux") assert.equal(baseline.status, "available");
     else assert.equal(baseline.stage, "unsupported");
@@ -266,7 +303,7 @@ export default {fetch(request,env,ctx) {
         .catch(() => false);
     };
     if (process.platform !== "linux") release();
-    const busy = await observeOwnedRuntimeRoles(owned, port, "busy", release);
+    const busy = await observeOwnedRuntimeRoles(owned, port, "busy", release, collect);
     t.diagnostic(JSON.stringify(busy));
     if (process.platform === "linux") assert.equal(busy.status, "available");
     let witness = "";
@@ -293,6 +330,35 @@ export default {fetch(request,env,ctx) {
         "User isolate CPU must increase beyond both proxy and healthy baseline",
       );
     } else assert.equal(busy.stage, "unsupported");
+    assert.equal(kernels.length, 2, "One isolated sink delivery per existing observation");
+    for (const [index, data] of kernels.entries()) {
+      const line = sourceKernelLine(data, null, 1, 1);
+      assert.ok(Buffer.byteLength(`# ${line}\n`) <= 512 && sourceTestDiagnostic(`# ${line}`));
+      if (process.platform === "linux") {
+        assert.equal(data.status, "available");
+        assert.ok(data.roles);
+        const observation = index === 0 ? baseline : busy;
+        for (const row of data.roles) {
+          const original = observation.roles?.find((value) => value.role === row.role);
+          assert.ok(original);
+          assert.equal(row.userTicks + row.systemTicks, original.ticks);
+          assert.ok(row.majorFaults >= 0);
+        }
+      } else {
+        assert.equal(data.stage, "unsupported");
+        assert.equal(data.roles, null);
+      }
+      t.diagnostic(
+        JSON.stringify({
+          diagnostic: "owned-kernel-control",
+          phase: index === 0 ? "baseline" : "busy",
+          status: data.status,
+          stage: data.stage,
+          elapsedMs: data.elapsedMs,
+          roles: data.roles,
+        }),
+      );
+    }
     assert.equal(forced, false);
   } finally {
     request.abort();

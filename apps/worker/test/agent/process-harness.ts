@@ -9,8 +9,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
-import { observeOwnedRuntimeRoles } from "../../../../scripts/owned-runtime-roles.ts";
 import {
+  type KernelObservation,
+  observeOwnedRuntimeRoles,
+} from "../../../../scripts/owned-runtime-roles.ts";
+import {
+  sourceKernelLine,
   sourceRecoveryPath,
   sourceTestDiagnostic,
 } from "../../../../scripts/source-test-processes.ts";
@@ -339,7 +343,16 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
           current.signalCode === null
         ) {
           try {
-            const role = await observeOwnedRuntimeRoles(current, port, "baseline");
+            let kernel: KernelObservation | undefined;
+            const role = await observeOwnedRuntimeRoles(
+              current,
+              port,
+              "baseline",
+              undefined,
+              (data) => {
+                kernel = data;
+              },
+            );
             const line = JSON.stringify({
               diagnostic: "source-recovery-role",
               sourcePath: sourcePath !== null && sourcePath.length <= 64 ? sourcePath : null,
@@ -351,6 +364,10 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
               roles: role.roles,
             });
             if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+            if (kernel) {
+              const line = sourceKernelLine(kernel, sourcePath, currentHarness, invocation);
+              if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+            }
           } catch {
             /* Never replace the already-decided startup error. */
           }
