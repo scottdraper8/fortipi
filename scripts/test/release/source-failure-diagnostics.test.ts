@@ -759,6 +759,101 @@ test("owned proxy discovery refuses a foreign WebSocket port before contacting i
   }
 });
 
+test("failure role records forward only canonical bounded correlated facts", async () => {
+  const prefix = "apps/worker/test/",
+    suffix = ".test.ts";
+  const sourcePath = prefix + "x".repeat(64 - prefix.length - suffix.length) + suffix;
+  const record = {
+    diagnostic: "source-recovery-role",
+    sourcePath,
+    harnessOrdinal: 999999,
+    invocation: 999,
+    status: "available",
+    stage: "complete",
+    elapsedMs: 5000,
+    roles: [
+      { role: "proxy", ticks: 1000000, state: "R" },
+      { role: "user", ticks: 1000000, state: "S" },
+    ],
+  };
+  const encode = (value: unknown) => `# ${JSON.stringify(value)}`;
+  const available = encode(record);
+  assert.ok(Buffer.byteLength(`${available}\n`) <= 512);
+  const absent = {
+    ...record,
+    sourcePath: null,
+    status: "unavailable",
+    stage: "unsupported",
+    elapsedMs: null,
+    roles: null,
+  };
+  const accepted = [
+    available,
+    ...["unsupported", "owner", "executable", "lineage", "socket", "identity", "bounds"].map(
+      (stage) => encode({ ...absent, stage }),
+    ),
+  ];
+  assert.ok(accepted.every(sourceTestDiagnostic));
+  const invalid = [
+    { ...record, sourcePath: `/${canary}/private.test.ts` },
+    { ...record, sourcePath: "apps/worker/test/../private.test.ts" },
+    { ...record, sourcePath: "apps/worker/test/./private.test.ts" },
+    { ...record, sourcePath: "apps/worker/test//private.test.ts" },
+    { ...record, sourcePath: sourcePath.replace("x", "xx") },
+    { ...record, sourcePath: "unknown/private.test.ts" },
+    { ...record, harnessOrdinal: 0 },
+    { ...record, harnessOrdinal: 1000000 },
+    { ...record, harnessOrdinal: 1.5 },
+    { ...record, invocation: 0 },
+    { ...record, invocation: 1000 },
+    { ...record, invocation: "1" },
+    { ...record, elapsedMs: 499 },
+    { ...record, elapsedMs: 5001 },
+    { ...record, status: "unknown" },
+    { ...record, stage: "socket" },
+    { ...record, roles: null },
+    { ...record, roles: [record.roles[0]] },
+    { ...record, roles: [...record.roles, record.roles[0]] },
+    { ...record, roles: [record.roles[1], record.roles[0]] },
+    { ...record, roles: [{ ...record.roles[0], ticks: -1 }, record.roles[1]] },
+    { ...record, roles: [{ ...record.roles[0], ticks: 1000001 }, record.roles[1]] },
+    { ...record, roles: [{ ...record.roles[0], state: canary }, record.roles[1]] },
+    { ...record, roles: [{ ...record.roles[0], pid: 123 }, record.roles[1]] },
+    { ...record, roles: [{ ticks: 0, role: "proxy", state: "R" }, record.roles[1]] },
+    { ...absent, stage: "complete" },
+    { ...absent, roles: record.roles },
+    { ...absent, elapsedMs: 500 },
+    { ...record, phase: "failure" },
+    { ...record, socket: { raw: canary } },
+    { ...record, profile: canary },
+    { ...record, error: canary },
+    { ...record, port: 12345 },
+    { ...record, env: canary },
+  ].map(encode);
+  invalid.push(available.replace('"invocation":999', `"invocation":"${canary}","invocation":999`));
+  invalid.push(
+    available.replace(
+      '"diagnostic":"source-recovery-role","sourcePath"',
+      '"sourcePath":"x","diagnostic":"source-recovery-role","sourcePath"',
+    ),
+  );
+  invalid.push(`${available} `, `${available}${" ".repeat(512)}`, `# ${canary.repeat(1000)}`);
+  assert.ok(invalid.every((line) => !sourceTestDiagnostic(line)));
+  const stream = new PassThrough(),
+    forwarded: string[] = [];
+  observeCandidateDiagnostics(stream, (line) => forwarded.push(line));
+  for (const line of [...invalid, ...accepted])
+    for (const byte of Buffer.from(`${line}\n`)) stream.write(Buffer.from([byte]));
+  const done = once(stream, "end");
+  stream.end();
+  await done;
+  assert.deepEqual(
+    forwarded,
+    accepted.map((line) => `${line}\n`),
+  );
+  assert.ok(!forwarded.join("").includes(canary));
+});
+
 test("owned Ready with ping503 preserves the original failure, profiles automatically and closes", {
   timeout: 45000,
 }, async (t) => {
@@ -862,6 +957,20 @@ test('original readiness error and owned child cleanup', {timeout:40000}, async 
     assert.ok(!forwarded.join("").includes(directory));
     assert.ok(!forwarded.join("").includes("Wrangler not ready"));
     for (const line of forwarded) t.diagnostic(line.slice(2).trimEnd());
+    const roleRows = records.filter((record) => record.diagnostic === "source-recovery-role");
+    assert.equal(roleRows.length, 1, "Failure-only owned role record must be retained");
+    const role = roleRows[0],
+      roleIndex = records.indexOf(role);
+    assert.ok(roleIndex > psIndex && roleIndex < profileIndex);
+    assert.equal(role.sourcePath, profile.sourcePath);
+    assert.equal(role.harnessOrdinal, end.harnessOrdinal);
+    assert.equal(role.invocation, end.invocation);
+    if (process.platform !== "linux") {
+      assert.equal(role.status, "unavailable");
+      assert.equal(role.stage, "unsupported");
+      assert.equal(role.elapsedMs, null);
+      assert.equal(role.roles, null);
+    }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

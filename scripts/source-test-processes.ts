@@ -319,6 +319,7 @@ export function sourceTestDiagnostic(line: string): boolean {
     failureDiagnostic(line) ||
     failureCallerDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    roleDiagnostic(line) ||
     profileDiagnostic(line) ||
     (/^# \{"diagnostic":"source-recovery-process","sourcePath":(?:null|"(?:packages\/fortipi-[a-z]+\/test|apps\/worker\/test|scripts\/test\/release|tests\/clients)\/[A-Za-z0-9._/-]+\.(?:test|spec)\.ts"),"harnessOrdinal":\d{1,6},"invocation":\d{1,3},"runtimeCount":(?:null|\d{1,4}),"runnableCount":(?:null|\d{1,4}),"rssKiB":(?:null|\d{1,14}),"cpuMs":(?:null|\d{1,14})\}$/.test(
       line,
@@ -332,6 +333,62 @@ export function sourceTestDiagnostic(line: string): boolean {
       line,
     )
   );
+}
+
+/** Failure-only owned runtime facts, never native frames or private socket output. */
+function roleDiagnostic(line: string): boolean {
+  if (!line.startsWith('# {"diagnostic":"source-recovery-role",')) return false;
+  try {
+    const record: unknown = JSON.parse(line.slice(2));
+    const closed = (value: unknown, keys: string): value is Record<string, unknown> =>
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value).join(",") === keys;
+    const integer = (value: unknown, low: number, high: number): value is number =>
+      typeof value === "number" && Number.isSafeInteger(value) && value >= low && value <= high;
+    if (
+      !closed(
+        record,
+        "diagnostic,sourcePath,harnessOrdinal,invocation,status,stage,elapsedMs,roles",
+      ) ||
+      line !== `# ${JSON.stringify(record)}` ||
+      (record.sourcePath !== null &&
+        (typeof record.sourcePath !== "string" ||
+          record.sourcePath.length > 64 ||
+          !testPath.test(record.sourcePath) ||
+          record.sourcePath
+            .split("/")
+            .some((part) => part === ".." || part === "." || part === ""))) ||
+      !integer(record.harnessOrdinal, 1, 999999) ||
+      !integer(record.invocation, 1, 999)
+    )
+      return false;
+    if (record.status === "unavailable")
+      return (
+        record.roles === null &&
+        record.elapsedMs === null &&
+        ["unsupported", "owner", "executable", "lineage", "socket", "identity", "bounds"].includes(
+          record.stage as string,
+        )
+      );
+    return (
+      record.status === "available" &&
+      record.stage === "complete" &&
+      integer(record.elapsedMs, 500, 5000) &&
+      Array.isArray(record.roles) &&
+      record.roles.length === 2 &&
+      record.roles.every(
+        (row, index) =>
+          closed(row, "role,ticks,state") &&
+          row.role === ["proxy", "user"][index] &&
+          integer(row.ticks, 0, 1000000) &&
+          ["R", "S", "D", "T", "t", "I", "W", "P"].includes(row.state as string),
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** One closed summary plus at most five ranked frames; each stays within512 bytes. */

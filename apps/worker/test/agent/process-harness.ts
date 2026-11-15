@@ -9,6 +9,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { freeInfrastructurePolicy } from "fortipi-contract";
+import { observeOwnedRuntimeRoles } from "../../../../scripts/owned-runtime-roles.ts";
 import {
   sourceRecoveryPath,
   sourceTestDiagnostic,
@@ -187,6 +188,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       },
     );
     const current = child;
+    const invocation = childInvocation;
     let announcedPort: number | undefined;
     const announcementMatches = () => (announcedPort === undefined ? null : announcedPort === port);
     const retain = (data: Buffer) => {
@@ -336,6 +338,22 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
           current.exitCode === null &&
           current.signalCode === null
         ) {
+          try {
+            const role = await observeOwnedRuntimeRoles(current, port, "baseline");
+            const line = JSON.stringify({
+              diagnostic: "source-recovery-role",
+              sourcePath: sourcePath !== null && sourcePath.length <= 64 ? sourcePath : null,
+              harnessOrdinal: currentHarness,
+              invocation,
+              status: role.status,
+              stage: role.stage,
+              elapsedMs: role.elapsedMs,
+              roles: role.roles,
+            });
+            if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+          } catch {
+            /* Never replace the already-decided startup error. */
+          }
           try {
             const profile = await processProfile(inspector);
             for (const line of processProfileLines(

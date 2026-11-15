@@ -5,6 +5,7 @@ import { open, readdir, readlink, realpath, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { isIP } from "node:net";
 import { setTimeout as pause } from "node:timers/promises";
+import { URL } from "node:url";
 
 const states = ["R", "S", "D", "T", "t", "I", "W", "P"] as const;
 type State = (typeof states)[number];
