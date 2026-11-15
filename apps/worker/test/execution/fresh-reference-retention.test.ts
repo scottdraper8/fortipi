@@ -1,18 +1,21 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import test from "node:test";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, harness, setup } from "../agent/harness.ts";
-import type { TestAgentSession } from "../agent/runtime-worker.js";
+import type { TestAgentSession } from "./fresh-reference-worker.ts";
 import { routingPeer } from "./routing-peer.ts";
 
 test("completed fresh-job handoffs do not exhaust the bounded Pi child-reference window", {
   timeout: 45000,
 }, async () => {
-  const h = await harness();
+  const h = await harness({
+    main: resolve("apps/worker/test/execution/fresh-reference-worker.ts"),
+  });
   let native: Awaited<ReturnType<typeof routingPeer>> | undefined;
   try {
     const { agent, conversation } = await setup(h),
-      probe = h.env.AGENT_SESSIONS.getByName(agent.agentId),
+      probe = h.env.AGENT_SESSIONS.getByName(agent.agentId) as DurableObjectStub<TestAgentSession>,
       state = async () =>
         JSON.parse(await probe.toolStateJson(conversation.conversationId)) as Awaited<
           ReturnType<TestAgentSession["toolState"]>
@@ -66,6 +69,12 @@ test("completed fresh-job handoffs do not exhaust the bounded Pi child-reference
         ).status,
         200,
       );
+      // Reference retention is independent of the dispatcher's real 5–30s polling cadence.
+      // The fixture runs the unchanged dispatch path only after the public rejection committed.
+      const settled = await probe.settleRejectedJob(jobId);
+      assert.equal(settled.done, true);
+      assert.equal(settled.state, "cancelled");
+      assert.equal(settled.hasExecution, false);
       await eventually(state, (value) =>
         value.jobs.some((job) => job.jobId === jobId && job.state === "cancelled"),
       );
