@@ -272,6 +272,64 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       assert.fail("Wrangler not ready");
     } finally {
       observe(ready ? "ready" : "end");
+      if (!ready) {
+        // Observe only after the original readiness decision. Never print process
+        // arguments, identifiers, environment, paths or captured child output.
+        let runtimeCount: number | null = null,
+          runnableCount: number | null = null,
+          rssKiB: number | null = null,
+          cpuMs: number | null = null;
+        try {
+          assert.ok(current.pid);
+          const table = await promisify(execFile)("ps", ["-eo", "pgid=,stat=,time=,rss=,comm="], {
+            timeout: 1000,
+            maxBuffer: 262144,
+          });
+          const runtimes = table.stdout
+            .split("\n")
+            .map((row) => row.trim().split(/\s+/))
+            .filter(
+              (row) => Number(row[0]) === current.pid && row.slice(4).join(" ").includes("workerd"),
+            );
+          runtimeCount = runtimes.length;
+          runnableCount = runtimes.filter((row) => row[1]?.startsWith("R")).length;
+          const resident = runtimes.map((row) => Number(row[3]));
+          if (resident.every((value) => Number.isSafeInteger(value) && value >= 0))
+            rssKiB = resident.reduce((sum, value) => sum + value, 0);
+          const times = runtimes.map((row) => {
+            const match = /^(?:(\d{1,4})-)?(\d{1,4}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,3}))?$/.exec(
+              row[2] ?? "",
+            );
+            if (!match) return null;
+            const hours = match[4] === undefined ? 0 : Number(match[2]);
+            const minutes = Number(match[4] === undefined ? match[2] : match[3]);
+            const seconds = Number(match[4] === undefined ? match[3] : match[4]);
+            return (
+              ((Number(match[1] ?? 0) * 24 + hours) * 3600 + minutes * 60 + seconds) * 1000 +
+              Number((match[5] ?? "0").padEnd(3, "0"))
+            );
+          });
+          if (times.every((value) => value !== null))
+            cpuMs = times.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+        } catch {
+          // Unavailable observation is not a runtime or readiness conclusion.
+        }
+        try {
+          const line = JSON.stringify({
+            diagnostic: "source-recovery-process",
+            sourcePath,
+            harnessOrdinal: currentHarness,
+            invocation: childInvocation,
+            runtimeCount,
+            runnableCount,
+            rssKiB,
+            cpuMs,
+          });
+          if (sourceTestDiagnostic(`# ${line}`)) console.log(line);
+        } catch {
+          /* Preserve the original failure. */
+        }
+      }
     }
   }
   async function stop(signal: "SIGKILL" | "SIGTERM") {

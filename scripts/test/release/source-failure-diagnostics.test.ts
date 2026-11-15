@@ -188,5 +188,32 @@ test("bounded TAP and closed-record validation discard unknown/private fields an
     { ...attributed, port: 12345 },
   ])
     assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
+  const runtime = {
+    diagnostic: "source-recovery-process",
+    sourcePath: path,
+    harnessOrdinal: 2,
+    invocation: 5,
+    runtimeCount: 1,
+    runnableCount: 0,
+    rssKiB: 123456,
+    cpuMs: 1250,
+  };
+  assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(runtime)}`), true);
+  assert.equal(
+    sourceTestDiagnostic(
+      `# ${JSON.stringify({ ...runtime, runtimeCount: null, runnableCount: null, rssKiB: null, cpuMs: null })}`,
+    ),
+    true,
+  );
+  for (const changed of [
+    { ...runtime, sourcePath: canary },
+    { ...runtime, sourcePath: "apps/worker/test/../private.test.ts" },
+    { ...runtime, runtimeCount: -1 },
+    { ...runtime, cpuMs: canary },
+    { ...runtime, rssKiB: Number.MAX_SAFE_INTEGER },
+    { ...runtime, pid: 12345 },
+    { ...runtime, output: canary },
+  ])
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
   assert.ok(!output.join("").includes(canary));
 });

@@ -260,6 +260,10 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     recoveryDiagnostic(line) ||
+    (/^# \{"diagnostic":"source-recovery-process","sourcePath":(?:null|"(?:packages\/fortipi-[a-z]+\/test|apps\/worker\/test|scripts\/test\/release|tests\/clients)\/[A-Za-z0-9._/-]+\.(?:test|spec)\.ts"),"harnessOrdinal":\d{1,6},"invocation":\d{1,3},"runtimeCount":(?:null|\d{1,4}),"runnableCount":(?:null|\d{1,4}),"rssKiB":(?:null|\d{1,14}),"cpuMs":(?:null|\d{1,14})\}$/.test(
+      line,
+    ) &&
+      !line.includes("../")) ||
     (/^# \{"diagnostic":"source-recovery-start","event":"(?:spawned|probe|ready|end)","invocation":\d{1,3},"elapsedMs":\d{1,8},"attempts":\d{1,3},"deadlines":\d{1,3},"transports":\d{1,3},"status":(?:null|[1-5]\d{2}),"exitCode":(?:null|-?\d{1,3}),"signal":(?:null|"(?:SIG[A-Z0-9]{1,8}|other)"),"logStage":"(?:ready-log|starting-log|unobserved)"(?:,"sourcePath":(?:null|"(?:packages\/fortipi-[a-z]+\/test|apps\/worker\/test|scripts\/test\/release|tests\/clients)\/[A-Za-z0-9._/-]+\.(?:test|spec)\.ts"),"harnessOrdinal":\d{1,6},"announcedPortMatches":(?:true|false|null))?\}$/.test(
       line,
     ) &&
