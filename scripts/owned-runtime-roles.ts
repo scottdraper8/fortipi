@@ -21,6 +21,7 @@ type Identity = Proc & { exe: string; device: number; inode: number };
 type Stage = "unsupported" | "owner" | "executable" | "lineage" | "socket" | "identity" | "bounds";
 type SocketTool = "ok" | "timeout" | "error" | "output-limit" | "cleanup-unconfirmed";
 type SocketOutput = { tool: SocketTool; closed: boolean; text: string | null };
+const addressForms = ["ipv4-loopback", "ipv6-loopback", "ipv6-mapped", "other"] as const;
 type SocketFacts = {
   sample: "first" | "second";
   tool: SocketTool;
@@ -36,6 +37,7 @@ type SocketFacts = {
     | "mixed"
     | "unreadable";
   owner: "none" | "target" | "owned-other" | "foreign" | "multiple" | "unreadable";
+  addressForms: (typeof addressForms)[number][];
 };
 export type RoleObservation = {
   diagnostic: "owned-runtime-role";
@@ -84,14 +86,33 @@ export function ownedSocketPid(text: string, port: number, owned: ReadonlySet<nu
   if (text.length > 8192 || !Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("socket bounds");
   const rows = text.trim().split("\n");
-  if (rows.length !== 1) throw new Error("socket ambiguity");
-  const match =
-    /^LISTEN[ \t]+\d{1,10}[ \t]+\d{1,10}[ \t]+127\.0\.0\.1:(\d{1,5})[ \t]+(?:0\.0\.0\.0|\*):\*[ \t]+users:\(\("[^"\\\r\n]{1,64}",pid=(\d{1,10}),fd=\d{1,10}\)\)$/.exec(
-      rows[0] ?? "",
-    );
-  const pid = Number(match?.[2]);
-  if (!match || Number(match[1]) !== port || !owned.has(pid)) throw new Error("socket owner");
-  return pid;
+  if (rows.length < 1 || rows.length > 2) throw new Error("socket ambiguity");
+  const hosts = new Set<string>();
+  let owner: number | undefined;
+  for (const row of rows) {
+    const match =
+      /^LISTEN[ \t]+\d{1,10}[ \t]+\d{1,10}[ \t]+(127\.0\.0\.1|\[::1\]):(\d{1,5})[ \t]+(0\.0\.0\.0|\*|\[::\]):\*[ \t]+users:\(\("[^"\\\r\n]{1,64}",pid=(\d{1,10}),fd=\d{1,10}\)\)$/.exec(
+        row,
+      );
+    const host = match?.[1],
+      pid = Number(match?.[4]);
+    if (
+      !match ||
+      !host ||
+      Number(match[2]) !== port ||
+      !owned.has(pid) ||
+      hosts.has(host) ||
+      (owner !== undefined && owner !== pid) ||
+      (host === "127.0.0.1" ? match[3] === "[::]" : match[3] === "0.0.0.0")
+    )
+      throw new Error("socket owner");
+    hosts.add(host);
+    owner = pid;
+  }
+  // The harness probes IPv4. An optional IPv6 loopback listener must have
+  // exactly the same verified owner; wildcard/mapped/duplicate listeners fail.
+  if (!hosts.has("127.0.0.1") || owner === undefined) throw new Error("socket endpoint");
+  return owner;
 }
 
 /** Descriptive only. Membership refers to the verified snapshot, never a role grant. */
@@ -116,6 +137,7 @@ export function ownedSocketFacts(
     layout: "unreadable",
     address: "unreadable",
     owner: "unreadable",
+    addressForms: [],
   };
   if (
     output.tool !== "ok" ||
@@ -172,6 +194,7 @@ export function ownedSocketFacts(
     listeners: rows.length === 1 ? "one" : "multiple",
     layout: layouts.size === 1 ? ([...layouts][0] as SocketFacts["layout"]) : "mixed",
     address: addresses.size === 1 ? ([...addresses][0] as SocketFacts["address"]) : "mixed",
+    addressForms: addressForms.filter((form) => addresses.has(form)),
     owner:
       !readableOwners || pid === undefined
         ? "unreadable"

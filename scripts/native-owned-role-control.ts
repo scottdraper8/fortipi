@@ -17,6 +17,28 @@ import {
   ownedSocketPid,
 } from "./owned-runtime-roles.ts";
 
+test("one verified front owner may bind IPv4 and IPv6 loopback without accepting foreign listeners", () => {
+  const v4 = 'LISTEN 0 4096 127.0.0.1:12345 0.0.0.0:* users:(("private",pid=101,fd=12))\n';
+  const v6 = 'LISTEN 0 4096 [::1]:12345 [::]:* users:(("private",pid=101,fd=13))\n';
+  const targets = new Set([101, 102]);
+  for (const text of [v4, v4 + v6, v6 + v4])
+    assert.equal(ownedSocketPid(text, 12345, targets), 101);
+  for (const text of [
+    v6,
+    v4 + v4,
+    v4 + v6 + v4,
+    v4 + v6.replace("pid=101", "pid=102"),
+    v4 + v6.replace("pid=101", "pid=103"),
+    v4 + v6.replace("[::1]", "[::]"),
+    v4 + v6.replace("[::1]", "[::ffff:127.0.0.1]"),
+    v4 + v6.replace(":12345", ":12346"),
+    v4 + v6.replace("[::]:*", "0.0.0.0:*"),
+    v4.replace("127.0.0.1", "0.0.0.0"),
+  ])
+    assert.throws(() => ownedSocketPid(text, 12345, targets));
+  assert.throws(() => ownedSocketPid(v4 + v6, 12345, new Set([102])));
+});
+
 test("constructed ss facts distinguish failures and private forms without granting ownership", () => {
   const targets = new Set([101, 102]),
     owned = new Set([99, 101, 102]);
@@ -33,6 +55,7 @@ test("constructed ss facts distinguish failures and private forms without granti
     layout: "plain",
     address: "ipv4-loopback",
     owner: "target",
+    addressForms: ["ipv4-loopback"],
   };
   assert.deepEqual(facts(row("127.0.0.1")), base);
   for (const [text, change] of [
@@ -55,7 +78,9 @@ test("constructed ss facts distinguish failures and private forms without granti
     ],
   ] as const) {
     const result = facts(text);
-    assert.deepEqual(result, { ...base, ...change });
+    const address = "address" in change ? change.address : base.address;
+    const addressForms = address === "mixed" ? ["ipv4-loopback", "ipv6-loopback"] : [address];
+    assert.deepEqual(result, { ...base, ...change, addressForms });
     assert.throws(
       () => ownedSocketPid(text, 12345, targets),
       "Classification must not relax the role gate",
@@ -70,6 +95,7 @@ test("constructed ss facts distinguish failures and private forms without granti
     layout: "none",
     address: "none",
     owner: "none",
+    addressForms: [],
   });
   const unreadable = {
     ...base,
@@ -77,6 +103,7 @@ test("constructed ss facts distinguish failures and private forms without granti
     layout: "unreadable",
     address: "unreadable",
     owner: "unreadable",
+    addressForms: [],
   };
   for (const text of [privateName, "x".repeat(8193), row("127.0.0.1").replace(":12345", ":12346")])
     assert.deepEqual(facts(text), unreadable);
