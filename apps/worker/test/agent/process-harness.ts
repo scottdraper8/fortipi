@@ -60,7 +60,10 @@ async function freePort() {
   return address.port;
 }
 /** A real standalone Wrangler/workerd process. createTestHarness cannot persist. */
-export async function processHarness(main = resolve("apps/worker/test/agent/runtime-worker.ts")) {
+export async function processHarness(
+  main = resolve("apps/worker/test/agent/runtime-worker.ts"),
+  options: { holdAfterSubmit?: true } = {},
+) {
   const sourcePath = sourceRecoveryPath();
   const currentHarness = ++harnessOrdinal;
   const runId = randomUUID();
@@ -80,6 +83,7 @@ export async function processHarness(main = resolve("apps/worker/test/agent/runt
       compatibility_date: "2026-11-10",
       compatibility_flags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
       vars: {
+        ...(options.holdAfterSubmit ? { FORTIPI_TEST_HOLD_AFTER_SUBMIT: true } : {}),
         FORTIPI_ADMIN_TOKEN: processBootstrap,
         FORTIPI_CONFIG: { version: 1, infrastructure: policy },
       },

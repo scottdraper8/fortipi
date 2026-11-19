@@ -414,6 +414,12 @@ export class TestAgentSession extends AgentSession {
   protected faux: FauxProviderHandle | undefined;
   private diagnostic = "";
   private readonly completion: ReturnType<typeof Promise.withResolvers<void>>;
+  private readonly completionGate: {
+    enabled: boolean;
+    entered: boolean;
+    released: boolean;
+    replyProduced: boolean;
+  };
   private readonly oldRepair = Promise.withResolvers<void>();
   private readonly newRepair = Promise.withResolvers<void>();
   private repairCalls = 0;
@@ -422,9 +428,19 @@ export class TestAgentSession extends AgentSession {
     | undefined;
   constructor(
     ctx: DurableObjectState,
-    env: Env & { FORTIPI_TEST_MODEL_CHUNK_BYTES?: 256; FORTIPI_TEST_LARGE_MODEL_CONTEXT?: true },
+    env: Env & {
+      FORTIPI_TEST_MODEL_CHUNK_BYTES?: 256;
+      FORTIPI_TEST_LARGE_MODEL_CONTEXT?: true;
+      FORTIPI_TEST_HOLD_AFTER_SUBMIT?: true;
+    },
   ) {
     const completion = Promise.withResolvers<void>();
+    const completionGate = {
+      enabled: env.FORTIPI_TEST_HOLD_AFTER_SUBMIT === true,
+      entered: false,
+      released: false,
+      replyProduced: false,
+    };
     const faux = fauxProvider({
       provider: "cloudflare",
       models: [
@@ -444,6 +460,11 @@ export class TestAgentSession extends AgentSession {
         const last = context.messages.filter((message) => message.role === "user").at(-1);
         const content = last && typeof last.content === "string" ? last.content : "input";
         if (content === "hold-completion") await completion.promise;
+        if (completionGate.enabled && content === "after-submit") {
+          completionGate.entered = true;
+          await completion.promise;
+          completionGate.replyProduced = true;
+        }
         return fauxAssistantMessage(
           content === "large-answer" ? "x".repeat(102400) : `answer:${content}`,
         );
@@ -472,6 +493,7 @@ export class TestAgentSession extends AgentSession {
       };
     }
     this.completion = completion;
+    this.completionGate = completionGate;
     this.faux = faux;
     const replay = this.store.replay.bind(this.store);
     this.store.replay = async (cid, query) => {
@@ -651,6 +673,14 @@ export class TestAgentSession extends AgentSession {
       if (request.headers.get("Authorization") !== `Bearer ${this.env.FORTIPI_ADMIN_TOKEN}`)
         return new Response(null, { status: 403 });
       const action = url.pathname.slice("/__test/".length);
+      if (action === "completion") {
+        if (!this.completionGate.enabled) return new Response(null, { status: 404 });
+        if (request.method !== "GET" && request.method !== "POST")
+          return new Response(null, { status: 405 });
+        if (request.method === "POST") this.releaseCompletion();
+        // Memory-only witness: do not join Pi's execution line or storage queue.
+        return Response.json({ ...this.completionGate, generation: this.processGeneration });
+      }
       if (action === "canary") {
         if (request.method === "PUT")
           await this.store.put("fixture", "canary", await request.json());
@@ -1497,6 +1527,7 @@ export class TestAgentSession extends AgentSession {
     return JSON.stringify(await this.inspectConversation(cid));
   }
   releaseCompletion() {
+    this.completionGate.released = true;
     this.completion.resolve();
   }
   async runRepair() {
@@ -1661,7 +1692,7 @@ export default {
     if (["/__test/dispatch-trace", "/__test/native-startup-gate"].includes(url.pathname))
       return env.CONTROL_PLANE.getByName("control").fetch(request);
     const match =
-      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|barrier|inspect|tool|tool-state|job-diagnostics|repair|growth)$/.exec(
+      /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|barrier|inspect|tool|tool-state|job-diagnostics|repair|growth|completion)$/.exec(
         url.pathname,
       );
     if (match) {

@@ -18,6 +18,13 @@ interface ProbeState {
   creations: { conversationId: string }[];
   piIds: string[];
 }
+interface CompletionWitness {
+  enabled: boolean;
+  entered: boolean;
+  released: boolean;
+  replyProduced: boolean;
+  generation: string;
+}
 test("standalone readiness refuses a foreign listener after actual runtime death", {
   timeout: 45000,
 }, async (t) => {
@@ -149,7 +156,7 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
     }
     throw error;
   };
-  const h = await processHarness().catch(failure);
+  const h = await processHarness(undefined, { holdAfterSubmit: true }).catch(failure);
   try {
     mark("agent.create");
     const agent = await h.api<D.Agent>("/v1/agents", {
@@ -221,6 +228,36 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
         .catch(() => undefined);
       mark(`${point}.wait`);
       await eventually(async () => observation.cue(), Boolean);
+      let held: CompletionWitness | undefined;
+      if (point === "after-submit") {
+        held = await eventually(
+          async () => {
+            const result = await h.api<CompletionWitness>(`${probe}/completion`);
+            assert.equal(result.status, 200);
+            return result.body;
+          },
+          (state) => state.entered,
+        );
+        assert.equal(held.enabled, true);
+        assert.equal(held.generation, observation.arm.generation);
+        assert.equal(held.released, false);
+        assert.equal(
+          held.replyProduced,
+          false,
+          "The model reply must remain unfinished before SIGKILL",
+        );
+        const denied = await fetch(`${h.origin}${probe}/completion`, {
+          method: "POST",
+          headers: { Authorization: "Bearer deliberately-invalid-test-admin" },
+          signal: AbortSignal.any([t.signal, AbortSignal.timeout(3000)]),
+        });
+        assert.equal(denied.status, 403);
+        await denied.arrayBuffer();
+        const unchanged = (await h.api<CompletionWitness>(`${probe}/completion`)).body;
+        assert.equal(unchanged.generation, held.generation);
+        assert.equal(unchanged.released, false);
+        assert.equal(unchanged.replyProduced, false);
+      }
       mark(`${point}.crash`);
       await h.crash();
       mark(`${point}.lost`);
@@ -241,6 +278,18 @@ test("SIGKILL/reopen preserves canary, allocation provenance and stable accepted
       assert.equal(accepted.body.operationId, identity.operationId);
       assert.equal(accepted.body.messageId, identity.messageId);
       assert.equal(accepted.body.taskId, identity.taskId);
+      if (point === "after-submit") {
+        assert.ok(held);
+        const replacement = (await h.api<CompletionWitness>(`${probe}/completion`)).body;
+        assert.equal(replacement.enabled, true);
+        assert.notEqual(replacement.generation, held.generation);
+        assert.equal(replacement.released, false);
+        assert.equal(replacement.replyProduced, false);
+        const released = await h.api<CompletionWitness>(`${probe}/completion`, {}, "POST");
+        assert.equal(released.status, 200);
+        assert.equal(released.body.generation, replacement.generation);
+        assert.equal(released.body.released, true);
+      }
       mark(`${point}.complete`);
       const completed = await eventually(
         async () =>
