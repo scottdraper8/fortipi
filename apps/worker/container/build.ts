@@ -110,11 +110,15 @@ async function download(
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
-  const response = await fetch(url, {
+  // Retain canonical signed identities while retrieving this frozen overlay from history.
+  const address = url.startsWith(securityUpdate.base)
+    ? `${securityUpdate.archive}${url.slice(securityUpdate.base.length)}`
+    : url;
+  const response = await fetch(address, {
     ...(headers ? { headers } : {}),
     signal: AbortSignal.timeout(120_000),
   });
-  check(response.ok, `Public input unavailable (${response.status}): ${new URL(url).hostname}`);
+  check(response.ok, `Public input unavailable (${response.status}): ${new URL(address).hostname}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   check(bytes.length <= 256 * 1024 * 1024, "Input exceeds archive bound");
   if (expected)

@@ -99,8 +99,11 @@ remain subject to independent artifact review.
 The FUSE3 runtime and library are Debian amd64 **3.18.3-1**, selected only from the
 signed SID indexes at `20261110T000000Z`. The sole additional security overlay is
 zlib1g and corresponding source at `1:1.3.dfsg+really1.3.1-1+deb13u1`, bound to the
-supplied signed trixie-security InRelease and immutable by-hash indexes. All other
-dependencies retain the frozen Trixie/base identities. The FUSE controls require libc6 >=2.38 and the existing
+supplied signed trixie-security InRelease and immutable by-hash indexes.
+The overlay is retrieved from Debian's fixed security snapshot at
+`20261112T120000Z`, since the live mirror rotates its old indexes. Canonical signed
+package identities and every SHA256, size and signature check remain unchanged.
+All other dependencies retain the frozen Trixie/base identities. The FUSE controls require libc6 >=2.38 and the existing
 mount package; the base supplies libc6 2.41. The previous adduser dependency is no
 longer selected. No development package is installed. The separately installed
 libfuse2t64 2.9.9-9 is not covered by the FUSE3 security comparison.

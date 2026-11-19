@@ -7,6 +7,7 @@ import { check, cleartext, run, sha256 } from "./fuse-security.ts";
 // One authenticated trixie-security overlay; unrelated packages retain their dated freeze.
 export const securityUpdate = {
   base: "https://security.debian.org/debian-security/",
+  archive: "https://snapshot.debian.org/archive/debian-security/20261112T120000Z/",
   version: "1:1.3.dfsg+really1.3.1-1+deb13u1",
   release: "7f4c748c903c3c12e1aded639dd8869f72433b7f396effef764cefdead539e76",
   packages: "393192f8a6ca82969d08b7fd31e1b8c012396f0d787096525506bf528147717c",
