@@ -4,7 +4,14 @@ packages:
 saveExact: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
-minimumReleaseAgeExclude: []
+minimumReleaseAgeExclude:
+  - "@cloudflare/workerd-darwin-64@1.20261119.1"
+  - "@cloudflare/workerd-darwin-arm64@1.20261119.1"
+  - "@cloudflare/workerd-linux-64@1.20261119.1"
+  - "@cloudflare/workerd-linux-arm64@1.20261119.1"
+  - "@cloudflare/workerd-windows-64@1.20261119.1"
+  - "@cloudflare/workers-types@5.20261119.1"
+  - "workerd@1.20261119.1"
 trustPolicy: no-downgrade
 trustLockfile: false
 verifyDepsBeforeRun: error
@@ -19,7 +26,7 @@ skills:
 allowBuilds:
   esbuild@0.28.2: true
   node-pty@1.1.0: true
-  workerd@1.20261113.1: false
+  workerd@1.20261119.1: false
   pnpm@12.18.0: false
   "@google/genai@2.21.0": false
   core-js-pure@3.51.0: false
@@ -28,3 +35,5 @@ patchedDependencies:
   "@earendil-works/pi-ai@1.5.2": patches/@earendil-works__pi-ai@1.5.2.patch
   "@earendil-works/pi-durable@1.5.2": patches/@earendil-works__pi-durable@1.5.2.patch
   agents@0.33.0: patches/agents@0.33.0.patch
+overrides:
+  workerd@1.20261113.1: 1.20261119.1

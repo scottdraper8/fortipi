@@ -51,6 +51,7 @@ export interface SupplyChain {
 }
 export interface Lock {
   lockfileVersion: string;
+  overrides?: Record<string, string>;
   importers: Record<string, Record<string, Record<string, { specifier: string; version: string }>>>;
   packages: Record<string, { resolution: { integrity: string }; hasBin?: boolean }>;
   snapshots?: Record<
@@ -89,6 +90,7 @@ export async function yaml<T>(root: string, path: string): Promise<T> {
     "packageManagerDependencies",
   ]);
   assert.deepEqual(documents[0]?.importers["."]?.configDependencies, {});
+  assert.equal(documents[0]?.overrides, undefined, "Manager dependency overrides forbidden");
   for (const importer of Object.values(documents[1]?.importers ?? {}))
     assert.equal(
       importer.packageManagerDependencies,
@@ -97,6 +99,7 @@ export async function yaml<T>(root: string, path: string): Promise<T> {
     );
   // pnpm 12 separately locks its own native package-manager distribution.
   const result: Lock = { lockfileVersion: "9.0", importers: {}, packages: {} };
+  if (documents[1]?.overrides) result.overrides = documents[1].overrides;
   for (const doc of documents) {
     assert.equal(String(doc.lockfileVersion), "9.0");
     result.snapshots = { ...result.snapshots, ...doc.snapshots };
@@ -257,10 +260,11 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
       "ignoreDepScripts",
       "neverBuiltDependencies",
       "pnpmfile",
-      "overrides",
       "packageExtensions",
     ])
       assert.equal(policy[key], undefined, `Forbidden policy override: ${key}`);
+    const runtimeOverrides = prefix ? undefined : { "workerd@1.20261113.1": "1.20261119.1" };
+    assert.deepEqual(policy.overrides, runtimeOverrides, "Unreviewed runtime override");
     const approvals = policy.allowBuilds as Record<string, boolean>;
     assert.ok(approvals && typeof approvals === "object");
     for (const [id, allowed] of Object.entries(approvals)) {
@@ -275,6 +279,7 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
         );
     }
     const lock = await yaml<Lock>(root, `${prefix}pnpm-lock.yaml`);
+    assert.deepEqual(lock.overrides, runtimeOverrides, "Runtime override lock drift");
     assert.equal(String(lock.lockfileVersion), "9.0");
     const ids = new Set(Object.keys(lock.packages));
     for (const [id, node] of Object.entries(lock.snapshots ?? {})) {

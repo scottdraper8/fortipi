@@ -1,5 +1,5 @@
 diff --git a/dist/lifecycle-v1rKHV2C.js b/dist/lifecycle-v1rKHV2C.js
-index e5f9d561159e8516aa2c3422a125add0f6726fad..3bcd1c17e3a421651f246431f71f49c3c02193ab 100644
+index e5f9d561159e8516aa2c3422a125add0f6726fad..8499411dbc4a2ccf224d75f91508ed922f318369 100644
 --- a/dist/lifecycle-v1rKHV2C.js
 +++ b/dist/lifecycle-v1rKHV2C.js
 @@ -228,10 +228,14 @@ var JobQueue = class {
@@ -411,7 +411,22 @@ index e5f9d561159e8516aa2c3422a125add0f6726fad..3bcd1c17e3a421651f246431f71f49c3
  function _warnBacklog(due) {
  	const counts = /* @__PURE__ */ new Map();
  	for (const row of due) counts.set(row.capability, (counts.get(row.capability) ?? 0) + 1);
-@@ -1386,4 +1477,4 @@ async function _resolveJobDispatch(owner) {
+@@ -1059,13 +1150,12 @@ var Lifecycle = class Lifecycle {
+ 			if (request.headers.get("Upgrade") === "websocket") {
+ 				const pair = new WebSocketPair();
+ 				pair[1].accept();
+-				pair[1].send(JSON.stringify({ error: err.stack }));
+ 				pair[1].close(1011, "Uncaught exception during session setup");
+ 				return new Response(null, {
+ 					status: 101,
+ 					webSocket: pair[0]
+ 				});
+-			} else return new Response(err.stack, { status: 500 });
++			} else return new Response("Internal Server Error", { status: 500 });
+ 		}
+ 	}
+ 	/** @internal Dispatch a hibernating WebSocket message. */
+@@ -1386,4 +1476,4 @@ async function _resolveJobDispatch(owner) {
  //#endregion
  export { abortWithoutAlarmRetry as a, setLifecycleRouteTransport as i, setLifecycleEventSink as n, setLifecycleHostInvoker as r, Lifecycle as t };
  

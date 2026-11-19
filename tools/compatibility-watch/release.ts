@@ -30,8 +30,8 @@ const packages: Record<InstalledReference, string[]> = {
   wrangler: [
     "wrangler@4.162.0",
     "miniflare@5.20261113.0-beta",
-    "workerd@1.20261113.1",
-    "@cloudflare/workers-types@5.20261113.1",
+    "workerd@1.20261119.1",
+    "@cloudflare/workers-types@5.20261119.1",
   ],
 };
 export const releaseHash = (value: unknown): string =>

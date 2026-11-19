@@ -17,13 +17,13 @@
   },
   "agents@0.33.0": {
     "path": "patches/agents@0.33.0.patch",
-    "sha256": "be9cf2adb5bb78fb438c17555aeaf048e9b6f07f9760f1edf61af47c9ad50528",
+    "sha256": "ec6855764c1e76c69c0fd42d170d7b23d438aeec38dca95ca75579956144f5a3",
     "source": "https://github.com/cloudflare/agents/commit/5071d3cda939972fb532c93e9b46942b36d8f5d7",
-    "reason": "fence Lifecycle retries and outcomes after supersession; modified chunk source map disabled",
+    "reason": "fence Lifecycle retries and outcomes after supersession; modified chunk source map disabled; neutral HTTP/WS fetch failures backported from https://github.com/cloudflare/agents/commit/81726f7d18206a0864d183c219fad9fa6e7e28e6",
     "files": {
       "dist/lifecycle-v1rKHV2C.js": {
         "originalSha256": "0af41bb3bea705431fd67fc944e364433a8e8e64c27c4a4d4aa291840776ecd7",
-        "patchedSha256": "08b96dcd4929f8a766d94a0504e5e6f6319a80ee496137857a8e535fd7b21e6e"
+        "patchedSha256": "8404089520dd2665f92cb30c50ca8dbc18352fa5dfc8f2669d59fbb0d2c7488d"
       }
     }
   },

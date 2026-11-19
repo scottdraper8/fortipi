@@ -1134,6 +1134,58 @@
       "inheritedFrom": "workerd@1.20261113.1",
       "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
       "files": []
+    },
+    "workerd@1.20261119.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/417403d5d5d0af855302f97cae3ab93525fa4690",
+      "evidence": "Exact published gitHead and SLSA417403d5 source agree; DSSE leaf signature and SHA512 archive subject checked. Registry signature/SRI verified separately. Full immutable source LICENSE matches prior reviewed bytes. No generated-type equivalence or cross-platform execution inferred; Sigstore certificate trust/transparency remains a release gate.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/417403d5d5d0af855302f97cae3ab93525fa4690/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/417403d5d5d0af855302f97cae3ab93525fa4690/LICENSE"
+        }
+      ]
+    },
+    "@cloudflare/workerd-linux-64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workerd-darwin-64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workerd-windows-64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workerd-linux-arm64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workerd-darwin-arm64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workers-types@5.20261119.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/417403d5d5d0af855302f97cae3ab93525fa4690",
+      "evidence": "Exact published gitHead and SLSA417403d5 source agree; DSSE leaf signature and SHA512 archive subject checked. Registry signature/SRI verified separately. Full immutable source LICENSE matches prior reviewed bytes. No generated-type equivalence or cross-platform execution inferred; Sigstore certificate trust/transparency remains a release gate.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/417403d5d5d0af855302f97cae3ab93525fa4690/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/417403d5d5d0af855302f97cae3ab93525fa4690/LICENSE"
+        }
+      ]
     }
   },
   "externalToolChain": ["wrangler@4.162.0", "miniflare@5.20261113.0-beta", "sharp@0.35.5"]

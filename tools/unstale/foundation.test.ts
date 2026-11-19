@@ -213,6 +213,27 @@ test("reject a permissions.build override of denied dependency scripts", async (
   }, /Forbidden policy override: permissions/);
 });
 
+test("reject an extra or changed runtime dependency override", async () => {
+  for (const overrides of [
+    { "workerd@1.20261113.1": "1.20261118.1" },
+    { "workerd@1.20261113.1": "1.20261119.1", undici: "7.30.1" },
+  ])
+    await fixture(async (root) => {
+      const policy = await yaml<Record<string, unknown>>(root, "pnpm-workspace.yaml");
+      policy.overrides = overrides;
+      await writeFile(resolve(root, "pnpm-workspace.yaml"), stringify(policy));
+    }, /Unreviewed runtime override/);
+  await fixture(async (root) => {
+    const path = resolve(root, "pnpm-lock.yaml");
+    const lock = await readFile(path, "utf8");
+    assert.ok(lock.includes("workerd@1.20261113.1: 1.20261119.1"));
+    await writeFile(
+      path,
+      lock.replace("workerd@1.20261113.1: 1.20261119.1", "workerd@1.20261113.1: 1.20261118.1"),
+    );
+  }, /Runtime override lock drift/);
+});
+
 test("reject stale graph advisory evidence", async () => {
   await fixture(async (root) => {
     const state = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");

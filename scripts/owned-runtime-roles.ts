@@ -444,7 +444,7 @@ async function pinnedExecutable() {
   if (
     worker("wrangler/package.json").version !== "4.162.0" ||
     wrangler("miniflare/package.json").version !== "5.20261113.0-beta" ||
-    workerd.version !== "1.20261113.1"
+    workerd.version !== "1.20261119.1"
   )
     throw new Error("unreviewed runtime graph");
   const path = await realpath(workerd.default),
