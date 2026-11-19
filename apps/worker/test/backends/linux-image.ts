@@ -154,7 +154,11 @@ try {
     }
     process.stdout.write(`${JSON.stringify({ ...trace, namespaceStable })}\n`);
   }
-  verifyGatewayEgress(harness.getLogs(), network, trace && { ...trace, namespaceStable });
+  const gatewayProof = verifyGatewayEgress(
+    harness.getLogs(),
+    network,
+    trace && { ...trace, namespaceStable },
+  );
   await inspectPhysical(physical);
   assert.ok(
     trace?.complete && namespaceStable,
@@ -175,6 +179,7 @@ try {
       applicationDns: "pinned-sidecar-synthetic",
       stepSecurityGatewayUpstreamSinkhole: true,
       gatewayForwardingVerified: true,
+      ...gatewayProof,
       providerDenialLogRequired: true,
     })}\n`,
   );

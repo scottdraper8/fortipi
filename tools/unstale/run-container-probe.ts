@@ -156,7 +156,7 @@ async function namespaceEgress(): Promise<void> {
     JSON.stringify({
       probe: "runtime-namespace-egress",
       allowedControls: "connected",
-      exampleConnection: "refused",
+      exampleRequest: "failed-or-timed-out",
       stepSecuritySinkhole: true,
     }),
   );

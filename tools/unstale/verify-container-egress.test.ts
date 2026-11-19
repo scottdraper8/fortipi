@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { once } from "node:events";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
+import { createConnection, createServer as createTcpServer, type Socket } from "node:net";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import {
@@ -341,7 +344,198 @@ test("harness observation delegates unrelated requests and bounds overflow or mi
   }
 });
 
-test("only an original connect refusal to the verified policy endpoint permits the Miniflare500 conversion", async () => {
+test("native request/socket correlation distinguishes policy redirection from refusal and ambiguity", {
+  timeout: 15000,
+}, async () => {
+  // Existing pinned test tooling only. Native Node fetch and TCP are real; the
+  // connector maps HTTPS fixtures to loopback HTTP/TLS-stall endpoints. This is
+  // a controlled policy-endpoint classification substitution, not Linux proof.
+  const worker = createRequire(new URL("../../apps/worker/package.json", import.meta.url));
+  const tooling = createRequire(createRequire(worker.resolve("wrangler")).resolve("miniflare"));
+  const { Agent, buildConnector } = tooling("undici");
+  const nativeFetch = globalThis.fetch;
+  const originalLog = console.log;
+  const sockets = new Set<Socket>();
+  const allowed = createServer((_request, response) => response.writeHead(200).end());
+  const sink = createTcpServer((socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  });
+  await new Promise<void>((accept) => allowed.listen(0, "127.0.0.1", accept));
+  await new Promise<void>((accept) => sink.listen(0, "127.0.0.1", accept));
+  const allowAddress = allowed.address();
+  const sinkAddress = sink.address();
+  assert.ok(allowAddress && typeof allowAddress === "object");
+  assert.ok(sinkAddress && typeof sinkAddress === "object");
+  const registryUrl = "https://registry.npmjs.org/pnpm/12.18.0";
+  const exampleUrl = "https://example.com/";
+  const registry = {
+    message:
+      'fortipi-gateway:{"target":"allowed-registry","forwarded":true,"outcome":"response","status":200}',
+  };
+  const receipts = [
+    registry,
+    {
+      message:
+        'fortipi-gateway:{"target":"denied-example","forwarded":true,"outcome":"response","status":500}',
+    },
+    registry,
+  ];
+  const evidence: ApplicationNetworkEvidence = {
+    imageId: `sha256:${"a".repeat(64)}`,
+    appPid: 42,
+    authorityVerifiedBeforeAfter: true,
+    allowedBefore: 200,
+    deniedStatus: 500,
+    deniedTransportFailure: false,
+    allowedAfter: 200,
+    tlsAuthorized: true,
+    syntheticDns: true,
+    upstreamStepSecurityBeforeAfter: true,
+  };
+  console.log = () => {};
+  try {
+    assert.deepEqual(verifyGatewayEgress(receipts, evidence, refusedTrace()), {
+      deniedOutcome: "policy-connect-refusal",
+      refusalVerified: true,
+      redirectionVerified: false,
+    });
+    for (const mode of [
+      "policy",
+      "wrong-endpoint",
+      "stale-preflight",
+      "concurrent",
+      "extra-socket",
+      "abort",
+      "pending",
+    ] as const) {
+      const connect = buildConnector({ timeout: 100, rejectUnauthorized: false });
+      const agent = new Agent({
+        connect(
+          params: { hostname: string; port: string; protocol: string },
+          callback: (error: Error | null, socket: Socket | null) => void,
+        ) {
+          if (params.hostname === "registry.npmjs.org") {
+            const socket = createConnection({ host: "127.0.0.1", port: allowAddress.port });
+            socket.once("connect", () => callback(null, socket));
+            socket.once("error", (error) => callback(error, null));
+            return socket;
+          }
+          if (mode === "extra-socket") {
+            const socket = createConnection({ host: "127.0.0.1", port: sinkAddress.port });
+            socket.once("error", () => {});
+            sockets.add(socket);
+            socket.once("close", () => sockets.delete(socket));
+          }
+          return connect(
+            { ...params, hostname: "127.0.0.1", port: String(sinkAddress.port) },
+            callback,
+          );
+        },
+      });
+      const controller = new AbortController();
+      let init = { method: "HEAD", dispatcher: agent, signal: controller.signal };
+      let delegated: Promise<Response> | undefined;
+      const extras: Promise<unknown>[] = [];
+      globalThis.fetch = function (this: unknown, ...args) {
+        assert.equal(args[1], init);
+        delegated = Reflect.apply(nativeFetch, this, args);
+        return delegated;
+      };
+      if (mode === "stale-preflight") {
+        const accepted = once(sink, "connection");
+        extras.push(nativeFetch(exampleUrl, init).catch(() => {}));
+        await accepted;
+      }
+      const observation: ReturnType<typeof observeHarnessFetch> =
+        mode === "wrong-endpoint"
+          ? observeHarnessFetch()
+          : observeHarnessFetch(
+              (address, port) => address === "127.0.0.1" && port === sinkAddress.port,
+            );
+      let pending: Promise<Response> | undefined;
+      try {
+        assert.equal((await fetch(registryUrl, init)).status, 200);
+        const accepted = ["abort", "pending"].includes(mode) ? once(sink, "connection") : undefined;
+        pending = fetch(exampleUrl, init);
+        assert.equal(pending, delegated, "Observer returns the original native fetch promise");
+        if (mode === "concurrent") extras.push(nativeFetch(exampleUrl, init).catch(() => {}));
+        if (accepted) await accepted;
+        if (mode === "abort") controller.abort();
+        if (mode !== "pending") await assert.rejects(pending);
+        // The fixture supplies a fresh signal for its control after explicit abort.
+        if (mode === "abort") init = { ...init, signal: new AbortController().signal };
+        assert.equal((await fetch(registryUrl, init)).status, 200);
+        const trace = { ...observation.stop(), namespaceStable: true };
+        if (mode === "policy") {
+          assert.equal(trace.complete, true);
+          const failure = trace.events[3];
+          assert.ok(failure?.phase === "FAILURE");
+          assert.equal(failure.causeCode, "UND_ERR_CONNECT_TIMEOUT");
+          assert.equal(failure.stepSecurityEndpoint, false);
+          assert.equal(failure.policyRedirection, true);
+          assert.deepEqual(verifyGatewayEgress(receipts, evidence, trace), {
+            deniedOutcome: "policy-redirection",
+            refusalVerified: false,
+            redirectionVerified: true,
+          });
+          for (const changed of [
+            { ...trace, complete: false },
+            { ...trace, namespaceStable: false },
+            { ...trace, events: trace.events.slice(0, 5) },
+            {
+              ...trace,
+              events: trace.events.map((event) => {
+                if (event.phase !== "FAILURE") return event;
+                const { policyRedirection: _proof, ...rest } = event;
+                return rest;
+              }),
+            },
+            {
+              ...trace,
+              events: trace.events.map((event) =>
+                event.phase === "FAILURE" ? { ...event, causeCode: "UNKNOWN" } : event,
+              ),
+            },
+          ])
+            assert.throws(() => verifyGatewayEgress(receipts, evidence, changed));
+          for (const changed of [
+            { ...evidence, upstreamStepSecurityBeforeAfter: false },
+            { ...evidence, authorityVerifiedBeforeAfter: false },
+            { ...evidence, allowedAfter: 500 },
+          ])
+            assert.throws(() => verifyGatewayEgress(receipts, changed, trace));
+        } else {
+          assert.ok(
+            !trace.events.some((event) => event.phase === "FAILURE" && event.policyRedirection),
+          );
+          assert.throws(() => verifyGatewayEgress(receipts, evidence, trace));
+        }
+        assert.doesNotMatch(
+          JSON.stringify(trace),
+          /127\.0\.0\.1|https:|address|headers|dispatcher/,
+        );
+      } finally {
+        observation.stop();
+        if (pending) await pending.catch(() => {});
+        await Promise.all(extras);
+        await agent.destroy();
+        for (const socket of sockets) socket.destroy();
+      }
+    }
+  } finally {
+    console.log = originalLog;
+    globalThis.fetch = nativeFetch;
+    for (const socket of sockets) socket.destroy();
+    allowed.closeAllConnections();
+    await Promise.all([
+      new Promise<void>((accept) => allowed.close(() => accept())),
+      new Promise<void>((accept) => sink.close(() => accept())),
+    ]);
+  }
+});
+
+test("original refusal retains its strict endpoint oracle and rejects uncorrelated failures", async () => {
   const originalFetch = globalThis.fetch;
   const originalLog = console.log;
   const messages: string[] = [];

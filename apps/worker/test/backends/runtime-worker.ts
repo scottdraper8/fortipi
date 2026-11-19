@@ -40,7 +40,8 @@ export class ProbeGateway extends WorkerEntrypoint {
     try {
       const response = await fetch(request, {
         redirect: "manual",
-        signal: AbortSignal.any([request.signal, AbortSignal.timeout(4000)]),
+        // Fixture only: await the host connector's native10s terminal failure.
+        signal: AbortSignal.any([request.signal, AbortSignal.timeout(12000)]),
       });
       console.log(
         `fortipi-gateway:${JSON.stringify({ target, forwarded: true, outcome: "response", status: response.status })}`,

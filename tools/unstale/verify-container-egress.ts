@@ -161,7 +161,7 @@ async function main(): Promise<void> {
         imageId: metadata.imageId,
         sourceCommit: metadata.sourceCommit,
         allowedControls: "connected",
-        exampleConnection: "refused",
+        exampleConnection: "failed-or-timed-out",
         attribution:
           "Exact StepSecurity DNS sinkhole observed; retain provider example.com denial event (subsequent responses may be cached)",
       }),

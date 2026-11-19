@@ -1,11 +1,13 @@
 // Observes the real app network namespace with the existing host Node client.
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile } from "node:child_process";
 import { X509Certificate } from "node:crypto";
+import { channel } from "node:diagnostics_channel";
 import { Resolver, resolve4 } from "node:dns/promises";
 import { lstat, readFile, readlink } from "node:fs/promises";
 import { request } from "node:https";
-import { isIP } from "node:net";
+import { isIP, Socket } from "node:net";
 import { delimiter, dirname, resolve } from "node:path";
 import { rootCertificates, TLSSocket } from "node:tls";
 import { promisify } from "node:util";
@@ -55,7 +57,181 @@ type FetchRole = "allowed-before" | "denied-example" | "allowed-after";
 type FetchEvent =
   | { role: FetchRole; phase: "START" }
   | { role: FetchRole; phase: "RESPONSE"; status: number }
-  | { role: FetchRole; phase: "FAILURE"; causeCode: string; stepSecurityEndpoint: boolean };
+  | {
+      role: FetchRole;
+      phase: "FAILURE";
+      causeCode: string;
+      stepSecurityEndpoint: boolean;
+      policyRedirection?: true;
+    };
+
+/** A single original request/connector/socket chain; ambiguous pooling stays unknown. */
+function observePolicyConnection(policyEndpoint: (address: string, port: number) => boolean) {
+  const context = new AsyncLocalStorage<object>();
+  const token = {};
+  let started = false;
+  let valid = true;
+  let request: object | undefined;
+  let connector: unknown;
+  let socket: Socket | undefined;
+  let socketError: unknown;
+  let attempts = 0;
+  let connectError: unknown;
+  let requestError: unknown;
+  let rejection: unknown;
+  const failedSocket = (error: unknown) => {
+    if (socketError || !error || typeof error !== "object") valid = false;
+    else socketError = error;
+  };
+  const attempt = (address: string, port: number, family: number) => {
+    try {
+      if (
+        context.getStore() !== token ||
+        rejection !== undefined ||
+        ++attempts > 4 ||
+        isIP(address) !== family ||
+        ![4, 6].includes(family) ||
+        !policyEndpoint(address, port)
+      )
+        valid = false;
+    } catch {
+      valid = false;
+    }
+  };
+  const subscriptions: { name: string; listener: (message: unknown) => void }[] = [];
+  const subscribe = (name: string, fn: (event: Record<string, unknown>) => void) => {
+    const listener = (message: unknown) => {
+      try {
+        if (started && message && typeof message === "object")
+          fn(message as Record<string, unknown>);
+      } catch {
+        valid = false;
+      }
+    };
+    channel(name).subscribe(listener);
+    subscriptions.push({ name, listener });
+  };
+  subscribe("undici:request:create", (event) => {
+    const value = event.request as { origin?: unknown; method?: unknown; path?: unknown };
+    if (value?.origin !== "https://example.com") return;
+    if (
+      context.getStore() !== token ||
+      request ||
+      rejection !== undefined ||
+      value.method !== "HEAD" ||
+      value.path !== "/"
+    )
+      valid = false;
+    else request = value;
+  });
+  const denied = (event: Record<string, unknown>) => {
+    const params = event.connectParams as {
+      hostname?: unknown;
+      protocol?: unknown;
+      port?: unknown;
+    };
+    return (
+      params?.hostname === "example.com" &&
+      params.protocol === "https:" &&
+      [443, "443", "", undefined].includes(params.port as string | number | undefined)
+    );
+  };
+  subscribe("undici:client:beforeConnect", (event) => {
+    if (!denied(event)) return;
+    if (
+      context.getStore() !== token ||
+      !request ||
+      connector ||
+      rejection !== undefined ||
+      typeof event.connector !== "function"
+    )
+      valid = false;
+    else connector = event.connector;
+  });
+  subscribe("net.client.socket", (event) => {
+    if (context.getStore() !== token) return;
+    if (
+      !request ||
+      !connector ||
+      socket ||
+      rejection !== undefined ||
+      !(event.socket instanceof Socket)
+    )
+      valid = false;
+    else {
+      socket = event.socket;
+      socket.on("connectionAttempt", attempt);
+      socket.on("error", failedSocket);
+    }
+  });
+  subscribe("undici:client:connectError", (event) => {
+    if (!denied(event)) return;
+    // Native connector timers may share an older async context. Bind their
+    // terminal error by connector identity, then exact request/error identity.
+    if (
+      !socket ||
+      !connector ||
+      event.connector !== connector ||
+      connectError ||
+      rejection !== undefined ||
+      !event.error ||
+      typeof event.error !== "object"
+    )
+      valid = false;
+    else connectError = event.error;
+  });
+  subscribe("undici:request:error", (event) => {
+    const value = event.request as { origin?: unknown };
+    if (value?.origin !== "https://example.com") return;
+    if (
+      value !== request ||
+      requestError ||
+      rejection !== undefined ||
+      !event.error ||
+      typeof event.error !== "object"
+    )
+      valid = false;
+    else requestError = event.error;
+  });
+  subscribe("undici:client:sendHeaders", (event) => {
+    if (event.request === request || (socket && event.socket === socket)) valid = false;
+  });
+  return {
+    run<T>(fn: () => T): T {
+      if (started) valid = false;
+      started = true;
+      return context.run(token, fn);
+    },
+    failed(error: unknown) {
+      rejection = error;
+    },
+    stop() {
+      for (const { name, listener } of subscriptions) channel(name).unsubscribe(listener);
+      socket?.off("connectionAttempt", attempt);
+      socket?.off("error", failedSocket);
+      context.disable();
+      try {
+        return (
+          valid &&
+          attempts >= 1 &&
+          attempts <= 4 &&
+          !!request &&
+          !!socket &&
+          !!connectError &&
+          socketError === connectError &&
+          requestError === socketError &&
+          (rejection === requestError ||
+            (rejection &&
+              typeof rejection === "object" &&
+              "cause" in rejection &&
+              rejection.cause === requestError)) === true
+        );
+      } catch {
+        return false;
+      }
+    },
+  };
+}
 
 /** Only a flat, wholly validated connect-refusal cause can identify the policy endpoint. */
 function connectFailure(error: unknown): { causeCode: string; stepSecurityEndpoint: boolean } {
@@ -127,7 +303,12 @@ function connectFailure(error: unknown): { causeCode: string; stepSecurityEndpoi
 }
 
 /** Observe the pinned harness's existing Node fetch without changing its promises or I/O. */
-export function observeHarnessFetch() {
+export function observeHarnessFetch(
+  // Classification substitution is only for local TCP sensitivity tests; Linux uses this pin.
+  policyEndpoint = (address: string, port: number) =>
+    port === 443 && isStepSecuritySinkhole([address]),
+) {
+  const connection = observePolicyConnection(policyEndpoint);
   const original = globalThis.fetch;
   const roles: FetchRole[] = ["allowed-before", "denied-example", "allowed-after"];
   const registry = "https://registry.npmjs.org/pnpm/12.18.0";
@@ -141,6 +322,7 @@ export function observeHarnessFetch() {
     else valid = false;
   };
   const failure = (role: FetchRole, error: unknown) => {
+    if (role === "denied-example") connection.failed(error);
     record({ role, phase: "FAILURE", ...connectFailure(error) });
   };
   const wrapper: typeof globalThis.fetch = function (this: unknown, ...args) {
@@ -163,7 +345,8 @@ export function observeHarnessFetch() {
     }
     let promise: ReturnType<typeof globalThis.fetch>;
     try {
-      promise = Reflect.apply(original, this, args);
+      const call = () => Reflect.apply(original, this, args);
+      promise = role === "denied-example" ? connection.run(call) : call();
     } catch (error) {
       if (role) failure(role, error);
       throw error;
@@ -196,11 +379,13 @@ export function observeHarnessFetch() {
     return promise;
   };
   globalThis.fetch = wrapper;
+  let policyRedirection = false;
   return {
     stop() {
       if (active) {
         if (globalThis.fetch === wrapper) globalThis.fetch = original;
         else valid = false;
+        policyRedirection = connection.stop();
         active = false;
       }
       return {
@@ -214,7 +399,15 @@ export function observeHarnessFetch() {
               event.role === roles[Math.floor(index / 2)] &&
               (index % 2 === 0 ? event.phase === "START" : event.phase !== "START"),
           ),
-        events: events.map((event) => ({ ...event })),
+        events: events.map((event) => ({
+          ...event,
+          ...(policyRedirection &&
+          event.role === "denied-example" &&
+          event.phase === "FAILURE" &&
+          ["UND_ERR_CONNECT_TIMEOUT", "ETIMEDOUT"].includes(event.causeCode)
+            ? { policyRedirection: true as const }
+            : {}),
+        })),
       };
     },
   };
@@ -225,7 +418,7 @@ export function verifyGatewayEgress(
   messages: readonly { message: string }[],
   evidence: ApplicationNetworkEvidence,
   trace?: ReturnType<ReturnType<typeof observeHarnessFetch>["stop"]> & { namespaceStable: boolean },
-): void {
+) {
   const events = messages
     .filter(({ message }) => message.startsWith("fortipi-gateway:"))
     .map(({ message }) => {
@@ -281,7 +474,23 @@ export function verifyGatewayEgress(
               event.stepSecurityEndpoint === true
             : event.phase === "RESPONSE" && event.status === 200),
     );
-  assert.ok(refusal, "Original host-fetch policy endpoint is UNKNOWN");
+  const redirection =
+    trace?.complete === true &&
+    trace.namespaceStable === true &&
+    trace.events.length === 6 &&
+    trace.events.every(
+      (event, index) =>
+        event.role ===
+          ["allowed-before", "denied-example", "allowed-after"][Math.floor(index / 2)] &&
+        (index % 2 === 0
+          ? event.phase === "START"
+          : index === 3
+            ? event.phase === "FAILURE" &&
+              event.policyRedirection === true &&
+              ["UND_ERR_CONNECT_TIMEOUT", "ETIMEDOUT"].includes(event.causeCode)
+            : event.phase === "RESPONSE" && event.status === 200),
+    );
+  assert.ok(refusal || redirection, "Original host-fetch policy endpoint is UNKNOWN");
   const conversion = events[1]?.outcome === "response" && events[1].status === 500;
   for (const [index, event] of events.entries()) {
     assert.equal(event.target, index === 1 ? "denied-example" : "allowed-registry");
@@ -304,6 +513,11 @@ export function verifyGatewayEgress(
     true,
     "Gateway failure without the protected StepSecurity DNS route is UNKNOWN",
   );
+  return {
+    deniedOutcome: refusal ? ("policy-connect-refusal" as const) : ("policy-redirection" as const),
+    refusalVerified: refusal,
+    redirectionVerified: !refusal && redirection,
+  };
 }
 async function docker(file: string, args: string[]): Promise<string> {
   assert.match(
@@ -401,7 +615,7 @@ async function head(
           agent: false,
           rejectUnauthorized: true,
           ca: [...rootCertificates, ca],
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(15000),
           lookup: (host, _options, callback) => {
             resolver.resolve4(host).then(
               (addresses) => {
@@ -467,7 +681,7 @@ async function observeApplicationNamespace(imageId: string): Promise<Application
   const child = await execute(rootless ? "/usr/bin/nsenter" : "/usr/bin/sudo", args, {
     cwd: repository,
     env,
-    timeout: 30000,
+    timeout: 75000,
     killSignal: "SIGKILL",
     maxBuffer: 16384,
     encoding: "utf8",
