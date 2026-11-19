@@ -400,22 +400,31 @@ test("a genuinely partial file-bearing Workspace cannot publish a completed publ
 
 test("an unavailable local Workspace keeps a real Pi aggregate unavailable without publishing a subset", {
   timeout: 60000,
-}, async () => {
+}, async (t) => {
+  const started = performance.now();
+  const phase = (name: string) =>
+    t.diagnostic(`phase=${name} elapsedMs=${Math.floor(performance.now() - started)}`);
+  phase("open-start");
   const h = await open();
   try {
+    phase("open-ready");
     const { agent, conversation } = await setup(h);
+    phase("setup-ready");
     await append(h, conversation.conversationId, "available-agent-unavailable-workspace");
+    phase("append-ready");
     const executorId = crypto.randomUUID();
     await issue(
       h,
       scope({ executorIds: [executorId], actions: ["tickets.mint", "executors.register"] }),
       executorId,
     );
+    phase("executor-issued");
     const binding = await workspace(h, {
       kind: "local",
       executorId,
       rootBindingId: "offline-root",
     });
+    phase("workspace-bound");
     const { completed } = await operation(
       h,
       scope({
@@ -424,6 +433,7 @@ test("an unavailable local Workspace keeps a real Pi aggregate unavailable witho
         workspaceIds: [binding.workspaceId],
       }),
     );
+    phase("operation-complete");
     assert.equal(completed.state, "unavailable");
     assert.deepEqual(completed.artifacts, []);
     const source = await observation(h, binding.workspaceId);
@@ -432,7 +442,10 @@ test("an unavailable local Workspace keeps a real Pi aggregate unavailable witho
     assert.equal(source.result.value.state, "unavailable");
     assert.deepEqual(source.result.value.artifacts, []);
     assert.deepEqual(source.result.value.unavailableWorkspaceIds, [binding.workspaceId]);
+    phase("workspace-observed");
   } finally {
+    phase("close-start");
     await h.close();
+    phase("close-complete");
   }
 });

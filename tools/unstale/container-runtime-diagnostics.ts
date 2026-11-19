@@ -60,7 +60,11 @@ if (
         const event = message as Record<string, unknown>;
         if (!event.connectParams || typeof event.connectParams !== "object") return;
         const params = event.connectParams as Record<string, unknown>;
-        if (params.port !== 443 && params.port !== "443") return;
+        if (
+          params.protocol !== "https:" ||
+          ![443, "443", "", undefined].includes(params.port as string | number | undefined)
+        )
+          return;
         const hosts = [params.hostname, params.host, params.servername];
         const target = hosts.some((host) => host === "example.com" || host === "example.com:443")
           ? "denied-example"
