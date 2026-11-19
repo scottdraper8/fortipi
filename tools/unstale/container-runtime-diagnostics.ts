@@ -1,8 +1,9 @@
 // CI-only bounded state observations while the one real transport fixture runs.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { channel } from "node:diagnostics_channel";
 import { readFile } from "node:fs/promises";
-import { isIPv4 } from "node:net";
+import { isIP, isIPv4 } from "node:net";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { repository } from "../../scripts/build-workspaces.ts";
@@ -23,6 +24,70 @@ if (
   process.platform === "linux" &&
   process.argv[1] === resolve(repository, "apps/worker/test/backends/linux-image.ts")
 ) {
+  // Passive transport observations only; no request arguments or acceptance rules change.
+  const started = performance.now();
+  let connections = 0;
+  const codes = [
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ENETUNREACH",
+    "EHOSTUNREACH",
+    "ETIMEDOUT",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "UND_ERR_CONNECT_TIMEOUT",
+    "UND_ERR_SOCKET",
+    "ABORT_ERR",
+  ];
+  const failure = (value: unknown) => {
+    const error = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+    const address = typeof error.address === "string" ? error.address : "";
+    return {
+      code: typeof error.code === "string" && codes.includes(error.code) ? error.code : "UNKNOWN",
+      family: isIP(address),
+      policyEndpoint: error.port === 443 && isStepSecuritySinkhole([address]),
+    };
+  };
+  for (const [name, phase] of [
+    ["beforeConnect", "begin"],
+    ["connected", "connected"],
+    ["connectError", "failed"],
+  ] as const) {
+    channel(`undici:client:${name}`).subscribe((message) => {
+      if (connections >= 16) return;
+      try {
+        if (!message || typeof message !== "object") return;
+        const event = message as Record<string, unknown>;
+        if (!event.connectParams || typeof event.connectParams !== "object") return;
+        const params = event.connectParams as Record<string, unknown>;
+        if (params.port !== 443 && params.port !== "443") return;
+        const hosts = [params.hostname, params.host, params.servername];
+        const target = hosts.some((host) => host === "example.com" || host === "example.com:443")
+          ? "denied-example"
+          : hosts.some((host) => host === "registry.npmjs.org" || host === "registry.npmjs.org:443")
+            ? "allowed-registry"
+            : undefined;
+        if (!target) return;
+        const error =
+          event.error && typeof event.error === "object"
+            ? (event.error as Record<string, unknown>)
+            : {};
+        const leaves = Array.isArray(error.errors) ? error.errors.slice(0, 4) : [error];
+        connections++;
+        console.error(
+          JSON.stringify({
+            probe: "harness-connect",
+            target,
+            phase,
+            elapsedMs: Math.floor(performance.now() - started),
+            ...(phase === "failed" ? { failures: leaves.map(failure) } : {}),
+          }),
+        );
+      } catch {
+        // Diagnostic projection must not interrupt the original transport.
+      }
+    });
+  }
   const env = {
     HOME: process.env.HOME,
     PATH: process.env.PATH,
