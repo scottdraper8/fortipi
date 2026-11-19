@@ -7,15 +7,37 @@ import type { CompletionControl } from "./fixtures/completion.ts";
 import { harness, request, scope, uuid, value } from "./harness.ts";
 
 async function setup(
-  options: { expiry?: boolean; splitAfterExpiry?: boolean; unsent?: boolean } = {},
+  options: {
+    expiry?: boolean;
+    splitAfterExpiry?: boolean;
+    unsent?: boolean;
+    controlledTime?: boolean;
+  } = {},
 ) {
   const h = await harness<CompletionControl>({
     fixturePath: "apps/worker/test/control/fixtures/completion.ts",
   });
+  const realNow = Date.now;
+  const restoreTime = async () => {
+    if (options.controlledTime) {
+      try {
+        await h.cp.setTime(null);
+      } finally {
+        Date.now = realNow;
+      }
+    }
+  };
   let channel: Awaited<ReturnType<typeof connected>> | undefined;
   try {
-    const left = 60000 - (Date.now() % 60000);
-    if (left < 12000) await new Promise((resolve) => setTimeout(resolve, left + 30));
+    if (options.controlledTime) {
+      // Hold one actual admission window; transport and timers remain real.
+      const now = (Math.floor(realNow() / 60000) + 1) * 60000 - 1;
+      await h.cp.setTime(now);
+      Date.now = () => now;
+    } else {
+      const left = 60000 - (Date.now() % 60000);
+      if (left < 12000) await new Promise((resolve) => setTimeout(resolve, left + 30));
+    }
     channel = await connected(h);
     const resources = {
       ...scope(["jobs.dispatch", "workspace.write"]),
@@ -62,12 +84,20 @@ async function setup(
       expiresAt,
       async close() {
         channel?.socket.close();
-        await h.close();
+        try {
+          await restoreTime();
+        } finally {
+          await h.close();
+        }
       },
     };
   } catch (error) {
     channel?.socket.close();
-    await h.close();
+    try {
+      await restoreTime();
+    } finally {
+      await h.close();
+    }
     throw error;
   }
 }
@@ -274,7 +304,7 @@ test("cancellation rechecks original credential, target, grant and one-grant cov
 });
 
 test("only attempted exact owner cleanup can use unchanged completion headroom after actual application exhaustion", async () => {
-  const h = await setup();
+  const h = await setup({ controlledTime: true });
   try {
     const unsent = await assignedJob(h, h.raw, { deferAssignment: true });
     const actors = [h.raw, await h.auth()];
@@ -292,7 +322,8 @@ test("only attempted exact owner cleanup can use unchanged completion headroom a
         if (!result.ok && result.code === "rate_limited") break;
       }
     assert.equal((await h.cp.admissions()).application, 90);
-    const before = await h.cp.admissions();
+    const before = await h.cp.admissionWindow();
+    assert.equal(before.application, 90);
     for (const [actor, input] of [
       [h.raw, h.input],
       [{ ...h.actor, registrationId: "missing" }, h.input],
@@ -302,7 +333,7 @@ test("only attempted exact owner cleanup can use unchanged completion headroom a
         { ...h.input, identity: unsent.identity },
       ],
     ] as const) {
-      const result = await h.cp.cancelExecution(actor, input);
+      const { result, admissions } = await h.cp.cancelExecutionWithAdmissions(actor, input);
       assert.equal(result.ok, false);
       if (!result.ok)
         assert.equal(
@@ -310,15 +341,19 @@ test("only attempted exact owner cleanup can use unchanged completion headroom a
           "rate_limited",
           "Ineligible cleanup cannot borrow repair capacity",
         );
+      // Alarm repair is independently charged and must not be attributed to this RPC.
+      assert.deepEqual(admissions, { application: 0, repair: 0 });
     }
-    assert.equal((await h.cp.admissions()).repair, before.repair);
-    const pending = h.cp.cancelExecution(h.actor, h.input);
+    assert.equal(h.channel.frames.filter((frame) => frame.type === "job.cancel").length, 0);
+    const pending = h.cp.cancelExecutionWithAdmissions(h.actor, h.input);
     await cancelFrame(h);
     acknowledge(h);
-    assert.deepEqual(value(await pending), disposition);
-    const after = await h.cp.admissions();
+    const observed = await pending;
+    assert.deepEqual(value(observed.result), disposition);
+    assert.deepEqual(observed.admissions, { application: 0, repair: 1 });
+    const after = await h.cp.admissionWindow();
+    assert.equal(after.minute, before.minute);
     assert.equal(after.application, 90);
-    assert.equal(after.repair, before.repair + 1);
     assert.equal(h.channel.frames.filter((frame) => frame.type === "job.cancel").length, 1);
     assert.equal(h.channel.frames.filter((frame) => frame.type === "job.assign").length, 1);
   } finally {
