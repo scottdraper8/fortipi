@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { x as extract } from "tar";
+import { parse, stringify } from "yaml";
 import { canonicalJson } from "../../packages/fortipi-contract/src/canonical-json.ts";
 import { checkPins, type SupplyChain } from "../../scripts/check-pins.ts";
 import {
@@ -132,13 +133,27 @@ test("required current references, source bindings, fresh evidence and detail2 r
 });
 
 test("lawful maturity and review metadata preserve byte identity, never raw enforcement bindings", async () => {
-  const git = promisify(execFile),
-    read = async (ref: string, path: string) =>
-      (await git("git", ["show", `${ref}:${path}`], { cwd: root, maxBuffer: 8_000_000 })).stdout;
-  const beforeWorkspace = await read("82fd187", "pnpm-workspace.yaml"),
-    beforePolicy = await read("82fd187", "tools/unstale/supply-chain.json"),
-    workspace = await readFile(resolve(root, "pnpm-workspace.yaml")),
-    policy = await readFile(resolve(root, "tools/unstale/supply-chain.json"));
+  const settings = parse(await readFile(resolve(root, "pnpm-workspace.yaml"), "utf8")),
+    recorded = JSON.parse(await readFile(resolve(root, "tools/unstale/supply-chain.json"), "utf8")),
+    packageId = Object.keys(recorded.packages)[0]!;
+  // Compare one archive graph before/after retirement, independently of the
+  // current graph's age. Actual expiry enforcement is exercised separately.
+  settings.minimumReleaseAgeExclude = [packageId];
+  recorded.exemptions = {
+    [packageId]: {
+      reason: "Controlled pre-maturity fixture",
+      integrity: recorded.packages[packageId].integrity,
+      expires: new Date(
+        Date.parse(recorded.packages[packageId].published) + 86400000,
+      ).toISOString(),
+    },
+  };
+  const beforeWorkspace = stringify(settings),
+    beforePolicy = JSON.stringify(recorded);
+  settings.minimumReleaseAgeExclude = [];
+  recorded.exemptions = {};
+  const workspace = Buffer.from(stringify(settings)),
+    policy = Buffer.from(JSON.stringify(recorded));
   assert.notEqual(beforeWorkspace, workspace.toString());
   assert.notEqual(beforePolicy, policy.toString());
   const normalized = immutablePolicyInputs(workspace, policy);
@@ -159,6 +174,12 @@ test("lawful maturity and review metadata preserve byte identity, never raw enfo
   assert.notEqual(
     immutablePolicyInputs(workspace, Buffer.from(JSON.stringify(refresh))).sourcePolicyInputs,
     normalized.sourcePolicyInputs,
+  );
+  const runtimeDrift = parse(workspace.toString());
+  runtimeDrift.overrides = { ...runtimeDrift.overrides, workerd: "0.0.0" };
+  assert.notEqual(
+    immutablePolicyInputs(Buffer.from(stringify(runtimeDrift)), policy).workspaceInputs,
+    normalized.workspaceInputs,
   );
 });
 

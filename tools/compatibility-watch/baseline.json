@@ -4,19 +4,19 @@
     "workers-policy": {
       "catalogSha256": "3e27f68e18881bb254fdd75a7f41dc27ad4cb5d25b2715de4643393f2187d6c0",
       "snapshot": {
-        "commit": "b6fe0684a64aa04753d3163311afae1c13a0d0d1",
+        "commit": "0d1b7bb16d56d2c84ae0bb7d401bedddb6a864e9",
         "version": null,
         "paths": {
-          "src/content/docs/workers/platform": "be4cf0aba128663edd51400496659790e76508766e0042161d54a431d8e0556a",
+          "src/content/docs/workers/platform": "b11015e47ab89817cc60d927aed30180c0d559a4e55f12920af5f21f72383dbc",
           "src/content/partials/workers/outbound-request-body-limits.mdx": "18f851260038816761c8963e98fbb0ff7afa76ce583d3295d55ce0e90dad69f1",
           "src/content/partials/workers/wall-time-limits.mdx": "49cc77460a529360532c1ba86132dc745dda113a063661481a99135104ad6336",
           "src/content/partials/workers/compute-per-request.mdx": "2feb35882f85b440a0b31921823e8dfc26cccf137f100dc6e2c86ebe9457f331"
         },
-        "sha256": "b0d0f4aab07d421b418efdd7a12d6cf71b9a462c5e8084eaa6cb65b7567b600c"
+        "sha256": "8ec258679b0d4572ac315b322a6b661bbd727c8802651074f368cacda9dbc62c"
       },
       "pins": {},
-      "reviewedAt": "2026-11-13T16:33:15.028Z",
-      "reviewNote": "Reviewed primary limits/pricing: Free 100000 daily requests, 10ms CPU and 128MB isolate memory; paid plan is distinct from zone plans. Retain conservative bounds; no account-wide headroom or deployed-fit claim. Reviewed exact cd05cefb3c3e3c9cdb43f3e2513650f0375331ff...b6fe0684a64aa04753d3163311afae1c13a0d0d1: limits/pricing link new spend-management.mdx covering optional account-wide request/CPU spending caps after included usage, separate from Free resource limits and other products. New invocations may be blocked; error1103 is not uniquely diagnostic, reporting/enforcement lag prevents a hard invoice ceiling, subscription excluded. Resume/billing-period reset is not a daily Free reset. All three watched partials/numeric limits unchanged; preserve conservative policy and unknown account headroom, no new budget feature or billing change. Evidence: phase3/thread-9/compatibility-cloudflare-b6fe-build.md."
+      "reviewedAt": "2026-11-19T17:52:25.879Z",
+      "reviewNote": "Reviewed b6fe068...0d1b7bb immutable watched contents: only limits/pricing files changed. Paid Cron triggers rise250 to1000/account; Paid Cron CPU for intervals<1h becomes5min maximum/default30s; >=1h remains15min. Pricing clarifies that interval condition and removes its Queue Consumer reference; rates/inclusions and Free100000/day(midnightUTC),10ms CPU,128MB unchanged. All3 partials and spend-management tree entry unchanged. Product has no Cron/Queue handlers/bindings; retain Free/unknown defaults, conservative bounds and explicit paid capability/deployment checks. Minute admission limits do not establish account daily headroom. No configuration/billing migration or deployed-fit claim. Evidence: phase3/thread-9/compat-current-policy-review.md."
     },
     "durable-objects-policy": {
       "catalogSha256": "e52b1c5413be096047c376cb5ace58a42ad00fd5fdcdbd6e67e812921b23c586",
@@ -67,75 +67,75 @@
     "workers-compatibility": {
       "catalogSha256": "4fd0686da2a0552c666942fc950197304baa684b1cd1233e5b443559767dd2e5",
       "snapshot": {
-        "commit": "cd05cefb3c3e3c9cdb43f3e2513650f0375331ff",
+        "commit": "0d1b7bb16d56d2c84ae0bb7d401bedddb6a864e9",
         "version": null,
         "paths": {
           "src/content/docs/workers/configuration/compatibility-dates.mdx": "fe6715e5fcc7b59042450f660aea243a60257b76ed63b806064e2a0db9a7ea95",
           "src/content/docs/workers/configuration/compatibility-flags.mdx": "77675f1756e82b577d1acb1b650b0c5f31c94f9356dbaaa5a413f3d6b7a57629",
-          "src/content/compatibility-flags": "fb0ff64f9423f3e676acbc358670f6dd2016ffd33df1960468e49918e5a20735"
+          "src/content/compatibility-flags": "e897892decdd3e2ff9c8375e359cb62a5a1de6c38989768816c43cd81a37656c"
         },
-        "sha256": "c5895cc5d55a8de45ca36a3f6aea31750eb64eaa6e2ca815b446ce8da8176170"
+        "sha256": "9a62f66149766e8d4bbe4fefbc5251051eb2ed9409e601252cc3ee188f40b6f0"
       },
       "pins": {},
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed compatibility-date/flag documentation and flag data origin. FortiPi source uses 2026-11-10 with nodejs_compat and both request-signal flags. These references are watch anchors; changing runtime compatibility requires explicit validation."
+      "reviewedAt": "2026-11-19T17:52:25.879Z",
+      "reviewNote": "Reviewed cd05cef...0d1b7bb immutable paths: date/flag overview documents and all135 prior flag entries unchanged; only WebSocket URL/extensions entry added. New websocket_standard_url_and_extensions (inverse websocket_legacy_url_and_extensions) accepts http/https as ws/wss, normalizes URL/path and returns empty protocol/extensions when none. Entry has no default_date; sort_date2026-11-17 orders documentation, not activation. FortiPi keeps2026-11-10 and nodejs_compat/enable_request_signal/request_signal_passthrough, neither new flag selected. No automatic date/flag migration, runtime adoption or deployed compatibility claim. Evidence: phase3/thread-9/compat-current-policy-review.md."
     },
     "computer-fuse": {
       "catalogSha256": "c4c8b17f74da3c8b3563522a2c0d5356d4805d624ce4de15cb25a3e8c34051cc",
       "snapshot": {
-        "commit": "904d2f584ff6f9247c12250a919739c7a5e3d3db",
-        "version": "0.11.2",
+        "commit": "258ecaf5ca4a25caac024163838e6362b604f92c",
+        "version": "0.11.3",
         "paths": {
-          "packages": "af4cf01d2f6dd0c4bd477eee876d0fb4478210ca44af15a9cc14b975719e2b44",
-          "docs": "6a5c0550f0a1c92e357ed96feaa6c5190fcc4c918a57f09db0cae4b3c0f568f6",
-          "packages/computer/package.json": "c6ccd02d86da52672d3c866a5714b09c747296f008e086dec26709435c6952ea",
-          "packages/computerd/package.json": "563ea2a92e3d10783a3df2b376b31c7a7cb222a298b203d4e06706a9b6cf4493"
+          "packages": "06cafd2d4924dd843bdc96e29cd9ba3da98f3d49e202bc3af484733b9ba6513a",
+          "docs": "21e220b85b270248644cb539620cda33cc96fc1a1938f7ccdd50c50f8d052a49",
+          "packages/computer/package.json": "228ffeceed90133fbfe75f791930b01539193d7576150ecc5a0863e474653440",
+          "packages/computerd/package.json": "9e0e14f435aa4bd51c6400b2b70f3bcac47e0d4bc0a760835a52bb05ee0516e6"
         },
-        "sha256": "240215283a0074b84095ac1dc36f2eccc6209e4fd1514ab1d415b22fbffbf541"
+        "sha256": "24b548502dc895ae9ff4bb94116f53e446fb44490e077666d39ab514e9751e29"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@cloudflare/computer": "0.11.1"
       },
-      "reviewedAt": "2026-11-12T19:19:37.897Z",
-      "reviewNote": "Reviewed de44ba6f to904d2f58 release0.11.2 (#324): version/changelog/docs/image-reference bookkeeping only; no runtime/native/RPC/FUSE/ABI/auth/SQL or export/dependency source change. Optional scheme feature is the already-reviewed de44 change. npm0.11.2 published2026-11-12T18:52:02.702Z, maturesNov13 same time; no new security cause/exemption. Retain eligible approved pin0.11.1/source812 and accepted8ead image/source; current0.11.1 exemption maturesNov12T20:08:41.359Z and needs routine removal then, not extension. Reference-only acknowledgement, no code adoption, image relabel or new runtime proof. Scope: phase3/thread-8/candidate-computer-0112-review.md."
+      "reviewedAt": "2026-11-19T18:27:42.097Z",
+      "reviewNote": "Reviewed904d2f58..258ecaf5/0.11.3: nested-transaction delegation, orphan-chunk reaping/pinning and later passthrough/saveResult changes. Retain exact0.11.1/source812/accepted8ead image; not future-source equivalence. Archived58JS contain no SyncRPCServer/applyChangesSync;232mapped sources retain unused applyChangesSync; current DO sync client uses async apply, native receiver uses Node SQLite. Actual ComputerStore Free and local Loader primitives observe maxDepth1; deliberate manual nested db calls reproduce forbidden SAVEPOINT but are unsupported by FortiPi. Rewrite churn retains physical bytes; existing physical-size census/limits and disposable-child retirement remain required, unlink is not reclamation. Hono absent from conveyed client maps, lock/policy and frozen6-component daemon inventory. New sync receivers/mounts/GC adoption reopen this review. No new livePaid/native-image assurance. Evidence: phase3/thread-9/compat-computer-reachability.md."
     },
     "agents-lifecycle": {
       "catalogSha256": "6845cb5c33905cbac363710a051956451ab229dde00e4dbaf1cd5a9a7fbca352",
       "snapshot": {
-        "commit": "46daba47a5f675aae42aa0514ce96437c804f3cd",
+        "commit": "81726f7d18206a0864d183c219fad9fa6e7e28e6",
         "version": "0.33.0",
         "paths": {
-          "packages/agents": "d4484938f9173885c752234a12d7657fa33cd939d6ef5e29e426364853f3d24e",
-          "packages/agents/package.json": "5a88cead6a563890a7a7bbfa17a719f0d1bc7b03e167e8a3f64235f74e900ab9",
-          "docs/agents/harnesses/pi.md": "879415c6f6ecf8fc5e6d5a1a9bba2f70e23cb37159517962848bdf5924d4239b"
+          "packages/agents": "a9bdbec7799a9640a6dafa583078e75657b946d357e74bf85aad926e3cf202c3",
+          "packages/agents/package.json": "81bcb0c35c68b6628d71549b90be09c83a79330e78fcf9fe9e6a473e8f2356c6",
+          "docs/agents/harnesses/pi.md": "78143e635f7478e8ada50a8e75bea13f0adc6dc2e186b33ecaa1f924436e60fa"
         },
-        "sha256": "540ffe8532de9ef4f1c6fc6ffc0c3ebaeccce7f48297a17a875b1bf600223670"
+        "sha256": "140ed684737f81a588d61d7a59195848070b0d075d5e9cc4b14f92be49837f2c"
       },
       "pins": {
         "apps/worker/package.json#dependencies/agents": "0.33.0"
       },
-      "reviewedAt": "2026-11-12T18:07:33.885Z",
-      "reviewNote": "Reviewed exact f0f4ed98...46daba47 three-commit range. 5071 Lifecycle retry/outcome fence is the accepted declared patch. Direct WebSockets is used: qualified application attachment/message/post-authority guards reject missing or host-closed state and closed durable budgets; actual queued-frame/host1008 proof is bounded, not SDK transport or post-eviction clearance. CapnWeb disabled; CP native WS separate. Routed Queue/Scheduler and Agents-managed MCP changes unused. Retain agents0.33.0/patch/lock. Reference only; no unpublished adoption, runtime/image/deployed approval. Evidence: phase3/thread-8/candidate-agents-pi-review.md."
+      "reviewedAt": "2026-11-19T18:52:18.050Z",
+      "reviewNote": "Reviewed46daba47..81726f7d primary Lifecycle/Pi documentation and selected model/browser/chat deltas. Retain exact published0.33.0; future onFetchError/base-Agent/error/provider APIs are not adopted. Backport ONLY neutral HTTP500/no WebSocket diagnostic frame into existing reviewed5071 lifecycle repair; full member inverse preserves fencing/logging/non-Error handling. Six actual startup/capability failure cases plus unchanged fencing/generation checks independently pass; prior member and HTTP-only mutant discriminate. Pi doc model/default and optionalTUI changes remain lookahead. Current maintained imports remain Lifecycle/PiHarness/WebSockets/models-pi-ai, not blanket future-main compatibility. Source/patch and current runtime19 qualification are separately bound. No deployed/public-client proof inferred. Evidence: phase3/thread-9/compat-lifecycle-security-enforcer.md."
     },
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "4f95fbe2f117d288610e937889ad03575777841c",
+        "commit": "1e34c3b4c7df78e716a8f53ad0bcf3a00feceedc",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "e652db83ded3d9c94ca33424ffeb500f36c648d83bcc76c4c30c5a8a190fdced",
-          "packages/ai": "ed79de6eee22ac7ed4a8194af3116ce3ba82ce688462a735137a19d30711968f",
-          "packages/chord": "3ce8cb8bc4af086bf2f7d968ead4c7442bbf5e2b2a19be275b6d7a8e29b2c6c7",
+          "packages/ai": "ca19a754f4faf3ac923a15fad9b17d3a5fe902bb8f91fa66e7b83811db5117d2",
+          "packages/chord": "137793cad9d05f50e4da4ea8ec68deb11bf4ec885da8898aad7bf8b19e6528d5",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
-          "packages/durable": "3044b813b7368a4786ddb3436e209f223862ac08226214fa04190ca90f26c175",
+          "packages/durable": "f20b675f403ffc96a4672b5f741f8e47c6a2110405970a455707743220e3a1ce",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
           "packages/mcp": "8bb24aaf6028fb9dfbd36754dc09fd8cf7210a187dea80e7715653eb90108674",
           "packages/schema": "1cac0355eee29b45658e037766a7b983f01a57dfa444d973e66365317f6c1752",
           "packages/telemetry": "cb8f452fda82cec5074961cc6854226cd74474490b92b3208a13e26e84ff28e7",
-          "packages/tui": "5483c0578f10b3c4346666658e4486062e9ad03707c10ded58ccf59eddf318d9",
+          "packages/tui": "69813e07749f491d172b646e5e5cf193b1d6bf07736082d98a58e821f9aac6bb",
           "packages/durable/package.json": "36d31c40a9cfc52cd044ead2af947bca4f4ab7d9af8f5e7a82db248e1c942ff9"
         },
-        "sha256": "685dfb74b5bd1f92bec0a87c7da4afd5fc849ad8e2379afbb8c8840667fca50b"
+        "sha256": "63b718887b66a6869288c984e9c9843aa9a481e0c024ec6bac618fdd2f70c9f5"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,68 +147,68 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-15T08:56:50.855Z",
-      "reviewNote": "Reviewed0db9861e..4f95fbe2:4linearcommits/5files; only2watchedtests and3P3docs. AI test corrects Together maxTokens expectation; Chord tests await listener delivery rather than turns. Entire AI/Chord runtime src, Durable tree and manifests unchanged. No new applicable installed risk or startup/recovery fix established; no live provider-cap validation. Retain1.5.2 archives/SRIs,pins/locks,declared Waiters/AI patches and installed ledger. Prior Chord remote-hold A/B/C,shared-authority/revocation,AI retry/read and app-kit caveats remain; remote/sync/store adoption reopens review. No runtime/provider/native ABI/FUSE/image/security/future compatibility or deployment clearance. Evidence:phase3/thread-9/upstream-pi-4f95-impact.md and upstream-pi-4f95-enforcer.md; earlier0db impact retains source-change review."
+      "reviewedAt": "2026-11-19T17:54:41.655Z",
+      "reviewNote": "Reviewed exact4f95fbe2..1e34c3b4 primary trees. Unreleased changes add queued-input onAbort keep (default withdrawal unchanged), Chord typed admission/wire denial and createWorkers store/exit fencing, provider Mistral strict opt-in/Codex connection-lifetime retry, model catalog and readonly/cached TUI render contract with O(viewport) scrolling. No published Pi family version change from1.5.2; these future APIs are not adopted. FortiPi uses Chord context/SQLite through real PiHarness and current AI/TUI wrappers, not Chord remote workers/admission. Retain exact installed archives/declared patches and maintained client tests; future adoption needs deliberate API/provider/render validation. No evidence this fixes the observed source-runtime stall. Evidence: phase3/thread-9/compat-current-installed-review.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "81e56ddf3e1ba28ea2320388fac86011a68f7be4",
-        "version": "4.162.0",
+        "commit": "56974d49141e72b19b33b74a19c160f734128108",
+        "version": "4.165.0",
         "paths": {
-          "packages/wrangler": "f25239bc4f07bf6f29539bc367ae785d8706d1db023726e930008d65a0c8da7e",
-          "packages/wrangler/package.json": "c3b2a67bdcb6ea59be3f01ad89acdff5110d607d4d70afd27fc069a08f6d6932"
+          "packages/wrangler": "b0cafcc9d8c45fecc33e58d3647d6716ca4a9e588a4fc015c258a20509de1a9e",
+          "packages/wrangler/package.json": "a76fd7aeaf4e24cb6a85d0d7872b2f2789ef63723a4fb6d3a8ac2496c8ee3d05"
         },
-        "sha256": "376f967bf4f18e02057bed429415b3defb546082e8e162e0fda77c93fb9a818e"
+        "sha256": "fc089aa2a562265a2b0c00614e674a35749f2aacefa428653c745b52b511ddeb"
       },
       "pins": {
         "apps/worker/package.json#devDependencies/wrangler": "4.162.0",
         "packages/fortipi-cli/package.json#dependencies/wrangler": "4.162.0"
       },
-      "reviewedAt": "2026-11-13T22:59:52.847Z",
-      "reviewNote": "Reviewed349fc4e7..81e56ddf:1commit/2complete Wrangler patches plus patch changeset;1117/1119 blobs and manifest unchanged. Effective omitted max_instances20 now selects rollout[10,100]; installed4.162.0 uses100. Explicit0/1 stay100;2/20 staged. FortiPi optional Paid Linux overlay omits max_instances and retains installed single-step behavior; Free has no containers. This later main fix is NOT in installed79b890ab4.162 source or an image/runtime proof. No pin/quota/binding/auth/API change adopted. Prior local Artifacts/Workflows-unused caveat, adopted hot-reload fix, nine-archive/mdream legal review and18exceptions retained. Reference only; actual Paid rollout/runtime/final qualification pending. Evidence:phase3/thread-9/compatibility-current-ledger-build.md."
+      "reviewedAt": "2026-11-19T17:54:41.656Z",
+      "reviewNote": "Reviewed exact81e56ddf..56974d49 primary Wrangler changelog/config/deploy/image/version paths through4.165.0. Changes include shared config/build/type packaging, VPC certificate settings, D1 force, OAuth refresh reuse, dev config watcher readiness, remote RPC transport error rejection, UTF8 env validation, maintained asset hashing and default compatibility/workerd updates. FortiPi uses closed explicit legacy config/date/flags, installed4.162.0 and exact Miniflare/workerd closure; no VPC/D1/Artifacts/nativecf auto-config features. Retain current pinned deployment/image behavior and real prepare/deploy qualification; later defaults/APIs/runtime are not adopted or certified. No evidenced source-runtime stall fix. Evidence: phase3/thread-9/compat-current-installed-review.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "56962b3530f0cc420e9e66e740ec928bfc51173e",
-        "version": "v1.20261115.1",
-        "sha256": "f9bea7366267ad97d422b514946857b595d24f9d9f024ef467b742f9df5bff6c",
+        "commit": "417403d5d5d0af855302f97cae3ab93525fa4690",
+        "version": "v1.20261119.1",
+        "sha256": "d5287ec643c390f56c6accc430d918b0f4dd5989edaf1510bb715f06baa420d4",
         "paths": {}
       },
       "pins": {
-        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261113.1"
+        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261119.1"
       },
-      "reviewedAt": "2026-11-15T01:20:50.628Z",
-      "reviewNote": "Reviewed3d3093c8..56962b35/v15; keep4.162/MF13beta/workerd13.1/types13.1 graph/archives/patches. 8401 adds no-GC bounds: current13 IoOwned owns spans/permits; Weak has no GC edge. 8403 fixes Rc stale-parent moves in resource Drop: inspected13 resources/Opaque/FunctionData have no such Drop; CacheBinding is a plain no-GC bytes field. Not Rust/native clearance; TracedGlobal/field-Drop/manual-trace caveats remain. Prior14 SQL savepoint/GetMultiple and gated TS-stream limits retained. Selected transient RPC owns server/callback via pinned KJ attachments/cancellation; ordinary ctx.run; Codemode Loader.load not get; facets/WorkerShell unselected. Keep RPC abort/cross-context/deferred/SQLite-sync caveats. Native/types adoption needs coherent Foundation review. Compat date does not pin cloud runtime; no Root/live proof. Evidence:phase3/thread-9/workerd-20261115-reference-build.md (primary8401/8403;prior14)."
+      "reviewedAt": "2026-11-19T18:52:18.050Z",
+      "reviewNote": "Reviewed reference15..19 and selected installed19 source417403d5. Adopt exact1.20261119.1 plus types5.20261119.1 through the sole reviewed13->19 override; retain Wrangler4.162/Miniflare5beta13 interfaces. Source contains5659efb repeated-reentry deadlock and2a07e8 deferred external-memory fixes; current reference review also covers timer/snapshot/Rust lifetime changes. Actual old/new repeated-callback control fails/passes; held-work recovery passes locally. Seven archives have SRI/registry signatures, SLSA source/subjects and leaf signatures; trust/transparency remains release gate. Controlled pack preserves bundled19/all five native pins, but ordinary installation/reification, fresh CI/native3OS/live remain required. No established cause/fix for prior intermittent Pi stall or live provider-runtime equivalence. Evidence: phase3/thread-9/compat-runtime-upgrade-enforcer.md."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
       "snapshot": {
-        "commit": "dd138afdd6f2edfff2153c0b964a56f0ae8de7e0",
-        "version": "v27.0.0-alpha.0.1.0",
-        "sha256": "5db017d2dba8625951b2a948b9a54ffe7cc5d41be233da438b3a59ab8ccdfadb",
+        "commit": "6c7c89331d062a47d6fe3d16b3c00e4a3145826d",
+        "version": "v27.0.0-alpha.0.1.1",
+        "sha256": "76178d7c5cb59d17e763553e257ff256b3712fb46ce388e641f09632dec9d30e",
         "paths": {}
       },
       "pins": {
         "package.json#fortipi/toolchain/node": "26.13.1"
       },
-      "reviewedAt": "2026-11-12T17:58:37.207Z",
-      "reviewNote": "Reviewed official Node v27.0.0-alpha.0.1.0 release/tag dd138af (annotated ddfef317), explicitly Alpha despite GitHub prerelease=false. Official production guidance requires Active/Maintenance LTS and still identifies 26.13.1 as Latest LTS; retain exact security-patched 26.13.1 and signed archive identity from phase3/thread-1/node-security-patch.md. November11 security advisory remains current. Alpha child_process/X509/DNS/SEA/runtime changes are not adopted or certified; native ABI and historical embedded Node/image identities remain separate. Only Node reference reviewed; details phase3/thread-8/candidate-node-review.md."
+      "reviewedAt": "2026-11-19T17:55:26.614Z",
+      "reviewNote": "Nov19 reviewed dd138af..6c7c893, alpha.0.1.0→alpha.0.1.1: immutable changelogs/25-commit diff cover Darwin notarization, Linux PIE, nghttp3 and V8 map-aging/idle-GC/Temporal-ICU fixes. Explicit Alpha despite API prerelease=false: retain security LTS26.13.1; no alpha/ABI adoption or stall-fix claim. New release/tag fingerprint matches frozen Nov19 watch. Old tag/commit unchanged but current old-release metadata hash differs from saved baseline; retain that history, use immutable changelogs for interval review. Existing signed26.13.1 security basis remains; this is reference review only, not new runtime qualification. See phase3/thread-9/compat-current-platform-review.md and E-v4HMge/receipt.json."
     },
     "pnpm": {
       "catalogSha256": "e58410592c8f99f5a020cb7c675a8fb1adcab60b7954df4ee66f045f48f14708",
       "snapshot": {
-        "commit": "0470052291b2ba369be93a9b696e0a0097722ba5",
-        "version": "v12.18.0",
-        "sha256": "c5cfce536bf2ff4177c36e0f78eeed7557dfc92263b8d25391ce6adcae2d4664",
+        "commit": "b8d388835f9a40ee1ac53fbc2d4b58c3ebfa5600",
+        "version": "v12.21.0",
+        "sha256": "e81e013dae06379ed704786c7b81bb2f31ab6089fb66a3ffd64c1ff387ea5086",
         "paths": {}
       },
       "pins": {
         "package.json#packageManager": "pnpm@12.18.0"
       },
-      "reviewedAt": "2026-11-11T09:06:45.505Z",
-      "reviewNote": "Reviewed v12.18.0 release/tag: lock/install behavior, platform variants and agent-skill approvals. Retain pinned manager and disabled skill directories; actual frozen root/isolated-tool installs are required."
+      "reviewedAt": "2026-11-19T17:55:26.614Z",
+      "reviewNote": "Nov19 reviewed0470052..b8d3888/releases12.19–12.21. Retain12.18.0 for current frozenv9/default-isolated installs; no v13/loaded/hoisted/pnpr/runtime-download adoption. Reviewed offline URL-redaction security fix, bundled node-gyp undici6→7, peer/engine checks and script-group cleanup. Current locks contain no explicit URL credentials; installer is online frozen and explicitly selects root node-gyp13.1.0; locked undici7.30.1/8.12.4. Upstream bundled node-gyp uses EnvHttpProxyAgent, not the advisory dump interceptor; this is scoped reachability, not bundled-binary/security clearance. Adoption requires coherent exact-pin/engine/bootstrap/action/lock/native and frozen-install checks, with trust/build/skill restrictions retained. New snapshot verified. Details phase3/thread-9/compat-current-platform-review.md."
     },
     "typescript": {
       "catalogSha256": "281424da318292a0ed0449e4fe3cc2b3be9e207251b80380700eb539925f768c",
@@ -275,16 +275,16 @@
     "format": 1,
     "cohort": {
       "rootManifest": "c5caf6a930f9562efe7100defea7bd2ff648a480f19b0fabb998b75c5d348722",
-      "rootLock": "b4c97e00aed9c893e1a408e37a9ef36d512a79c3fe7bf8d525d5b4d8f90a59a3",
-      "workspaceInputs": "184d8e1a0596e562790e028ea2700aee54cf611a776d0c32b9f137fd432f0e28",
+      "rootLock": "54db511df4861e3296d9367dc857e951d6bde6ed9e71e750e43e33298d067363",
+      "workspaceInputs": "023ff7ae2f5a6eeaaea91ecdfc89b6cc5e60efd5b8910fc630080a986ae8cf02",
       "toolingLock": "75a3f7298cadaa5444d04a018fcc763bf2be45e8e569282f71bd40f69ecbd63e",
-      "sourcePolicyInputs": "292dd0d1818cb811e2af13106bd859f995316732db8bc2038008263e156a6b00",
-      "patchReview": "0f43b42be09b86a49bd8d30886d4e3d9522ad2afee713069d47b411d1c65c7a1",
-      "patchTree": "c601ec5b06b4c0eb09eaae60f69abb203b6fe082",
+      "sourcePolicyInputs": "e94c4ca3dda850bdd649ce7daadc2c5f6a9a9c808b39afdfcd9605e771618513",
+      "patchReview": "5ee7fb6488a9d356de3be0bee58e24c933ba07e360fc60d3b8a52e581301d2f4",
+      "patchTree": "ed05aa03cba2c97f0e1eedf49062ff1b91618b60",
       "platformTools": "34c2ec28d230f3583e1da8d1f7ef1e62e083e0c82ba078e332e036aac9419dfc",
       "imageInputs": "be74003a3969ceb3e4eb6b7d45e612d54db50d412316c07efa4de458e6d5f39a",
       "productTrees": {
-        "worker": "674bc5fbe138f3b65778bb88f443917b2871e360",
+        "worker": "8732851c921f7486635cca57ebc9a2900c4dfb8a",
         "packages": "1b661d779d7efec12a6af587e98bb658a2731817"
       },
       "image": {
@@ -294,12 +294,12 @@
         "sourceKitSha256": "10c50b19e254716cf7807712c3abd063c9fb35bb2f9957efec14382dedc3e2c6"
       }
     },
-    "cohortSha256": "6a6af823a6fd939e4fbedfbbb91c6adc04df350983add218ec0b053f5a99c36e",
+    "cohortSha256": "c45273b659dd051706e581edfa5aa36f1d1eba319e4a957d2c35eaceab56f15b",
     "references": {
       "pi-runtime": {
         "sourceFactsSha256": "d1853d93b918ceeb5da681a105366d7e050f862b0936afcb01c903bb0d1ac9ac",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-14T01:27:43.023Z",
+        "basisReviewedAt": "2026-11-19T18:52:18.050Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@earendil-works/chord/-/chord-1.5.2.tgz",
@@ -338,28 +338,28 @@
             "sha256": "2fdd7609ee61e7c275a528e32d62093c2c298d3f9254ad3048451df2063e6bda"
           }
         ],
-        "limitation": "Reviewed installed 1.5.2 archives, both declared Pi transformations, actual queued SQLite PiHarness path and all five maintained public entry surfaces. Existing remote-hold A/B/C race remains real upstream; no established exposure via the supported Worker loop, AI OpenAI/Anthropic/Codex wrappers or pi-tui primitives (AI/TUI archives have no Chord imports). Remote/sync/store adoption must reopen this record. Later827383a design docs are lookahead, not installed code or blanket conveyed-export safety. No new runtime, provider, recovery or future-advisory clearance."
+        "limitation": "Same exact1.5.2 archives and declared Pi transformations; maintained Worker context/SQLite/PiHarness and AI/TUI imports unchanged by runtime repair. Current future-main review records onAbort/Chord admission/worker-store and readonly TUI/provider deltas without adoption. Original remote-hold race remains scoped outside supported wrappers; remote/store adoption reopens review. Current Worker tree/cohort rebound to reviewed Agents redaction and runtime19 changes. No new provider, native-platform, deployed recovery or future-advisory clearance."
       },
       "agents-lifecycle": {
         "sourceFactsSha256": "a34a982d22a8917350f1cff490e9b602740c078d7410437c9444034e604bff7c",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-14T01:27:43.023Z",
+        "basisReviewedAt": "2026-11-19T18:52:18.050Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/agents/-/agents-0.33.0.tgz",
             "sha256": "985a3e04db1c8500b6dbc6c79cbb1aa43579fef2f2ad903bde7cd3bfa764ff7f"
           },
           {
-            "uri": "https://raw.githubusercontent.com/scottdraper8/fortipi/e2eccdea0c488d076358252b4c0ea646180e9611/patches/agents@0.33.0.patch",
-            "sha256": "be9cf2adb5bb78fb438c17555aeaf048e9b6f07f9760f1edf61af47c9ad50528"
+            "uri": "https://raw.githubusercontent.com/scottdraper8/fortipi/d070e8baa3e8bfc7c4ec52fab2db39fdfed41063/patches/agents@0.33.0.patch",
+            "sha256": "ec6855764c1e76c69c0fd42d170d7b23d438aeec38dca95ca75579956144f5a3"
           }
         ],
-        "limitation": "Exact agents0.33.0 archive has no gitHead; do not infer a published base commit. Declared Lifecycle patch5071 fences retry/outcome after supersession and is checked against original/patched/installed member bytes. Actual maintained imports are Lifecycle.install, PiHarness/websockets and models/pi-ai; application host-close/current-authority guards remain separate. This is current source coupling, not SDK transport, eviction, future-main, or deployed recovery clearance."
+        "limitation": "Exact0.33.0 archive with no published gitHead inference. Existing5071 job-fencing repair plus independently reviewed two-statement fetch-error redaction; original/fenced/fixed member identities and source817 are verified. Actual six failure cases and existing fencing/generation controls discriminate old and restored behavior. Native Node/runtime19 combination is a new reviewed cohort, requiring fresh coherent CI/native/platform and deployed proof. No future onFetchError API or broad SDK transport equivalence."
       },
       "computer-fuse": {
         "sourceFactsSha256": "645d0bdc91df175b152b1b5590017e8d4ed2a020c78d646ab3bbccd298b005e3",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-14T01:27:43.023Z",
+        "basisReviewedAt": "2026-11-19T18:52:18.050Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@cloudflare/computer/-/computer-0.11.1.tgz",
@@ -370,31 +370,31 @@
             "sha256": "ee20eae6939c82bd465933c3a591f96b362aa58fe344888307f7ea4839121f27"
           }
         ],
-        "limitation": "Exact client0.11.1 and capnweb graph; no package patch. Original812 source attribution and accepted8ead immutable image/source kit bind separate daemon/SEA22.23.5/FUSE inputs. Existing Workspace/storage/backends/output, WorkspaceProxy and backend APIs remain in their reviewed wrappers. Future904d/0.11.2 is not installed equivalence. Preserve runtimeVerified:false, licenseReviewRequired:true and registryDigest:null metadata; historical native artifact authentication is separate, not new current cloud/image/runtime approval."
+        "limitation": "Exact client0.11.1/capnweb and source812/image8ead identities retained. Independent current-path review distinguishes58 executable JS files without SyncRPCServer/applyChangesSync from232 maps retaining unused helper. Supported DO apply is asynchronous; native receiver uses Node SQLite; direct database nesting/custom receivers are unsupported. Rewrites retain physical storage until bounded disposable-child retirement; preserve census/headroom checks. No0.11.3 GC/mount adoption or new native/livePaid proof. Keep runtimeVerified:false, licenseReviewRequired:true, registryDigest:null metadata."
       },
       "wrangler": {
-        "sourceFactsSha256": "101e5bbeab53e210edee7c172574de82343943c4d40448c0ba69aed30176c233",
+        "sourceFactsSha256": "c74830d39b33b0873d420df8dfcc398b18dec0dad679b08df660dbb183b25948",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-14T01:27:43.023Z",
+        "basisReviewedAt": "2026-11-19T18:52:18.050Z",
         "primaryReferences": [
           {
-            "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261113.1.tgz",
-            "sha256": "cef32e75d5876601ea2b17e48f76ed9aded000984bfcf3000be9cdd71d8db5b7"
+            "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261119.1.tgz",
+            "sha256": "6b4bcc7839e1b115bb356b0b48991631bfbcc5a93242c61a03a92006b1ce5c28"
           },
           {
             "uri": "https://registry.npmjs.org/miniflare/-/miniflare-5.20261113.0-beta.tgz",
             "sha256": "4777f56bb9e822fd249b05929dec2a82e1c9b9fc4cf5a757f7ef15cb9bd34785"
           },
           {
-            "uri": "https://registry.npmjs.org/workerd/-/workerd-1.20261113.1.tgz",
-            "sha256": "e52d9df647b4e15bbef09a2cc603e9fd9d1d665176c15f22ebdec56947869d90"
+            "uri": "https://registry.npmjs.org/workerd/-/workerd-1.20261119.1.tgz",
+            "sha256": "641cc9ff16806ba8c5fc02825a3b99bbc1417fc8a544b3fc48bc01700a612b5c"
           },
           {
             "uri": "https://registry.npmjs.org/wrangler/-/wrangler-4.162.0.tgz",
             "sha256": "bdc0366417fbeea506296931be1c5dd91c131043f8873e31601e03ed4c31956a"
           }
         ],
-        "limitation": "Installed4.162.0 source archive and exact Miniflare/workerd/types closure are reviewed; CLI still verifies pinned Node26.13.1/Wrangler and actual config/prepare/deploy ports remain required. Later watched Artifacts-to-Workflow feature is unsupported by the closed FortiPi config (no artifacts/workflow/triggers), not future code certified compatible. Omitted Paid max_instances retains installed single-step rollout; later81e56 default-rollout fix is not adopted. Free omits paid bindings. Actual Paid rollout, genuine candidate and live proof remain open."
+        "limitation": "Exact Wrangler4.162.0/Miniflare5.20261113.0-beta interfaces retained with reviewed exact workerd13->19 override and matching types19. Seven new archives and explicit finite age exceptions are verified; declared source/peer/context changes and version guards match. Controlled scoped pack resolves bundled19 from both Wrangler and Miniflare and pins all five native variants19; ordinary consumer install/reification and current native3OS/candidate/live qualification remain required. Unused future VPC/D1/Artifacts/config APIs are not adopted. No prior intermittent Pi-stall cause/fix, provider-runtime equivalence or Paid rollout clearance."
       }
     }
   }
