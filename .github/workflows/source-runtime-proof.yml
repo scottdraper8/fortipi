@@ -70,10 +70,11 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-native-role-')
         run: node --test --test-reporter=tap scripts/native-owned-role-control.ts
         timeout-minutes: 2
-      - name: Observe three actual source test processes directly
+      - name: Observe the unchanged Pi wake case with three runtime controls
         run: >-
-          node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
+          node --require ./scripts/source-test-processes.ts --test-concurrency=4 --test --test-reporter=tap
           apps/worker/test/agent/admin-file-bearing.test.ts
+          apps/worker/test/agent/pi-wake-retry.test.ts
           apps/worker/test/agent/process-recovery.test.ts
           apps/worker/test/api/stream-boundaries.test.ts
       - name: Require Linux hardener service still active
