@@ -8,6 +8,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { readDistributionReceipt } from "../packages/fortipi-cli/test/offline-consumer.ts";
+import { localBrowserLine } from "../tests/clients/local-evidence-observation.ts";
 
 const execute = promisify(execFile);
 const script = fileURLToPath(import.meta.url);
@@ -90,15 +91,40 @@ async function run(file: string, args: string[], cwd = root, timeout = 120000) {
       // application, registry or GitHub credentials are present. Preserve its
       // bounded tool diagnostic; signed URL queries and auth-shaped values
       // are still removed. Other subprocess failures never emit captured text.
-      process.stderr.write(
-        stderr
-          .slice(0, 8192)
-          .replace(/https?:\/\/[^\s"'<>]+/g, "[URL removed]")
-          .replace(
-            /(?:Bearer\s+|(?:token|password|secret|authorization)\s*[=:]\s*)[^\s"',;]+/gi,
-            "[authentication removed]",
-          ),
-      );
+      if (args[2] === "--browser") {
+        // Re-project only the closed browser observation. Installed application
+        // errors and arbitrary child output remain private to this process.
+        for (const line of stderr.slice(-65536).split("\n").slice(-32)) {
+          try {
+            const row = JSON.parse(line) as Record<string, unknown>;
+            if (row.diagnostic !== "local-browser-observation") continue;
+            process.stderr.write(
+              `${localBrowserLine(row.event, row, {
+                stage: row.stage,
+                errorClass: row.errorClass,
+                errorCode: row.errorCode,
+                cleanupComplete: row.cleanupComplete,
+                diagnostic: {
+                  phase: row.publicPhase,
+                  code: row.publicCode,
+                  status: row.publicStatus,
+                  completionDeadline: row.completionDeadline,
+                },
+              })}\n`,
+            );
+          } catch {}
+        }
+      } else {
+        process.stderr.write(
+          stderr
+            .slice(0, 8192)
+            .replace(/https?:\/\/[^\s"'<>]+/g, "[URL removed]")
+            .replace(
+              /(?:Bearer\s+|(?:token|password|secret|authorization)\s*[=:]\s*)[^\s"',;]+/gi,
+              "[authentication removed]",
+            ),
+        );
+      }
       const condition =
         [
           "ERR_ASSERTION",
@@ -449,16 +475,24 @@ async function main() {
   assert.equal(process.argv.length, 3);
   if (phase === "inputs") await inputs();
   else if (phase === "image") await image();
-  else if (phase === "install") {
+  else if (phase === "install" || phase === "install-browser") {
     await inputs();
     await run(
       process.execPath,
-      ["packages/fortipi-cli/test/install-harness.ts", distribution()],
+      [
+        "packages/fortipi-cli/test/install-harness.ts",
+        distribution(),
+        ...(phase === "install-browser" ? ["--browser"] : []),
+      ],
       root,
       600000,
     );
     await regular(join(distribution(), "distribution.json"));
     await regular(join(distribution(), "consumer/offline-consumer.ts"));
+    if (phase === "install-browser")
+      process.stderr.write(
+        '{"diagnostic":"installed-browser-component","outcome":"pass","componentOnly":true,"publishable":false}\n',
+      );
   } else if (phase === "offline") await offline();
   else throw new Error("Unknown proof phase");
 }
@@ -466,7 +500,14 @@ if (import.meta.main)
   await main().catch((error: unknown) => {
     // Neither signed artifact URLs nor child auth/output can enter a diagnostic.
     const phase = process.argv[2];
-    const label = ["inputs", "image", "install", "offline", "namespace"].includes(phase ?? "")
+    const label = [
+      "inputs",
+      "image",
+      "install",
+      "install-browser",
+      "offline",
+      "namespace",
+    ].includes(phase ?? "")
       ? phase
       : "unknown";
     const condition =

@@ -14,12 +14,16 @@ import {
 } from "../../../scripts/prepare-release.ts";
 import { actualCapsule } from "../../../scripts/test/release/fixtures.ts";
 import { SYNTHETIC_SCOPE } from "../../../scripts/verify-release-gates.ts";
+import { localBrowser } from "../../../tests/clients/browser-local.ts";
 import { verifyAssets } from "../dist/assets.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const execute = promisify(execFile);
 
-export async function installConsumer(directory: string): Promise<Record<string, unknown>> {
+export async function installConsumer(
+  directory: string,
+  browserProof = false,
+): Promise<Record<string, unknown>> {
   // Never run installed prepare/Wrangler on an ineligible local host.
   assert.equal(process.platform, "linux", "Installed CLI proof requires actual Linux");
   assert.ok(isAbsolute(directory));
@@ -119,6 +123,17 @@ export async function installConsumer(directory: string): Promise<Record<string,
     parentNetworkNamespace: await readlink("/proc/self/ns/net"),
     offlineDryBuild: "not-executed; dedicated Linux identity/network namespace required",
   };
+  // Diagnostic component only: keep the real stager's private authority and
+  // installed inventory in this process. This cannot authorize outer evidence.
+  if (browserProof) {
+    const { install } = await import("../../../tests/distribution/install.ts");
+    const browserInstalled = await install(path);
+    await localBrowser(browserInstalled);
+    await browserInstalled.verifyUnchanged();
+    process.stderr.write(
+      '{"diagnostic":"installed-browser-component","outcome":"pass","componentOnly":true,"publishable":false}\n',
+    );
+  }
   await writeFile(join(directory, "distribution.json"), `${JSON.stringify(result, null, 2)}\n`, {
     flag: "wx",
     mode: 0o600,
@@ -132,5 +147,8 @@ if (import.meta.main) {
     directory && isAbsolute(directory),
     "Explicit fresh absolute distribution directory required",
   );
-  console.log(JSON.stringify(await installConsumer(directory)));
+  assert.ok(
+    process.argv.length === 3 || (process.argv.length === 4 && process.argv[3] === "--browser"),
+  );
+  console.log(JSON.stringify(await installConsumer(directory, process.argv[3] === "--browser")));
 }

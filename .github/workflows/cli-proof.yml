@@ -1,4 +1,4 @@
-name: Installed CLI offline proof
+name: Installed HTTPS browser component diagnostic
 on:
   push:
     branches: ["ci/fortipi-cli-proof-*"]
@@ -8,7 +8,7 @@ permissions:
   actions: read
 concurrency:
   group: cli-proof-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 env:
   CI: "true"
   SOURCE_SHA: ${{ github.sha }}
@@ -42,6 +42,13 @@ jobs:
             downloads.python.org:443
             pypi.org:443
             files.pythonhosted.org:443
+            cdn.playwright.dev:443
+            playwright.download.prss.microsoft.com:443
+            archive.ubuntu.com:80
+            security.ubuntu.com:80
+            azure.archive.ubuntu.com:80
+            *.ec2.archive.ubuntu.com:80
+            packages.microsoft.com:443
             api.osv.dev:443
             *.actions.githubusercontent.com:443
             api.stepsecurity.io:443
@@ -101,8 +108,10 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run schema:check
       - run: pnpm run check:licenses
-      - name: Stage and install the five scoped source component bundles
-        run: node scripts/cli-proof.ts install
+      - name: Install the pinned Chromium and Linux libraries
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Stage five real source bundles and exercise the installed HTTPS browser
+        run: node scripts/cli-proof.ts install-browser
       - name: Run the installed CLI with an empty OS home and no external network
         env:
           FORTIPI_CLI_PROOF_PNPM_BIN: ${{ steps.pnpm.outputs.bin_dest }}
