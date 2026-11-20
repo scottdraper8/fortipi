@@ -20,6 +20,22 @@ const phases = new Set([
   "pi-factory-store",
   "pi-factory-models",
   "pi-factory-harness",
+  "recovery-job-drain",
+  "drain-controls",
+  "drain-reconciliation",
+  "drain-fresh-jobs",
+  "drain-dispatch",
+  "drain-projection",
+  "drain-exports",
+  "chord-transaction-request",
+  "chord-queue-operation",
+  "chord-storage-callback",
+  "pi-commit-transaction",
+  "pi-commit-publication",
+  "router-state-ingress",
+  "api-state-fetch-enter",
+  "api-state-headers",
+  "storage-observation-limit",
 ]);
 
 export function recoveryInspectionLine(phase: unknown, event: unknown): string | null {

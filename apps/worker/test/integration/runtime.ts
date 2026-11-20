@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { freeInfrastructurePolicy } from "fortipi-contract";
@@ -19,7 +19,10 @@ import {
   processCueMatches,
   readProcessWitness,
 } from "../agent/process-observation.ts";
-import { recoveryInspectionRecord } from "../agent/recovery-inspection-observation.ts";
+import {
+  observeRecoveryInspection,
+  recoveryInspectionRecord,
+} from "../agent/recovery-inspection-observation.ts";
 import { killRuntime } from "./runtime-child.ts";
 
 const repository = resolve(import.meta.dirname, "../../../..");
@@ -329,6 +332,12 @@ export async function start(options: RuntimeOptions = {}) {
     token = admin,
   ) => {
     assert.ok(path.startsWith("/") && !path.startsWith("//"));
+    const observeStateRequest =
+      options.main !== undefined &&
+      /^admission-identity-(?:baseline|mutant)\.js$/.test(basename(options.main)) &&
+      /^\/__test\/agents\/[A-Za-z0-9_-]+\/state$/.test(path);
+    if (observeStateRequest)
+      observeRecoveryInspection("api-state-fetch-enter", "enter", console.error);
     const response = await fetch(`${endpoint}${path}`, {
       method,
       redirect: "error",
@@ -336,6 +345,7 @@ export async function start(options: RuntimeOptions = {}) {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(30000),
     });
+    if (observeStateRequest) observeRecoveryInspection("api-state-headers", "exit", console.error);
     return { status: response.status, body: (await response.json()) as T };
   };
   try {
