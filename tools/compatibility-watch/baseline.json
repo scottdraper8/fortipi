@@ -120,11 +120,11 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "3107a58d2e9a1b426a94bf877bd58dd1282cd1ae",
+        "commit": "edfe6b2ef32283d31efc9e26db86fe48be19d3b2",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "e652db83ded3d9c94ca33424ffeb500f36c648d83bcc76c4c30c5a8a190fdced",
-          "packages/ai": "38233f9ee56454a166a1e21fd7f064c6719ca8ca9257064fec17731e62ba8ed3",
+          "packages/ai": "b818fbd68e755256c25b79bd4dfae3511e48b7f7ef2b3bc2f9fe3cdfd020c128",
           "packages/chord": "137793cad9d05f50e4da4ea8ec68deb11bf4ec885da8898aad7bf8b19e6528d5",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "f20b675f403ffc96a4672b5f741f8e47c6a2110405970a455707743220e3a1ce",
@@ -135,7 +135,7 @@
           "packages/tui": "5f89e7d37cbd0507a50776544a828e803b8a1a7f3bbfae1e8619eb6eef41908f",
           "packages/durable/package.json": "36d31c40a9cfc52cd044ead2af947bca4f4ab7d9af8f5e7a82db248e1c942ff9"
         },
-        "sha256": "fe838374db224efc059442ac0dfb75f8ee68e18107899a5c442d53d1ab4914a8"
+        "sha256": "b80c62e7cf5ebc23a667a148c8bc689d83b1960c0fc4db27150be09a05b38ed5"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-19T22:15:54.564Z",
-      "reviewNote": "2026-11-19 reviewed exact1e34c3b4..3107a58d: Copilot catalog enables explicit Responses strict flags/Claude strict tools; TUI corrects autocomplete Enter and cursor-only SettingsList filtering, adds opt-in setSuspendSignalHandler with start/stop ownership. Other9 watched identities/version1.5.2 unchanged. FortiPi registers WorkersAI/OpenAI/Anthropic/Codex, no Copilot; its Editor has no completion provider, lists use SelectList, no TUI suspension API. No required current-code correction identified. Retain exact1.5.2 archives and declared AI schema/Durable waiter patches; future APIs are not adopted. Preserve earlier Chord remote/hold/store and readonly-render caveats; external suspension remains unqualified. No provider/runtime or stall-fix claim. Evidence: phase3/thread-9/fresh-pi-453-review.md."
+      "reviewedAt": "2026-11-20T01:28:22.963Z",
+      "reviewNote": "Reviewed3107a58d..edfe6b2e: one commit/four AI files, version1.5.2 unchanged. Codex moves system text from instructions to leading developer/system input and drops fallback prompt; exported includeSystemPrompt option removed. FortiPi uses createModels/provider APIs without converter/payload coupling; no current correction identified. Retain exact1.5.2 archives and AI schema/Durable waiter patches; later main is not adopted. Preserve Chord remote-hold/store and readonly-render caveats; remote/store adoption reopens review. TUI has no completion/suspension integration; external suspension remains unqualified. No Pi-stall cause/fix, cache-gain, deployed/provider or Paid proof. Evidence: phase3/thread-9/pi-edfe-compatibility-review.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "417403d5d5d0af855302f97cae3ab93525fa4690",
-        "version": "v1.20261119.1",
-        "sha256": "d5287ec643c390f56c6accc430d918b0f4dd5989edaf1510bb715f06baa420d4",
+        "commit": "065dcca0b991bbce9b70770b7053ce9d426edbb9",
+        "version": "v1.20261120.1",
+        "sha256": "022f28e34227fdcc5b32b7343161d14e10b6391345f82702c56f206274fcd81c",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261119.1"
       },
-      "reviewedAt": "2026-11-19T18:52:18.050Z",
-      "reviewNote": "Reviewed reference15..19 and selected installed19 source417403d5. Adopt exact1.20261119.1 plus types5.20261119.1 through the sole reviewed13->19 override; retain Wrangler4.162/Miniflare5beta13 interfaces. Source contains5659efb repeated-reentry deadlock and2a07e8 deferred external-memory fixes; current reference review also covers timer/snapshot/Rust lifetime changes. Actual old/new repeated-callback control fails/passes; held-work recovery passes locally. Seven archives have SRI/registry signatures, SLSA source/subjects and leaf signatures; trust/transparency remains release gate. Controlled pack preserves bundled19/all five native pins, but ordinary installation/reification, fresh CI/native3OS/live remain required. No established cause/fix for prior intermittent Pi stall or live provider-runtime equivalence. Evidence: phase3/thread-9/compat-runtime-upgrade-enforcer.md."
+      "reviewedAt": "2026-11-20T01:28:22.963Z",
+      "reviewNote": "Reviewed417403d5..065dcca0:78commits/276files, future20 reference only. Fetch TypeError/CONNECT TLS opt in; MessageChannel becomes lazy TS; autogated structuredClone keeps native serializer with WebIDL conversion. Direct clones omit options; no direct MessageChannel/CONNECT/R2/BrowserRun use. No current correction identified. Retain runtime1.20261119.1/types5.20261119.1, sole13->19 override and Wrangler4.162/Miniflare5beta13 interfaces. Inherited repeated-callback fail/pass, held-recovery and controlled-pack proofs concern19, not20. Ordinary consumer install/reification, native3OS/coherentCI/live acceptance remain required; signature/provenance/trust gates unchanged. No transitive20/deployed/provider/Paid equivalence or Pi-stall cause/fix. Evidence: phase3/thread-9/workerd20-compatibility-review.md."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
