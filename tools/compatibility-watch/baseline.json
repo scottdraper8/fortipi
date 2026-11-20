@@ -120,11 +120,11 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "b9d4820312bca26a79a98392b7c1ad13afeacb5a",
+        "commit": "03de604b87b03287650cf99c8a23a67bd52811ba",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "e652db83ded3d9c94ca33424ffeb500f36c648d83bcc76c4c30c5a8a190fdced",
-          "packages/ai": "ebf0e26a11570036cf4be12f419690a5af31b5849c2a75e8b69aa24c95abc73f",
+          "packages/ai": "442102294f50e88de4082edebc8d7df6f177b6758626a4096c9fd140b7bd7e0f",
           "packages/chord": "b7d999ca08e2b66d7133ee5dc4cbb2b383cc399f12ca68b9fddffd6bb34dd57d",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "f20b675f403ffc96a4672b5f741f8e47c6a2110405970a455707743220e3a1ce",
@@ -135,7 +135,7 @@
           "packages/tui": "5f89e7d37cbd0507a50776544a828e803b8a1a7f3bbfae1e8619eb6eef41908f",
           "packages/durable/package.json": "36d31c40a9cfc52cd044ead2af947bca4f4ab7d9af8f5e7a82db248e1c942ff9"
         },
-        "sha256": "5a899696aa3cd41b42d13168d62d8a55356c258fe0d699ed4e64ae7a69dd8360"
+        "sha256": "3400e9f95ace5f1fa27ff89d4c51ea91079cd915e23cd757929739ea3cc406fc"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,8 +147,8 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-20T08:59:09.608Z",
-      "reviewNote": "Reviewed edfe6b2e..b9d48203 (12 commits), main still1.5.2. AI Codex adds compat-gated GPT6 effort configuration_update/none and maxTokens->max_output_tokens(min16); Chat Completions defaults system except OpenAI, explicit compat retained. Catalog removes redundant role flags and declares minimum client1.5.3; do not transplant into1.5.2. Durable/other watched runtime trees unchanged; Chord only fixes test readiness/timeouts. Retain installed1.5.2 archives, AI-schema/Durable-waiter patches and prior Codex instruction caveats. FortiPi uses fixed provider factories/endpoints, no custom catalog or request-body overrides. Preserve Chord remote-hold/store and readonly TUI caveats; adoption reopens review. No cache gain, output-cap guarantee, Pi-stall cause/fix, provider/live/Paid qualification. Evidence: phase3/thread-9/f86-current-compat-review/report.md."
+      "reviewedAt": "2026-11-20T09:12:14.795Z",
+      "reviewNote": "Reviewed b9d48203..03de604b (2 commits): only AI watched tree changes; Durable/Chord/other watched identities unchanged, main still1.5.2. Shared Responses terminal handling records removed-reasoning IDs/reasons as openai_input_transformations, excluding turn_boundary; OpenAI/Azure/Codex share it. Upstream openai7.19.0->7.59.0 and coding-agent optional notices are not installed graph/FortiPi TUI changes. No replay/request-repair fix. Retain exact1.5.2 archives and AI-schema/Durable-waiter patches; future diagnostics need byte/privacy/projection/provider qualification. Prior Codex effort/token/instruction, ChatCompletions role/catalog1.5.3, Chord remote-hold/store and readonly TUI caveats remain; no cache/output-cap guarantee, Pi-stall cause/fix, provider/live/Paid clearance. Evidence: phase3/thread-9/6f9-current-pi-review/report.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
