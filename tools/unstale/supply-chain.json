@@ -8545,43 +8545,7 @@
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/zod@4.6.7; Sigstore transparency verification required at release"
     }
   },
-  "exemptions": {
-    "@cloudflare/workerd-darwin-64@1.20261119.1": {
-      "reason": "Bounded urgent runtime-defect repair: exact workerd20261119 source contains reentry deadlock5659efb and external-memory2a07e8 fixes; old/new real RPC control reproduced failure then success. SRI, registry signatures, archive/licenses/lifecycle and current OSV reviewed; no script execution allowed. Exact24h maturity expiry retained; full coherent qualification still required.",
-      "expires": "2026-11-20T01:00:53.298Z",
-      "integrity": "sha512-yotoiTGXCl1gTRX+y5ZWSAmzAg6CcBJXhJL6C1DGWUhsjjezNe8FdzraNsefVTOeKsOid2EC+hqOzewczKLvmQ=="
-    },
-    "@cloudflare/workerd-darwin-arm64@1.20261119.1": {
-      "reason": "Bounded urgent runtime-defect repair: exact workerd20261119 source contains reentry deadlock5659efb and external-memory2a07e8 fixes; old/new real RPC control reproduced failure then success. SRI, registry signatures, archive/licenses/lifecycle and current OSV reviewed; no script execution allowed. Exact24h maturity expiry retained; full coherent qualification still required.",
-      "expires": "2026-11-20T01:00:50.540Z",
-      "integrity": "sha512-VPOmfEmMubvw4SPcg/yDgamQXsiVAENgxeCJO8pDggRJFaF93SP0g/hktD8sbfmWBS19BO1kX1EsdgHSgRL9jA=="
-    },
-    "@cloudflare/workerd-linux-64@1.20261119.1": {
-      "reason": "Bounded urgent runtime-defect repair: exact workerd20261119 source contains reentry deadlock5659efb and external-memory2a07e8 fixes; old/new real RPC control reproduced failure then success. SRI, registry signatures, archive/licenses/lifecycle and current OSV reviewed; no script execution allowed. Exact24h maturity expiry retained; full coherent qualification still required.",
-      "expires": "2026-11-20T01:00:21.449Z",
-      "integrity": "sha512-aaDf78smiN12Uuwtg6TG6iLVS61sLpy/7DC5PYORf2+TCYw/bygcaqqb8zQJ+XwZ3xYhm/Ws80c/yMMhCMTFYA=="
-    },
-    "@cloudflare/workerd-linux-arm64@1.20261119.1": {
-      "reason": "Bounded urgent runtime-defect repair: exact workerd20261119 source contains reentry deadlock5659efb and external-memory2a07e8 fixes; old/new real RPC control reproduced failure then success. SRI, registry signatures, archive/licenses/lifecycle and current OSV reviewed; no script execution allowed. Exact24h maturity expiry retained; full coherent qualification still required.",
-      "expires": "2026-11-20T01:02:05.045Z",
-      "integrity": "sha512-LkyAvTMcKqRUP73HRScWWwTSz3pw09um1hxR+rcGdvsGzao8IR59XXTp/tul6kFdVBL2mD8U3X6j2O8t7I4viw=="
-    },
-    "@cloudflare/workerd-windows-64@1.20261119.1": {
-      "reason": "Bounded urgent runtime-defect repair: exact workerd20261119 source contains reentry deadlock5659efb and external-memory2a07e8 fixes; old/new real RPC control reproduced failure then success. SRI, registry signatures, archive/licenses/lifecycle and current OSV reviewed; no script execution allowed. Exact24h maturity expiry retained; full coherent qualification still required.",
-      "expires": "2026-11-20T01:01:03.001Z",
-      "integrity": "sha512-y4RO3QFNWt4j4uq2kmP5tklTvdA3qOA0PXuA66vsCmEtZYYb71ldefJcq5Dt0jrexKf/i4BBaLXZMVYLnohb0g=="
-    },
-    "@cloudflare/workers-types@5.20261119.1": {
-      "reason": "Bounded urgent runtime-defect repair: exact workerd20261119 source contains reentry deadlock5659efb and external-memory2a07e8 fixes; old/new real RPC control reproduced failure then success. SRI, registry signatures, archive/licenses/lifecycle and current OSV reviewed; no script execution allowed. Exact24h maturity expiry retained; full coherent qualification still required.",
-      "expires": "2026-11-20T01:08:26.746Z",
-      "integrity": "sha512-TSAVVAUehPUN1idYKaUwJTUhrdKBdlb1jdbA0+OaLQgHHCnOT32oAexu/Aw48CG2NpzSZ7kqi6nIFcO/+t6k5w=="
-    },
-    "workerd@1.20261119.1": {
-      "reason": "Bounded urgent runtime-defect repair: exact workerd20261119 source contains reentry deadlock5659efb and external-memory2a07e8 fixes; old/new real RPC control reproduced failure then success. SRI, registry signatures, archive/licenses/lifecycle and current OSV reviewed; no script execution allowed. Exact24h maturity expiry retained; full coherent qualification still required.",
-      "expires": "2026-11-20T01:03:23.166Z",
-      "integrity": "sha512-lalSvY+ad5asqMgzA/DfrZo7wvuvOHJc/aS1UctUrwu76fJE/LkSKJlprfBu0LeU79Qai5d+xFooQA9CIfj+dQ=="
-    }
-  },
+  "exemptions": {},
   "advisory": {
     "checkedAt": "2026-11-19T18:01:11.224Z",
     "identities": 115,
