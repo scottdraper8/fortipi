@@ -15,7 +15,7 @@ env:
   npm_config_node_gyp: ${{ github.workspace }}/node_modules/node-gyp/bin/node-gyp.js
   npm_config_build_from_source: "true"
 jobs:
-  source-runtime-control:
+  native-executor:
     if: >-
       github.repository == 'scottdraper8/fortipi' && !github.event.repository.fork &&
       startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-')
