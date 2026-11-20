@@ -319,6 +319,9 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     failureCallerDiagnostic(line) ||
+    /^# \{"diagnostic":"source-pi-wake-failure","phase":"(?:prepare|observe-failure|recover|observe-replacement|check-replacement|settle-old|check-old|observe-terminal|check-terminal)"\}$/.test(
+      line,
+    ) ||
     recoveryDiagnostic(line) ||
     roleDiagnostic(line) ||
     kernelDiagnostic(line) ||

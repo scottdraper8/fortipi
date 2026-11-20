@@ -9,11 +9,12 @@ import {
   loadCandidate,
   runEvidence,
 } from "../../prepare-release.ts";
-import { actualCapsule, discard, temporary } from "./fixtures.ts";
+import { REPOSITORY, REPOSITORY_ID } from "../../verify-release-gates.ts";
+import { actualCapsule, discard, fixtureEnvironment, httpFixture, temporary } from "./fixtures.ts";
 
 test("actual five retained scoped archives install outside checkout and resolve strict types, JS and installed prepare/dry-build", {
   timeout: 600000,
-}, async () => {
+}, async (t) => {
   const root = await temporary("fortipi-scoped-install-");
   try {
     const path = await actualCapsule(resolve(root, "candidate"));
@@ -118,15 +119,49 @@ export type Public = Protocol; void api;
       before.hash,
       "Consumer checks must not change retained bytes",
     );
-    await assert.rejects(
-      runEvidence(
-        "local",
-        path,
-        resolve(root, "missing-fixture.json"),
-        resolve(root, "not-evidence"),
-      ),
-      /ENOENT|fixture/,
-    );
+    // Reach the descriptor gate with a controlled Actions producer, even when CI hosts this test.
+    fixtureEnvironment(t, {
+      GITHUB_ACTIONS: "true",
+      GITHUB_REPOSITORY: REPOSITORY,
+      GITHUB_REPOSITORY_ID: String(REPOSITORY_ID),
+      GITHUB_SHA: before.candidate.sourceCommit,
+      GITHUB_REF: "refs/heads/main",
+      GITHUB_RUN_ID: "10",
+      GITHUB_RUN_ATTEMPT: "2",
+      GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/ci.yml@refs/heads/main`,
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_JOB: "policy-and-integration",
+    });
+    const server = await httpFixture((request, response) => {
+      assert.equal(request.method, "GET");
+      assert.equal(request.headers.authorization, undefined);
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ id: 1, path: ".github/workflows/ci.yml", state: "active" }));
+    });
+    const nativeFetch = globalThis.fetch;
+    const fetchMetadata: typeof fetch = (input, options) => {
+      assert.equal(
+        String(input),
+        `https://api.github.com/repos/${REPOSITORY}/actions/workflows/ci.yml`,
+      );
+      return nativeFetch(server.origin, options);
+    };
+    const metadata = t.mock.method(globalThis, "fetch", fetchMetadata);
+    try {
+      await assert.rejects(
+        runEvidence(
+          "local",
+          path,
+          resolve(root, "missing-fixture.json"),
+          resolve(root, "not-evidence"),
+        ),
+        /Evidence fixture must be a trusted source descriptor/,
+      );
+      assert.equal(metadata.mock.callCount(), 1);
+    } finally {
+      metadata.mock.restore();
+      await server.close();
+    }
   } finally {
     await discard(root);
   }

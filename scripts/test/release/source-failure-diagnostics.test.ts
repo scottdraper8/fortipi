@@ -29,6 +29,30 @@ const reviewedAdmissionName =
 const canary = "synthetic-private-diagnostic-canary";
 const helper = new URL("../../build-workspaces.ts", import.meta.url);
 
+test("Pi wake failure forwarding admits only fixed phases without error details", () => {
+  for (const phase of [
+    "prepare",
+    "observe-failure",
+    "recover",
+    "observe-replacement",
+    "check-replacement",
+    "settle-old",
+    "check-old",
+    "observe-terminal",
+    "check-terminal",
+  ]) {
+    const record = { diagnostic: "source-pi-wake-failure", phase };
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(record)}`), true);
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify({ ...record, error: canary })}`), false);
+  }
+  assert.equal(
+    sourceTestDiagnostic(
+      `# ${JSON.stringify({ diagnostic: "source-pi-wake-failure", phase: canary })}`,
+    ),
+    false,
+  );
+});
+
 test("an actual admission polling failure retains its reviewed inner location without its error text", {
   timeout: 10000,
 }, async () => {

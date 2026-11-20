@@ -23,7 +23,7 @@ import {
   readJson,
   sha256,
 } from "../../verify-release-gates.ts";
-import { candidate, fixtureFiles, httpFixture, temporary } from "./fixtures.ts";
+import { candidate, fixtureEnvironment, fixtureFiles, httpFixture, temporary } from "./fixtures.ts";
 
 test("SIGKILL retains upload intent; workflow ZIP excludes ephemeral locks and recovery never reuploads", {
   timeout: 20000,
@@ -159,7 +159,12 @@ test("SIGKILL retains upload intent; workflow ZIP excludes ephemeral locks and r
   }
 });
 
-test("actual child observes durable intent before HTTP acceptance; lost availability reconciles without a second upload", async () => {
+test("actual child observes durable intent before HTTP acceptance; lost availability reconciles without a second upload", async (t) => {
+  fixtureEnvironment(t, {
+    GITHUB_ACTIONS: "true",
+    GITHUB_RUN_ID: "10",
+    GITHUB_RUN_ATTEMPT: "1",
+  });
   const root = await temporary("fortipi-publication-");
   const c = candidate();
   await fixtureFiles(root, c);
@@ -238,6 +243,19 @@ test("actual child observes durable intent before HTTP acceptance; lost availabi
     const journal = object(await readJson(journalPath));
     assert.ok(Array.isArray(journal.packages));
     assert.equal(object(journal.packages[0]).state, "accepted-but-unavailable");
+    assert.deepEqual(object(journal.packages[0]).attemptedBy, { runId: 10, runAttempt: 1 });
+    process.env.GITHUB_RUN_ATTEMPT = "2";
+    await assert.rejects(
+      publishPackages(
+        c,
+        sha256("candidate"),
+        root,
+        resolve(root, "rerun-without-journal.json"),
+        perform,
+        server.transport,
+      ),
+      /A rerun requires its retained publication journal/,
+    );
     await assert.rejects(
       publishPackages(c, sha256("candidate"), root, journalPath, perform, server.transport),
       /Uncertain prior upload/,

@@ -17,9 +17,10 @@ import {
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
+import type { TestContext } from "node:test";
 import { promisify } from "node:util";
 import { repository } from "../../build-workspaces.ts";
-import { generateSbom, stageAndPack } from "../../prepare-release.ts";
+import { childEnvironment, generateSbom, stageAndPack } from "../../prepare-release.ts";
 import {
   type CandidateManifest,
   canonicalJson,
@@ -97,6 +98,17 @@ export function candidate(): CandidateManifest {
 }
 export async function temporary(prefix: string): Promise<string> {
   return mkdtemp(resolve(await realpath(tmpdir()), prefix));
+}
+/** Sequential fixture scope: hosting identity is synthetic; no credential role is inherited. */
+export function fixtureEnvironment(context: TestContext, extra: NodeJS.ProcessEnv): void {
+  const original = process.env;
+  const environment = childEnvironment();
+  for (const key of Object.keys(environment))
+    if (key.startsWith("GITHUB_")) delete environment[key];
+  process.env = { ...environment, ...extra };
+  context.after(() => {
+    process.env = original;
+  });
 }
 export async function fixtureFiles(root: string, _c: CandidateManifest): Promise<void> {
   await mkdir(resolve(root, "packs"));

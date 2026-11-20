@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { after, before, test } from "node:test";
+import { after, before, type TestContext, test } from "node:test";
 import { repository } from "../../build-workspaces.ts";
 import { observeDeployment, type TargetDescriptor } from "../../deploy-smoke.ts";
 import { generateNotices } from "../../generate-notices.ts";
@@ -120,7 +120,7 @@ after(async () => {
   if (root) await discard(root);
 });
 
-async function fixture(fault = "") {
+async function fixture(t: TestContext, fault = "") {
   const operationId = (++nextOperation).toString(16).padStart(32, "0");
   const journalDirectory = resolve(root, operationId);
   const runtime = object(object(target.operator).runtime);
@@ -144,6 +144,11 @@ async function fixture(fault = "") {
       ),
     );
   });
+  // Own the server before any observation/checkpoint await can fail.
+  // Callers still close each loop iteration eagerly; the hook covers failed construction.
+  let closing: Promise<void> | undefined;
+  const close = () => (closing ??= server.close());
+  t.after(close);
   const read: RecoveryPorts["read"] = async (path) => {
     if (unavailable) throw new Error("synthetic-provider-secret-do-not-retain");
     if (path === "/workers/subdomain") return { subdomain: "example" };
@@ -322,7 +327,7 @@ async function fixture(fault = "") {
     input,
     ports,
     calls,
-    close: server.close,
+    close,
     reconnect() {
       unavailable = false;
     },
@@ -337,8 +342,8 @@ async function fixture(fault = "") {
 
 test("provider phase retains same-byte new-version intent, never qualifies app recovery; verification is strictly read-only", {
   timeout: 120000,
-}, async () => {
-  const f = await fixture();
+}, async (t) => {
+  const f = await fixture(t);
   try {
     // Workflow reads still require authenticated artifact authority for the same
     // real package bytes exercised by this local provider-protocol fixture.
@@ -427,9 +432,9 @@ await assert.rejects(loadWorkflowCandidate(${JSON.stringify(manifestPath)}), {
 
 test("uncertain writes reconcile exact retained intent, without repeating upload or deployment", {
   timeout: 120000,
-}, async () => {
+}, async (t) => {
   for (const fault of ["ambiguous-upload", "ambiguous-deploy", "upload-absent"]) {
-    const f = await fixture(fault);
+    const f = await fixture(t, fault);
     try {
       await assert.rejects(
         recoverProvider({ ...f.input, mode: "perform" }, f.ports),
@@ -461,9 +466,9 @@ test("uncertain writes reconcile exact retained intent, without repeating upload
 
 test("historical transition and digest share one snapshot across provider awaits", {
   timeout: 120000,
-}, async () => {
+}, async (t) => {
   for (const mode of ["verify-existing", "perform"] as const) {
-    const f = await fixture();
+    const f = await fixture(t);
     try {
       await recoverProvider({ ...f.input, mode: "perform" }, f.ports);
       const path = resolve(f.input.journalDirectory, "transition.json");
@@ -527,7 +532,7 @@ test("historical transition and digest share one snapshot across provider awaits
 
 test("candidate/prepared identity, distinct version and inherited module/binding/namespace/secret guards fail before deployment", {
   timeout: 180000,
-}, async () => {
+}, async (t) => {
   for (const fault of [
     "candidate",
     "checkpoint",
@@ -539,7 +544,7 @@ test("candidate/prepared identity, distinct version and inherited module/binding
     "secret",
     "latest",
   ]) {
-    const f = await fixture(fault);
+    const f = await fixture(t, fault);
     const configPath = resolve(prepared, "wrangler.json");
     const original = await regularBytes(configPath);
     try {

@@ -46,17 +46,24 @@ test("actual PiHarness retry rereads replacement delayed work after a failed reo
   const state = async () => JSON.parse(await probe.stateJson()) as RetryState;
   const task = async () => JSON.parse(await probe.taskJson()) as TaskState;
   let drive: Promise<void> | undefined;
+  let phase = "prepare";
   try {
     const prepared = await probe.prepare();
     drive = probe.drive();
     void drive.catch(() => {});
+    phase = "observe-failure";
     await eventually(state, (state) => state.failed);
+    phase = "recover";
     await probe.recover();
+    phase = "observe-replacement";
     const replacement = await eventually(state, (state) => state.row?.time === prepared.until);
+    phase = "check-replacement";
     assert.equal(replacement.row?.retry, undefined, "Use the real inherited retry policy");
     assert.equal((await task()).status, "sleeping");
+    phase = "settle-old";
     await probe.releaseFailure();
     await drive;
+    phase = "check-old";
     const interim = await state();
     assert.equal(
       interim.row?.time,
@@ -65,7 +72,9 @@ test("actual PiHarness retry rereads replacement delayed work after a failed reo
     );
     assert.equal((await task()).status, "sleeping", "No early task execution");
     assert.ok((await probe.alarmTime()) !== null, "Delayed work retains an actual physical alarm");
+    phase = "observe-terminal";
     const terminal = await eventually(task, (state) => state?.status === "terminal");
+    phase = "check-terminal";
     assert.equal(terminal?.status, "terminal");
     if (terminal?.status !== "terminal") assert.fail("Actual Pi task did not finish");
     assert.equal(terminal.outcome?.status, "completed");
@@ -88,6 +97,13 @@ test("actual PiHarness retry rereads replacement delayed work after a failed reo
       1,
       "A replaced Pi wake must not invoke the obsolete callback again",
     );
+  } catch (error) {
+    try {
+      t.diagnostic(JSON.stringify({ diagnostic: "source-pi-wake-failure", phase }));
+    } catch {
+      // Diagnostic failure must not replace the original runtime error.
+    }
+    throw error;
   } finally {
     await probe.releaseFailure();
     await drive?.catch(() => {});
