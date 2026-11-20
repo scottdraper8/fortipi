@@ -24,7 +24,10 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
     | "fresh-cancel-wait"
     | "narrow-authority"
     | "identity-conflicts"
+    | "standalone-new-job"
+    | "standalone-job-read"
     | "standalone-cancel"
+    | "standalone-cancel-retry"
     | "standalone-cancel-wait"
     | "final-job-read"
     | "close";
@@ -364,7 +367,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       freshCredential.body.token,
     );
     assert.equal(originalId.status, 400, "Explicit ID cannot identify the old operation");
-    enter("standalone-cancel");
+    enter("standalone-new-job");
     const cancellable = await h.api<D.ReconcileReceipt>(
       `/v1/jobs/${jobId}/reconcile`,
       {
@@ -377,6 +380,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       freshCredential.body.token,
     );
     assert.equal(cancellable.status, 202);
+    enter("standalone-job-read");
     const cancelJob = await h.api<D.Job>(
       `/v1/jobs/${cancellable.body.newJobId}`,
       undefined,
@@ -388,6 +392,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       requestId: crypto.randomUUID(),
       reason: "Cancel before approval and any execution",
     };
+    enter("standalone-cancel");
     const cancelReceipt = await h.api<D.ControlReceipt>(
       `/v1/tasks/${cancelJob.body.taskId}/cancel`,
       cancelInput,
@@ -396,6 +401,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
     );
     assert.equal(cancelReceipt.status, 202, JSON.stringify(cancelReceipt.body));
     assert.equal(cancelReceipt.body.disposition.possibleExternalEffects, false);
+    enter("standalone-cancel-retry");
     assert.deepEqual(
       await h.api(
         `/v1/tasks/${cancelJob.body.taskId}/cancel`,

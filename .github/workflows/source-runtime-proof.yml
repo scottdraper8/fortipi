@@ -70,12 +70,13 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-native-role-')
         run: node --test --test-reporter=tap scripts/native-owned-role-control.ts
         timeout-minutes: 2
-      - name: Observe three actual source test processes directly
+      - name: Observe four failing source test processes directly
         run: >-
-          node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
-          apps/worker/test/agent/admin-file-bearing.test.ts
-          apps/worker/test/agent/process-recovery.test.ts
-          apps/worker/test/api/stream-boundaries.test.ts
+          node --require ./scripts/source-test-processes.ts --test --test-reporter=tap --test-concurrency=4
+          apps/worker/test/agent/recovery-generation.test.ts
+          apps/worker/test/execution/approval.test.ts
+          apps/worker/test/execution/native-boundary-recovery.test.ts
+          apps/worker/test/integration/admission-recovery.test.ts
       - name: Require Linux hardener service still active
         if: always() && runner.os == 'Linux'
         shell: bash
