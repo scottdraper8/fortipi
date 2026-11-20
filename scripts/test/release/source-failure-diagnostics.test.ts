@@ -18,8 +18,10 @@ import {
 import { observeCandidateDiagnostics, observeSourceTestFailures } from "../../build-workspaces.ts";
 import {
   nativeRecoveryFailureLine,
+  nativeRecoveryObservationLine,
   sourceFailureLines,
   sourceRecoveryPath,
+  sourceReentryFailureLine,
   sourceTestDiagnostic,
 } from "../../source-test-processes.ts";
 
@@ -29,6 +31,140 @@ const reviewedAdmissionName =
   "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries";
 const canary = "synthetic-private-diagnostic-canary";
 const helper = new URL("../../build-workspaces.ts", import.meta.url);
+
+test("reentry failure observation forwards bounded phases without error payloads", async () => {
+  for (const phase of ["listen", "fetch-once", "fetch-twice", "close"]) {
+    for (const [name, kind] of [
+      ["TimeoutError", "timeout"],
+      ["AbortError", "abort"],
+      ["AssertionError", "assertion"],
+      [canary, "other"],
+    ]) {
+      const line = sourceReentryFailureLine(phase, { name, message: canary, stack: canary }, 5000);
+      assert.equal(line.includes(canary), false);
+      assert.deepEqual(JSON.parse(line), {
+        diagnostic: "source-reentry-failure",
+        phase,
+        kind,
+        elapsedMs: 5000,
+      });
+      assert.equal(sourceTestDiagnostic(`# ${line}`), true);
+    }
+  }
+  const line = sourceReentryFailureLine(
+    "fetch-once",
+    new DOMException(canary, "TimeoutError"),
+    5000,
+  );
+  const record = JSON.parse(line);
+  for (const changed of [
+    { ...record, phase: canary },
+    { ...record, kind: canary },
+    { ...record, error: canary },
+    { ...record, elapsedMs: -1 },
+    { ...record, elapsedMs: 60001 },
+    { ...record, elapsedMs: "5000" },
+  ]) {
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
+  }
+  const opaque = {
+    get name(): never {
+      throw new Error(canary);
+    },
+  };
+  assert.equal(sourceReentryFailureLine(canary, opaque, Number.NaN).includes(canary), false);
+  const forgedPhase = { toString: () => "listen", payload: canary };
+  assert.equal(sourceReentryFailureLine(forgedPhase, opaque, 5000).includes(canary), false);
+  const output: string[] = [],
+    stream = new PassThrough();
+  observeCandidateDiagnostics(stream, (chunk) => output.push(chunk));
+  const ended = once(stream, "end");
+  stream.end(`# ${line}\n# ${canary}\n`);
+  await ended;
+  assert.deepEqual(output, [`# ${line}\n`]);
+});
+
+test("native recovery observation admits only closed query and receipt facts", async () => {
+  const control = {
+    query: {
+      ok: true,
+      state: "unknown",
+      sockets: 0,
+      attempted: true,
+      startedAt: 100,
+      finishedAt: 101,
+      message: canary,
+    },
+    grants: canary,
+  };
+  const agent = { receiptRetained: false, nativeReceiptAck: null, payload: canary };
+  const line = nativeRecoveryObservationLine("running", "agent-first", control, "succeeded", agent);
+  assert.equal(line.includes(canary), false);
+  const expected = {
+    diagnostic: "source-native-recovery-observation",
+    mode: "running",
+    activation: "agent-first",
+    queryState: "unknown",
+    querySockets: 0,
+    queryAttempted: true,
+    queryMs: 1,
+    nativeResult: "succeeded",
+    receiptRetained: false,
+    receiptAck: null,
+  };
+  assert.deepEqual(JSON.parse(line), expected);
+  assert.equal(sourceTestDiagnostic(`# ${line}`), true);
+  for (const changed of [
+    { ...expected, mode: canary },
+    { ...expected, activation: canary },
+    { ...expected, queryState: canary },
+    { ...expected, querySockets: 1000 },
+    { ...expected, querySockets: -1 },
+    { ...expected, queryMs: 60001 },
+    { ...expected, queryMs: "1" },
+    { ...expected, queryAttempted: "true" },
+    { ...expected, nativeResult: canary },
+    { ...expected, receiptRetained: 1 },
+    { ...expected, receiptAck: "false" },
+    { ...expected, message: canary },
+  ]) {
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
+  }
+  const unknown = nativeRecoveryObservationLine(
+    canary,
+    canary,
+    {
+      query: {
+        ok: canary,
+        state: canary,
+        sockets: canary,
+        attempted: canary,
+        startedAt: canary,
+        finishedAt: canary,
+      },
+    },
+    canary,
+    { receiptRetained: canary, nativeReceiptAck: canary },
+  );
+  assert.equal(unknown.includes(canary), false);
+  assert.equal(sourceTestDiagnostic(`# ${unknown}`), true);
+  const opaque = {
+    get query(): never {
+      throw new Error(canary);
+    },
+  };
+  assert.equal(
+    nativeRecoveryObservationLine(null, null, opaque, null, null).includes(canary),
+    false,
+  );
+  const output: string[] = [],
+    stream = new PassThrough();
+  observeCandidateDiagnostics(stream, (chunk) => output.push(chunk));
+  const ended = once(stream, "end");
+  stream.end(`# ${line}\n# ${canary}\n`);
+  await ended;
+  assert.deepEqual(output, [`# ${line}\n`]);
+});
 
 test("approval abort and native completion diagnostics exclude arbitrary payloads", () => {
   const approval = {

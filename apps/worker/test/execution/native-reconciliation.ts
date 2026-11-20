@@ -27,6 +27,15 @@ interface Trace {
     leaseExpiresAt: number;
   }[];
 }
+export function assertOfflineQueryCause(query: Trace["query"], reconnectStartedAt: number): void {
+  assert.ok(query?.ok && query.state === "unknown", "An actual unknown query is required");
+  assert.equal(query.attempted, true, "Only the original attempted execution qualifies");
+  assert.equal(query.sockets, 0, "Unknown must be observed while the executor is offline");
+  assert.ok(
+    query.startedAt <= query.finishedAt && query.finishedAt <= reconnectStartedAt,
+    "Offline query must finish before reconnect begins",
+  );
+}
 export async function verifyNativeReconciliation(
   c: NativeRecoveryContext,
   mode: "assign-ack" | "result",
@@ -51,11 +60,7 @@ export async function verifyNativeReconciliation(
   }
   const facts = await trace();
   if (mode === "assign-ack") {
-    assert.equal(facts.query?.ok, true);
-    assert.equal(facts.query?.state, "unknown", "Offline uncertainty is not a closed-ledger proof");
-    assert.equal(facts.query?.attempted, true);
-    assert.equal(facts.query?.sockets, 0);
-    assert.ok(facts.query && facts.query.finishedAt <= c.offlineReleasedAt);
+    assertOfflineQueryCause(facts.query, c.offlineReleasedAt);
   } else {
     assert.ok(c.offlineReleasedAt > c.identity.lease.expiresAt, "Use real elapsed lease expiry");
     assert.ok(
@@ -200,6 +205,66 @@ export async function verifyNativeReconciliation(
       processStarts: 1,
       piOutcomePreserved: true,
       rootStillPinned: true,
+    }),
+  );
+}
+
+/** The natural running case must prove its cause before taking the explicit branch. */
+export async function verifyNaturalRunning(
+  c: NativeRecoveryContext,
+): Promise<undefined | "continue"> {
+  const current = await c.view();
+  if (current.jobs[0]?.state === "completed") {
+    const job = await c.service.api<D.Job>(
+      `/v1/jobs/${c.job.jobId}`,
+      undefined,
+      "GET",
+      c.actorToken,
+    );
+    assert.equal(job.status, 200);
+    assert.equal(job.body.state, "completed");
+    assert.equal(job.body.execution?.executionId, c.identity.executionId);
+    assert.ok(job.body.state === "completed" && job.body.evidence.kind === "committed");
+    console.log(
+      JSON.stringify({ naturalRunningBranch: "committed-result", originalExecution: true }),
+    );
+    return "continue"; // The original completion, receipt ACK, one-start and child checks still run.
+  }
+  assert.equal(
+    current.jobs[0]?.state,
+    "requires_reconciliation",
+    "Missing a terminal recovery outcome",
+  );
+  const facts = (
+    await c.service.api<Trace>(
+      `/__test/dispatch-trace?job=${c.job.jobId}&operation=${c.job.operationId}`,
+    )
+  ).body;
+  assertOfflineQueryCause(facts.query, c.offlineReleasedAt);
+  const native = c.fixture.ledger.get(c.job.jobId);
+  assert.ok(native, "The original native ledger entry must remain available");
+  assert.equal(native.assignment.identity.executionId, c.identity.executionId);
+  assert.equal(native.assignment.identity.assignmentDigest, c.identity.assignmentDigest);
+  assert.equal(native.assignment.identity.lease.fence, c.identity.lease.fence);
+  assert.equal(native.committed, undefined, "An uncertain application cannot claim native commit");
+  assert.ok(facts.query);
+  const wrongCause = { ...facts.query, state: "running" };
+  // Sensitivity probes use the actual observation, not manufactured runtime responses.
+  assert.throws(() => assertOfflineQueryCause(null, c.offlineReleasedAt), {
+    code: "ERR_ASSERTION",
+  });
+  assert.throws(() => assertOfflineQueryCause(wrongCause, c.offlineReleasedAt), {
+    code: "ERR_ASSERTION",
+  });
+  assert.throws(() => assert.equal(current.jobs[0]?.state, "completed"), { code: "ERR_ASSERTION" });
+  await verifyNativeReconciliation(c, "assign-ack");
+  console.log(
+    JSON.stringify({
+      naturalRunningBranch: "offline-unknown",
+      originalOracleRefused: true,
+      missingCauseRefused: true,
+      wrongCauseRefused: true,
+      nativeIdentityRetained: true,
     }),
   );
 }

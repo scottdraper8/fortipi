@@ -79,6 +79,8 @@ if (process.execArgv.includes("--test") && selected.size > 0 && selected.size <=
 const admissionFailureName =
   "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries";
 const failureNames = new Set<string>([
+  "Agent-first running recovery completes after a real registered query-boundary handoff",
+  "A real offline running query disproves unconditional completion and uses public reconciliation",
   "actual workerd Inspector observes delayed-publication cancellation and shutdown",
   "real Pi tool attaches one child and waits without acquiring execution before approval",
   "candidate safe wrapper recovers one actual native execution across service SIGKILL and changed receipt closure",
@@ -179,6 +181,36 @@ function sourceLocation(line: string): string | null {
     return null;
   }
 }
+/** Fixed failure facts only; error messages, stacks and unknown names are excluded. */
+export function sourceReentryFailureLine(
+  phase: unknown,
+  error: unknown,
+  elapsedMs: number,
+): string {
+  let name: unknown;
+  try {
+    if (error !== null && typeof error === "object") name = (error as { name?: unknown }).name;
+  } catch {
+    // An error object's accessor cannot interfere with the original failure.
+  }
+  return JSON.stringify({
+    diagnostic: "source-reentry-failure",
+    phase:
+      typeof phase === "string" && ["listen", "fetch-once", "fetch-twice", "close"].includes(phase)
+        ? phase
+        : "unknown",
+    kind:
+      name === "TimeoutError"
+        ? "timeout"
+        : name === "AbortError"
+          ? "abort"
+          : name === "AssertionError"
+            ? "assertion"
+            : "other",
+    elapsedMs: Number.isFinite(elapsedMs) ? Math.min(60000, Math.max(0, Math.round(elapsedMs))) : 0,
+  });
+}
+
 function failureDiagnostic(line: string): boolean {
   if (!line.startsWith('{"diagnostic":"source-test-failure",')) return false;
   try {
@@ -328,6 +360,10 @@ export function sourceTestDiagnostic(line: string): boolean {
       line,
     ) ||
     nativeRecoveryDiagnostic(line) ||
+    nativeObservationDiagnostic(line) ||
+    /^# \{"diagnostic":"source-reentry-failure","phase":"(?:listen|fetch-once|fetch-twice|close|unknown)","kind":"(?:timeout|abort|assertion|other)","elapsedMs":(?:0|[1-9]\d{0,3}|[1-5]\d{4}|60000)\}$/.test(
+      line,
+    ) ||
     /^# \{"diagnostic":"source-pi-wake-failure","phase":"(?:prepare|observe-failure|recover|observe-replacement|check-replacement|settle-old|check-old|observe-terminal|check-terminal)"\}$/.test(
       line,
     ) ||
@@ -388,6 +424,105 @@ export function nativeRecoveryFailureLine(
     committed: committed === true,
     connected: connected === true,
   });
+}
+
+const nativeModes = new Set([
+  "running",
+  "seed",
+  "attached",
+  "attempted",
+  "assign-ack",
+  "result",
+  "receipt",
+]);
+const nativeActivations = new Set(["agent-first", "executor-first"]);
+const nativeQueryStates = new Set([
+  "unknown",
+  "not_started",
+  "lost",
+  "waiting_for_local_policy",
+  "preparing",
+  "running",
+  "pending_sync",
+  "terminal",
+]);
+const nativeResultStates = new Set(["succeeded", "failed", "cancelled", "unknown"]);
+function ownDiagnosticField(value: unknown, key: string): unknown {
+  if (value === null || typeof value !== "object") return undefined;
+  try {
+    return Object.getOwnPropertyDescriptor(value, key)?.value;
+  } catch {
+    return undefined;
+  }
+}
+function diagnosticEnum(value: unknown, values: Set<string>): string | null {
+  return typeof value === "string" && values.has(value) ? value : null;
+}
+function diagnosticBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+function diagnosticInteger(value: unknown, max: number): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= max
+    ? value
+    : null;
+}
+/** Project facts already collected by the fixture; never include its private trace. */
+export function nativeRecoveryObservationLine(
+  mode: unknown,
+  activation: unknown,
+  control: unknown,
+  nativeResult: unknown,
+  agent: unknown,
+): string {
+  const query = ownDiagnosticField(control, "query");
+  const ok = ownDiagnosticField(query, "ok");
+  const started = ownDiagnosticField(query, "startedAt"),
+    finished = ownDiagnosticField(query, "finishedAt");
+  return JSON.stringify({
+    diagnostic: "source-native-recovery-observation",
+    mode: diagnosticEnum(mode, nativeModes),
+    activation: diagnosticEnum(activation, nativeActivations),
+    queryState:
+      ok === false
+        ? "error"
+        : ok === true
+          ? diagnosticEnum(ownDiagnosticField(query, "state"), nativeQueryStates)
+          : null,
+    querySockets: diagnosticInteger(ownDiagnosticField(query, "sockets"), 999),
+    queryAttempted: diagnosticBoolean(ownDiagnosticField(query, "attempted")),
+    queryMs:
+      typeof started === "number" && typeof finished === "number"
+        ? diagnosticInteger(finished - started, 60000)
+        : null,
+    nativeResult: diagnosticEnum(nativeResult, nativeResultStates),
+    receiptRetained: diagnosticBoolean(ownDiagnosticField(agent, "receiptRetained")),
+    receiptAck: diagnosticBoolean(ownDiagnosticField(agent, "nativeReceiptAck")),
+  });
+}
+function nativeObservationDiagnostic(line: string): boolean {
+  if (!line.startsWith('# {"diagnostic":"source-native-recovery-observation",')) return false;
+  try {
+    const r = JSON.parse(line.slice(2));
+    return (
+      r !== null &&
+      typeof r === "object" &&
+      !Array.isArray(r) &&
+      Object.keys(r).join(",") ===
+        "diagnostic,mode,activation,queryState,querySockets,queryAttempted,queryMs,nativeResult,receiptRetained,receiptAck" &&
+      line === `# ${JSON.stringify(r)}` &&
+      (r.mode === null || nativeModes.has(r.mode)) &&
+      (r.activation === null || nativeActivations.has(r.activation)) &&
+      (r.queryState === null || r.queryState === "error" || nativeQueryStates.has(r.queryState)) &&
+      (r.querySockets === null || diagnosticInteger(r.querySockets, 999) === r.querySockets) &&
+      (r.queryMs === null || diagnosticInteger(r.queryMs, 60000) === r.queryMs) &&
+      (r.nativeResult === null || nativeResultStates.has(r.nativeResult)) &&
+      [r.queryAttempted, r.receiptRetained, r.receiptAck].every(
+        (v) => v === null || typeof v === "boolean",
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 function nativeRecoveryDiagnostic(line: string): boolean {

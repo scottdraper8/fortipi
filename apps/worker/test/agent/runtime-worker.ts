@@ -39,7 +39,143 @@ interface NativeStartupArm {
   released: boolean;
   consumed: boolean;
 }
+interface NativeQueryArm extends NativeStartupArm {
+  identity: D.ExecutionIdentity;
+  armedBy: string;
+  ledgerId: string;
+  ledgerInstanceId: string;
+  disconnected: boolean;
+  healthyRelease: boolean;
+  aborted: boolean;
+}
 export class ControlPlane extends RealControlPlane {
+  private readonly queryIncarnation = crypto.randomUUID();
+  private readonly nativeQueryEvents = new Map<
+    string,
+    {
+      entered: ReturnType<typeof Promise.withResolvers<void>>;
+      released: ReturnType<typeof Promise.withResolvers<void>>;
+    }
+  >();
+  private queryEvents(armId: string) {
+    let events = this.nativeQueryEvents.get(armId);
+    if (!events) {
+      events = { entered: Promise.withResolvers<void>(), released: Promise.withResolvers<void>() };
+      this.nativeQueryEvents.set(armId, events);
+    }
+    return events;
+  }
+  private async nativeQueryGate(request: Request): Promise<Response> {
+    if (request.headers.get("Authorization") !== `Bearer ${this.env.FORTIPI_ADMIN_TOKEN}`)
+      return new Response(null, { status: 403 });
+    if (!["PUT", "GET", "DELETE", "POST"].includes(request.method))
+      return new Response(null, { status: 405 });
+    const url = new URL(request.url);
+    const body =
+      request.method === "GET"
+        ? { armId: url.searchParams.get("armId"), executionId: url.searchParams.get("executionId") }
+        : await boundedJson(request, 512);
+    if (!body || typeof body !== "object" || Array.isArray(body))
+      return new Response(null, { status: 400 });
+    const input = body as Record<string, unknown>;
+    if (
+      Object.keys(input).sort().join(",") !== "armId,executionId" ||
+      ![input.armId, input.executionId].every(
+        (v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(v),
+      )
+    )
+      return new Response(null, { status: 400 });
+    const executionId = input.executionId as string;
+    let arm = this.store.get<NativeQueryArm>("fixture-native-query", executionId);
+    if (request.method === "PUT") {
+      const dispatch = this.store.get<{ attempted: boolean; intent: D.DispatchIntent }>(
+        "dispatch",
+        executionId,
+      );
+      const identity = dispatch?.intent.assignment.identity;
+      if (arm || !dispatch?.attempted || identity?.target.kind !== "executor")
+        return new Response(null, { status: 409 });
+      const executor = this.store.get<import("../../src/control/tickets.js").ExecutorState>(
+        "executor",
+        identity.target.executorId,
+      );
+      if (executor?.ledger?.kind !== "bound") return new Response(null, { status: 409 });
+      arm = {
+        armId: input.armId as string,
+        identity,
+        armedBy: this.queryIncarnation,
+        ledgerId: executor.ledger.ledgerId,
+        ledgerInstanceId: executor.ledger.ledgerInstanceId,
+        entered: false,
+        released: false,
+        consumed: false,
+        disconnected: false,
+        healthyRelease: false,
+        aborted: false,
+      };
+      this.store.put("fixture-native-query", executionId, arm);
+      return Response.json(arm);
+    }
+    if (!arm || arm.armId !== input.armId) return new Response(null, { status: 409 });
+    if (arm.consumed) return Response.json(arm);
+    const events = this.queryEvents(arm.armId);
+    if (request.method === "GET") {
+      if (url.searchParams.get("entered") === "1" && !arm.entered) await events.entered.promise;
+      return Response.json(this.store.get("fixture-native-query", executionId));
+    }
+    if (request.method === "DELETE") {
+      const target = arm.identity.target;
+      if (!arm.entered || !arm.disconnected || target.kind !== "executor")
+        return new Response(null, { status: 409 });
+      const executor = this.store.get<import("../../src/control/tickets.js").ExecutorState>(
+        "executor",
+        target.executorId,
+      );
+      const lease =
+        this.store.get<{ lease: D.Lease }>("lease", arm.identity.lease.leaseId)?.lease ??
+        arm.identity.lease;
+      if (
+        executor?.generation !== target.generation ||
+        executor.ledger?.kind !== "bound" ||
+        executor.ledger.ledgerId !== arm.ledgerId ||
+        executor.ledger.ledgerInstanceId !== arm.ledgerInstanceId ||
+        Date.now() >= Math.min(lease.expiresAt, arm.identity.deadline)
+      )
+        return new Response(null, { status: 409 });
+      this.executors.channel(target.executorId, target.generation);
+      arm.healthyRelease = true;
+    } else arm.aborted = true; // Cleanup releases both event waiters without granting production work.
+    arm.released = true;
+    this.store.put("fixture-native-query", executionId, arm);
+    events.entered.resolve();
+    events.released.resolve();
+    return Response.json(arm);
+  }
+  private async waitNativeQuery(ctx: D.AuthContext, input: D.ExecutionIdentity) {
+    const arm = this.store.get<NativeQueryArm>("fixture-native-query", input.executionId);
+    // A pre-crash query cannot consume the gate reserved for the replacement service.
+    if (!arm || arm.armedBy === this.queryIncarnation || arm.consumed) return;
+    const dispatch = this.store.get<{ intent: D.DispatchIntent }>("dispatch", input.executionId);
+    if (
+      input.target.kind !== "executor" ||
+      input.assignmentDigest !== arm.identity.assignmentDigest ||
+      ctx.registrationId !== dispatch?.intent.reservation.registrationIds.agent
+    )
+      throw new Error("Native query gate changed its original Agent/execution");
+    arm.entered = true;
+    arm.disconnected = this.ctx.getWebSockets(input.target.executorId).length === 0;
+    this.store.put("fixture-native-query", input.executionId, arm);
+    const events = this.queryEvents(arm.armId);
+    events.entered.resolve();
+    // No SQL transaction, scheduler replacement or production query reply is held/fabricated.
+    if (!arm.released) await events.released.promise;
+    const current = this.store.get<NativeQueryArm>("fixture-native-query", input.executionId);
+    if (!current?.healthyRelease || current.aborted || !current.disconnected)
+      throw new Error("Native query gate aborted or lacks live registered authority");
+    current.consumed = true;
+    this.store.put("fixture-native-query", input.executionId, current);
+    this.nativeQueryEvents.delete(arm.armId);
+  }
   private readonly nativeStartupEvents = new Map<
     string,
     {
@@ -173,6 +309,7 @@ export class ControlPlane extends RealControlPlane {
     return super.settleCapacity(ctx, input);
   }
   override async queryExecution(ctx: D.AuthContext, input: D.ExecutionIdentity) {
+    await this.waitNativeQuery(ctx, input);
     const startedAt = Date.now(),
       sockets =
         input.target.kind === "executor"
@@ -253,6 +390,7 @@ export class ControlPlane extends RealControlPlane {
   }
   override async fetch(request: Request) {
     const path = new URL(request.url).pathname;
+    if (path === "/__test/native-query-gate") return this.nativeQueryGate(request);
     if (path === "/__test/native-startup-gate") return this.nativeStartupGate(request);
     if (path === "/__test/dispatch-trace") {
       if (request.method === "PUT") this.store.put("fixture", "trace-dispatch", true);
@@ -1755,7 +1893,13 @@ export default {
   fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/__test/ping") return new Response("ready");
-    if (["/__test/dispatch-trace", "/__test/native-startup-gate"].includes(url.pathname))
+    if (
+      [
+        "/__test/dispatch-trace",
+        "/__test/native-startup-gate",
+        "/__test/native-query-gate",
+      ].includes(url.pathname)
+    )
       return env.CONTROL_PLANE.getByName("control").fetch(request);
     const match =
       /^\/__test\/agents\/([A-Za-z0-9_-]+)\/(canary|fault|state|barrier|inspect|tool|tool-state|job-diagnostics|repair|growth|completion)$/.exec(

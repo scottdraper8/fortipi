@@ -18,7 +18,10 @@ import {
   fixture,
   nodeCommand,
 } from "../../../../packages/fortipi-executor/test/fixtures/daemon.ts";
-import { nativeRecoveryFailureLine } from "../../../../scripts/source-test-processes.ts";
+import {
+  nativeRecoveryFailureLine,
+  nativeRecoveryObservationLine,
+} from "../../../../scripts/source-test-processes.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, pause } from "../agent/harness.ts";
 import { processHarness } from "../agent/process-harness.ts";
@@ -135,7 +138,8 @@ export async function nativeProcessRecovery(
     | "receipt" = "running",
   activation: "agent-first" | "executor-first" = "agent-first",
   recover?: {
-    outage: "natural" | "until-uncertain" | "until-lease-expired";
+    outage: "natural" | "until-uncertain" | "until-lease-expired" | "query-ready";
+    verifyAfterOutcome?: true;
     verify: (context: NativeRecoveryContext) => Promise<void | "continue">;
   },
 ) {
@@ -150,6 +154,7 @@ export async function nativeProcessRecovery(
     connection: Promise<void> | undefined;
   let reconnectedAt = 0,
     offlineReleasedAt = 0;
+  let queryArm: { armId: string; executionId: string } | undefined;
   try {
     const gateStartup =
       activation === "executor-first" && ["assign-ack", "result", "receipt"].includes(mode);
@@ -647,10 +652,17 @@ export async function nativeProcessRecovery(
     const original = f.ledger.get(job.jobId);
     assert.ok(original);
     const identity = structuredClone(original.assignment.identity);
+    const ledgerAtCut = { id: f.ledger.ledgerId, instance: f.ledger.ledgerInstanceId };
     const children = (await view()).tasks
       .filter((task) => task.kind === "fortipi.dispatch")
       .map((task) => task.id);
     assert.equal(children.length, 1);
+    if (recover?.outage === "query-ready") {
+      assert.equal(mode, "running");
+      assert.equal(activation, "agent-first");
+      queryArm = { armId: crypto.randomUUID(), executionId: identity.executionId };
+      assert.equal((await service.api("/__test/native-query-gate", queryArm, "PUT")).status, 200);
+    }
     const reconnectAfterOutage = async () => {
       if (recover?.outage === "until-uncertain")
         await eventually(view, (value) => value.jobs[0]?.state === "requires_reconciliation");
@@ -664,8 +676,58 @@ export async function nativeProcessRecovery(
         );
         while (Date.now() <= expiresAt) await pause(Math.min(500, expiresAt - Date.now() + 1));
       }
+      if (queryArm) {
+        const entered = await service.api<{
+          entered: boolean;
+          disconnected: boolean;
+          identity: D.ExecutionIdentity;
+        }>(`/__test/native-query-gate?${new URLSearchParams({ ...queryArm, entered: "1" })}`);
+        assert.equal(entered.status, 200);
+        assert.equal(entered.body.entered, true);
+        assert.equal(entered.body.disconnected, true);
+        assert.equal(entered.body.identity.assignmentDigest, identity.assignmentDigest);
+        assert.equal(native.connected, false);
+      }
       offlineReleasedAt = Date.now();
       await connect();
+      if (queryArm) {
+        assert.ok(native.session?.registered);
+        assert.equal(native.profile.executorGeneration, identity.target.generation);
+        assert.equal(native.ledger, f.ledger);
+        assert.equal(native.ledger.ledgerId, ledgerAtCut.id);
+        assert.equal(native.ledger.ledgerInstanceId, ledgerAtCut.instance);
+        const released = await service.api<{ healthyRelease: boolean }>(
+          "/__test/native-query-gate",
+          queryArm,
+          "DELETE",
+        );
+        assert.equal(
+          released.status,
+          200,
+          "Automatic fixture needs the same registered executor and live original authority",
+        );
+        assert.equal(released.body.healthyRelease, true);
+        const observed = await eventually(
+          async () =>
+            (
+              await service.api<{ query: { ok: boolean; state: string; sockets: number } | null }>(
+                `/__test/dispatch-trace?job=${job.jobId}`,
+              )
+            ).body,
+          (value) => value.query?.state === "running",
+        );
+        assert.equal(observed.query?.ok, true);
+        assert.ok((observed.query?.sockets ?? 0) > 0);
+        console.log(
+          JSON.stringify({
+            nativeQueryHandoff: "agent-first",
+            enteredDisconnected: true,
+            realRegisteredQuery: "running",
+            sameLedgerInstance: true,
+            liveAuthorityAtRelease: true,
+          }),
+        );
+      }
     };
     if (mode === "assign-ack") {
       await eventually(
@@ -739,39 +801,47 @@ export async function nativeProcessRecovery(
         if (activation === "agent-first") await reconnectAfterOutage();
       }
     }
-    if (recover) {
-      const disposition = await recover.verify({
-        service,
-        native,
-        fixture: f,
-        actorToken: actor.token,
-        probe,
-        cid,
-        workspaceId,
-        job,
-        identity,
-        children,
-        marker,
-        input,
-        admission: sent,
-        base: rebound.body,
-        reconnectedAt,
-        offlineReleasedAt,
-        view,
-      });
+    const recoveryContext = (): NativeRecoveryContext => ({
+      service,
+      native,
+      fixture: f,
+      actorToken: actor.token,
+      probe,
+      cid,
+      workspaceId,
+      job,
+      identity,
+      children,
+      marker,
+      input,
+      admission: sent,
+      base: rebound.body,
+      reconnectedAt,
+      offlineReleasedAt,
+      view,
+    });
+    if (recover && !recover.verifyAfterOutcome) {
+      const disposition = await recover.verify(recoveryContext());
       if (disposition !== "continue") return;
     }
     let final: View | undefined;
     for (let i = 0; i < 900; i++) {
       await native.tick();
       final = await view();
+      if (recover?.verifyAfterOutcome && final.jobs[0]?.state === "requires_reconciliation") break;
       if (final.jobs[0]?.state === "completed" && f.ledger.get(job.jobId)?.committed) break;
       await pause(50);
     }
+    if (recover?.verifyAfterOutcome) {
+      const disposition = await recover.verify(recoveryContext());
+      if (disposition !== "continue") return;
+    }
+    const agentDiagnostic = (await service.api(`${probe}/job-diagnostics?job=${job.jobId}`)).body;
+    const controlDiagnostic = (await service.api(`/__test/dispatch-trace?job=${job.jobId}`)).body;
     const diagnostic = JSON.stringify({
       application: final,
-      diagnostic: (await service.api(`${probe}/job-diagnostics?job=${job.jobId}`)).body,
-      control: (await service.api(`/__test/dispatch-trace?job=${job.jobId}`)).body,
+      diagnostic: agentDiagnostic,
+      control: controlDiagnostic,
       native: {
         state: f.ledger.get(job.jobId)?.state,
         lease: f.ledger.get(job.jobId)?.assignment.identity.lease,
@@ -788,6 +858,15 @@ export async function nativeProcessRecovery(
             f.ledger.get(job.jobId)?.state,
             !!f.ledger.get(job.jobId)?.committed,
             native.connected,
+          ),
+        );
+        console.log(
+          nativeRecoveryObservationLine(
+            mode,
+            activation,
+            controlDiagnostic,
+            f.ledger.get(job.jobId)?.result?.state,
+            agentDiagnostic,
           ),
         );
       } catch {
@@ -851,6 +930,7 @@ export async function nativeProcessRecovery(
       }),
     );
   } finally {
+    if (queryArm) await h?.api("/__test/native-query-gate", queryArm, "POST").catch(() => {});
     await writeFile(gate, "finish").catch(() => {});
     stop.abort();
     await connection;
