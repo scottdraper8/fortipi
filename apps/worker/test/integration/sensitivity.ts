@@ -17,6 +17,7 @@ import {
 import { provision } from "./fixture-state.ts";
 import { rejectedLocalBytes } from "./local-bytes.ts";
 import { concurrentAdmissionBoundary } from "./oracles.ts";
+import { piOpenObservationPlugin } from "./pi-open-observation.ts";
 import { poll, start } from "./runtime.ts";
 import {
   runStartLedgerSensitivity,
@@ -263,6 +264,7 @@ async function compile(directory: string, kind: Kind, fault: boolean) {
     logLevel: "silent",
     metafile: true,
     plugins: [
+      piOpenObservationPlugin(repository, kind === "admission-identity"),
       {
         name: "one-reviewed-source-fault",
         setup(builder) {

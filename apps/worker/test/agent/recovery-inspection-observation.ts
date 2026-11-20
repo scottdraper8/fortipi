@@ -9,6 +9,17 @@ const phases = new Set([
   "state-pi-open",
   "state-conversation-scan",
   "state-response",
+  "pi-ready",
+  "pi-last-close",
+  "pi-session-store",
+  "pi-harness-factory",
+  "pi-root",
+  "pi-resume",
+  "pi-open-timer",
+  "pi-open-wake",
+  "pi-factory-store",
+  "pi-factory-models",
+  "pi-factory-harness",
 ]);
 
 export function recoveryInspectionLine(phase: unknown, event: unknown): string | null {
