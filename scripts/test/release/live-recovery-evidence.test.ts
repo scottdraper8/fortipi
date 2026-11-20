@@ -30,7 +30,10 @@ import type { RecoveryInput, RecoveryPorts } from "../../platform-recovery.ts";
 import * as prepare from "../../prepare-release.ts";
 import { childEnvironment, execute, generateSbom, stageAndPack } from "../../prepare-release.ts";
 import {
+  type LiveRecoveryAwait,
+  type LiveRecoveryInvocation,
   type LiveRecoveryPhase,
+  liveRecoveryAwaitLine,
   liveRecoveryFailureLine,
   liveRecoveryPhaseLine,
 } from "../../source-test-processes.ts";
@@ -84,6 +87,21 @@ function observePhase(phase: LiveRecoveryPhase, event: "enter" | "caught" = "ent
     process.stdout.write(`${liveRecoveryPhaseLine(phase, event)}\n`);
   } catch {
     /* Diagnostic output cannot replace the existing result or error. */
+  }
+}
+let invocation: LiveRecoveryInvocation | undefined;
+let postChildEntered = false;
+function observeAwait(step: LiveRecoveryAwait, event: "enter" | "exit") {
+  if (!invocation) return;
+  if (step === "outer" && event === "enter") postChildEntered = false;
+  if (step === "post-child") {
+    if (event === "exit" && !postChildEntered) return;
+    postChildEntered = event === "enter";
+  }
+  try {
+    process.stdout.write(`${liveRecoveryAwaitLine(invocation, step, event)}\n`);
+  } catch {
+    /* Observations cannot replace the original result or error. */
   }
 }
 
@@ -811,7 +829,9 @@ async function controlled() {
         assert.deepEqual(startup, f.input.before);
       } else if (recovery.coordinator.mode === "verify-existing") {
         observePhase("readonly");
+        observeAwait("cached-bridge", "enter");
         const result = await recovery.coordinator.bridge.verifyExisting();
+        observeAwait("cached-bridge", "exit");
         assert.equal(result.status, "lineage-confirmed");
         if (result.status !== "lineage-confirmed") throw Error("Controlled original unavailable");
         assert.deepEqual(startup, result.current, "Child must receive the exact fresh timestamp");
@@ -869,6 +889,8 @@ async function controlled() {
           resolve(integratedDirectory, "claims/infrastructure-boundaries.json"),
           `${canonicalJson({ id: "infrastructure-boundaries", outcome: "pass", observation: { substituted: true } })}\n`,
         );
+      // The child callback is returning; outer disposal/authentication and payload checks remain.
+      observeAwait("post-child", "enter");
     };
     mock.module(new URL("../../prepare-release.ts", import.meta.url), {
       cache: true,
@@ -896,7 +918,9 @@ async function controlled() {
           return {
             ...reader,
             async verifyExisting() {
+              observeAwait("original-reader", "enter");
               const result = await reader.verifyExisting();
+              observeAwait("original-reader", "exit");
               if (result.status === "lineage-confirmed")
                 privateRecords = [result.before.path, result.after.path];
               return result;
@@ -1094,11 +1118,15 @@ async function controlled() {
     process.env.OPERATION = "verify";
     process.env.CONFIRM = `verify ${c.tag} ${sourceCommit} ${c.scope}`;
     const originalFiles = await inventory(originalDirectory);
+    invocation = "positive";
+    observeAwait("outer", "enter");
     const verified = await successful({
       ...common,
       deploymentPath: verifyDeployment,
       out: resolve(root, "verify-claims"),
     });
+    observeAwait("post-child", "exit");
+    observeAwait("outer", "exit");
     assert.equal(f.calls.length, 2, "Verification must have no provider effects");
     assert.equal(integratedDownloads, 4);
     assert.equal(copiedRecords.length, 2);
@@ -1122,6 +1150,8 @@ async function controlled() {
     await copyFile(`${verifyDeployment}.cli.json`, `${tamperDeployment}.cli.json`);
     childMode = "tamper-local";
     try {
+      invocation = "tamper";
+      observeAwait("outer", "enter");
       await assert.rejects(
         runLiveRecoveryEvidence({
           ...common,
@@ -1130,6 +1160,9 @@ async function controlled() {
         }),
         /unavailable/,
       );
+      // Exit means the existing expected-refusal assertion completed, not qualification.
+      observeAwait("post-child", "exit");
+      observeAwait("outer", "exit");
       assert.equal(f.calls.length, 2, "Changed predecessor cannot cause a provider write");
       assert.equal(
         integratedDownloads,
@@ -1146,6 +1179,8 @@ async function controlled() {
     process.env.OPERATION = "deploy";
     process.env.CONFIRM = frame.CONFIRM;
     childMode = "omit-phases";
+    invocation = "omitted";
+    observeAwait("outer", "enter");
     await assert.rejects(
       runLiveRecoveryEvidence({
         ...common,
@@ -1154,6 +1189,8 @@ async function controlled() {
       }),
       /unavailable/,
     );
+    observeAwait("post-child", "exit");
+    observeAwait("outer", "exit");
     assert.equal(f.calls.length, 2, "Missing phases cannot invent another provider operation");
     process.stdout.write(
       "Controlled outer perform/verify, immutable inventory, pre-credential guards and incomplete-phase refusal passed.\n",

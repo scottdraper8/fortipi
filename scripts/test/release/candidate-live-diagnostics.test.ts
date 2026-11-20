@@ -6,6 +6,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { observeCandidateDiagnostics } from "../../build-workspaces.ts";
 import {
+  liveRecoveryAwaitLine,
   liveRecoveryFailureLine,
   liveRecoveryPhaseLine,
   nativePublicationObservationLine,
@@ -238,6 +239,9 @@ test("live child failure preserves only bounded exit facts and actually observed
     signal: null,
     lastPhase: "cleanup",
     lastPhaseAtError: "prepare",
+    lastInvocation: null,
+    lastAwaitEntered: null,
+    lastAwaitExited: null,
   });
   assert.equal(line.includes(privateValue), false);
   assert.equal(sourceTestDiagnostic(`# ${line}`), true);
@@ -248,6 +252,40 @@ test("live child failure preserves only bounded exit facts and actually observed
   assert.equal(timed.lastPhaseAtError, null);
   assert.equal(timed.killed, true);
   assert.equal(timed.signal, "SIGTERM");
+  const entered = JSON.parse(
+    liveRecoveryFailureLine({
+      code: null,
+      killed: true,
+      signal: "SIGTERM",
+      stdout: [
+        liveRecoveryAwaitLine("positive", "outer", "enter"),
+        liveRecoveryAwaitLine("positive", "cached-bridge", "enter"),
+        liveRecoveryAwaitLine("positive", "cached-bridge", "exit"),
+        liveRecoveryAwaitLine("positive", "post-child", "enter"),
+      ].join("\n"),
+    }),
+  );
+  assert.equal(entered.lastInvocation, "positive");
+  assert.equal(entered.lastAwaitEntered, "post-child");
+  assert.equal(entered.lastAwaitExited, "cached-bridge");
+  const reset = JSON.parse(
+    liveRecoveryFailureLine({
+      stdout: [
+        liveRecoveryAwaitLine("positive", "outer", "enter"),
+        liveRecoveryAwaitLine("positive", "outer", "exit"),
+        liveRecoveryAwaitLine("tamper", "outer", "enter"),
+        liveRecoveryAwaitLine("tamper", "original-reader", "enter"),
+      ].join("\n"),
+    }),
+  );
+  assert.equal(reset.lastInvocation, "tamper");
+  assert.equal(reset.lastAwaitEntered, "original-reader");
+  assert.equal(reset.lastAwaitExited, null, "A prior invocation cannot complete this await");
+  const orphan = JSON.parse(
+    liveRecoveryFailureLine({ stdout: liveRecoveryAwaitLine("omitted", "outer", "exit") }),
+  );
+  assert.equal(orphan.lastInvocation, null);
+  assert.equal(orphan.lastAwaitExited, null);
   const forged = liveRecoveryPhaseLine("packing", "enter").replace(
     '"phase":"packing"',
     `"phase":"${privateValue}","phase":"packing"`,
@@ -262,7 +300,7 @@ test("live child failure preserves only bounded exit facts and actually observed
   const opaque = Object.defineProperties(
     {},
     Object.fromEntries(
-      ["code", "killed", "signal", "stdout"].map((key) => [
+      ["code", "killed", "signal", "stdout", "toString"].map((key) => [
         key,
         {
           get() {
@@ -281,19 +319,64 @@ test("live child failure preserves only bounded exit facts and actually observed
     { killed: "true" },
     { signal: privateValue },
     { lastPhase: privateValue },
+    { lastInvocation: privateValue },
+    { lastAwaitEntered: privateValue },
+    { lastAwaitExited: 1 },
     { payload: privateValue },
   ])
     assert.equal(sourceTestDiagnostic(`# ${JSON.stringify({ ...record, ...patch })}`), false);
   const phaseLines = ["packing", "prepare", "perform", "readonly", "cleanup"].map((p) =>
     liveRecoveryPhaseLine(p, "enter"),
   );
+  const awaitLines: string[] = [];
+  for (const invocation of ["positive", "tamper", "omitted"])
+    for (const step of ["outer", "original-reader", "cached-bridge", "post-child"])
+      for (const event of ["enter", "exit"])
+        awaitLines.push(liveRecoveryAwaitLine(invocation, step, event));
+  const awaitRecord = JSON.parse(liveRecoveryAwaitLine("positive", "post-child", "enter"));
+  const refused = [
+    ...[
+      { invocation: privateValue },
+      { invocation: 1 },
+      { step: privateValue },
+      { step: null },
+      { event: privateValue },
+      { event: "completed" },
+      { payload: privateValue },
+    ].map((patch) => JSON.stringify({ ...awaitRecord, ...patch })),
+    JSON.stringify(awaitRecord).replace(
+      '"invocation":"positive"',
+      `"invocation":"${privateValue}","invocation":"positive"`,
+    ),
+    liveRecoveryAwaitLine(opaque, opaque, opaque),
+  ];
+  assert.equal(accessorCalls, 0);
+  for (const marker of refused) assert.equal(sourceTestDiagnostic(`# ${marker}`), false);
+  const forgedAwait = JSON.parse(liveRecoveryFailureLine({ stdout: refused.join("\n") }));
+  assert.equal(forgedAwait.lastInvocation, null);
+  assert.equal(forgedAwait.lastAwaitEntered, null);
+  const overBound = JSON.parse(
+    liveRecoveryFailureLine({
+      stdout: `${"x".repeat(2_000_001)}\n${liveRecoveryAwaitLine("positive", "outer", "enter")}`,
+    }),
+  );
+  assert.equal(overBound.lastInvocation, null);
+  for (const marker of [...phaseLines, ...awaitLines, line])
+    assert.ok(Buffer.byteLength(`# ${marker}`) <= 512);
   const stream = new PassThrough(),
     forwarded: string[] = [];
   observeCandidateDiagnostics(stream, (value) => forwarded.push(value));
   const ended = once(stream, "end");
-  stream.end([...phaseLines.map((p) => `# ${p}`), `# ${line}`, `# ${privateValue}`].join("\n"));
+  for (const marker of [...refused, ...phaseLines, ...awaitLines, line]) {
+    stream.write(`# ${marker.slice(0, 23)}`);
+    stream.write(`${marker.slice(23)}\n`);
+  }
+  stream.end(`# ${privateValue}`);
   await ended;
-  assert.deepEqual(forwarded, [...phaseLines.map((p) => `# ${p}\n`), `# ${line}\n`]);
+  assert.deepEqual(
+    forwarded,
+    [...phaseLines, ...awaitLines, line].map((p) => `# ${p}\n`),
+  );
 });
 
 test("only reviewed generation, boundary and live titles survive failure projection", () => {

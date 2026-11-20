@@ -614,8 +614,13 @@ function publicationDiagnostic(line: string): boolean {
   );
 }
 export type LiveRecoveryPhase = "packing" | "prepare" | "perform" | "readonly" | "cleanup";
+export type LiveRecoveryInvocation = "positive" | "tamper" | "omitted";
+export type LiveRecoveryAwait = "outer" | "original-reader" | "cached-bridge" | "post-child";
 const livePhases = new Set(["packing", "prepare", "perform", "readonly", "cleanup"]);
 const liveEvents = new Set(["enter", "caught"]);
+const liveInvocations = new Set(["positive", "tamper", "omitted"]);
+const liveAwaits = new Set(["outer", "original-reader", "cached-bridge", "post-child"]);
+const liveAwaitEvents = new Set(["enter", "exit"]);
 const childCodes = new Set([
   "ERR_ASSERTION",
   "ERR_TEST_FAILURE",
@@ -658,20 +663,54 @@ function livePhase(line: string): Record<string, unknown> | null {
     ? r
     : null;
 }
+export function liveRecoveryAwaitLine(invocation: unknown, step: unknown, event: unknown): string {
+  return JSON.stringify({
+    diagnostic: "source-live-recovery-await",
+    invocation: diagnosticEnum(invocation, liveInvocations),
+    step: diagnosticEnum(step, liveAwaits),
+    event: diagnosticEnum(event, liveAwaitEvents),
+  });
+}
+function liveAwait(line: string): Record<string, unknown> | null {
+  const r = closedObservation(line, "source-live-recovery-await", "invocation,step,event");
+  return r &&
+    typeof r.invocation === "string" &&
+    liveInvocations.has(r.invocation) &&
+    typeof r.step === "string" &&
+    liveAwaits.has(r.step) &&
+    typeof r.event === "string" &&
+    liveAwaitEvents.has(r.event)
+    ? r
+    : null;
+}
 /** Inspect only bounded canonical markers in captured stdout; never forward child output/errors. */
 export function liveRecoveryFailureLine(error: unknown): string {
   const stdout = ownDiagnosticField(error, "stdout");
   let lastPhase: unknown = null,
-    lastPhaseAtError: unknown = null;
+    lastPhaseAtError: unknown = null,
+    lastInvocation: unknown = null,
+    lastAwaitEntered: unknown = null,
+    lastAwaitExited: unknown = null;
   if (typeof stdout === "string" && stdout.length <= 2_000_000) {
     const tail = stdout.slice(-8192),
       lines = tail.split("\n");
     if (stdout.length > tail.length) lines.shift();
     for (const line of lines.slice(-64)) {
       const r = line.length <= 160 ? livePhase(`# ${line}`) : null;
-      if (!r) continue;
-      if (r.event === "enter") lastPhase = r.phase;
-      else lastPhaseAtError = r.phase;
+      if (r) {
+        if (r.event === "enter") lastPhase = r.phase;
+        else lastPhaseAtError = r.phase;
+      }
+      const awaited = line.length <= 160 ? liveAwait(`# ${line}`) : null;
+      if (!awaited) continue;
+      if (awaited.event === "enter") {
+        if (awaited.invocation !== lastInvocation || awaited.step === "outer") {
+          lastAwaitEntered = null;
+          lastAwaitExited = null;
+        }
+        lastInvocation = awaited.invocation;
+        lastAwaitEntered = awaited.step;
+      } else if (awaited.invocation === lastInvocation) lastAwaitExited = awaited.step;
     }
   }
   const code = ownDiagnosticField(error, "code");
@@ -685,14 +724,17 @@ export function liveRecoveryFailureLine(error: unknown): string {
     signal: diagnosticEnum(ownDiagnosticField(error, "signal"), childSignals),
     lastPhase,
     lastPhaseAtError,
+    lastInvocation,
+    lastAwaitEntered,
+    lastAwaitExited,
   });
 }
 function liveRecoveryDiagnostic(line: string): boolean {
-  if (livePhase(line)) return true;
+  if (livePhase(line) || liveAwait(line)) return true;
   const r = closedObservation(
     line,
     "source-live-recovery-failure",
-    "code,killed,signal,lastPhase,lastPhaseAtError",
+    "code,killed,signal,lastPhase,lastPhaseAtError,lastInvocation,lastAwaitEntered,lastAwaitExited",
   );
   return !!(
     r &&
@@ -701,7 +743,9 @@ function liveRecoveryDiagnostic(line: string): boolean {
       (typeof r.code === "string" && childCodes.has(r.code))) &&
     (r.killed === null || typeof r.killed === "boolean") &&
     optionalEnum(r.signal, childSignals) &&
-    [r.lastPhase, r.lastPhaseAtError].every((v) => optionalEnum(v, livePhases))
+    [r.lastPhase, r.lastPhaseAtError].every((v) => optionalEnum(v, livePhases)) &&
+    optionalEnum(r.lastInvocation, liveInvocations) &&
+    [r.lastAwaitEntered, r.lastAwaitExited].every((v) => optionalEnum(v, liveAwaits))
   );
 }
 /** Project facts already collected by the fixture; never include its private trace. */

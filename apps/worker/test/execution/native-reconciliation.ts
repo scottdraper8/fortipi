@@ -27,6 +27,47 @@ interface Trace {
     leaseExpiresAt: number;
   }[];
 }
+export interface ResultPublicationDiagnostic {
+  phase: string;
+  now: number;
+  pressure: { phase: string; code: string; message: string } | null;
+  originalLease: D.Lease | null;
+  observedLease: D.Lease | null;
+  receiptRetained: boolean;
+}
+/** This exact Workspace guard, not a final state or original-lease timestamp, proves expiry. */
+export function assertExpiredResultPublication(
+  diagnostic: ResultPublicationDiagnostic,
+  facts: Pick<Trace, "local">,
+  identity: D.ExecutionIdentity,
+): void {
+  assert.equal(diagnostic.phase, "requires_reconciliation");
+  assert.equal(diagnostic.pressure?.phase, "result_pending_commit");
+  assert.equal(diagnostic.pressure?.code, "workspace.conflict");
+  assert.equal(diagnostic.pressure?.message, "Lease expired");
+  assert.equal(diagnostic.receiptRetained, false);
+  assert.deepEqual(diagnostic.originalLease, identity.lease);
+  if (diagnostic.observedLease) {
+    const { leaseVersion: _version, expiresAt: _expiry, ...observed } = diagnostic.observedLease;
+    const {
+      leaseVersion: _originalVersion,
+      expiresAt: _originalExpiry,
+      ...original
+    } = identity.lease;
+    assert.deepEqual(observed, original, "Observed lease must retain original authority identity");
+    assert.ok(diagnostic.observedLease.leaseVersion >= identity.lease.leaseVersion);
+  }
+  const expiry = Math.max(identity.lease.expiresAt, diagnostic.observedLease?.expiresAt ?? 0);
+  assert.ok(diagnostic.now > expiry, "Latest retained lease observation must also be expired");
+  assert.ok(diagnostic.now < identity.deadline, "This branch cannot explain deadline expiry");
+  assert.ok(
+    facts.local.some(
+      (row) =>
+        row.kind === "observe" && row.ok && row.sockets > 0 && row.startedAt <= row.finishedAt,
+    ),
+    "An actual successful observation from the connected executor is required",
+  );
+}
 export function assertOfflineQueryCause(query: Trace["query"], reconnectStartedAt: number): void {
   assert.ok(query?.ok && query.state === "unknown", "An actual unknown query is required");
   assert.equal(query.attempted, true, "Only the original attempted execution qualifies");
@@ -68,6 +109,21 @@ export async function verifyNativeReconciliation(
       JSON.stringify(facts),
     );
   }
+  await verifyReconciliationOutcome(c, mode, facts);
+}
+
+/** Shared public outcome invariants; each caller must first prove its distinct cause. */
+async function verifyReconciliationOutcome(
+  c: NativeRecoveryContext,
+  mode: "assign-ack" | "result",
+  facts: Trace,
+) {
+  const trace = async () =>
+    (
+      await c.service.api<Trace>(
+        `/__test/dispatch-trace?job=${c.job.jobId}&operation=${c.job.operationId}`,
+      )
+    ).body;
   const terminal = await eventually(
     c.view,
     (value) =>
@@ -205,6 +261,68 @@ export async function verifyNativeReconciliation(
       processStarts: 1,
       piOutcomePreserved: true,
       rootStillPinned: true,
+    }),
+  );
+}
+
+/** Retain natural RESULT recovery without treating every reconciliation as lawful expiry. */
+export async function verifyNaturalResult(
+  c: NativeRecoveryContext,
+): Promise<undefined | "continue"> {
+  const current = await c.view();
+  if (current.jobs[0]?.state === "completed") {
+    const job = await c.service.api<D.Job>(
+      `/v1/jobs/${c.job.jobId}`,
+      undefined,
+      "GET",
+      c.actorToken,
+    );
+    assert.equal(job.status, 200);
+    assert.ok(job.body.state === "completed" && job.body.evidence.kind === "committed");
+    if (job.body.state !== "completed" || job.body.evidence.kind !== "committed")
+      throw new Error("A completed native result requires its real Workspace receipt");
+    const receipt = job.body.evidence.receipt;
+    const binding = await c.service.api<D.WorkspaceBinding>(`/v1/workspaces/${c.workspaceId}`);
+    assert.equal(binding.status, 200);
+    assert.equal(receipt.providerKind, "local");
+    assert.equal(receipt.jobId, c.job.jobId);
+    assert.equal(receipt.operationId, c.job.operationId);
+    assert.equal(receipt.baseRevision, c.base.revision);
+    assert.equal(receipt.revision, binding.body.revision);
+    assert.equal(receipt.manifestHash, binding.body.manifestHash);
+    assert.notEqual(binding.body.manifestHash, c.base.manifestHash);
+    console.log(
+      JSON.stringify({ nativeResultBranch: "committed-result", actualWorkspaceReceipt: true }),
+    );
+    return "continue"; // Original completion/receipt ACK, original IDs, child and one-start checks run.
+  }
+  const facts = (
+    await c.service.api<Trace>(
+      `/__test/dispatch-trace?job=${c.job.jobId}&operation=${c.job.operationId}`,
+    )
+  ).body;
+  const diagnostic = (
+    await c.service.api<ResultPublicationDiagnostic>(
+      `${c.probe}/job-diagnostics?job=${c.job.jobId}`,
+    )
+  ).body;
+  assertExpiredResultPublication(diagnostic, facts, c.identity);
+  const native = c.fixture.ledger.get(c.job.jobId);
+  assert.ok(native);
+  assert.equal(native.result?.state, "succeeded");
+  assert.equal(native.assignment.identity.executionId, c.identity.executionId);
+  assert.equal(native.assignment.identity.assignmentDigest, c.identity.assignmentDigest);
+  assert.equal(native.assignment.identity.lease.fence, c.identity.lease.fence);
+  assert.equal(native.committed, undefined);
+  assert.equal(c.native.connected, true);
+  assert.ok(c.native.session?.registered);
+  await verifyReconciliationOutcome(c, "result", facts);
+  console.log(
+    JSON.stringify({
+      nativeResultBranch: "expired-publication",
+      actualWorkspaceLeaseGuard: true,
+      realPublicReconciliation: true,
+      originalExecutionRetained: true,
     }),
   );
 }

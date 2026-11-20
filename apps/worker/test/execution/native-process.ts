@@ -838,7 +838,11 @@ export async function nativeProcessRecovery(
       if (disposition !== "continue") return;
     }
     const agentDiagnostic = (await service.api(`${probe}/job-diagnostics?job=${job.jobId}`)).body;
-    const controlDiagnostic = (await service.api(`/__test/dispatch-trace?job=${job.jobId}`)).body;
+    const controlDiagnostic = (
+      await service.api(
+        `/__test/dispatch-trace?${new URLSearchParams({ job: job.jobId, operation: job.operationId })}`,
+      )
+    ).body;
     const diagnostic = JSON.stringify({
       application: final,
       diagnostic: agentDiagnostic,

@@ -1,6 +1,6 @@
 import test from "node:test";
 import { nativeProcessRecovery } from "./native-process.ts";
-import { verifyNaturalLostAck } from "./native-reconciliation.ts";
+import { verifyNaturalLostAck, verifyNaturalResult } from "./native-reconciliation.ts";
 
 for (const mode of ["attempted", "assign-ack", "result", "receipt"] as const)
   test(
@@ -17,6 +17,8 @@ for (const mode of ["attempted", "assign-ack", "result", "receipt"] as const)
               outage: "natural",
               verify: verifyNaturalLostAck,
             }
-          : undefined,
+          : mode === "result"
+            ? { outage: "natural", verifyAfterOutcome: true, verify: verifyNaturalResult }
+            : undefined,
       ),
   );
