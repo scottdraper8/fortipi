@@ -69,6 +69,7 @@ import {
   InfrastructureEvidenceUnavailable,
   type InfrastructureObserver,
 } from "./live-infrastructure-controls.ts";
+import { observeLocalEvidence } from "./local-evidence-observation.ts";
 import { runNativeDaemon } from "./native-daemon.ts";
 import { nativePlatform } from "./native-matrix.ts";
 import { publicFlow } from "./public-flow.ts";
@@ -188,6 +189,15 @@ export async function runEvidence(
     else if (devices) assertDeviceEvidenceData(devices, current);
   }
   const results: ClaimResult[] = [];
+  const observeLocal = (
+    stage: string,
+    event: "enter" | "exit",
+    began: number,
+    outcome: unknown = null,
+  ) => {
+    if (input.mode === "local")
+      observeLocalEvidence(stage, event, performance.now() - began, outcome);
+  };
   const cleanup: CleanupObservation[] = [];
   const command = [
     process.execPath,
@@ -215,6 +225,7 @@ export async function runEvidence(
     sensitivity: string[] = [],
   ) {
     const began = performance.now();
+    observeLocal(id, "enter", began);
     try {
       const observation = await scenario();
       results.push({
@@ -256,6 +267,7 @@ export async function runEvidence(
         sensitivity,
       });
     }
+    observeLocal(id, "exit", began, results.at(-1)?.outcome);
     process.stderr.write(`${id}: ${results.at(-1)!.outcome}\n`);
   }
   let installed: Installed | undefined;
@@ -1421,11 +1433,23 @@ export async function runEvidence(
   // Authentication/install belongs to trusted setup. Post-client integrity
   // reads metadata and installed bytes; it must not acquire new archive-read
   // authority or reconstruct the producer's packages on this native OS.
+  let finalBegan = performance.now();
+  observeLocal("installed-integrity", "enter", finalBegan);
   if (installed) await installed.verifyUnchanged();
   else assert.equal(sha256(await regularBytes(input.candidateManifest)), loaded.hash);
+  observeLocal("installed-integrity", "exit", finalBegan);
+  finalBegan = performance.now();
+  observeLocal("checkout-integrity", "enter", finalBegan);
   assert.equal(await git("status", "--porcelain"), "", "Evidence changed frozen source");
+  observeLocal("checkout-integrity", "exit", finalBegan);
+  finalBegan = performance.now();
+  observeLocal("producer-integrity", "enter", finalBegan);
   assert.deepEqual(await evidenceProducer(input, loaded.candidate), producer);
+  observeLocal("producer-integrity", "exit", finalBegan);
+  finalBegan = performance.now();
+  observeLocal("write-evidence", "enter", finalBegan);
   await writeEvidence(input, loaded.candidate, identity, results);
+  observeLocal("write-evidence", "exit", finalBegan);
   return results;
 }
 export function argumentsFor(argv: string[]): EvidenceInput {
@@ -1507,6 +1531,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         })}\n`,
       );
       if (!rows.length || rows.some((r) => r.outcome !== "pass")) process.exitCode = 1;
+      // Reaching this callback proves runEvidence returned, not that the process exited or claims passed.
+      if (process.argv[2] === "local") observeLocalEvidence("cli-return", "exit", 0);
     })
     .catch(() => {
       process.stderr.write(

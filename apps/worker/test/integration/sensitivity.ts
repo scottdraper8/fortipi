@@ -32,6 +32,80 @@ type Kind =
   | "completed-generation"
   | "start-ledger-dedup"
   | "final-admission-reservation";
+const diagnosticKinds = new Set([
+  "admission-identity",
+  "canonical-bytes-before-cas",
+  "completed-generation",
+  "start-ledger-dedup",
+  "final-admission-reservation",
+]);
+const diagnosticRuns = new Set(["driver", "baseline", "mutant", "restored", "ledger"]);
+const diagnosticPhases = new Set([
+  "directory",
+  "compile",
+  "scenario",
+  "runtime-start",
+  "provision",
+  "arm-fault",
+  "after-submit-barrier",
+  "stop",
+  "lost-response",
+  "reopen",
+  "recovered-receipt",
+  "original-completion",
+  "retry-admission",
+  "retry-completion",
+  "inspect",
+  "runtime-dispose",
+  "artifact-cleanup",
+  "exercise",
+  "case-result",
+  "cli-result",
+]);
+const diagnosticEvents = new Set(["enter", "exit", "throw"]);
+const diagnosticOutcomes = new Set(["killed", "survived", "unavailable"]);
+const diagnosticMember = (value: unknown, values: Set<string>) =>
+  typeof value === "string" && values.has(value) ? value : null;
+export function sensitivityPhaseLine(
+  kind: unknown,
+  run: unknown,
+  phase: unknown,
+  event: unknown,
+  outcome: unknown = null,
+  exitCodeDecision: unknown = null,
+) {
+  return JSON.stringify({
+    diagnostic: "sensitivity-phase",
+    kind: diagnosticMember(kind, diagnosticKinds),
+    run: diagnosticMember(run, diagnosticRuns),
+    phase: diagnosticMember(phase, diagnosticPhases),
+    event: diagnosticMember(event, diagnosticEvents),
+    outcome: diagnosticMember(outcome, diagnosticOutcomes),
+    exitCodeDecision:
+      typeof exitCodeDecision === "number" &&
+      Number.isInteger(exitCodeDecision) &&
+      exitCodeDecision >= 0 &&
+      exitCodeDecision <= 255
+        ? exitCodeDecision
+        : null,
+  });
+}
+function observeSensitivity(
+  kind: unknown,
+  run: unknown,
+  phase: unknown,
+  event: unknown,
+  outcome: unknown = null,
+  exitCodeDecision: unknown = null,
+  emit = (line: string) => {
+    process.stderr.write(line);
+  },
+) {
+  try {
+    emit(`${sensitivityPhaseLine(kind, run, phase, event, outcome, exitCodeDecision)}\n`);
+  } catch {}
+}
+type Observe = (phase: string, event: "enter" | "exit" | "throw") => void;
 export type MutationResult = WorkerMutationResult | StartLedgerSensitivity;
 export interface WorkerMutationResult {
   id: Kind;
@@ -215,25 +289,40 @@ async function compile(directory: string, kind: Kind, fault: boolean) {
     outputSha256: sha(await readFile(outfile)),
   };
 }
-async function admissionMultiplicity(main: string) {
+async function admissionMultiplicity(main: string, observe: Observe) {
+  observe("runtime-start", "enter");
   const runtime = await start({ main });
+  observe("runtime-start", "exit");
   try {
+    observe("provision", "enter");
     const state = await provision(runtime),
       cid = state.conversations[0]!.conversationId;
+    observe("provision", "exit");
     const probe = `/__test/agents/${state.agent.agentId}`;
     const body = {
       clientRequestId: crypto.randomUUID(),
       content: "seed1010-sensitivity-input",
       busyBehavior: "followUp",
     };
+    observe("arm-fault", "enter");
     await runtime.api(`${probe}/fault`, "after-submit");
+    observe("arm-fault", "exit");
     const lost = runtime
       .api(`/v1/conversations/${cid}/messages`, body, "POST", state.client.token)
       .catch(() => undefined);
+    observe("after-submit-barrier", "enter");
     await runtime.barrier(state.agent.agentId, "after-submit");
+    observe("after-submit-barrier", "exit");
+    observe("stop", "enter");
     await runtime.stopAbruptly();
+    observe("stop", "exit");
+    observe("lost-response", "enter");
     await lost;
+    observe("lost-response", "exit");
+    observe("reopen", "enter");
     await runtime.reopenSameStorage();
+    observe("reopen", "exit");
+    observe("recovered-receipt", "enter");
     const recovered = await poll(
       async () =>
         (
@@ -243,7 +332,9 @@ async function admissionMultiplicity(main: string) {
         ).body,
       (value) => value.admissions.some((admission) => !!admission.receipt),
     );
+    observe("recovered-receipt", "exit");
     const originalTask = recovered.admissions.find((admission) => !!admission.receipt)!.taskId;
+    observe("original-completion", "enter");
     await poll(
       async () =>
         (
@@ -256,13 +347,17 @@ async function admissionMultiplicity(main: string) {
         ).body,
       (value) => value.status.state === "completed",
     );
+    observe("original-completion", "exit");
+    observe("retry-admission", "enter");
     const reply = await runtime.api<{ taskId: string }>(
       `/v1/conversations/${cid}/messages`,
       body,
       "POST",
       state.client.token,
     );
+    observe("retry-admission", "exit");
     assert.equal(reply.status, 202, "Original accepted identity must remain retryable");
+    observe("retry-completion", "enter");
     await poll(
       async () =>
         (
@@ -275,6 +370,8 @@ async function admissionMultiplicity(main: string) {
         ).body,
       (value) => value.status.state === "completed",
     );
+    observe("retry-completion", "exit");
+    observe("inspect", "enter");
     const inspection = await poll(
       async () =>
         (
@@ -284,6 +381,7 @@ async function admissionMultiplicity(main: string) {
         ).body,
       (value) => value.entries.some((entry) => entry.kind === "pi.user"),
     );
+    observe("inspect", "exit");
     const count = inspection.entries.filter(
       (entry) => entry.kind === "pi.user" && entry.text === body.content,
     ).length;
@@ -304,10 +402,12 @@ async function admissionMultiplicity(main: string) {
       acknowledgedActualSubmitBoundary: true,
     };
   } finally {
+    observe("runtime-dispose", "enter");
     await runtime.dispose();
+    observe("runtime-dispose", "exit");
   }
 }
-async function scenario(kind: Kind, main: string) {
+async function scenario(kind: Kind, main: string, observe: Observe) {
   if (kind === "canonical-bytes-before-cas") {
     const module = (await import(pathToFileURL(main).href)) as {
       LocalWorkspace: typeof import("../../../../packages/fortipi-executor/dist/index.js").LocalWorkspace;
@@ -315,7 +415,7 @@ async function scenario(kind: Kind, main: string) {
     return rejectedLocalBytes(module.LocalWorkspace);
   }
   if (kind === "completed-generation") return fenceGeneration({ main });
-  if (kind === "admission-identity") return admissionMultiplicity(main);
+  if (kind === "admission-identity") return admissionMultiplicity(main, observe);
   return concurrentAdmissionBoundary({ main });
 }
 function falsifier(kind: Kind, error: unknown): Record<string, unknown> | undefined {
@@ -370,21 +470,38 @@ function falsifier(kind: Kind, error: unknown): Record<string, unknown> | undefi
     };
 }
 export async function exerciseMutation(kind: Kind): Promise<MutationResult> {
+  if (kind === "start-ledger-dedup") observeSensitivity(kind, "ledger", "scenario", "enter");
   if (kind === "start-ledger-dedup")
     // Preserve the qualified component scope and the separately protected full
     // runtime observations verbatim; this is not a full-runtime kill claim.
     return runStartLedgerSensitivity();
+  observeSensitivity(kind, "driver", "directory", "enter");
   const directory = await mkdtemp(resolve(tmpdir(), "fortipi-thread10-mutant-"));
+  observeSensitivity(kind, "driver", "directory", "exit");
   try {
+    observeSensitivity(kind, "baseline", "compile", "enter");
     const baseline = await compile(directory, kind, false);
-    const before = await scenario(kind, baseline.outfile);
+    observeSensitivity(kind, "baseline", "compile", "exit");
+    observeSensitivity(kind, "baseline", "scenario", "enter");
+    const before = await scenario(kind, baseline.outfile, (phase, event) =>
+      observeSensitivity(kind, "baseline", phase, event),
+    );
+    observeSensitivity(kind, "baseline", "scenario", "exit");
+    observeSensitivity(kind, "mutant", "compile", "enter");
     const mutant = await compile(directory, kind, true);
+    observeSensitivity(kind, "mutant", "compile", "exit");
     assert.notEqual(mutant.outputSha256, baseline.outputSha256);
     let observed: Record<string, unknown> | undefined, nonBehavioralFailure: string | undefined;
     let assertion: Record<string, unknown> | undefined;
     try {
-      await scenario(kind, mutant.outfile);
+      observeSensitivity(kind, "mutant", "scenario", "enter");
+      await scenario(kind, mutant.outfile, (phase, event) =>
+        observeSensitivity(kind, "mutant", phase, event),
+      );
+      observeSensitivity(kind, "mutant", "scenario", "exit");
     } catch (error) {
+      // This throw may be the expected falsifier; the existing classifier alone decides killed.
+      observeSensitivity(kind, "mutant", "scenario", "throw");
       observed = falsifier(kind, error);
       if (!observed) {
         nonBehavioralFailure = error instanceof Error ? error.name : "UnknownFailure";
@@ -396,17 +513,30 @@ export async function exerciseMutation(kind: Kind): Promise<MutationResult> {
           assertion = { actual: error.actual, expected: error.expected };
       }
     }
+    observeSensitivity(kind, "restored", "compile", "enter");
     const restored = await compile(directory, kind, false);
+    observeSensitivity(kind, "restored", "compile", "exit");
     assert.equal(
       restored.outputSha256,
       baseline.outputSha256,
       "Restored producer must reproduce the original binary input",
     );
-    const after = await scenario(kind, restored.outfile);
+    observeSensitivity(kind, "restored", "scenario", "enter");
+    const after = await scenario(kind, restored.outfile, (phase, event) =>
+      observeSensitivity(kind, "restored", phase, event),
+    );
+    observeSensitivity(kind, "restored", "scenario", "exit");
     assert.equal(
       sha(await readFile(resolve(repository, baseline.source))),
       baseline.sourceSha256,
       "Release source must remain untouched",
+    );
+    observeSensitivity(
+      kind,
+      "driver",
+      "case-result",
+      "exit",
+      observed ? "killed" : nonBehavioralFailure ? "unavailable" : "survived",
     );
     return {
       id: kind,
@@ -424,8 +554,13 @@ export async function exerciseMutation(kind: Kind): Promise<MutationResult> {
       },
       restored: { ...after, producerSha256: restored.outputSha256 },
     };
+  } catch (error) {
+    observeSensitivity(kind, "driver", "exercise", "throw");
+    throw error;
   } finally {
+    observeSensitivity(kind, "driver", "artifact-cleanup", "enter");
     await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    observeSensitivity(kind, "driver", "artifact-cleanup", "exit");
   }
 }
 export async function runSensitivity(
@@ -450,7 +585,9 @@ export async function runSensitivity(
     "start-ledger-dedup",
     "final-admission-reservation",
   ] as const) {
+    observeSensitivity(kind, "driver", "exercise", "enter");
     const result = await exerciseMutation(kind);
+    observeSensitivity(kind, "driver", "exercise", "exit", result.outcome);
     results.push(result);
     process.stderr.write(`sensitivity ${kind}: ${result.outcome}\n`);
   }
@@ -478,11 +615,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       );
       if (results.length !== 5 || results.some((result) => result.outcome !== "killed"))
         process.exitCode = 1;
+      // This is the existing CLI decision after return, not an observed OS child exit.
+      observeSensitivity(null, "driver", "cli-result", "exit", null, process.exitCode ?? 0);
     })
     .catch(() => {
       process.stderr.write(
         "Sensitivity failed or did not reach its required behavioral falsifier; no acceptance.\n",
       );
       process.exitCode = 1;
+      observeSensitivity(null, "driver", "cli-result", "throw", null, 1);
     });
 }

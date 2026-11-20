@@ -9,6 +9,7 @@ import { childEnvironment } from "../../scripts/prepare-release.ts";
 import { installedClientSnapshot } from "../distribution/consumer-runtime.ts";
 import type { Installed } from "../distribution/install.ts";
 import { fixtureTLS } from "./fixture-tls.ts";
+import { observeLocalBrowser } from "./local-evidence-observation.ts";
 
 async function stopTree(child: ChildProcess) {
   if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
@@ -107,6 +108,7 @@ export async function localBrowser(installed: Installed) {
         PLAYWRIGHT_BROWSERS_PATH: dirname(revision),
       }),
     );
+    observeLocalBrowser("coordinator-return", result);
     await installed.verifyUnchanged();
     assert.equal(result.timedOut, false, "Local HTTPS browser coordinator timed out");
     const observed = JSON.parse(result.stdout) as {
@@ -118,6 +120,7 @@ export async function localBrowser(installed: Installed) {
       diagnostic?: Record<string, unknown>;
       observation?: Record<string, unknown>;
     };
+    observeLocalBrowser("report", result, observed);
     assert.equal(
       result.code,
       0,
