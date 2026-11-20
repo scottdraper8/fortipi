@@ -5,8 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
-import type { Readable } from "node:stream";
+import { dirname, join, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { freeInfrastructurePolicy } from "fortipi-contract";
 import {
@@ -19,46 +18,9 @@ import {
   processCueMatches,
   readProcessWitness,
 } from "../agent/process-observation.ts";
-import {
-  observeRecoveryInspection,
-  recoveryInspectionRecord,
-} from "../agent/recovery-inspection-observation.ts";
 import { killRuntime } from "./runtime-child.ts";
 
 const repository = resolve(import.meta.dirname, "../../../..");
-/** Forward complete closed fixture records only, never arbitrary worker output. */
-export function forwardRecoveryInspection(
-  stream: Readable,
-  isCurrent: () => boolean,
-  emit = (line: string) => {
-    process.stderr.write(line);
-  },
-): void {
-  const decoder = new StringDecoder("utf8");
-  let partial = "",
-    dropping = false;
-  stream.on("data", (data: Buffer | string) => {
-    for (const character of typeof data === "string" ? data : decoder.write(data)) {
-      if (character === "\n") {
-        try {
-          const line = partial.endsWith("\r") ? partial.slice(0, -1) : partial;
-          const record = !dropping && isCurrent() ? recoveryInspectionRecord(line) : null;
-          if (record) emit(`${record}\n`);
-        } catch {
-          /* Preserve the owned child's original result even if the sink fails. */
-        }
-        partial = "";
-        dropping = false;
-      } else if (!dropping) {
-        if (partial.length + character.length > 129) {
-          partial = "";
-          dropping = true;
-        } else partial += character;
-      }
-    }
-  });
-  // EOF/close without a newline is deliberately not a complete worker record.
-}
 export async function poll<T>(
   read: () => Promise<T>,
   ready: (value: T) => boolean,
@@ -214,9 +176,6 @@ export async function start(options: RuntimeOptions = {}) {
     );
     const current = child,
       launched = invocation;
-    for (const stream of [child.stdout, child.stderr])
-      if (stream)
-        forwardRecoveryInspection(stream, () => child === current && invocation === launched);
     // Parse bounded private cue lines only; retain a match boolean, never logs.
     for (const stream of [child.stdout, child.stderr]) {
       const decoder = new StringDecoder("utf8");
@@ -264,7 +223,7 @@ export async function start(options: RuntimeOptions = {}) {
       lastStatus: number | null = null;
     const observe = (event: "enter" | "ready" | "failed") => {
       try {
-        console.log(
+        console.error(
           JSON.stringify({
             diagnostic: "admission-runtime-readiness",
             event,
@@ -332,12 +291,6 @@ export async function start(options: RuntimeOptions = {}) {
     token = admin,
   ) => {
     assert.ok(path.startsWith("/") && !path.startsWith("//"));
-    const observeStateRequest =
-      options.main !== undefined &&
-      /^admission-identity-(?:baseline|mutant)\.js$/.test(basename(options.main)) &&
-      /^\/__test\/agents\/[A-Za-z0-9_-]+\/state$/.test(path);
-    if (observeStateRequest)
-      observeRecoveryInspection("api-state-fetch-enter", "enter", console.error);
     const response = await fetch(`${endpoint}${path}`, {
       method,
       redirect: "error",
@@ -345,7 +298,6 @@ export async function start(options: RuntimeOptions = {}) {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(30000),
     });
-    if (observeStateRequest) observeRecoveryInspection("api-state-headers", "exit", console.error);
     return { status: response.status, body: (await response.json()) as T };
   };
   try {

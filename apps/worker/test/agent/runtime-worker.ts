@@ -23,7 +23,6 @@ import { FreshJobDoc } from "../../src/execution/new-job.js";
 import { defaultModel } from "../../src/models/factory.js";
 import { configuredModel } from "../../src/models/selection.js";
 import type { ProcessArm, ProcessWitness } from "./process-observation.ts";
-import { observeRecoveryInspection } from "./recovery-inspection-observation.ts";
 import { samplingOracle } from "./sampling-oracle.js";
 
 export { WorkspaceProxy } from "@cloudflare/computer";
@@ -631,25 +630,6 @@ export class TestAgentSession extends AgentSession {
         return ungatedPiStart(...args);
       };
     }
-    const piStart = this.pi.onStart.bind(this.pi);
-    this.pi.onStart = async (...args) => {
-      observeRecoveryInspection("pi-start", "enter");
-      const result = await piStart(...args);
-      observeRecoveryInspection("pi-start", "exit");
-      return result;
-    };
-    // The original installed Lifecycle handler still owns startup and dispatch.
-    const lifecycleFetch = this.lifecycle.fetch.bind(this.lifecycle);
-    Object.defineProperty(this, "fetch", {
-      configurable: true,
-      value: async (request: Request) => {
-        const state = new URL(request.url).pathname === "/__test/state";
-        if (state) observeRecoveryInspection("state-fetch", "enter");
-        const response = await lifecycleFetch(request);
-        if (state) observeRecoveryInspection("state-fetch", "exit");
-        return response;
-      },
-    });
     this.completion = completion;
     this.completionGate = completionGate;
     this.faux = faux;
@@ -701,11 +681,6 @@ export class TestAgentSession extends AgentSession {
   }
   diagnose() {
     return this.diagnostic;
-  }
-  override async onStart(): Promise<void> {
-    observeRecoveryInspection("host-start", "enter");
-    await super.onStart();
-    observeRecoveryInspection("host-start", "exit");
   }
   holdReplay(cid: string) {
     this.#replayHold = { cid, entered: false, gate: Promise.withResolvers<void>() };
@@ -895,7 +870,6 @@ export class TestAgentSession extends AgentSession {
         return Response.json({ armed: true });
       }
       if (action === "state" || action === "barrier") {
-        if (action === "state") observeRecoveryInspection("state-handler", "enter");
         if (action === "barrier" && url.searchParams.has("arm")) {
           const witness = await this.store.get<string | ProcessWitness>("fixture", "barrier");
           return Response.json({
@@ -908,11 +882,9 @@ export class TestAgentSession extends AgentSession {
                 : null,
           });
         }
-        if (action === "state") observeRecoveryInspection("state-admissions", "enter");
         const admissions = await this.store.page<
           import("../../src/agent/conversations.js").Admission
         >("admission", 100);
-        if (action === "state") observeRecoveryInspection("state-admissions", "exit");
         const observed = async () => ({
           barrier: await this.store
             .get<string | ProcessWitness>("fixture", "barrier")
@@ -926,27 +898,18 @@ export class TestAgentSession extends AgentSession {
         });
         // Observe a committed fault boundary without joining Pi's execution line.
         if (action === "barrier") return Response.json(await observed());
-        observeRecoveryInspection("state-creations", "enter");
         const creations = await this.store.page<
           import("../../src/agent/conversations.js").CreationIntent
         >("creation", 100);
-        observeRecoveryInspection("state-creations", "exit");
-        observeRecoveryInspection("state-admission-intents", "enter");
         const admissionIntents = await this.store.page<
           import("../../src/agent/conversations.js").AdmissionIntent
         >("admission-intent", 100);
-        observeRecoveryInspection("state-admission-intents", "exit");
-        observeRecoveryInspection("state-pi-open", "enter");
         const harness = await this.pi.pi();
-        observeRecoveryInspection("state-pi-open", "exit");
-        observeRecoveryInspection("state-conversation-scan", "enter");
         const conversations = await harness.commit(
           (tx) => tx.scanConversations({ order: "ascending" }, 100),
           BACKGROUND_CONTEXT,
         );
-        observeRecoveryInspection("state-conversation-scan", "exit");
-        observeRecoveryInspection("state-response", "enter");
-        const response = Response.json({
+        return Response.json({
           ...(await observed()),
           admissionIntents: admissionIntents.map(({ value }) => ({
             operationId: value.operationId,
@@ -957,9 +920,6 @@ export class TestAgentSession extends AgentSession {
           creations: creations.map((row) => ({ conversationId: row.value.conversationId })),
           piIds: conversations.items.filter((c) => !c.owner).map((c) => String(c.id)),
         });
-        observeRecoveryInspection("state-response", "exit");
-        observeRecoveryInspection("state-handler", "exit");
-        return response;
       }
       if (action === "inspect")
         return Response.json(await this.inspectConversation(url.searchParams.get("cid") ?? ""));

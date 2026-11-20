@@ -227,7 +227,9 @@ export function buildRegistry(deps: {
         if (mapped) {
           const more = await projection.entries(mapped.conversationId);
           if (more) {
-            await runtime.sleepUntil(Date.now() + 1, { phase: "project" }, context);
+            // Admission repair needs a host turn; history pagination can continue promptly.
+            const delay = (await projection.hasPendingInput(mapped.conversationId)) ? 5000 : 1;
+            await runtime.sleepUntil(Date.now() + delay, { phase: "project" }, context);
             return;
           }
         }

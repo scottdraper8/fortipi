@@ -12,18 +12,22 @@ export class Projection {
   constructor(conversations: Conversations) {
     this.conversations = conversations;
   }
+  async hasPendingInput(cid: string): Promise<boolean> {
+    const { store } = this.conversations.host;
+    const unmapped = await store.db.get<{ id: string }>(
+      "SELECT id FROM fp_records_v1 WHERE kind='input-pending' AND id>=? AND id<? LIMIT 1",
+      `${cid}:`,
+      `${cid};`,
+    );
+    return !!unmapped;
+  }
   async entries(cid: string): Promise<boolean> {
     const { store, pi } = this.conversations.host;
     const row = await store.get<ConversationRow>("conversation", cid);
     check(row, "not_found", "Conversation unavailable");
     // Pi may publish its user entry before the app receives the admission reply.
     // Preserve causal order until every earlier placed input has its canonical ID.
-    const unmapped = await store.db.get<{ id: string }>(
-      "SELECT id FROM fp_records_v1 WHERE kind='input-pending' AND id>=? AND id<? LIMIT 1",
-      `${cid}:`,
-      `${cid};`,
-    );
-    if (unmapped) return true;
+    if (await this.hasPendingInput(cid)) return true;
     const page = await pi.session(row.piId).entries(
       {
         order: "ascending",
