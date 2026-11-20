@@ -18,6 +18,7 @@ import {
   fixture,
   nodeCommand,
 } from "../../../../packages/fortipi-executor/test/fixtures/daemon.ts";
+import { nativeRecoveryFailureLine } from "../../../../scripts/source-test-processes.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { eventually, pause } from "../agent/harness.ts";
 import { processHarness } from "../agent/process-harness.ts";
@@ -779,6 +780,20 @@ export async function nativeProcessRecovery(
         connected: native.connected,
       },
     });
+    if (final?.jobs[0]?.state !== "completed" || !f.ledger.get(job.jobId)?.committed) {
+      try {
+        console.log(
+          nativeRecoveryFailureLine(
+            final?.jobs[0]?.state,
+            f.ledger.get(job.jobId)?.state,
+            !!f.ledger.get(job.jobId)?.committed,
+            native.connected,
+          ),
+        );
+      } catch {
+        // Preserve the original assertion if diagnostic output is unavailable.
+      }
+    }
     assert.equal(final?.jobs[0]?.state, "completed", diagnostic);
     assert.ok(f.ledger.get(job.jobId)?.committed, diagnostic);
     assert.ok((f.ledger.get(job.jobId)?.committed?.eventSeq ?? 0) > 0);

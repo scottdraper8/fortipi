@@ -17,6 +17,7 @@ import {
 } from "../../../apps/worker/test/agent/process-profile.ts";
 import { observeCandidateDiagnostics, observeSourceTestFailures } from "../../build-workspaces.ts";
 import {
+  nativeRecoveryFailureLine,
   sourceFailureLines,
   sourceRecoveryPath,
   sourceTestDiagnostic,
@@ -28,6 +29,60 @@ const reviewedAdmissionName =
   "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries";
 const canary = "synthetic-private-diagnostic-canary";
 const helper = new URL("../../build-workspaces.ts", import.meta.url);
+
+test("approval abort and native completion diagnostics exclude arbitrary payloads", () => {
+  const approval = {
+    diagnostic: "approval-phase",
+    phase: "close",
+    event: "aborted",
+    elapsedMs: 25000,
+  };
+  for (const phase of [
+    "fixture",
+    "original-approval-wait",
+    "original-approval-snapshot",
+    "original-approval-read",
+    "original-reject",
+    "original-cancel-wait",
+    "acknowledge-rejection",
+    "fresh-authority",
+    "fresh-request",
+    "fresh-approval-wait",
+    "fresh-identity",
+    "fresh-reject",
+    "fresh-cancel-wait",
+    "narrow-authority",
+    "identity-conflicts",
+    "standalone-cancel",
+    "standalone-cancel-wait",
+    "final-job-read",
+    "close",
+  ])
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify({ ...approval, phase })}`), true);
+  for (const changed of [
+    { ...approval, phase: canary },
+    { ...approval, event: "entered" },
+    { ...approval, elapsedMs: "25000" },
+    { ...approval, elapsedMs: -1 },
+    { ...approval, elapsedMs: 60001 },
+    { ...approval, error: canary },
+  ])
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
+  const line = nativeRecoveryFailureLine("requires_reconciliation", "result", false, true);
+  assert.equal(sourceTestDiagnostic(`# ${line}`), true);
+  const record = JSON.parse(line);
+  for (const changed of [
+    { ...record, applicationState: canary },
+    { ...record, ledgerState: canary },
+    { ...record, connected: "true" },
+    { ...record, committed: 1 },
+    { ...record, error: canary },
+  ])
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
+  const redacted = nativeRecoveryFailureLine(canary, canary, false, false);
+  assert.equal(redacted.includes(canary), false);
+  assert.equal(sourceTestDiagnostic(`# ${redacted}`), true);
+});
 
 test("Pi wake failure forwarding admits only fixed phases without error details", () => {
   for (const phase of [

@@ -7,15 +7,58 @@ import { nativeService } from "./native-service.ts";
 
 test("real Pi tool attaches one child and waits without acquiring execution before approval", {
   timeout: 25000,
-}, async () => {
+}, async (t) => {
+  type ApprovalPhase =
+    | "fixture"
+    | "original-approval-wait"
+    | "original-approval-snapshot"
+    | "original-approval-read"
+    | "original-reject"
+    | "original-cancel-wait"
+    | "acknowledge-rejection"
+    | "fresh-authority"
+    | "fresh-request"
+    | "fresh-approval-wait"
+    | "fresh-identity"
+    | "fresh-reject"
+    | "fresh-cancel-wait"
+    | "narrow-authority"
+    | "identity-conflicts"
+    | "standalone-cancel"
+    | "standalone-cancel-wait"
+    | "final-job-read"
+    | "close";
+  const began = performance.now();
+  let phase: ApprovalPhase = "fixture";
+  const enter = (next: ApprovalPhase) => {
+    phase = next;
+  };
+  const aborted = () => {
+    try {
+      const elapsed = performance.now() - began;
+      const elapsedMs = Number.isFinite(elapsed)
+        ? Math.min(60_000, Math.max(0, Math.round(elapsed)))
+        : 0;
+      t.diagnostic(
+        JSON.stringify({ diagnostic: "approval-phase", phase, event: "aborted", elapsedMs }),
+      );
+    } catch {
+      // Diagnostics must never change the test result.
+    }
+  };
+  t.signal.addEventListener("abort", aborted, { once: true });
+  t.after(() => t.signal.removeEventListener("abort", aborted));
+  enter("fixture");
   const n = await nativeService({ approve: false });
   const { h, agent, conversation, probe, sent, state } = n;
   try {
     assert.equal(sent.status, 202);
+    enter("original-approval-wait");
     const waiting = await eventually(
       state,
       (value) => value.jobs[0]?.state === "awaiting_approval",
     ).catch(async (error) => {
+      enter("original-approval-snapshot");
       console.log(
         await probe.toolStateJson(conversation.conversationId),
         await probe.inspectionJson(conversation.conversationId),
@@ -31,6 +74,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
     const children = waiting.tasks.filter((task) => task.kind === "fortipi.dispatch");
     assert.equal(children.length, 1, "Actual persisted Pi child count");
     assert.ok(children[0]?.owner, "Actual child must belong to its Pi tool task");
+    enter("original-approval-read");
     const task = await h.api<D.Task>(`/v1/tasks/${sent.body.taskId}`);
     assert.equal(task.status, 200);
     assert.deepEqual(task.body.status, {
@@ -49,6 +93,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       operationDigest: approval.body.operation.operationDigest,
       decision: "reject",
     };
+    enter("original-reject");
     const rejected = await h.api<D.Approval>(`/v1/approvals/${approvalId}/decisions`, decision);
     assert.equal(rejected.status, 200);
     assert.equal(rejected.body.state, "rejected");
@@ -60,10 +105,12 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       decision: "approve",
     });
     assert.equal(conflicting.status, 409);
+    enter("original-cancel-wait");
     const settled = await eventually(state, (value) => value.jobs[0]?.state === "cancelled");
     assert.equal(settled.jobs[0]?.hasExecution, false);
     assert.equal(settled.tasks.filter((task) => task.kind === "fortipi.dispatch").length, 1);
     const jobId = settled.jobs[0]!.jobId;
+    enter("acknowledge-rejection");
     const prior = await h.api<D.Job>(`/v1/jobs/${jobId}`);
     assert.equal(prior.status, 200);
     const reconcile: D.ReconcileInput = {
@@ -102,6 +149,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
     const piAfter = await state();
     assert.equal(piAfter.tasks.filter((task) => task.kind === "fortipi.dispatch").length, 1);
     assert.equal(piAfter.jobs[0]?.hasExecution, false);
+    enter("fresh-authority");
     const freshCredential = await h.api<D.CredentialReceipt>("/v1/admin/credentials", {
       requestId: crypto.randomUUID(),
       role: "client",
@@ -142,6 +190,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
         authorizationId: crypto.randomUUID(),
       },
     };
+    enter("fresh-request");
     const fresh = await h.api<D.ReconcileReceipt>(
       `/v1/jobs/${jobId}/reconcile`,
       freshInput,
@@ -156,6 +205,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       "Server durably allocates the omitted opaque ID",
     );
     assert.notEqual(fresh.body.newJobId, jobId);
+    enter("fresh-approval-wait");
     const allocated = await eventually(state, (view) =>
       view.jobs.some(
         (job) => job.jobId === fresh.body.newJobId && job.state === "awaiting_approval",
@@ -166,6 +216,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       2,
       "One fresh Pi child alongside the original child",
     );
+    enter("fresh-identity");
     assert.deepEqual(
       await h.api(`/v1/jobs/${jobId}/reconcile`, freshInput, "POST", freshCredential.body.token),
       fresh,
@@ -210,6 +261,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
     );
     assert.equal(newApproval.status, 200);
     assert.notEqual(newApproval.body.operation.operationId, approval.body.operation.operationId);
+    enter("fresh-reject");
     const deniedFresh = await h.api(
       `/v1/approvals/${newApprovalId}/decisions`,
       {
@@ -222,6 +274,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       freshCredential.body.token,
     );
     assert.equal(deniedFresh.status, 200);
+    enter("fresh-cancel-wait");
     await eventually(state, (view) =>
       view.jobs.some((job) => job.jobId === fresh.body.newJobId && job.state === "cancelled"),
     );
@@ -232,6 +285,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       "cancelled",
       "Fresh task projects its own terminal disposition",
     );
+    enter("narrow-authority");
     const limited = await h.api<D.CredentialReceipt>("/v1/admin/credentials", {
       requestId: crypto.randomUUID(),
       role: "client",
@@ -277,6 +331,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       (await state()).tasks.filter((task) => task.kind === "fortipi.dispatch").length,
       2,
     );
+    enter("identity-conflicts");
     const reusedId = await h.api(
       `/v1/jobs/${jobId}/reconcile`,
       {
@@ -309,6 +364,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       freshCredential.body.token,
     );
     assert.equal(originalId.status, 400, "Explicit ID cannot identify the old operation");
+    enter("standalone-cancel");
     const cancellable = await h.api<D.ReconcileReceipt>(
       `/v1/jobs/${jobId}/reconcile`,
       {
@@ -349,11 +405,13 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       ),
       cancelReceipt,
     );
+    enter("standalone-cancel-wait");
     const cancelledTask = await eventually(
       () => h.api<D.Task>(`/v1/tasks/${cancelJob.body.taskId}`),
       (value) => value.body.status.state === "cancelled",
     );
     assert.equal(cancelledTask.body.taskId, cancelJob.body.taskId);
+    enter("final-job-read");
     const noExecution = await h.api<D.Job>(
       `/v1/jobs/${cancellable.body.newJobId}`,
       undefined,
@@ -363,6 +421,7 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
     assert.equal(noExecution.body.state, "cancelled");
     assert.equal(noExecution.body.execution, undefined);
   } finally {
+    enter("close");
     await n.close();
   }
 });

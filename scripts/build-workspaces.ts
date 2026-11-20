@@ -13,7 +13,7 @@ export const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 export const publicPackages = ["contract", "client", "tui", "executor", "cli"] as const;
 export const packagePaths = publicPackages.map((name) => `packages/fortipi-${name}`);
 export const projects = [...packagePaths, "apps/worker"];
-export const FULL_SOURCE_TEST_TIMEOUT_MS = 30 * 60_000;
+export const FULL_SOURCE_TEST_TIMEOUT_MS = 40 * 60_000;
 
 /** Observe only complete closed stderr records; leave execFile's capture/error handling alone. */
 export function observeCandidateDiagnostics(
@@ -224,9 +224,10 @@ export async function main(command: string | undefined): Promise<void> {
           "--scope",
           "fortipi-ci-test",
         ],
-        // This wraps build, checks, the 30-minute test stage and packing. Keep
-        // the existing 40-minute candidate ceiling; individual stage limits remain.
-        { cwd: repository, timeout: 40 * 60_000, maxBuffer: 8_000_000 },
+        // Allow a finite 40-minute aggregate budget for all 265 source-test files.
+        // The 50-minute candidate ceiling leaves margin for build, checks and packing;
+        // individual test deadlines and failure conditions remain unchanged.
+        { cwd: repository, timeout: 50 * 60_000, maxBuffer: 8_000_000 },
       );
       if (pending.child.stderr) observeCandidateDiagnostics(pending.child.stderr);
       const output = await pending.catch((error: unknown) => {

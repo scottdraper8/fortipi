@@ -79,6 +79,9 @@ if (process.execArgv.includes("--test") && selected.size > 0 && selected.size <=
 const admissionFailureName =
   "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries";
 const failureNames = new Set<string>([
+  "actual workerd Inspector observes delayed-publication cancellation and shutdown",
+  "real Pi tool attaches one child and waits without acquiring execution before approval",
+  "candidate safe wrapper recovers one actual native execution across service SIGKILL and changed receipt closure",
   "standalone readiness refuses a foreign listener after actual runtime death",
   "SIGKILL/reopen preserves canary, allocation provenance and stable accepted input",
   "premature cues from held or rejected marker transactions cannot become historical proof",
@@ -102,6 +105,8 @@ const failureNames = new Set<string>([
   "candidate SAFE receipt recovery with executor reconnected before Agent activation",
 ]);
 const failurePaths = new Set<string>([
+  "apps/worker/test/agent/workerd-inspector-races.test.ts",
+  "apps/worker/test/execution/approval.test.ts",
   "apps/worker/test/agent/process-recovery.test.ts",
   "apps/worker/test/control/tickets.test.ts",
   "apps/worker/test/execution/native-connected-recovery.test.ts",
@@ -319,6 +324,10 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     failureCallerDiagnostic(line) ||
+    /^# \{"diagnostic":"approval-phase","phase":"(?:fixture|original-approval-wait|original-approval-snapshot|original-approval-read|original-reject|original-cancel-wait|acknowledge-rejection|fresh-authority|fresh-request|fresh-approval-wait|fresh-identity|fresh-reject|fresh-cancel-wait|narrow-authority|identity-conflicts|standalone-cancel|standalone-cancel-wait|final-job-read|close)","event":"aborted","elapsedMs":(?:0|[1-9]\d{0,3}|[1-5]\d{4}|60000)\}$/.test(
+      line,
+    ) ||
+    nativeRecoveryDiagnostic(line) ||
     /^# \{"diagnostic":"source-pi-wake-failure","phase":"(?:prepare|observe-failure|recover|observe-replacement|check-replacement|settle-old|check-old|observe-terminal|check-terminal)"\}$/.test(
       line,
     ) ||
@@ -338,6 +347,68 @@ export function sourceTestDiagnostic(line: string): boolean {
       line,
     )
   );
+}
+
+const applicationStates = new Set([
+  "created",
+  "awaiting_approval",
+  "authorized",
+  "queued",
+  "waiting_for_executor",
+  "waiting_for_local_policy",
+  "leased",
+  "dispatch_attempted",
+  "running",
+  "result_pending_commit",
+  "completed",
+  "failed",
+  "cancelled",
+  "interrupted",
+  "expired",
+  "workspace_conflict",
+  "requires_reconciliation",
+]);
+const ledgerStates = new Set(["pending", "start_intent", "running", "result", "closed", "unknown"]);
+
+/** Fixed states and booleans only; never forward the assertion's private payload. */
+export function nativeRecoveryFailureLine(
+  applicationState: unknown,
+  ledgerState: unknown,
+  committed: boolean,
+  connected: boolean,
+): string {
+  return JSON.stringify({
+    diagnostic: "source-native-recovery-failure",
+    applicationState:
+      typeof applicationState === "string" && applicationStates.has(applicationState)
+        ? applicationState
+        : null,
+    ledgerState:
+      typeof ledgerState === "string" && ledgerStates.has(ledgerState) ? ledgerState : null,
+    committed: committed === true,
+    connected: connected === true,
+  });
+}
+
+function nativeRecoveryDiagnostic(line: string): boolean {
+  if (!line.startsWith('# {"diagnostic":"source-native-recovery-failure",')) return false;
+  try {
+    const record = JSON.parse(line.slice(2));
+    return (
+      record !== null &&
+      typeof record === "object" &&
+      !Array.isArray(record) &&
+      Object.keys(record).join(",") ===
+        "diagnostic,applicationState,ledgerState,committed,connected" &&
+      line === `# ${JSON.stringify(record)}` &&
+      (record.applicationState === null || applicationStates.has(record.applicationState)) &&
+      (record.ledgerState === null || ledgerStates.has(record.ledgerState)) &&
+      typeof record.committed === "boolean" &&
+      typeof record.connected === "boolean"
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Closed projection only; a caller must still validate before emitting. */
