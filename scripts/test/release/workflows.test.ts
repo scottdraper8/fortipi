@@ -261,6 +261,16 @@ test("fresh deployment operate provisions pinned Chromium before credentials wit
     "*.ec2.archive.ubuntu.com:80",
     "packages.microsoft.com:443",
   ];
+  const assertEndpoints = (workflow: Record<string, unknown>, jobName: string) => {
+    const steps = object(object(workflow.jobs)[jobName]).steps;
+    assert.ok(Array.isArray(steps));
+    const endpoints = String(object(object(steps[0]).with)["allowed-endpoints"]).split(/\s+/);
+    assert.deepEqual(
+      endpoints.filter((endpoint) => /playwright|microsoft|ubuntu/.test(endpoint)).sort(),
+      [...requiredEndpoints].sort(),
+      "Use only reviewed provisioning endpoints",
+    );
+  };
   const assertPrerequisite = (workflow: Record<string, unknown>) => {
     const job = object(object(workflow.jobs).operate);
     assert.ok(Array.isArray(job.steps));
@@ -281,31 +291,14 @@ test("fresh deployment operate provisions pinned Chromium before credentials wit
     assert.match(String(steps[0]?.uses), /^step-security\/harden-runner@[a-f0-9]{40}$/);
     const hardener = object(steps[0]?.with);
     assert.equal(hardener["egress-policy"], "block");
-    const endpoints = String(hardener["allowed-endpoints"]).split(/\s+/);
-    assert.deepEqual(
-      endpoints.filter((endpoint) => /playwright|microsoft|ubuntu/.test(endpoint)).sort(),
-      [...requiredEndpoints].sort(),
-      "Use only reviewed provisioning endpoints",
-    );
+    assertEndpoints(workflow, "operate");
   };
   const candidate = object(object(release.jobs).candidate);
   assert.ok(Array.isArray(candidate.steps));
   assert.ok(candidate.steps.some((step) => object(step).run === command));
-  const releaseEndpoints = String(
-    object(object(candidate.steps[0]).with)["allowed-endpoints"],
-  ).split(/\s+/);
-  for (const endpoint of requiredEndpoints) assert.ok(releaseEndpoints.includes(endpoint));
+  assertEndpoints(release, "candidate");
   const ci = object(parse(await readFile(resolve(repository, ".github/workflows/ci.yml"), "utf8")));
-  const policy = object(object(ci.jobs)["policy-and-integration"]);
-  assert.ok(Array.isArray(policy.steps));
-  const ciEndpoints = String(object(object(policy.steps[0]).with)["allowed-endpoints"]).split(
-    /\s+/,
-  );
-  assert.deepEqual(
-    ciEndpoints.filter((endpoint) => /playwright|microsoft|ubuntu/.test(endpoint)).sort(),
-    [...requiredEndpoints].sort(),
-    "CI uses the same reviewed browser repository boundary",
-  );
+  assertEndpoints(ci, "policy-and-integration");
   assertPrerequisite(deploy);
   const missing = structuredClone(deploy);
   const missingSteps = object(object(missing.jobs).operate).steps;
@@ -321,11 +314,17 @@ test("fresh deployment operate provisions pinned Chromium before credentials wit
   object(exposedSteps[0]).env = { CLOUDFLARE_API_TOKEN: "synthetic-test-value" };
   assert.throws(() => assertPrerequisite(exposed), /before credentials/);
   for (const endpoint of ["*.playwright.dev:443", "*.ubuntu.com:80", "*.microsoft.com:443"]) {
-    const broad = structuredClone(deploy);
-    const broadSteps = object(object(broad.jobs).operate).steps;
-    assert.ok(Array.isArray(broadSteps));
-    object(object(broadSteps[0]).with)["allowed-endpoints"] += ` ${endpoint}`;
-    assert.throws(() => assertPrerequisite(broad), /reviewed provisioning endpoints/);
+    for (const [workflow, job] of [
+      [deploy, "operate"],
+      [release, "candidate"],
+      [ci, "policy-and-integration"],
+    ] as const) {
+      const broad = structuredClone(workflow);
+      const broadSteps = object(object(broad.jobs)[job]).steps;
+      assert.ok(Array.isArray(broadSteps));
+      object(object(broadSteps[0]).with)["allowed-endpoints"] += ` ${endpoint}`;
+      assert.throws(() => assertEndpoints(broad, job), /reviewed provisioning endpoints/);
+    }
   }
 });
 
