@@ -323,14 +323,15 @@ test("owned post-exit collection loses certainty at real lease expiry and revoca
     stopping: Promise<void> | undefined,
     collecting = false;
   try {
-    const marker = join(f.path, "one-expiring-effect"),
-      a = await assignment(nodeCommand(fixtureChild, "append-wait", marker));
-    a.identity.lease.expiresAt = Date.now() + 5000;
     runtime = nativeRuntime(f);
     await runtime.initialize();
     const local = runtime.locals.get("root");
     assert.ok(local);
     await importRoot(local);
+    // Bootstrap must finish before this unchanged short execution lease begins.
+    const marker = join(f.path, "one-expiring-effect"),
+      a = await assignment(nodeCommand(fixtureChild, "append-wait", marker));
+    a.identity.lease.expiresAt = Date.now() + 5000;
     await local.request(prepare(a, f.initial.manifestHash));
     const finish = local.nativeFinished.bind(local);
     local.nativeFinished = async (...args) => {
