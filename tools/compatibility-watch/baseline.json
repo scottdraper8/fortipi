@@ -120,12 +120,12 @@
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "edfe6b2ef32283d31efc9e26db86fe48be19d3b2",
+        "commit": "b9d4820312bca26a79a98392b7c1ad13afeacb5a",
         "version": "1.5.2",
         "paths": {
           "packages/agent": "e652db83ded3d9c94ca33424ffeb500f36c648d83bcc76c4c30c5a8a190fdced",
-          "packages/ai": "b818fbd68e755256c25b79bd4dfae3511e48b7f7ef2b3bc2f9fe3cdfd020c128",
-          "packages/chord": "137793cad9d05f50e4da4ea8ec68deb11bf4ec885da8898aad7bf8b19e6528d5",
+          "packages/ai": "ebf0e26a11570036cf4be12f419690a5af31b5849c2a75e8b69aa24c95abc73f",
+          "packages/chord": "b7d999ca08e2b66d7133ee5dc4cbb2b383cc399f12ca68b9fddffd6bb34dd57d",
           "packages/codemode": "f75f1e02b0859bcd388cf4ee45e556a2131efd7b7e8183c9343cb9b5277c1af2",
           "packages/durable": "f20b675f403ffc96a4672b5f741f8e47c6a2110405970a455707743220e3a1ce",
           "packages/env": "203252c22d2a5cde92db40be45e8467021d5c8c2145bc9739db71ed0c4dcf033",
@@ -135,7 +135,7 @@
           "packages/tui": "5f89e7d37cbd0507a50776544a828e803b8a1a7f3bbfae1e8619eb6eef41908f",
           "packages/durable/package.json": "36d31c40a9cfc52cd044ead2af947bca4f4ab7d9af8f5e7a82db248e1c942ff9"
         },
-        "sha256": "b80c62e7cf5ebc23a667a148c8bc689d83b1960c0fc4db27150be09a05b38ed5"
+        "sha256": "5a899696aa3cd41b42d13168d62d8a55356c258fe0d699ed4e64ae7a69dd8360"
       },
       "pins": {
         "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
@@ -147,26 +147,26 @@
         "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
         "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
       },
-      "reviewedAt": "2026-11-20T01:28:22.963Z",
-      "reviewNote": "Reviewed3107a58d..edfe6b2e: one commit/four AI files, version1.5.2 unchanged. Codex moves system text from instructions to leading developer/system input and drops fallback prompt; exported includeSystemPrompt option removed. FortiPi uses createModels/provider APIs without converter/payload coupling; no current correction identified. Retain exact1.5.2 archives and AI schema/Durable waiter patches; later main is not adopted. Preserve Chord remote-hold/store and readonly-render caveats; remote/store adoption reopens review. TUI has no completion/suspension integration; external suspension remains unqualified. No Pi-stall cause/fix, cache-gain, deployed/provider or Paid proof. Evidence: phase3/thread-9/pi-edfe-compatibility-review.md."
+      "reviewedAt": "2026-11-20T08:59:09.608Z",
+      "reviewNote": "Reviewed edfe6b2e..b9d48203 (12 commits), main still1.5.2. AI Codex adds compat-gated GPT6 effort configuration_update/none and maxTokens->max_output_tokens(min16); Chat Completions defaults system except OpenAI, explicit compat retained. Catalog removes redundant role flags and declares minimum client1.5.3; do not transplant into1.5.2. Durable/other watched runtime trees unchanged; Chord only fixes test readiness/timeouts. Retain installed1.5.2 archives, AI-schema/Durable-waiter patches and prior Codex instruction caveats. FortiPi uses fixed provider factories/endpoints, no custom catalog or request-body overrides. Preserve Chord remote-hold/store and readonly TUI caveats; adoption reopens review. No cache gain, output-cap guarantee, Pi-stall cause/fix, provider/live/Paid qualification. Evidence: phase3/thread-9/f86-current-compat-review/report.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "56974d49141e72b19b33b74a19c160f734128108",
+        "commit": "f3f7bbc1fe609e14ea9a7be78a25551d270f1fce",
         "version": "4.165.0",
         "paths": {
-          "packages/wrangler": "b0cafcc9d8c45fecc33e58d3647d6716ca4a9e588a4fc015c258a20509de1a9e",
+          "packages/wrangler": "4c9d52bdf3d2f823b9c1cca9801d75f721a7893531849f71d0935f8667438b80",
           "packages/wrangler/package.json": "a76fd7aeaf4e24cb6a85d0d7872b2f2789ef63723a4fb6d3a8ac2496c8ee3d05"
         },
-        "sha256": "fc089aa2a562265a2b0c00614e674a35749f2aacefa428653c745b52b511ddeb"
+        "sha256": "53fae1671778b3d91224be04cc49ce29f3be55ff16390cb68d72a07b8626a4fc"
       },
       "pins": {
         "apps/worker/package.json#devDependencies/wrangler": "4.162.0",
         "packages/fortipi-cli/package.json#dependencies/wrangler": "4.162.0"
       },
-      "reviewedAt": "2026-11-19T17:54:41.656Z",
-      "reviewNote": "Reviewed exact81e56ddf..56974d49 primary Wrangler changelog/config/deploy/image/version paths through4.165.0. Changes include shared config/build/type packaging, VPC certificate settings, D1 force, OAuth refresh reuse, dev config watcher readiness, remote RPC transport error rejection, UTF8 env validation, maintained asset hashing and default compatibility/workerd updates. FortiPi uses closed explicit legacy config/date/flags, installed4.162.0 and exact Miniflare/workerd closure; no VPC/D1/Artifacts/nativecf auto-config features. Retain current pinned deployment/image behavior and real prepare/deploy qualification; later defaults/APIs/runtime are not adopted or certified. No evidenced source-runtime stall fix. Evidence: phase3/thread-9/compat-current-installed-review.md."
+      "reviewedAt": "2026-11-20T08:59:09.608Z",
+      "reviewNote": "Reviewed56974d49..f3f7bbc1 (one commit), future main still4.165.0; installed4.162.0 unchanged. write-build-output.ts records prior Container output before cleaning; containers-shared skips docker image ls only with no current Containers and priorOutputHadContainers=false. Configured/removed Containers still clean tags; omitted flag retains old lookup. Vite carries the same flag; tests cover those branches. This is experimental cloudflare.config.ts/Build Output, not FortiPi legacy deploy --config/no_bundle path. Preserve explicit date/flags, image schema, exact Wrangler/Miniflare/workerd closure and real prepare/deploy requirements; no new VPC/D1/Artifacts or defaults adoption, stall-fix/provider/live/Paid clearance. Evidence: phase3/thread-9/f86-current-compat-review/report.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
