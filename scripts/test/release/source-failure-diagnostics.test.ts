@@ -32,6 +32,14 @@ const reviewedAdmissionName =
 const canary = "synthetic-private-diagnostic-canary";
 const helper = new URL("../../build-workspaces.ts", import.meta.url);
 
+function runtimeCallFrame(lines: string[], call: "await poll(" | "await launch();"): string {
+  const matches = lines.flatMap((line, index) => (line.trim() === call ? [{ line, index }] : []));
+  assert.equal(matches.length, 1, "The reviewed runtime call must have one source location");
+  const match = matches[0];
+  assert.ok(match);
+  return `apps/worker/test/integration/runtime.ts:${match.index + 1}:${match.line.indexOf(call) + 1}`;
+}
+
 test("reentry failure observation forwards bounded phases without error payloads", async () => {
   for (const phase of ["listen", "fetch-once", "fetch-twice", "close"]) {
     for (const [name, kind] of [
@@ -300,8 +308,8 @@ test("admission caller records retain only two distinct reviewed frames and clos
   const oracles = new URL("../../../apps/worker/test/integration/oracles.ts", import.meta.url);
   const lines = (await readFile(runtime, "utf8")).split("\n");
   const inner = `apps/worker/test/integration/runtime.ts:${lines.findIndex((line) => line.includes('throw new Error("Expected durable boundary')) + 1}:9`;
-  const launch = `apps/worker/test/integration/runtime.ts:${lines.indexOf("    await poll(") + 1}:5`;
-  const start = `apps/worker/test/integration/runtime.ts:${lines.indexOf("    await launch();") + 1}:5`;
+  const launch = runtimeCallFrame(lines, "await poll(");
+  const start = runtimeCallFrame(lines, "await launch();");
   const oracleLines = (await readFile(oracles, "utf8")).split("\n");
   const oracle = `apps/worker/test/integration/oracles.ts:${oracleLines.findIndex((line) => line.includes("await poll(async () => observation.cue()")) + 1}:7`;
   const summary = {
@@ -418,9 +426,10 @@ test("actual startup poll retains reviewed callers with its original error and o
   try {
     const runtime = new URL("../../../apps/worker/test/integration/runtime.ts", import.meta.url);
     const lines = (await readFile(runtime, "utf8")).split("\n");
-    const callers = ["    await poll(", "    await launch();"].map(
-      (line) => `apps/worker/test/integration/runtime.ts:${lines.indexOf(line) + 1}:5`,
-    );
+    const callers = [
+      runtimeCallFrame(lines, "await poll("),
+      runtimeCallFrame(lines, "await launch();"),
+    ];
     const worker = fileURLToPath(
       new URL("../../../apps/worker/test/integration/fixture-worker.ts", import.meta.url),
     );

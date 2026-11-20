@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { afterEach, beforeEach } from "node:test";
 import { eventually, harness, pause } from "./harness.ts";
 
 interface State {
@@ -7,6 +7,24 @@ interface State {
   state: { id: string; generation: number; running: boolean; armPending: boolean };
   jobs: { id: string; time: number }[];
 }
+
+let fixture: Awaited<ReturnType<typeof harness>> | undefined;
+// Cold runtime startup has its own bound; recovery retains its 25-second budget.
+beforeEach(
+  async () => {
+    fixture = await harness();
+  },
+  { timeout: 30000 },
+);
+afterEach(
+  async () => {
+    const current = fixture;
+    fixture = undefined;
+    await current?.close();
+  },
+  { timeout: 15000 },
+);
+
 for (const mode of ["supersession", "hung takeover"] as const) {
   test(`production Recovery ${mode} preserves distinct successor and bounded rows`, {
     timeout: 25000,
@@ -33,7 +51,8 @@ for (const mode of ["supersession", "hung takeover"] as const) {
       );
     t.signal.addEventListener("abort", aborted, { once: true });
     t.after(() => t.signal.removeEventListener("abort", aborted));
-    const h = await harness();
+    const h = fixture;
+    assert.ok(h);
     const probe = h.env.AGENT_SESSIONS.getByName(`recovery-${mode.replaceAll(" ", "-")}`);
     const state = async () => {
       const value = JSON.parse(await probe.repairProbeJson()) as State;
@@ -88,7 +107,6 @@ for (const mode of ["supersession", "hung takeover"] as const) {
       phase = "close";
       await probe.releaseRepairProbe("old");
       await probe.releaseRepairProbe("new");
-      await h.close();
     }
   });
 }
