@@ -82,6 +82,7 @@ export class Recovery {
   async start(): Promise<void> {
     const state = await this.store.get<RepairState>("meta", "repair");
     const kinds = [
+      "admission-intent",
       "admission",
       "creation",
       "export-work",

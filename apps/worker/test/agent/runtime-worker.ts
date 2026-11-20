@@ -1632,6 +1632,72 @@ export class TestAgentSession extends AgentSession {
       receipt: row.value.receipt ?? null,
     }));
   }
+  private startupAdmissionArm: (() => Promise<void>) | undefined;
+  async setAdmissionSchedulingUnavailable(unavailable: boolean) {
+    if (unavailable) {
+      if (this.startupAdmissionArm) throw new Error("Admission fixture already active");
+      this.startupAdmissionArm = this.recovery.arm.bind(this.recovery);
+      this.recovery.arm = async () => {
+        throw new Error("Fixture scheduling unavailable");
+      };
+    } else if (this.startupAdmissionArm) {
+      this.recovery.arm = this.startupAdmissionArm;
+      this.startupAdmissionArm = undefined;
+    }
+  }
+  async runAdmissionStartupDiscovery() {
+    await this.onStart();
+  }
+  async admissionStartupSnapshotJson(cid: string) {
+    return JSON.stringify(
+      await this.store.transaction(async (tx) => {
+        const rows = await tx.all<{ kind: string; id: string; data: string; due: number | null }>(
+          "SELECT kind,id,data,due FROM fp_records_v1 WHERE kind IN ('admission-intent','admission','growth-claim') ORDER BY kind,id LIMIT 100",
+        );
+        const events = await tx.all<{ source: string; data: string }>(
+          "SELECT source,data FROM fp_events_v1 WHERE conversation=? ORDER BY seq LIMIT 100",
+          cid,
+        );
+        return {
+          repair: (await this.store.get("meta", "repair", tx)) ?? null,
+          jobs: this.lifecycle.jobs.list().map((job) => ({ id: job.id, fn: job.fn })),
+          due: await tx.all(
+            "SELECT kind,id FROM fp_records_v1 WHERE due<=? ORDER BY kind,id LIMIT 100",
+            Date.now(),
+          ),
+          intents: rows
+            .filter((row) => row.kind === "admission-intent")
+            .map((row) => {
+              const value = JSON.parse(row.data);
+              return {
+                key: row.id,
+                operationId: value.operationId,
+                messageId: value.messageId,
+                taskId: value.taskId,
+                growthBytes: value.growthBytes,
+              };
+            }),
+          admissions: rows
+            .filter((row) => row.kind === "admission")
+            .map((row) => {
+              const value = JSON.parse(row.data);
+              return {
+                operationId: value.operationId,
+                messageId: value.messageId,
+                taskId: value.taskId,
+                receipt: value.receipt ?? null,
+              };
+            }),
+          claims: rows
+            .filter((row) => row.kind === "growth-claim")
+            .map((row) => JSON.parse(row.data)),
+          pendingGrowth: await this.store.pendingGrowth(tx),
+          events: events.map((row) => ({ source: row.source, ...JSON.parse(row.data) })),
+          modelCalls: this.faux?.state.callCount ?? 0,
+        };
+      }),
+    );
+  }
   async beginRepairProbe() {
     await this.lifecycle.start();
     this.projection.drain = async () => {
