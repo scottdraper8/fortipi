@@ -1,4 +1,4 @@
-name: Source runtime Linux control
+name: Maintained sensitivity component diagnostic
 on:
   push:
     branches: ["ci/fortipi-source-runtime-proof-*"]
@@ -70,12 +70,29 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-native-role-')
         run: node --test --test-reporter=tap scripts/native-owned-role-control.ts
         timeout-minutes: 2
-      - name: Observe three actual source test processes directly
-        run: >-
-          node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
-          apps/worker/test/agent/admin-file-bearing.test.ts
-          apps/worker/test/agent/process-recovery.test.ts
-          apps/worker/test/api/stream-boundaries.test.ts
+      - name: Diagnose the existing first sensitivity kind
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          assert.equal(process.platform, 'linux');
+          assert.equal(process.env.GITHUB_ACTIONS, 'true');
+          assert.equal(process.env.GITHUB_REF, 'refs/heads/ci/fortipi-source-runtime-proof-f2ca-sensitivity');
+          assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), process.env.GITHUB_SHA);
+          assert.equal(execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }), '');
+          try {
+            const { exerciseMutation } = await import('./apps/worker/test/integration/sensitivity.ts');
+            const result = await exerciseMutation('admission-identity');
+            assert.equal(result.outcome, 'killed');
+            console.log('{"diagnostic":"sensitivity-component","passed":true,"componentOnly":true,"publishable":false}');
+          } catch {
+            console.error('{"diagnostic":"sensitivity-component","passed":false,"componentOnly":true,"publishable":false}');
+            process.exitCode = 1;
+          }
+          JS
+      - name: Require runner egress enforcement
+        if: always()
+        run: node scripts/verify-foundation.ts --egress
       - name: Require Linux hardener service still active
         if: always() && runner.os == 'Linux'
         shell: bash
