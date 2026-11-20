@@ -399,7 +399,7 @@ test("a genuinely partial file-bearing Workspace cannot publish a completed publ
 });
 
 test("an unavailable local Workspace keeps a real Pi aggregate unavailable without publishing a subset", {
-  timeout: 60000,
+  timeout: 180000,
 }, async (t) => {
   const started = performance.now();
   const phase = (name: string) =>

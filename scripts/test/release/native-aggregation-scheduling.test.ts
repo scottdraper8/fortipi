@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
@@ -59,18 +59,21 @@ function runner(directory: string, advance = 2000) {
       assert.equal(active, false, "A serial lane must await the previous child");
       assert.equal(cwd, directory);
       assert.ok(timeout !== undefined && timeout > 0);
-      assert.ok(
-        !args.some(
-          (a) => a.startsWith("--test-concurrency") || a.startsWith("--test-name-pattern"),
-        ),
+      assert.ok(!args.some((a) => a.startsWith("--test-name-pattern")));
+      const concurrency = args.filter((a) => a.startsWith("--test-concurrency="));
+      const plain = args.filter((a) => !a.startsWith("--test-concurrency="));
+      const files = plain.slice(4);
+      assert.deepEqual(
+        concurrency,
+        files.length > 1 ? [`--test-concurrency=${availableParallelism()}`] : [],
       );
-      assert.deepEqual(args.slice(0, 4), [
+      assert.deepEqual(plain.slice(0, 4), [
         "--require",
         join(directory, "scripts/source-test-processes.ts"),
         "--test",
         "--test-reporter=tap",
       ]);
-      calls.push({ files: args.slice(4), timeout, began: clock, args });
+      calls.push({ files, timeout, began: clock, args });
       active = true;
       try {
         await promisify(execFile)(command, args, { cwd, env: {}, timeout, maxBuffer: 100_000 });

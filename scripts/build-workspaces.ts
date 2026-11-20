@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { chmod, copyFile, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
@@ -170,7 +171,15 @@ export async function tests(
     if (selected.length)
       await execute(
         process.execPath,
-        [...diagnostics, "--test", "--test-reporter=tap", ...selected],
+        [
+          ...diagnostics,
+          ...(observeProcesses && selected.length > 1
+            ? [`--test-concurrency=${availableParallelism()}`]
+            : []),
+          "--test",
+          "--test-reporter=tap",
+          ...selected,
+        ],
         directory,
         remainingTimeout(),
       );
