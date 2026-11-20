@@ -19,6 +19,7 @@ import {
   nodeCommand,
 } from "../../../../packages/fortipi-executor/test/fixtures/daemon.ts";
 import {
+  nativePublicationObservationLine,
   nativeRecoveryFailureLine,
   nativeRecoveryObservationLine,
 } from "../../../../scripts/source-test-processes.ts";
@@ -868,6 +869,14 @@ export async function nativeProcessRecovery(
             f.ledger.get(job.jobId)?.result?.state,
             agentDiagnostic,
           ),
+        );
+        console.log(
+          nativePublicationObservationLine(mode, activation, controlDiagnostic, agentDiagnostic, {
+            assignmentLeaseExpiresAt: identity.lease.expiresAt,
+            deadline: identity.deadline,
+            reconnectStartedAt: offlineReleasedAt,
+            observedAt: Date.now(),
+          }),
         );
       } catch {
         // Preserve the original assertion if diagnostic output is unavailable.

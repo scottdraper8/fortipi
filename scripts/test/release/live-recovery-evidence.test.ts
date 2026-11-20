@@ -30,6 +30,11 @@ import type { RecoveryInput, RecoveryPorts } from "../../platform-recovery.ts";
 import * as prepare from "../../prepare-release.ts";
 import { childEnvironment, execute, generateSbom, stageAndPack } from "../../prepare-release.ts";
 import {
+  type LiveRecoveryPhase,
+  liveRecoveryFailureLine,
+  liveRecoveryPhaseLine,
+} from "../../source-test-processes.ts";
+import {
   type ArtifactReference,
   type CandidateManifest,
   canonicalJson,
@@ -71,8 +76,19 @@ let config: Record<string, unknown>;
 let preparedReceipt: Record<string, unknown>;
 let nextOperation = 0;
 let retainedCandidate: CandidateManifest;
+// Last entered callback only; it may have completed before a later guard fails.
+let lastPhase: LiveRecoveryPhase = "packing";
+function observePhase(phase: LiveRecoveryPhase, event: "enter" | "caught" = "enter") {
+  if (event === "enter") lastPhase = phase;
+  try {
+    process.stdout.write(`${liveRecoveryPhaseLine(phase, event)}\n`);
+  } catch {
+    /* Diagnostic output cannot replace the existing result or error. */
+  }
+}
 
 async function preparePackages() {
+  observePhase("packing");
   root = await temporary("fortipi-recovery-protocol-");
   const directory = resolve(root, "candidate");
   await mkdir(directory);
@@ -116,6 +132,7 @@ async function preparePackages() {
     operator,
   };
   prepared = resolve(root, "prepared");
+  observePhase("prepare");
   const result = await execute(
     process.execPath,
     [
@@ -783,6 +800,7 @@ async function controlled() {
         const before = { path: beforePath, size: bytes.length, mode: 0o600, sha256: sha256(bytes) };
         f.input.journalDirectory = resolve(out, "provider-recovery");
         f.input.beforeCheckpoint = before;
+        observePhase("perform");
         const result = await recovery.coordinator.bridge.perform(before);
         assert.equal(result.status, "operation-confirmed");
         if (result.status !== "operation-confirmed") throw Error("Controlled perform unavailable");
@@ -792,6 +810,7 @@ async function controlled() {
         assert.equal((await recovery.coordinator.bridge.finish(after)).status, "qualified");
         assert.deepEqual(startup, f.input.before);
       } else if (recovery.coordinator.mode === "verify-existing") {
+        observePhase("readonly");
         const result = await recovery.coordinator.bridge.verifyExisting();
         assert.equal(result.status, "lineage-confirmed");
         if (result.status !== "lineage-confirmed") throw Error("Controlled original unavailable");
@@ -1139,7 +1158,11 @@ async function controlled() {
     process.stdout.write(
       "Controlled outer perform/verify, immutable inventory, pre-credential guards and incomplete-phase refusal passed.\n",
     );
+  } catch (error) {
+    observePhase(lastPhase, "caught");
+    throw error;
   } finally {
+    observePhase("cleanup");
     process.env = ordinaryEnvironment;
     globalThis.fetch = nativeFetch;
     for (const [method, original] of assertMethods) Reflect.set(assert, method, original);
@@ -1157,11 +1180,20 @@ if (process.argv.includes("--controlled-recovery")) {
   test("trusted outer recovery preserves original receipts and child byte closure across perform/readonly verification", {
     timeout: 240000,
   }, async () => {
-    const result = await promisify(execFile)(
-      process.execPath,
-      ["--experimental-test-module-mocks", import.meta.filename, "--controlled-recovery"],
-      { cwd: repository, env: childEnvironment(), timeout: 220000, maxBuffer: 2_000_000 },
-    );
-    assert.match(result.stdout, /pre-credential guards and incomplete-phase refusal passed/);
+    try {
+      const result = await promisify(execFile)(
+        process.execPath,
+        ["--experimental-test-module-mocks", import.meta.filename, "--controlled-recovery"],
+        { cwd: repository, env: childEnvironment(), timeout: 220000, maxBuffer: 2_000_000 },
+      );
+      assert.match(result.stdout, /pre-credential guards and incomplete-phase refusal passed/);
+    } catch (error) {
+      try {
+        console.log(liveRecoveryFailureLine(error));
+      } catch {
+        /* Preserve the original child or assertion failure. */
+      }
+      throw error;
+    }
   });
 }

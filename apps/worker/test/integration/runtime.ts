@@ -217,18 +217,54 @@ export async function start(options: RuntimeOptions = {}) {
     child.once("error", () => {
       spawnError = true;
     });
-    await poll(
-      async () => {
-        assert.ok(!spawnError && child?.exitCode === null, "Local runtime did not stay running");
-        try {
-          return (await fetch(`${endpoint}/health`, { signal: AbortSignal.timeout(300) })).ok;
-        } catch {
-          return false;
-        }
-      },
-      Boolean,
-      30000,
-    );
+    const began = performance.now();
+    let attempts = 0,
+      fetchFailures = 0,
+      lastStatus: number | null = null;
+    const observe = (event: "enter" | "ready" | "failed") => {
+      try {
+        console.log(
+          JSON.stringify({
+            diagnostic: "admission-runtime-readiness",
+            event,
+            invocation,
+            elapsedMs: Math.min(1_000_000, Math.round(performance.now() - began)),
+            attempts,
+            fetchFailures,
+            lastStatus,
+            spawnError,
+            childAlive: child?.exitCode === null && child.signalCode === null,
+          }),
+        );
+      } catch {
+        /* Preserve the original readiness result. */
+      }
+    };
+    observe("enter");
+    try {
+      await poll(
+        async () => {
+          attempts++;
+          assert.ok(!spawnError && child?.exitCode === null, "Local runtime did not stay running");
+          try {
+            const response = await fetch(`${endpoint}/health`, {
+              signal: AbortSignal.timeout(300),
+            });
+            lastStatus = response.status;
+            return response.ok;
+          } catch {
+            fetchFailures++;
+            return false;
+          }
+        },
+        Boolean,
+        30000,
+      );
+      observe("ready");
+    } catch (error) {
+      observe("failed");
+      throw error;
+    }
   }
   async function stop(abrupt: boolean) {
     if (!child) return;

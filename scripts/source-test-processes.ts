@@ -79,6 +79,13 @@ if (process.execArgv.includes("--test") && selected.size > 0 && selected.size <=
 const admissionFailureName =
   "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries";
 const failureNames = new Set<string>([
+  "production Recovery supersession preserves distinct successor and bounded rows",
+  "production Recovery hung takeover preserves distinct successor and bounded rows",
+  "SAFE attempted boundary survives real service SIGKILL with retained execution identity",
+  "SAFE assign-ack boundary survives real service SIGKILL with retained execution identity",
+  "SAFE result boundary survives real service SIGKILL with retained execution identity",
+  "SAFE receipt boundary survives real service SIGKILL with retained execution identity",
+  "trusted outer recovery preserves original receipts and child byte closure across perform/readonly verification",
   "Agent-first running recovery completes after a real registered query-boundary handoff",
   "A real offline running query disproves unconditional completion and uses public reconciliation",
   "actual workerd Inspector observes delayed-publication cancellation and shutdown",
@@ -107,6 +114,8 @@ const failureNames = new Set<string>([
   "candidate SAFE receipt recovery with executor reconnected before Agent activation",
 ]);
 const failurePaths = new Set<string>([
+  "apps/worker/test/agent/recovery-generation.test.ts",
+  "scripts/test/release/live-recovery-evidence.test.ts",
   "apps/worker/test/agent/workerd-inspector-races.test.ts",
   "apps/worker/test/execution/approval.test.ts",
   "apps/worker/test/agent/process-recovery.test.ts",
@@ -356,9 +365,15 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     failureCallerDiagnostic(line) ||
-    /^# \{"diagnostic":"approval-phase","phase":"(?:fixture|original-approval-wait|original-approval-snapshot|original-approval-read|original-reject|original-cancel-wait|acknowledge-rejection|fresh-authority|fresh-request|fresh-approval-wait|fresh-identity|fresh-reject|fresh-cancel-wait|narrow-authority|identity-conflicts|standalone-cancel|standalone-cancel-wait|final-job-read|close)","event":"aborted","elapsedMs":(?:0|[1-9]\d{0,3}|[1-5]\d{4}|60000)\}$/.test(
+    /^# \{"diagnostic":"approval-phase","phase":"(?:fixture|original-approval-wait|original-approval-snapshot|original-approval-read|original-reject|original-cancel-wait|acknowledge-rejection|fresh-authority|fresh-request|fresh-approval-wait|fresh-identity|fresh-reject|fresh-cancel-wait|narrow-authority|identity-conflicts|standalone-new-job|standalone-job-read|standalone-cancel|standalone-cancel-retry|standalone-cancel-wait|final-job-read|close)","event":"aborted","elapsedMs":(?:0|[1-9]\d{0,3}|[1-5]\d{4}|60000)\}$/.test(
       line,
     ) ||
+    /^# \{"diagnostic":"recovery-generation-phase","mode":"(?:supersession|hung takeover)","phase":"(?:fixture|begin|initial|takeover-delay|takeover-alarm|successor|second-drain|release-old|release-new|coalesce|close)","event":"aborted","stateSeen":(?:true|false),"lastRunning":(?:true|false),"lastArmPending":(?:true|false),"lastSuccessor":(?:true|false),"lastSecondDrain":(?:true|false),"lastRowsBounded":(?:true|false)\}$/.test(
+      line,
+    ) ||
+    readinessDiagnostic(line) ||
+    publicationDiagnostic(line) ||
+    liveRecoveryDiagnostic(line) ||
     nativeRecoveryDiagnostic(line) ||
     nativeObservationDiagnostic(line) ||
     /^# \{"diagnostic":"source-reentry-failure","phase":"(?:listen|fetch-once|fetch-twice|close|unknown)","kind":"(?:timeout|abort|assertion|other)","elapsedMs":(?:0|[1-9]\d{0,3}|[1-5]\d{4}|60000)\}$/.test(
@@ -465,6 +480,229 @@ function diagnosticInteger(value: unknown, max: number): number | null {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= max
     ? value
     : null;
+}
+function closedObservation(
+  line: string,
+  diagnostic: string,
+  keys: string,
+): Record<string, unknown> | null {
+  if (!line.startsWith(`# {"diagnostic":"${diagnostic}",`)) return null;
+  try {
+    const r = JSON.parse(line.slice(2));
+    return r &&
+      typeof r === "object" &&
+      !Array.isArray(r) &&
+      Object.keys(r).join(",") === `diagnostic,${keys}` &&
+      line === `# ${JSON.stringify(r)}`
+      ? r
+      : null;
+  } catch {
+    return null;
+  }
+}
+function readinessDiagnostic(line: string): boolean {
+  const r = closedObservation(
+    line,
+    "admission-runtime-readiness",
+    "event,invocation,elapsedMs,attempts,fetchFailures,lastStatus,spawnError,childAlive",
+  );
+  return !!(
+    r &&
+    typeof r.event === "string" &&
+    ["enter", "ready", "failed"].includes(r.event) &&
+    diagnosticInteger(r.invocation, 999) === r.invocation &&
+    Number(r.invocation) > 0 &&
+    typeof r.elapsedMs === "number" &&
+    diagnosticInteger(r.elapsedMs, 1_000_000) === r.elapsedMs &&
+    typeof r.attempts === "number" &&
+    diagnosticInteger(r.attempts, 999999) === r.attempts &&
+    typeof r.fetchFailures === "number" &&
+    diagnosticInteger(r.fetchFailures, 999999) === r.fetchFailures &&
+    Number(r.fetchFailures) <= Number(r.attempts) &&
+    (r.lastStatus === null ||
+      (diagnosticInteger(r.lastStatus, 599) === r.lastStatus && Number(r.lastStatus) >= 100)) &&
+    typeof r.spawnError === "boolean" &&
+    typeof r.childAlive === "boolean"
+  );
+}
+const localCodes = new Set([
+  "conflict",
+  "workspace.conflict",
+  "unavailable",
+  "unavailable_executor",
+  "interrupted",
+  "unauthorized",
+  "unauthenticated",
+  "not_found",
+  "quota_paused",
+  "invalid_request",
+]);
+const publicationReasons = new Set(["expired_lease", "stale_fence", "expected_revision"]);
+function optionalEnum(value: unknown, values: Set<string>): boolean {
+  return value === null || (typeof value === "string" && values.has(value));
+}
+function observedTime(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+function expiredAt(expiry: unknown, at: unknown): boolean | null {
+  return observedTime(expiry) && observedTime(at) ? expiry <= at : null;
+}
+/** Already-collected local observation only; request/original lease flags are not current authority. */
+export function nativePublicationObservationLine(
+  mode: unknown,
+  activation: unknown,
+  control: unknown,
+  agent: unknown,
+  timing: unknown,
+): string {
+  const local = ownDiagnosticField(control, "local");
+  const length = diagnosticInteger(ownDiagnosticField(local, "length"), 8);
+  let observe: unknown;
+  if (Array.isArray(local) && length !== null)
+    for (let i = 0; i < length; i++) {
+      const row = ownDiagnosticField(local, String(i));
+      if (ownDiagnosticField(row, "kind") === "observe") observe = row;
+    }
+  const began = ownDiagnosticField(observe, "startedAt"),
+    finished = ownDiagnosticField(observe, "finishedAt"),
+    reconnect = ownDiagnosticField(timing, "reconnectStartedAt"),
+    at = ownDiagnosticField(timing, "observedAt");
+  return JSON.stringify({
+    diagnostic: "source-native-publication-observation",
+    mode: diagnosticEnum(mode, nativeModes),
+    activation: diagnosticEnum(activation, nativeActivations),
+    observeOk: diagnosticBoolean(ownDiagnosticField(observe, "ok")),
+    observeCode: diagnosticEnum(ownDiagnosticField(observe, "code"), localCodes),
+    observeReason: diagnosticEnum(ownDiagnosticField(observe, "reason"), publicationReasons),
+    observeSockets: diagnosticInteger(ownDiagnosticField(observe, "sockets"), 999),
+    observeMs:
+      observedTime(began) && observedTime(finished)
+        ? diagnosticInteger(finished - began, 60000)
+        : null,
+    leaseExpiredAtObserve: expiredAt(ownDiagnosticField(observe, "leaseExpiresAt"), finished),
+    observeBeforeReconnect:
+      observedTime(finished) && observedTime(reconnect) ? finished <= reconnect : null,
+    assignmentLeaseExpired: expiredAt(ownDiagnosticField(timing, "assignmentLeaseExpiresAt"), at),
+    deadlineExpired: expiredAt(ownDiagnosticField(timing, "deadline"), at),
+    pressureCode: diagnosticEnum(
+      ownDiagnosticField(ownDiagnosticField(agent, "pressure"), "code"),
+      localCodes,
+    ),
+  });
+}
+function publicationDiagnostic(line: string): boolean {
+  const r = closedObservation(
+    line,
+    "source-native-publication-observation",
+    "mode,activation,observeOk,observeCode,observeReason,observeSockets,observeMs,leaseExpiredAtObserve,observeBeforeReconnect,assignmentLeaseExpired,deadlineExpired,pressureCode",
+  );
+  return !!(
+    r &&
+    optionalEnum(r.mode, nativeModes) &&
+    optionalEnum(r.activation, nativeActivations) &&
+    [r.observeCode, r.pressureCode].every((v) => optionalEnum(v, localCodes)) &&
+    optionalEnum(r.observeReason, publicationReasons) &&
+    (r.observeSockets === null || diagnosticInteger(r.observeSockets, 999) === r.observeSockets) &&
+    (r.observeMs === null || diagnosticInteger(r.observeMs, 60000) === r.observeMs) &&
+    [
+      r.observeOk,
+      r.leaseExpiredAtObserve,
+      r.observeBeforeReconnect,
+      r.assignmentLeaseExpired,
+      r.deadlineExpired,
+    ].every((v) => v === null || typeof v === "boolean")
+  );
+}
+export type LiveRecoveryPhase = "packing" | "prepare" | "perform" | "readonly" | "cleanup";
+const livePhases = new Set(["packing", "prepare", "perform", "readonly", "cleanup"]);
+const liveEvents = new Set(["enter", "caught"]);
+const childCodes = new Set([
+  "ERR_ASSERTION",
+  "ERR_TEST_FAILURE",
+  "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+  "ENOENT",
+  "EACCES",
+  "ETIMEDOUT",
+  "ABORT_ERR",
+]);
+const childSignals = new Set([
+  "SIGTERM",
+  "SIGKILL",
+  "SIGABRT",
+  "SIGINT",
+  "SIGSEGV",
+  "SIGBUS",
+  "SIGILL",
+  "SIGHUP",
+  "SIGQUIT",
+  "SIGPIPE",
+  "SIGTRAP",
+  "SIGSYS",
+  "SIGXCPU",
+  "SIGXFSZ",
+]);
+export function liveRecoveryPhaseLine(phase: unknown, event: unknown): string {
+  return JSON.stringify({
+    diagnostic: "source-live-recovery-phase",
+    phase: diagnosticEnum(phase, livePhases),
+    event: diagnosticEnum(event, liveEvents),
+  });
+}
+function livePhase(line: string): Record<string, unknown> | null {
+  const r = closedObservation(line, "source-live-recovery-phase", "phase,event");
+  return r &&
+    typeof r.phase === "string" &&
+    livePhases.has(r.phase) &&
+    typeof r.event === "string" &&
+    liveEvents.has(r.event)
+    ? r
+    : null;
+}
+/** Inspect only bounded canonical markers in captured stdout; never forward child output/errors. */
+export function liveRecoveryFailureLine(error: unknown): string {
+  const stdout = ownDiagnosticField(error, "stdout");
+  let lastPhase: unknown = null,
+    lastPhaseAtError: unknown = null;
+  if (typeof stdout === "string" && stdout.length <= 2_000_000) {
+    const tail = stdout.slice(-8192),
+      lines = tail.split("\n");
+    if (stdout.length > tail.length) lines.shift();
+    for (const line of lines.slice(-64)) {
+      const r = line.length <= 160 ? livePhase(`# ${line}`) : null;
+      if (!r) continue;
+      if (r.event === "enter") lastPhase = r.phase;
+      else lastPhaseAtError = r.phase;
+    }
+  }
+  const code = ownDiagnosticField(error, "code");
+  return JSON.stringify({
+    diagnostic: "source-live-recovery-failure",
+    code:
+      typeof code === "number" && Number.isInteger(code) && Math.abs(code) <= 255
+        ? code
+        : diagnosticEnum(code, childCodes),
+    killed: diagnosticBoolean(ownDiagnosticField(error, "killed")),
+    signal: diagnosticEnum(ownDiagnosticField(error, "signal"), childSignals),
+    lastPhase,
+    lastPhaseAtError,
+  });
+}
+function liveRecoveryDiagnostic(line: string): boolean {
+  if (livePhase(line)) return true;
+  const r = closedObservation(
+    line,
+    "source-live-recovery-failure",
+    "code,killed,signal,lastPhase,lastPhaseAtError",
+  );
+  return !!(
+    r &&
+    (r.code === null ||
+      (typeof r.code === "number" && Number.isInteger(r.code) && Math.abs(r.code) <= 255) ||
+      (typeof r.code === "string" && childCodes.has(r.code))) &&
+    (r.killed === null || typeof r.killed === "boolean") &&
+    optionalEnum(r.signal, childSignals) &&
+    [r.lastPhase, r.lastPhaseAtError].every((v) => optionalEnum(v, livePhases))
+  );
 }
 /** Project facts already collected by the fixture; never include its private trace. */
 export function nativeRecoveryObservationLine(
