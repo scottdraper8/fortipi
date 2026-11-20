@@ -223,7 +223,7 @@ export async function start(options: RuntimeOptions = {}) {
       lastStatus: number | null = null;
     const observe = (event: "enter" | "ready" | "failed") => {
       try {
-        console.log(
+        console.error(
           JSON.stringify({
             diagnostic: "admission-runtime-readiness",
             event,
