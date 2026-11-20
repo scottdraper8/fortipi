@@ -284,7 +284,7 @@
       "platformTools": "34c2ec28d230f3583e1da8d1f7ef1e62e083e0c82ba078e332e036aac9419dfc",
       "imageInputs": "be74003a3969ceb3e4eb6b7d45e612d54db50d412316c07efa4de458e6d5f39a",
       "productTrees": {
-        "worker": "7dee653cf03972f7493c1adb5006cdb78a720e77",
+        "worker": "e34fffcd8e71555391ca491415c937f154438611",
         "packages": "1b661d779d7efec12a6af587e98bb658a2731817"
       },
       "image": {
@@ -294,12 +294,12 @@
         "sourceKitSha256": "913458e337ff82543629573a16b9df30cf10ac63e47693e5489e8b122c8807e5"
       }
     },
-    "cohortSha256": "c54493375f873832b9cb83c314a45b4ba41b032863c7292f7c5e30ae0b9fc414",
+    "cohortSha256": "7584835ddb76f02df45b82b089463f147385d26588662ff169b97b8a9c13a4b6",
     "references": {
       "pi-runtime": {
         "sourceFactsSha256": "d1853d93b918ceeb5da681a105366d7e050f862b0936afcb01c903bb0d1ac9ac",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-20T03:19:49.992Z",
+        "basisReviewedAt": "2026-11-20T04:40:45.785Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@earendil-works/chord/-/chord-1.5.2.tgz",
@@ -338,12 +338,12 @@
             "sha256": "2fdd7609ee61e7c275a528e32d62093c2c298d3f9254ad3048451df2063e6bda"
           }
         ],
-        "limitation": "Same exact1.5.2 archives and declared Pi transformations; maintained Worker context/SQLite/PiHarness and AI/TUI imports unchanged by runtime repair. Current future-main review records onAbort/Chord admission/worker-store and readonly TUI/provider deltas without adoption. Original remote-hold race remains scoped outside supported wrappers; remote/store adoption reopens review. Current Worker tree/cohort rebound to reviewed Agents redaction and runtime19 changes. No new provider, native-platform, deployed recovery or future-advisory clearance. Source3f136b51 review: Pi retry fixture adds failure-only fixed phases; all13 assertions,24 awaits and20s timeout remain exact. Unchanged Pi passed the four-file/four-slot Linux control; the prior full-CI nonzero cause stays unknown. No SDK/backport/provider/Paid clearance; coherent full CI remains required."
+        "limitation": "Same exact1.5.2 archives and declared Pi transformations; maintained Worker context/SQLite/PiHarness and AI/TUI imports unchanged by runtime repair. Current future-main review records onAbort/Chord admission/worker-store and readonly TUI/provider deltas without adoption. Original remote-hold race remains scoped outside supported wrappers; remote/store adoption reopens review. Current Worker tree/cohort rebound to reviewed Agents redaction and runtime19 changes. No new provider, native-platform, deployed recovery or future-advisory clearance. Source9f077251 review: Test-only failure diagnostics and finite source-CI aggregate budget changed; runtime surfaces, pins and qualified453 image remain identical. The 40-minute shared source deadline and 50-minute candidate preserve individual deadlines and failure rules. Original full-CI inspector/approval/native/admission causes remain UNKNOWN; unchanged four-file Linux control passed, full265-file corpus remains unqualified. Fixed approval/native diagnostics confer no producer or live authority."
       },
       "agents-lifecycle": {
         "sourceFactsSha256": "a34a982d22a8917350f1cff490e9b602740c078d7410437c9444034e604bff7c",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-20T03:19:49.992Z",
+        "basisReviewedAt": "2026-11-20T04:40:45.785Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/agents/-/agents-0.33.0.tgz",
@@ -354,12 +354,12 @@
             "sha256": "ec6855764c1e76c69c0fd42d170d7b23d438aeec38dca95ca75579956144f5a3"
           }
         ],
-        "limitation": "Exact0.33.0 archive with no published gitHead inference. Existing5071 job-fencing repair plus independently reviewed two-statement fetch-error redaction; original/fenced/fixed member identities and source817 are verified. Actual six failure cases and existing fencing/generation controls discriminate old and restored behavior. Native Node/runtime19 combination is a new reviewed cohort, requiring fresh coherent CI/native/platform and deployed proof. No future onFetchError API or broad SDK transport equivalence. Source3f136b51 review: Only fixture identity, server cleanup and failure observability change; no Lifecycle/SDK API or patch change. Failed recovery-fixture construction now releases its server while preserving its error and all50 assertions/timeouts. CI attribution remains unknown; no live lifecycle claim."
+        "limitation": "Exact0.33.0 archive with no published gitHead inference. Existing5071 job-fencing repair plus independently reviewed two-statement fetch-error redaction; original/fenced/fixed member identities and source817 are verified. Actual six failure cases and existing fencing/generation controls discriminate old and restored behavior. Native Node/runtime19 combination is a new reviewed cohort, requiring fresh coherent CI/native/platform and deployed proof. No future onFetchError API or broad SDK transport equivalence. Source9f077251 review: Test-only failure diagnostics and finite source-CI aggregate budget changed; runtime surfaces, pins and qualified453 image remain identical. The 40-minute shared source deadline and 50-minute candidate preserve individual deadlines and failure rules. Original full-CI inspector/approval/native/admission causes remain UNKNOWN; unchanged four-file Linux control passed, full265-file corpus remains unqualified. Fixed approval/native diagnostics confer no producer or live authority."
       },
       "computer-fuse": {
         "sourceFactsSha256": "645d0bdc91df175b152b1b5590017e8d4ed2a020c78d646ab3bbccd298b005e3",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-20T03:19:49.992Z",
+        "basisReviewedAt": "2026-11-20T04:40:45.785Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@cloudflare/computer/-/computer-0.11.1.tgz",
@@ -370,12 +370,12 @@
             "sha256": "ee20eae6939c82bd465933c3a591f96b362aa58fe344888307f7ea4839121f27"
           }
         ],
-        "limitation": "Exact client0.11.1/capnweb and source812 retained; qualified image identity is bound by cohort.image. Independent current-path review distinguishes58 executable JS files without SyncRPCServer/applyChangesSync from232 maps retaining unused helper. Supported DO apply is asynchronous; native receiver uses Node SQLite; direct database nesting/custom receivers are unsupported. Rewrites retain physical storage until bounded disposable-child retirement; preserve census/headroom checks. No0.11.3 GC/mount adoption or new native/livePaid proof. Keep runtimeVerified:false, licenseReviewRequired:true, registryDigest:null metadata. Source3f136b51 review: No Computer/FUSE/storage/build recipe or image change. Three synthetic fixture identity/cleanup repairs and a Pi failure-only cue preserve runtime interfaces. Same qualified453 image/source kit remain bound; no new Paid/native/deployed clearance."
+        "limitation": "Exact client0.11.1/capnweb and source812 retained; qualified image identity is bound by cohort.image. Independent current-path review distinguishes58 executable JS files without SyncRPCServer/applyChangesSync from232 maps retaining unused helper. Supported DO apply is asynchronous; native receiver uses Node SQLite; direct database nesting/custom receivers are unsupported. Rewrites retain physical storage until bounded disposable-child retirement; preserve census/headroom checks. No0.11.3 GC/mount adoption or new native/livePaid proof. Keep runtimeVerified:false, licenseReviewRequired:true, registryDigest:null metadata. Source9f077251 review: Test-only failure diagnostics and finite source-CI aggregate budget changed; runtime surfaces, pins and qualified453 image remain identical. The 40-minute shared source deadline and 50-minute candidate preserve individual deadlines and failure rules. Original full-CI inspector/approval/native/admission causes remain UNKNOWN; unchanged four-file Linux control passed, full265-file corpus remains unqualified. Fixed approval/native diagnostics confer no producer or live authority."
       },
       "wrangler": {
         "sourceFactsSha256": "c74830d39b33b0873d420df8dfcc398b18dec0dad679b08df660dbb183b25948",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-20T03:19:49.992Z",
+        "basisReviewedAt": "2026-11-20T04:40:45.785Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261119.1.tgz",
@@ -394,7 +394,7 @@
             "sha256": "bdc0366417fbeea506296931be1c5dd91c131043f8873e31601e03ed4c31956a"
           }
         ],
-        "limitation": "Exact Wrangler4.162.0/Miniflare5.20261113.0-beta interfaces retained with reviewed exact workerd13->19 override and matching types19. Seven new archives and explicit finite age exceptions are verified; declared source/peer/context changes and version guards match. Controlled scoped pack resolves bundled19 from both Wrangler and Miniflare and pins all five native variants19; ordinary consumer install/reification and current native3OS/candidate/live qualification remain required. Unused future VPC/D1/Artifacts/config APIs are not adopted. No prior intermittent Pi-stall cause/fix, provider-runtime equivalence or Paid rollout clearance. Source3f136b51 review: Distribution supplies explicit synthetic Actions metadata and loopback workflow identity; publication distinguishes creator/recovery attempts. Existing real install/types/import/prepare/dry-build and producer/refusal checks remain. Pins and shared30min/four-slot scheduling unchanged; full-corpus completion remains unqualified."
+        "limitation": "Exact Wrangler4.162.0/Miniflare5.20261113.0-beta interfaces retained with reviewed exact workerd13->19 override and matching types19. Seven new archives and explicit finite age exceptions are verified; declared source/peer/context changes and version guards match. Controlled scoped pack resolves bundled19 from both Wrangler and Miniflare and pins all five native variants19; ordinary consumer install/reification and current native3OS/candidate/live qualification remain required. Unused future VPC/D1/Artifacts/config APIs are not adopted. No prior intermittent Pi-stall cause/fix, provider-runtime equivalence or Paid rollout clearance. Source9f077251 review: Test-only failure diagnostics and finite source-CI aggregate budget changed; runtime surfaces, pins and qualified453 image remain identical. The 40-minute shared source deadline and 50-minute candidate preserve individual deadlines and failure rules. Original full-CI inspector/approval/native/admission causes remain UNKNOWN; unchanged four-file Linux control passed, full265-file corpus remains unqualified. Fixed approval/native diagnostics confer no producer or live authority."
       }
     }
   }
