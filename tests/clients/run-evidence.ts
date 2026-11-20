@@ -69,6 +69,7 @@ import {
   InfrastructureEvidenceUnavailable,
   type InfrastructureObserver,
 } from "./live-infrastructure-controls.ts";
+import { withLocalBrowserLane } from "./local-browser-lane.ts";
 import { observeLocalEvidence } from "./local-evidence-observation.ts";
 import { runNativeDaemon } from "./native-daemon.ts";
 import { nativePlatform } from "./native-matrix.ts";
@@ -223,12 +224,13 @@ export async function runEvidence(
     scenario: () => Promise<Record<string, unknown>>,
     limitations: string[],
     sensitivity: string[] = [],
+    sink: ClaimResult[] = results,
   ) {
     const began = performance.now();
     observeLocal(id, "enter", began);
     try {
       const observation = await scenario();
-      results.push({
+      sink.push({
         id,
         outcome: "pass",
         identity,
@@ -246,7 +248,7 @@ export async function runEvidence(
     } catch (error) {
       // Arbitrary library diagnostics may include request bodies/roles. Preserve
       // sanitized failure metadata, never stringify the thrown object/stack.
-      results.push({
+      sink.push({
         id,
         outcome:
           error instanceof InfrastructureEvidenceUnavailable
@@ -267,8 +269,8 @@ export async function runEvidence(
         sensitivity,
       });
     }
-    observeLocal(id, "exit", began, results.at(-1)?.outcome);
-    process.stderr.write(`${id}: ${results.at(-1)!.outcome}\n`);
+    observeLocal(id, "exit", began, sink.at(-1)?.outcome);
+    process.stderr.write(`${id}: ${sink.at(-1)!.outcome}\n`);
   }
   let installed: Installed | undefined;
   await measure(
@@ -283,7 +285,7 @@ export async function runEvidence(
       "Synthetic scope registry is installation evidence, not npm rights or publication eligibility",
     ],
   );
-  if (input.mode === "local") {
+  async function localClaims(joinBrowser: () => Promise<readonly ClaimResult[]>) {
     const localLimits = [
       "Disposable source fixture composes real PiHarness/workerd/SQLite with faux model and acknowledged barriers",
       "Process death proves local disk recovery, not platform eviction; synthetic traffic headroom is not actual Free account capacity",
@@ -798,16 +800,7 @@ export async function runEvidence(
           "Synthetic source model; actual installed public client and real TCP/workerd/SQLite; no live-provider inference",
         ],
       );
-      await measure(
-        "installed-browser",
-        ["Chromium", "installed-browser-export", "seed1010"],
-        "Native browser fetch/ticket WebSocket applies correlated committed completion and exact offline replay",
-        () => localBrowser(ports),
-        [
-          "Local source model fixture; no live provider or account capacity claim",
-          "Disposable fixture CA is trusted only by dedicated Node children; Chromium exact leaf-SPKI exception substitutes certificate authentication, not public PKI/hostname/revocation proof",
-        ],
-      );
+      results.push(...(await joinBrowser()));
       await measure(
         "independent-python",
         ["python3", "-I", "-B", "examples/python-client/client.py"],
@@ -877,6 +870,27 @@ export async function runEvidence(
         ],
       );
     }
+  }
+  if (input.mode === "local") {
+    if (installed) {
+      const ports = installed;
+      await withLocalBrowserLane(
+        (sink: ClaimResult[]) =>
+          measure(
+            "installed-browser",
+            ["Chromium", "installed-browser-export", "seed1010"],
+            "Native browser fetch/ticket WebSocket applies correlated committed completion and exact offline replay",
+            () => localBrowser(ports),
+            [
+              "Local source model fixture; no live provider or account capacity claim",
+              "Disposable fixture CA is trusted only by dedicated Node children; Chromium exact leaf-SPKI exception substitutes certificate authentication, not public PKI/hostname/revocation proof",
+            ],
+            [],
+            sink,
+          ),
+        localClaims,
+      );
+    } else await localClaims(async () => []);
   }
   if (input.mode === "native" && installed) {
     const ports = installed;
