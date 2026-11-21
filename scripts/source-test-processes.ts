@@ -613,10 +613,29 @@ function publicationDiagnostic(line: string): boolean {
     ].every((v) => v === null || typeof v === "boolean")
   );
 }
-export type LiveRecoveryPhase = "packing" | "prepare" | "perform" | "readonly" | "cleanup";
+export type LiveRecoveryPhase =
+  | "packing"
+  | "sbom"
+  | "prepare"
+  | "fixture"
+  | "consumer"
+  | "setup"
+  | "perform"
+  | "readonly"
+  | "cleanup";
 export type LiveRecoveryInvocation = "positive" | "tamper" | "omitted";
 export type LiveRecoveryAwait = "outer" | "original-reader" | "cached-bridge" | "post-child";
-const livePhases = new Set(["packing", "prepare", "perform", "readonly", "cleanup"]);
+const livePhases = new Set([
+  "packing",
+  "sbom",
+  "prepare",
+  "fixture",
+  "consumer",
+  "setup",
+  "perform",
+  "readonly",
+  "cleanup",
+]);
 const liveEvents = new Set(["enter", "caught"]);
 const liveInvocations = new Set(["positive", "tamper", "omitted"]);
 const liveAwaits = new Set(["outer", "original-reader", "cached-bridge", "post-child"]);

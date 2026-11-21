@@ -25,7 +25,6 @@ import type {
 } from "../../../tests/clients/platform-recovery.ts";
 import { repository } from "../../build-workspaces.ts";
 import { observeDeployment, type TargetDescriptor } from "../../deploy-smoke.ts";
-import { generateNotices } from "../../generate-notices.ts";
 import type { RecoveryInput, RecoveryPorts } from "../../platform-recovery.ts";
 import * as prepare from "../../prepare-release.ts";
 import { childEnvironment, execute, generateSbom, stageAndPack } from "../../prepare-release.ts";
@@ -112,7 +111,8 @@ async function preparePackages() {
   await mkdir(directory);
   const c = candidate(); // API identity only is synthetic; all five package archives below are actual.
   const packed = await stageAndPack(repository, resolve(directory, "packs"), c.scope, c.version);
-  await generateSbom(repository, directory, c.scope, c.version, await generateNotices());
+  observePhase("sbom");
+  await generateSbom(repository, directory, c.scope, c.version, packed.runtimeNotices);
   await mkdir(resolve(directory, "image"));
   for (const name of ["image-metadata.json", "sources-and-notices.tar"])
     await copyFile(
@@ -486,9 +486,11 @@ async function controlled() {
   const assertMethods = new Map<string, unknown>();
   try {
     await preparePackages();
+    observePhase("fixture");
     const f = await fixture();
     closeFixture = f.close;
     const c = retainedCandidate;
+    observePhase("consumer");
     const consumer = resolve(root, "consumer");
     const cliRoot = resolve(consumer, "node_modules", `@${c.scope}/fortipi-cli`);
     await mkdir(cliRoot, { recursive: true });
@@ -517,6 +519,7 @@ async function controlled() {
       } else await chmod(path, stat.mode & 0o111 ? 0o555 : 0o444);
     }
     await protect(resolve(consumer, "node_modules"));
+    observePhase("setup");
     const installedWranglerUrl = pathToFileURL(resolve(cliRoot, "dist/wrangler.js"));
     const actualWrangler = await import(installedWranglerUrl.href);
     mock.module(installedWranglerUrl, {
