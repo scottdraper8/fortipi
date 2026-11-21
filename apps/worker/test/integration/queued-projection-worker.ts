@@ -27,6 +27,14 @@ export class TestAgentSession extends ExistingTestAgentSession {
         release: ReturnType<typeof Promise.withResolvers<void>>;
       }
     | undefined;
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    // Conversations owns a separate host port; the compiler calls that port.
+    Object.defineProperties(this.conversations.host, {
+      holdQueuedProjection: { value: this.holdQueuedProjection.bind(this) },
+      observeQueuedProjectionResult: { value: this.observeQueuedProjectionResult.bind(this) },
+    });
+  }
   async holdQueuedProjection(piId: number, caller: number) {
     const gate = this.#gate;
     if (!gate || gate.piId !== piId || gate.entered || gate.released) return;

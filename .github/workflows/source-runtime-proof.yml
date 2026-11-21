@@ -67,7 +67,7 @@ jobs:
       - run: node scripts/check-licenses.ts --foundation
       - run: node scripts/build-workspaces.ts build:evidence
       - name: Qualify valid queued input during afterRun
-        run: node --test apps/worker/test/integration/queued-projection.test.ts
+        run: node --test --test-reporter=tap apps/worker/test/integration/queued-projection.test.ts
         timeout-minutes: 2
       - name: Observe owned runtime roles and CPU ticks
         if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-native-role-')
