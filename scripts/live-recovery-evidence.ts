@@ -64,6 +64,17 @@ export interface LiveRecoveryEvidenceResult {
   currentReceiptPath: string;
   recoveryFactsPath: string;
 }
+/** Optional in-process diagnostics only; labels carry no authority or input data. */
+export type LiveRecoveryEvidenceObserver = (
+  step:
+    | "candidate-load"
+    | "authorize"
+    | "prepared"
+    | "installed"
+    | "local-proof"
+    | "initial-observe",
+  event: "enter" | "exit",
+) => void;
 const stable = ({ checkedAt: _time, ...value }: DeploymentIdentity) => value;
 const maximum = 1_048_576;
 function snapshot<T>(value: T): T {
@@ -200,7 +211,15 @@ async function authorize(candidate: CandidateManifest, request: GitHubRequest) {
  * filtered environment and private IPC bridge, never provider capabilities. */
 export async function runLiveRecoveryEvidence(
   input: LiveRecoveryEvidenceInput,
+  observer?: LiveRecoveryEvidenceObserver,
 ): Promise<LiveRecoveryEvidenceResult> {
+  const observeStep: LiveRecoveryEvidenceObserver = (step, event) => {
+    try {
+      observer?.(step, event);
+    } catch {
+      // Diagnostics cannot replace the original result or error.
+    }
+  };
   try {
     const bound = snapshot(input);
     assert.deepEqual(Object.keys(bound).sort(), [
@@ -220,8 +239,12 @@ export async function runLiveRecoveryEvidence(
     ])
       assert.ok(path !== bound.out && !path.startsWith(`${bound.out}${sep}`));
     const request = githubRequest(process.env.GITHUB_TOKEN);
+    observeStep("candidate-load", "enter");
     const loaded = await loadWorkflowCandidate(bound.candidatePath);
+    observeStep("candidate-load", "exit");
+    observeStep("authorize", "enter");
     await authorize(loaded.candidate, request);
+    observeStep("authorize", "exit");
     const operation = process.env.OPERATION;
     const installed = object((await canonicalFile(bound.installationPath)).value);
     assert.equal(installed.schemaVersion, 1);
@@ -275,11 +298,15 @@ export async function runLiveRecoveryEvidence(
         receipt.targets.length === 1 &&
         (receipt.targets[0] === before.origin || `https://${receipt.targets[0]}` === before.origin),
     );
+    observeStep("prepared", "enter");
     const preparedReceipt = await verifyPrepared(prepared);
+    observeStep("prepared", "exit");
     assert.equal(preparedReceipt.sourceCommit, loaded.candidate.sourceCommit);
     assert.equal(preparedReceipt.assetManifestSha256, loaded.candidate.assetManifestSha256);
     assert.deepEqual(preparedReceipt.operator, target.operator);
+    observeStep("installed", "enter");
     const wrangler = await installedWrangler(installed, loaded.candidate);
+    observeStep("installed", "exit");
     const localInput = {
       candidate: loaded.candidate,
       candidateSha256: loaded.hash,
@@ -288,9 +315,13 @@ export async function runLiveRecoveryEvidence(
     };
     // Authenticate the original completed LOCAL producer/archive before any
     // deployment or application credential access. JSON labels grant no authority.
+    if (before.backend === "free") observeStep("local-proof", "enter");
     const localInfrastructure =
       before.backend === "free" ? await readLocalInfrastructureProof(localInput) : undefined;
+    if (before.backend === "free") observeStep("local-proof", "exit");
+    observeStep("authorize", "enter");
     await authorize(loaded.candidate, request);
+    observeStep("authorize", "exit");
     assert.equal(process.env.OPERATION, operation);
     // First CF/application credential access, after all source/installation/frame guards.
     const account = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -324,7 +355,9 @@ export async function runLiveRecoveryEvidence(
         fetch,
         admin,
       );
+    observeStep("initial-observe", "enter");
     const initial = await observe(cli.value);
+    observeStep("initial-observe", "exit");
     assert.deepEqual(stable(initial), stable(before));
     const infrastructure = (deployment: DeploymentIdentity) => {
       if (deployment.backend !== "free") return {};

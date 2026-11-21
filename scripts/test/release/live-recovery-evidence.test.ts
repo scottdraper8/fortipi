@@ -80,10 +80,12 @@ let nextOperation = 0;
 let retainedCandidate: CandidateManifest;
 // Last entered callback only; it may have completed before a later guard fails.
 let lastPhase: LiveRecoveryPhase = "packing";
+// performance.now() is monotonic elapsed time from this child process's time origin.
+const traceElapsed = () => Math.min(220000, Math.max(0, Math.floor(performance.now())));
 function observePhase(phase: LiveRecoveryPhase, event: "enter" | "caught" = "enter") {
   if (event === "enter") lastPhase = phase;
   try {
-    process.stdout.write(`${liveRecoveryPhaseLine(phase, event)}\n`);
+    process.stdout.write(`${liveRecoveryPhaseLine(phase, event, traceElapsed())}\n`);
   } catch {
     /* Diagnostic output cannot replace the existing result or error. */
   }
@@ -98,7 +100,7 @@ function observeAwait(step: LiveRecoveryAwait, event: "enter" | "exit") {
     postChildEntered = event === "enter";
   }
   try {
-    process.stdout.write(`${liveRecoveryAwaitLine(invocation, step, event)}\n`);
+    process.stdout.write(`${liveRecoveryAwaitLine(invocation, step, event, traceElapsed())}\n`);
   } catch {
     /* Observations cannot replace the original result or error. */
   }
@@ -819,9 +821,12 @@ async function controlled() {
       assert.equal(candidatePath, manifestPath);
       assert.equal(fixturePath, resolve(repository, "tests/clients/fixtures/local.json"));
       assert.ok(deployment && recovery);
+      observeAwait("child-setup", "enter");
       await mkdir(out, { mode: 0o700 });
       const startup = await readJson(deployment);
+      observeAwait("child-setup", "exit");
       if (recovery.coordinator.mode === "perform" && childMode === "normal") {
+        observeAwait("checkpoint-setup", "enter");
         await mkdir(recovery.checkpointDirectory, { mode: 0o700 });
         const beforePath = resolve(recovery.checkpointDirectory, "application-before.json");
         await saveJson(beforePath, f.publicBefore);
@@ -829,6 +834,7 @@ async function controlled() {
         const before = { path: beforePath, size: bytes.length, mode: 0o600, sha256: sha256(bytes) };
         f.input.journalDirectory = resolve(out, "provider-recovery");
         f.input.beforeCheckpoint = before;
+        observeAwait("checkpoint-setup", "exit");
         observePhase("perform");
         const result = await recovery.coordinator.bridge.perform(before);
         assert.equal(result.status, "operation-confirmed");
@@ -996,7 +1002,7 @@ async function controlled() {
     const successful = async (input: Parameters<typeof runLiveRecoveryEvidence>[0]) => {
       failures.length = 0;
       try {
-        return await runLiveRecoveryEvidence(input);
+        return await runLiveRecoveryEvidence(input, observeAwait);
       } catch (error) {
         process.stderr.write(
           `${JSON.stringify({ diagnostic: "controlled-recovery-assertion", failures: failures.slice(-4) })}\n`,
@@ -1068,8 +1074,12 @@ async function controlled() {
     assert.equal(childCalls, 0);
     refuseSelection = false;
     const out = resolve(root, "claims");
+    invocation = "initial-perform";
     observePhase("outer-perform");
+    observeAwait("outer", "enter");
     const result = await successful({ ...common, out });
+    observeAwait("post-child", "exit");
+    observeAwait("outer", "exit");
     assert.equal(
       integratedDownloads,
       2,

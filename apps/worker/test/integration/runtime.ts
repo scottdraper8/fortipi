@@ -9,9 +9,14 @@ import { dirname, join, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { freeInfrastructurePolicy } from "fortipi-contract";
 import {
+  sourceRecoveryPath,
+  sourceTestDiagnostic,
+} from "../../../../scripts/source-test-processes.ts";
+import {
   offlineWranglerEnvironment,
   verifyOfflineWranglerAuth,
 } from "../../../../tests/clients/offline-wrangler.ts";
+import { startupMarker } from "../agent/owned-process-group.ts";
 import {
   armProcessBarrier,
   type ProcessArm,
@@ -21,6 +26,7 @@ import {
 import { killRuntime } from "./runtime-child.ts";
 
 const repository = resolve(import.meta.dirname, "../../../..");
+let runtimeOrdinal = 0;
 export async function poll<T>(
   read: () => Promise<T>,
   ready: (value: T) => boolean,
@@ -59,6 +65,8 @@ export interface RuntimeOptions {
 }
 /** Real TCP/workerd/SQLite, one immutable config and storage directory across kills. */
 export async function start(options: RuntimeOptions = {}) {
+  const sourcePath = sourceRecoveryPath();
+  const harnessOrdinal = ++runtimeOrdinal;
   if (options.sourceLoader)
     assert.equal(
       options.main && resolve(options.main),
@@ -176,6 +184,15 @@ export async function start(options: RuntimeOptions = {}) {
     );
     const current = child,
       launched = invocation;
+    // Retain only a bounded startup tail for the existing closed classifier.
+    // Captured bytes never enter observations or assertion/error messages.
+    let startupOutput = "";
+    const retainStartup = (data: Buffer) => {
+      if (child === current && invocation === launched)
+        startupOutput = (startupOutput + data.toString("utf8")).slice(-12000);
+    };
+    current.stdout?.on("data", retainStartup);
+    current.stderr?.on("data", retainStartup);
     // Parse bounded private cue lines only; retain a match boolean, never logs.
     for (const stream of [child.stdout, child.stderr]) {
       const decoder = new StringDecoder("utf8");
@@ -263,7 +280,30 @@ export async function start(options: RuntimeOptions = {}) {
       observe("ready");
     } catch (error) {
       observe("failed");
+      try {
+        const code = current.exitCode;
+        const signal = current.signalCode;
+        const line = JSON.stringify({
+          diagnostic: "source-recovery-start-failure",
+          sourcePath,
+          harnessOrdinal,
+          invocation: launched,
+          marker: startupMarker(startupOutput),
+          exitCode:
+            typeof code === "number" && Number.isInteger(code) && Math.abs(code) <= 255
+              ? code
+              : null,
+          signal: signal === null ? null : /^SIG[A-Z0-9]{1,8}$/.test(signal) ? signal : "other",
+        });
+        if (sourceTestDiagnostic(`# ${line}`)) console.error(line);
+      } catch {
+        /* Preserve the original readiness result. */
+      }
       throw error;
+    } finally {
+      current.stdout?.off("data", retainStartup);
+      current.stderr?.off("data", retainStartup);
+      startupOutput = "";
     }
   }
   async function stop(abrupt: boolean) {

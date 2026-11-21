@@ -704,8 +704,20 @@ export type LiveRecoveryPhase =
   | "perform"
   | "readonly"
   | "cleanup";
-export type LiveRecoveryInvocation = "positive" | "tamper" | "omitted";
-export type LiveRecoveryAwait = "outer" | "original-reader" | "cached-bridge" | "post-child";
+export type LiveRecoveryInvocation = "initial-perform" | "positive" | "tamper" | "omitted";
+export type LiveRecoveryAwait =
+  | "outer"
+  | "candidate-load"
+  | "authorize"
+  | "prepared"
+  | "installed"
+  | "local-proof"
+  | "initial-observe"
+  | "child-setup"
+  | "checkpoint-setup"
+  | "original-reader"
+  | "cached-bridge"
+  | "post-child";
 const livePhases = new Set([
   "packing",
   "sbom",
@@ -737,9 +749,28 @@ const livePhases = new Set([
   "cleanup",
 ]);
 const liveEvents = new Set(["enter", "caught"]);
-const liveInvocations = new Set(["positive", "tamper", "omitted"]);
-const liveAwaits = new Set(["outer", "original-reader", "cached-bridge", "post-child"]);
+const liveInvocations = new Set(["initial-perform", "positive", "tamper", "omitted"]);
+const liveAwaits = new Set([
+  "outer",
+  "candidate-load",
+  "authorize",
+  "prepared",
+  "installed",
+  "local-proof",
+  "initial-observe",
+  "child-setup",
+  "checkpoint-setup",
+  "original-reader",
+  "cached-bridge",
+  "post-child",
+]);
 const liveAwaitEvents = new Set(["enter", "exit"]);
+// Elapsed process time saturates at the existing controlled-child deadline.
+const liveElapsedMaximum = 220000;
+const liveTraceLineMaximum = 192;
+function liveElapsed(value: unknown): boolean {
+  return value === null || diagnosticInteger(value, liveElapsedMaximum) === value;
+}
 const childCodes = new Set([
   "ERR_ASSERTION",
   "ERR_TEST_FAILURE",
@@ -765,16 +796,22 @@ const childSignals = new Set([
   "SIGXCPU",
   "SIGXFSZ",
 ]);
-export function liveRecoveryPhaseLine(phase: unknown, event: unknown): string {
+export function liveRecoveryPhaseLine(phase: unknown, event: unknown, elapsedMs?: unknown): string {
   return JSON.stringify({
     diagnostic: "source-live-recovery-phase",
     phase: diagnosticEnum(phase, livePhases),
     event: diagnosticEnum(event, liveEvents),
+    ...(elapsedMs === undefined
+      ? {}
+      : { elapsedMs: diagnosticInteger(elapsedMs, liveElapsedMaximum) }),
   });
 }
 function livePhase(line: string): Record<string, unknown> | null {
-  const r = closedObservation(line, "source-live-recovery-phase", "phase,event");
+  const r =
+    closedObservation(line, "source-live-recovery-phase", "phase,event") ??
+    closedObservation(line, "source-live-recovery-phase", "phase,event,elapsedMs");
   return r &&
+    (!Object.hasOwn(r, "elapsedMs") || liveElapsed(r.elapsedMs)) &&
     typeof r.phase === "string" &&
     livePhases.has(r.phase) &&
     typeof r.event === "string" &&
@@ -782,17 +819,28 @@ function livePhase(line: string): Record<string, unknown> | null {
     ? r
     : null;
 }
-export function liveRecoveryAwaitLine(invocation: unknown, step: unknown, event: unknown): string {
+export function liveRecoveryAwaitLine(
+  invocation: unknown,
+  step: unknown,
+  event: unknown,
+  elapsedMs?: unknown,
+): string {
   return JSON.stringify({
     diagnostic: "source-live-recovery-await",
     invocation: diagnosticEnum(invocation, liveInvocations),
     step: diagnosticEnum(step, liveAwaits),
     event: diagnosticEnum(event, liveAwaitEvents),
+    ...(elapsedMs === undefined
+      ? {}
+      : { elapsedMs: diagnosticInteger(elapsedMs, liveElapsedMaximum) }),
   });
 }
 function liveAwait(line: string): Record<string, unknown> | null {
-  const r = closedObservation(line, "source-live-recovery-await", "invocation,step,event");
+  const r =
+    closedObservation(line, "source-live-recovery-await", "invocation,step,event") ??
+    closedObservation(line, "source-live-recovery-await", "invocation,step,event,elapsedMs");
   return r &&
+    (!Object.hasOwn(r, "elapsedMs") || liveElapsed(r.elapsedMs)) &&
     typeof r.invocation === "string" &&
     liveInvocations.has(r.invocation) &&
     typeof r.step === "string" &&
@@ -810,26 +858,40 @@ export function liveRecoveryFailureLine(error: unknown): string {
     lastInvocation: unknown = null,
     lastAwaitEntered: unknown = null,
     lastAwaitExited: unknown = null;
+  let timed = false,
+    lastPhaseElapsedMs: unknown = null,
+    lastAwaitEnteredElapsedMs: unknown = null,
+    lastAwaitExitedElapsedMs: unknown = null;
   if (typeof stdout === "string" && stdout.length <= 2_000_000) {
     const tail = stdout.slice(-8192),
       lines = tail.split("\n");
     if (stdout.length > tail.length) lines.shift();
     for (const line of lines.slice(-64)) {
-      const r = line.length <= 160 ? livePhase(`# ${line}`) : null;
+      const r = line.length <= liveTraceLineMaximum ? livePhase(`# ${line}`) : null;
       if (r) {
-        if (r.event === "enter") lastPhase = r.phase;
-        else lastPhaseAtError = r.phase;
+        timed ||= Object.hasOwn(r, "elapsedMs");
+        if (r.event === "enter") {
+          lastPhase = r.phase;
+          lastPhaseElapsedMs = r.elapsedMs ?? null;
+        } else lastPhaseAtError = r.phase;
       }
-      const awaited = line.length <= 160 ? liveAwait(`# ${line}`) : null;
+      const awaited = line.length <= liveTraceLineMaximum ? liveAwait(`# ${line}`) : null;
       if (!awaited) continue;
+      timed ||= Object.hasOwn(awaited, "elapsedMs");
       if (awaited.event === "enter") {
         if (awaited.invocation !== lastInvocation || awaited.step === "outer") {
           lastAwaitEntered = null;
           lastAwaitExited = null;
+          lastAwaitEnteredElapsedMs = null;
+          lastAwaitExitedElapsedMs = null;
         }
         lastInvocation = awaited.invocation;
         lastAwaitEntered = awaited.step;
-      } else if (awaited.invocation === lastInvocation) lastAwaitExited = awaited.step;
+        lastAwaitEnteredElapsedMs = awaited.elapsedMs ?? null;
+      } else if (awaited.invocation === lastInvocation) {
+        lastAwaitExited = awaited.step;
+        lastAwaitExitedElapsedMs = awaited.elapsedMs ?? null;
+      }
     }
   }
   const code = ownDiagnosticField(error, "code");
@@ -846,15 +908,20 @@ export function liveRecoveryFailureLine(error: unknown): string {
     lastInvocation,
     lastAwaitEntered,
     lastAwaitExited,
+    ...(timed ? { lastPhaseElapsedMs, lastAwaitEnteredElapsedMs, lastAwaitExitedElapsedMs } : {}),
   });
 }
 function liveRecoveryDiagnostic(line: string): boolean {
-  if (livePhase(line) || liveAwait(line)) return true;
-  const r = closedObservation(
-    line,
-    "source-live-recovery-failure",
-    "code,killed,signal,lastPhase,lastPhaseAtError,lastInvocation,lastAwaitEntered,lastAwaitExited",
-  );
+  if (line.length <= liveTraceLineMaximum + 2 && (livePhase(line) || liveAwait(line))) return true;
+  const keys =
+    "code,killed,signal,lastPhase,lastPhaseAtError,lastInvocation,lastAwaitEntered,lastAwaitExited";
+  const r =
+    closedObservation(line, "source-live-recovery-failure", keys) ??
+    closedObservation(
+      line,
+      "source-live-recovery-failure",
+      `${keys},lastPhaseElapsedMs,lastAwaitEnteredElapsedMs,lastAwaitExitedElapsedMs`,
+    );
   return !!(
     r &&
     (r.code === null ||
@@ -864,7 +931,11 @@ function liveRecoveryDiagnostic(line: string): boolean {
     optionalEnum(r.signal, childSignals) &&
     [r.lastPhase, r.lastPhaseAtError].every((v) => optionalEnum(v, livePhases)) &&
     optionalEnum(r.lastInvocation, liveInvocations) &&
-    [r.lastAwaitEntered, r.lastAwaitExited].every((v) => optionalEnum(v, liveAwaits))
+    [r.lastAwaitEntered, r.lastAwaitExited].every((v) => optionalEnum(v, liveAwaits)) &&
+    (!Object.hasOwn(r, "lastPhaseElapsedMs") ||
+      [r.lastPhaseElapsedMs, r.lastAwaitEnteredElapsedMs, r.lastAwaitExitedElapsedMs].every(
+        liveElapsed,
+      ))
   );
 }
 /** Project facts already collected by the fixture; never include its private trace. */
