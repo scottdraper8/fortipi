@@ -197,7 +197,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/prepare-release.ts retained-evidence --candidate "$RUNNER_TEMP/candidate/candidate.json" --reference "$RUNNER_TEMP/candidate-reference.json"
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm run test:browser
+      - name: Verify complete local acceptance (installed clients and infrastructure)
+        run: pnpm run test:browser
         if: github.event_name != 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ github.token }}
