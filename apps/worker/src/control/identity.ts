@@ -171,15 +171,13 @@ export class Identities {
         ...(body.expiresAt === undefined ? {} : { expiresAt: body.expiresAt }),
       });
       if (body.role === "executor") {
-        const e = this.store.get<{ generation: number; epoch: number; status: string }>(
-          "executor",
-          body.executorId,
-        );
+        const e = this.store.get<import("./tickets.js").ExecutorState>("executor", body.executorId);
         if (!e)
           this.store.put("executor", body.executorId, {
             generation: 1,
             epoch: 0,
             status: "offline",
+            ledger: { kind: "unbound" },
           });
         else if (e.status === "revoked")
           this.store.put("executor", body.executorId, { ...e, status: "offline" });

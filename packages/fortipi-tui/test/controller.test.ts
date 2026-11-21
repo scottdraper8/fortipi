@@ -32,7 +32,7 @@ void test("busy preserves composer and never steers; uncertain send reuses the o
   await service.start();
   const controller = new Controller(service.client());
   try {
-    await controller.open("conv_1");
+    await controller.open("conv_1", "agent_1");
     controller.composer = "keep this";
     service.busy = true;
     await assert.rejects(controller.send(), { code: "conflict" });
@@ -241,7 +241,7 @@ void test("reopen restores actionable metadata through the snapshot cursor witho
   service.tasks.set(task.taskId, task);
   const controller = new Controller(service.client());
   try {
-    await controller.open("conv_1");
+    await controller.open("conv_1", "agent_1");
     assert.equal(controller.projection.approvals.get("approval_1")?.operation.trust, "host");
     assert.equal(controller.projection.jobs.get("job_1")?.state, "requires_reconciliation");
     assert.equal(controller.projection.tasks.get("task_1")?.status.state, "waiting");
@@ -265,13 +265,15 @@ void test("TUI displays authenticated redacted client identity and rejects opera
     service.identity = { ...service.identity, role };
     const controller = new Controller(service.client());
     try {
+      await assert.rejects(controller.open("conv_1"), { code: "select_agent" });
+      assert.equal(service.requests.length, 0);
       if (role === "client") {
-        await controller.open("conv_1");
+        await controller.open("conv_1", "agent_1");
         assert.equal(controller.ticketIdentity?.principalId, "principal_test");
         assert(controller.ids().includes("principal_test"));
         assert(controller.ticketIdentity && !("ticket" in controller.ticketIdentity));
       } else {
-        await assert.rejects(controller.open("conv_1"), {
+        await assert.rejects(controller.open("conv_1", "agent_1"), {
           code: "application_credential_required",
         });
         assert(!service.requests.includes("GET /v1/conversations/conv_1"));

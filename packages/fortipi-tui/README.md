@@ -14,11 +14,21 @@ Node 26.13 or later is required. `--help` documents the installed-bin interface.
 There are no token/secret arguments. The renderer uses static progress labels;
 `--no-animation` preserves all controls and focus behavior.
 
+Reopening needs the conversation's known agent. For `--conversation` or a saved
+`conversationId`, set that profile's `agentId` as well. Interactively, select an
+agent with `/agents` first or use `/open ID AGENT`. `open` rejects missing agent
+context with `select_agent` before making a request; ticket minting never discovers
+the agent by reading a conversation.
+
 Profiles live outside the checkout at:
 
 - macOS: `~/Library/Application Support/FortiPi/profiles.json`
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/fortipi/profiles.json`
 - Windows: `%LOCALAPPDATA%/FortiPi/profiles.json`
+
+Use `--profiles-file /absolute/protected/profiles.json` to select a different file.
+Profile selections and conversation updates are saved to that same file. All
+directory, file, and credential permission checks apply to the selected path.
 
 Create a protected directory/profile file through operator tooling or an editor
 that preserves restrictive permissions. Each credential file is independently
@@ -59,7 +69,7 @@ support leaves selectable text and a visible fallback.
 | Commands                                                                                       | Behavior                                                                                                                                  |
 | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `/agents [search]`, `/conversations [search]`, `/more`                                         | Authorized paginated title/ID search, progress and cancellable continuation                                                               |
-| `/new [title]`, `/open ID`, `/profiles`                                                        | Create, reopen and switch selections; stale requests are cancelled/ignored                                                                |
+| `/new [title]`, `/open ID [AGENT]`, `/profiles`                                                | Create, reopen in the selected or specified agent, and switch selections; stale requests are cancelled/ignored                            |
 | ordinary text, `/steer text`, `/retry`, `/discard-intent`                                      | Send or explicit steer; retry retains the uncertain intent identity; busy keeps input                                                     |
 | `/task [ID]`, `/cancel [ID]`, `/resume ID continuation`, `/tool ID`                            | Task/control receipts and expanded tool/target/trust context                                                                              |
 | `/approvals [ID]`, `/approve`, `/reject`                                                       | Full agent/principal/arguments/digest/capabilities/target/trust/workspace/base/policy/grant/expiry context; refetch before exact decision |

@@ -198,6 +198,8 @@ export class Store {
       "lease",
       "capacity_request",
       "capacity_reservation",
+      "storage_allocation",
+      "storage_sample",
       "binding_request",
       "binding_pending",
       "provider_request",
@@ -207,6 +209,9 @@ export class Store {
       "local_prepared",
       "local_apply",
       "command",
+      "admin_job",
+      "admin_request",
+      "admin_artifact",
     ];
     if (
       admissions.includes(kind) &&

@@ -10,14 +10,16 @@ export class RecoveryProcess {
   readonly directory: string;
   private child: ChildProcess | undefined;
   private diagnostics = "";
+  private readonly config: Record<string, unknown>;
   url = "";
-  constructor(directory: string) {
+  constructor(directory: string, config: Record<string, unknown> = workspaceConfig()) {
     this.directory = directory;
+    this.config = config;
   }
   async start(): Promise<void> {
     await mkdir(this.directory, { recursive: true });
     const configPath = resolve(this.directory, "wrangler.json");
-    await writeFile(configPath, JSON.stringify(workspaceConfig()));
+    await writeFile(configPath, JSON.stringify(this.config));
     const server = createServer();
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();

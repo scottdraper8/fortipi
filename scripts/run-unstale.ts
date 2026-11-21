@@ -7,6 +7,35 @@ import { archive, archiveEntries, hash } from "../tools/unstale/review-supply-ch
 import { repository } from "./build-workspaces.ts";
 import type { SupplyChain } from "./check-pins.ts";
 
+const cveAuthority =
+  "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/54xxx/CVE-2023-54404.json";
+const githubAuthority = "https://api.github.com/advisories/GHSA-mrhx-c7xc-m3w5";
+
+/** Authentication is confined to the fixed GitHub advisory endpoint. */
+export async function readAdvisoryAuthority(
+  url: string,
+  githubToken: string | undefined,
+  transport: typeof fetch = fetch,
+): Promise<Buffer> {
+  assert.ok(url === cveAuthority || url === githubAuthority, "Unknown advisory authority");
+  const headers: Record<string, string> = {};
+  if (url === githubAuthority) {
+    headers.Accept = "application/vnd.github+json";
+    headers["X-GitHub-Api-Version"] = "2022-11-28";
+    if (githubToken) headers.Authorization = `Bearer ${githubToken}`;
+  }
+  const response = await transport(url, {
+    headers,
+    signal: AbortSignal.timeout(30_000),
+    redirect: "error",
+  });
+  assert.ok(
+    response.ok,
+    `${url === githubAuthority ? "GitHub" : "CVE"} advisory authority unavailable: HTTP ${response.status}${response.headers.get("x-ratelimit-remaining") === "0" ? "; quota exhausted" : ""}`,
+  );
+  return Buffer.from(await response.arrayBuffer());
+}
+
 export function validateRejectedZodAuthorities(cve: unknown, github: unknown): void {
   const authority = cve as { cveMetadata: { cveId: string; state: string } };
   const advisory = github as {
@@ -53,16 +82,11 @@ export async function rejectedZodAdvisory(output: string): Promise<boolean> {
   assert.equal(disposition.package, "zod");
   assert.equal(disposition.version, "4.6.7");
   assert.equal(disposition.cve, "CVE-2023-54404");
-  assert.equal(
-    disposition.authorityURL,
-    "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/54xxx/CVE-2023-54404.json",
-  );
-  assert.equal(disposition.githubURL, "https://api.github.com/advisories/GHSA-mrhx-c7xc-m3w5");
+  assert.equal(disposition.authorityURL, cveAuthority);
+  assert.equal(disposition.githubURL, githubAuthority);
   const observations: { url: string; sha256: string }[] = [];
   const fetchSource = async (url: string): Promise<unknown> => {
-    const response = await fetch(url, { signal: AbortSignal.timeout(30_000), redirect: "error" });
-    assert.ok(response.ok, `Advisory authority unavailable: HTTP ${response.status}`);
-    const raw = Buffer.from(await response.arrayBuffer());
+    const raw = await readAdvisoryAuthority(url, process.env.GITHUB_TOKEN);
     observations.push({ url, sha256: hash(raw) });
     return JSON.parse(raw.toString()) as unknown;
   };
@@ -83,29 +107,53 @@ export async function rejectedZodAdvisory(output: string): Promise<boolean> {
 
 import { json } from "./check-pins.ts";
 
+// unstale v0.3.1 onboarding::Bound gives a short positive --wait at least 60s
+// for setup and twice that for its last-resort report/exit. Leave another 30s
+// (its default public-request timeout) for process/config startup and shutdown.
+// --wait 0 instead selects a 300s setup bound; it does not mean immediate setup.
+// https://github.com/vuca-dev/unstale/blob/v0.3.1/local/cli/src/onboarding.rs
+const coverageTimeout = 150_000;
+
+/** Public coverage only: never select model inference or read a user's model setup. */
+export function unstaleEnvironment(input: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    UNSTALE_CACHE_DIR: resolve(repository, ".unstale/cache"),
+    UNSTALE_CONFIG_DIR: resolve(repository, ".unstale/tool-config"),
+    // Official v0.3.1 util::EDGE_INFERENCE_DEFAULT is true. Keep this governed
+    // public registry/coverage check from collecting credentials or starting model steps.
+    UNSTALE_EDGE_INFERENCE: "0",
+  };
+  for (const key of [
+    "PATH",
+    "HOME",
+    "USERPROFILE",
+    "LOCALAPPDATA",
+    "APPDATA",
+    "SystemRoot",
+    "WINDIR",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "CI",
+  ])
+    if (input[key]) env[key] = input[key];
+  return env;
+}
+
 async function execute(
   binary: string,
   args: string[],
   timeout = 45_000,
 ): Promise<{ code: number; output: string }> {
+  const operation = args[0];
+  assert.ok(
+    operation &&
+      ["--version", "init", "notify", "status", "sync", "advisories"].includes(operation),
+    "Unknown public unstale operation",
+  );
   return new Promise((accept, reject) => {
     // Public registry/catalog queries receive no registry or application credentials.
-    const env: NodeJS.ProcessEnv = {};
-    env.UNSTALE_CACHE_DIR = resolve(repository, ".unstale/cache");
-    for (const key of [
-      "PATH",
-      "HOME",
-      "USERPROFILE",
-      "LOCALAPPDATA",
-      "APPDATA",
-      "SystemRoot",
-      "WINDIR",
-      "TMPDIR",
-      "TEMP",
-      "TMP",
-      "CI",
-    ])
-      if (process.env[key]) env[key] = process.env[key];
+    const env = unstaleEnvironment();
     const child = spawn(binary, args, {
       cwd: repository,
       env,
@@ -133,7 +181,7 @@ async function execute(
       if (timedOut || output.length > 2_000_000)
         reject(
           new Error(
-            "unstale timeout/output limit; coverage unavailable; retry after checking service",
+            `unstale ${operation} ${timedOut ? "timeout" : "output limit"}; coverage unavailable; retry after checking service`,
           ),
         );
       else accept({ code: code ?? 1, output });
@@ -149,14 +197,14 @@ async function main(): Promise<void> {
   );
   const name = `@unstale/cli-${key}`;
   const review = await json<SupplyChain>(repository, "tools/unstale/supply-chain.json");
-  const record = review.packages[`${name}@0.2.12`];
+  const record = review.packages[`${name}@0.3.1`];
   assert.ok(record, "Missing unstale native archive review");
   const require = createRequire(resolve(repository, "tools/unstale/package.json"));
   const launcherRequire = createRequire(require.resolve("@unstale/cli/package.json"));
   const manifest = launcherRequire.resolve(`${name}/package.json`);
   const relative = `bin/unstale${process.platform === "win32" ? ".exe" : ""}`;
   const binary = resolve(dirname(manifest), relative);
-  const entries = archiveEntries(await archive(name, "0.2.12", record.integrity));
+  const entries = archiveEntries(await archive(name, "0.3.1", record.integrity));
   const expected = entries.get(`package/${relative}`);
   assert.ok(expected, "Missing native unstale binary in reviewed archive");
   assert.equal(
@@ -164,7 +212,7 @@ async function main(): Promise<void> {
     hash(expected),
     "Installed unstale native integrity mismatch",
   );
-  assert.equal((await execute(binary, ["--version"])).output.trim(), "unstale 0.2.12");
+  assert.equal((await execute(binary, ["--version"])).output.trim(), "unstale 0.3.1");
   let initialized = true;
   try {
     await access(resolve(repository, ".unstale/config.json"));
@@ -174,14 +222,18 @@ async function main(): Promise<void> {
   if (!initialized) {
     const init = await execute(
       binary,
-      ["init", "--yes", "--mode", "personal", "--no-animation", "--wait", "0"],
-      60_000,
+      ["init", "--yes", "--mode", "personal", "--no-animation", "--wait", "10"],
+      coverageTimeout,
     );
     assert.equal(init.code, 0, `unstale setup failed: ${init.output}`);
   }
   const notify = await execute(binary, ["notify"]);
   assert.equal(notify.code, 0, `unstale notify failed: ${notify.output}`);
-  const status = await execute(binary, ["status", "--wait", "10", "--no-animation"], 60_000);
+  const status = await execute(
+    binary,
+    ["status", "--wait", "10", "--no-animation"],
+    coverageTimeout,
+  );
   assert.equal(status.code, 0, `unstale status failed: ${status.output}`);
   const sync = await execute(binary, ["sync"], 60_000);
   const advisories = await execute(binary, ["advisories"]);
@@ -210,7 +262,7 @@ async function main(): Promise<void> {
   await mkdir(resolve(repository, "dist/supply-chain"), { recursive: true });
   await writeFile(
     resolve(repository, "dist/supply-chain/unstale.json"),
-    `${JSON.stringify({ version: "0.2.12", platform: key, notifyExit: notify.code, statusExit: status.code, syncExit: sync.code, advisoryExit: advisories.code, advisoryCoverage: advisoryUnavailable || sync.code !== 0 ? "degraded" : "checked", acknowledged, reportSha256: hash(Buffer.from(report)), coverageSha256: hash(Buffer.from(coverage)), observedAt: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ version: "0.3.1", platform: key, notifyExit: notify.code, statusExit: status.code, syncExit: sync.code, advisoryExit: advisories.code, advisoryCoverage: advisoryUnavailable || sync.code !== 0 ? "degraded" : "checked", acknowledged, reportSha256: hash(Buffer.from(report)), coverageSha256: hash(Buffer.from(coverage)), observedAt: new Date().toISOString() }, null, 2)}\n`,
   );
   console.log(
     status.output

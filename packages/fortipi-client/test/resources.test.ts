@@ -4,7 +4,42 @@ import { test } from "node:test";
 import { FortiPiClient } from "fortipi-client/node";
 import { routeCatalog } from "fortipi-contract";
 import type { UploadBegin } from "fortipi-contract/client";
-import { json, protocol } from "./fixtures/wire.ts";
+import { json, protocol, ticketReceipt } from "./fixtures/wire.ts";
+
+void test("ticket minting binds the caller's concrete agent without a conversation read", async () => {
+  const requests: string[] = [];
+  let requestedResources: unknown;
+  const client = new FortiPiClient({
+    endpoint: "https://example.test",
+    credentials: async () => "synthetic",
+    fetch: async (url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (path === "/v1/protocol") return json(protocol);
+      requests.push(path);
+      assert.equal(
+        path,
+        "/v1/connections/tickets",
+        "Minting must not require conversation-read authority",
+      );
+      assert.equal(typeof init?.body, "string");
+      const body: unknown = JSON.parse(String(init?.body));
+      assert.ok(body && typeof body === "object" && "resources" in body);
+      requestedResources = body.resources;
+      return json(ticketReceipt(), 201);
+    },
+  });
+  await client.tickets.mint("agent_2", "conv_2");
+  assert.deepEqual(requestedResources, {
+    agentIds: ["agent_2"],
+    conversationIds: ["conv_2"],
+    workspaceIds: [],
+    actions: ["events.read"],
+    tools: [],
+    executorIds: [],
+    backendIds: [],
+  });
+  assert.deepEqual(requests, ["/v1/connections/tickets"]);
+});
 
 void test("all generated operations are callable typed surfaces; scoped resources retain transfer and revision identity", async () => {
   const requests: { url: URL; body: unknown }[] = [];

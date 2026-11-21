@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildDaemon, prepareDaemon } from "./computerd-build.ts";
 import { imageInputs } from "./inputs.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -18,7 +19,7 @@ interface Component {
   notices: Record<string, string>;
 }
 interface Inventory {
-  binarySha256: string;
+  binarySha256: string | null;
   bootstrapSha256: string;
   assets: Record<string, { size: number; sha256: string }>;
   components: Component[];
@@ -73,7 +74,7 @@ function sea(binary: Buffer): { bootstrap: Buffer; assets: Map<string, Buffer> }
   }
   throw new Error("Source-matched computerd SEA resource not found");
 }
-async function inputs(download: Download) {
+async function inputs(download: Download, rebuilding = false) {
   await mkdir(output, { recursive: true });
   const archive = resolve(output, "computer-source.tgz");
   await writeFile(
@@ -92,8 +93,45 @@ async function inputs(download: Download) {
       "9f4637c57d28d94e19eb448f66cbcf4dcca06761ae890ec1d75081c642e7cb3d",
     "Computerd layer drift",
   );
-  const binary = tar(layer, "usr/local/bin/computerd");
+  const addon = sea(tar(layer, "usr/local/bin/computerd")).assets.get("fuse.node");
+  check(addon, "Missing authenticated historical addon input");
+  if (rebuilding) await buildDaemon(download, addon);
+  else {
+    await prepareDaemon(download, addon);
+    try {
+      await readFile(resolve(output, "computerd-built"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      await buildDaemon(download, addon);
+    }
+  }
+  const binary = await readFile(resolve(output, "computerd-built"));
+  const receipt = JSON.parse(await readFile(resolve(output, "computerd-build.json"), "utf8"));
+  const prepared = JSON.parse(
+    await readFile(resolve(output, "daemon-build/build-inputs.json"), "utf8"),
+  );
+  const authenticatedNode = JSON.parse(
+    await readFile(resolve(output, "daemon-build/node-authentication.json"), "utf8"),
+  );
+  for (const [key, value] of Object.entries(prepared))
+    check(
+      JSON.stringify(receipt[key]) === JSON.stringify(value),
+      `SEA receipt does not match rebuilt source input ${key}`,
+    );
+  check(
+    receipt.computerSource === imageInputs.source &&
+      receipt.nodeVersion === imageInputs.embeddedNodeVersion &&
+      receipt.generatorVersion === imageInputs.embeddedNodeVersion &&
+      receipt.nodeExecutableSha256 === authenticatedNode.executableSha256 &&
+      receipt.binarySha256 === hash(binary),
+    "Actual patched SEA build handoff mismatch",
+  );
   const extracted = sea(binary);
+  check(
+    hash(extracted.assets.get("bundle.mjs") ?? Buffer.alloc(0)) === receipt.bundleSha256 &&
+      hash(extracted.assets.get("fuse.node") ?? Buffer.alloc(0)) === receipt.addonSha256,
+    "Rebuilt SEA assets differ from actual build receipt",
+  );
   const top = `computer-${imageInputs.source}/`;
   check(
     extracted.bootstrap.equals(tar(archive, `${top}packages/computerd/scripts/sea/bootstrap.cjs`)),
@@ -131,7 +169,7 @@ async function component(
   return { name, version, lockPath, url, integrity, sha256: hash(bytes), notices };
 }
 export async function freezeEmbedded(download: Download): Promise<void> {
-  const { archive, binary, extracted, top } = await inputs(download);
+  const { archive, binary, extracted, top } = await inputs(download, true);
   const lock = JSON.parse(tar(archive, `${top}package-lock.json`).toString()) as {
     packages: Record<string, { version: string; resolved?: string; integrity?: string }>;
   };
@@ -147,12 +185,24 @@ export async function freezeEmbedded(download: Download): Promise<void> {
     ),
   ];
   const components: Component[] = [];
+  const reviewed = JSON.parse(
+    await readFile(resolve(here, "embedded-freeze.json"), "utf8"),
+  ) as Inventory;
   for (const path of paths) {
-    const pin = lock.packages[path];
-    check(pin?.resolved && pin.integrity, `Embedded source has no exact lock identity: ${path}`);
     const name = path.slice(path.lastIndexOf("node_modules/") + 13);
+    const expected = reviewed.components.find((pin) => pin.name === name);
+    check(expected, `New daemon component needs archive review: ${name}`);
+    // Bundle comments do not encode peer/workspace context. Match the reviewed
+    // exact source-lock identity, not a different root-hoisted version by name.
+    const selected = [path, expected.lockPath].find(
+      (candidate) =>
+        lock.packages[candidate]?.version === expected.version &&
+        lock.packages[candidate]?.integrity === expected.integrity,
+    );
+    const pin = selected ? lock.packages[selected] : undefined;
+    check(pin?.resolved && pin.integrity, `Embedded source has no exact lock identity: ${path}`);
     components.push(
-      await component(download, name, pin.version, path, pin.resolved, pin.integrity),
+      await component(download, name, pin.version, selected ?? path, pin.resolved, pin.integrity),
     );
   }
   const macros = lock.packages["node_modules/napi-macros"];
@@ -212,6 +262,10 @@ export async function prepareEmbedded(
   const frozen = JSON.parse(
     await readFile(resolve(here, "embedded-freeze.json"), "utf8"),
   ) as Inventory;
+  check(
+    frozen.binarySha256 && Object.keys(frozen.assets).length === 2,
+    "Actual new Linux SEA freeze required; --freeze-embedded must run on trusted Linux before full prepare",
+  );
   const { archive: sourceArchive, top, binary, extracted } = await inputs(download);
   check(
     hash(binary) === frozen.binarySha256 && hash(extracted.bootstrap) === frozen.bootstrapSha256,
@@ -261,5 +315,22 @@ export async function prepareEmbedded(
   await writeFile(resolve(notices, "embedded-inventory.json"), JSON.stringify(frozen, null, 2));
   const addon = extracted.assets.get("fuse.node");
   check(addon, "Missing verified native addon");
+  await writeFile(resolve(output, "context/computerd"), binary, { mode: 0o755 });
   return { binary, addon };
+}
+
+/** Source-only preparation cannot emit image metadata or a source kit with invented output hashes. */
+export async function prepareEmbeddedInputs(download: Download): Promise<void> {
+  const layer = resolve(
+    output,
+    "9f4637c57d28d94e19eb448f66cbcf4dcca06761ae890ec1d75081c642e7cb3d.tgz",
+  );
+  check(
+    hash(await readFile(layer)) ===
+      "9f4637c57d28d94e19eb448f66cbcf4dcca06761ae890ec1d75081c642e7cb3d",
+    "Addon origin layer drift",
+  );
+  const addon = sea(tar(layer, "usr/local/bin/computerd")).assets.get("fuse.node");
+  check(addon, "Missing actual addon");
+  await prepareDaemon(download, addon);
 }

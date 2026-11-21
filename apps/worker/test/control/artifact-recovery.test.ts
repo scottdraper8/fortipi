@@ -154,7 +154,12 @@ test("artifact index and interrupted producer correlation survive actual Wrangle
             audience: "executor-session",
             originMode: { kind: "native" },
             resources: scope(),
-            executor: { executorId: "executor", generation: 1 },
+            executor: {
+              executorId: "executor",
+              generation: 1,
+              ledgerId: "fixture_ledger",
+              ledgerInstanceId: "fixture_instance",
+            },
           }),
         }),
       );
@@ -188,6 +193,8 @@ test("artifact index and interrupted producer correlation survive actual Wrangle
           payload: {
             executorId: "executor",
             generation: 1,
+            ledgerId: "fixture_ledger",
+            ledgerInstanceId: "fixture_instance",
             protocolVersion: "1.0",
             schemaVersion: "1.0.0",
             capabilities: ["shell"],

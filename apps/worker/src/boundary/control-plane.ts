@@ -4,6 +4,10 @@ export interface ControlPlaneRpc extends InfrastructureReservations {
   readonly contractVersion: "1.0";
   authenticate(input: D.CredentialProof): Promise<D.Outcome<D.AuthContext>>;
   authorize(input: D.AuthorizationRequest): Promise<D.Outcome<D.GrantDecision>>;
+  toolTopology(
+    ctx: D.AuthContext,
+    input: D.ToolContextRequest,
+  ): Promise<D.Outcome<D.CurrentToolContext>>;
   /** Keyed current binding/executor lookup; null limits means no validated numeric registration observation. */
   resolveExecutorGeneration(
     ctx: D.AuthContext,

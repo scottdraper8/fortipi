@@ -2,7 +2,17 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { mock, test } from "node:test";
 import type { Source } from "./catalog.ts";
-import { type Baseline, check, exitCode, githubRequest, hash, observer, summary } from "./watch.ts";
+import { sources } from "./catalog.ts";
+import {
+  type Baseline,
+  check,
+  exitCode,
+  githubRequest,
+  hash,
+  localPins,
+  observer,
+  summary,
+} from "./watch.ts";
 
 const fixture = JSON.parse(
   await readFile(new URL("fixtures/upstream.json", import.meta.url), "utf8"),
@@ -10,6 +20,11 @@ const fixture = JSON.parse(
   head: { object: { type: string; sha: string } };
   directory: { name: string; path: string; type: string; sha: string }[];
   release: Record<string, unknown>;
+  meson: {
+    release: Record<string, unknown>;
+    tagRef: { object: { type: string; sha: string } };
+    tag: { object: { type: string; sha: string } };
+  };
 };
 const source: Source = {
   id: "runtime",
@@ -66,6 +81,53 @@ test("matching reference succeeds; recursive code drift at the same version requ
   assert.match(summary(result), /runtime: review-required/);
 });
 
+test("Durable Object code-update and lifecycle policy edits independently require review", async (t) => {
+  const durable = sources.find((item) => item.id === "durable-objects-policy");
+  assert.ok(durable);
+  const policies = [
+    "src/content/docs/durable-objects/deployments/durable-objects-code-updates.mdx",
+    "src/content/docs/durable-objects/concepts/durable-object-lifecycle.mdx",
+  ];
+  const observed = (changed?: string) =>
+    observer(async (path) => {
+      if (path.includes("git/ref/heads/")) return structuredClone(fixture.head);
+      const prefix = "repos/cloudflare/cloudflare-docs/contents/";
+      assert.ok(path.startsWith(prefix));
+      const file = path.slice(prefix.length).split("?")[0];
+      assert.ok(file && durable.paths.includes(file));
+      return policies.includes(file)
+        ? { path: file, type: "file", sha: (file === changed ? "b" : "a").repeat(40) }
+        : [{ name: "limits.mdx", path: `${file}/limits.mdx`, type: "file", sha: "a".repeat(40) }];
+    });
+  const reviewed: Baseline = {
+    format: 1,
+    entries: {
+      [durable.id]: {
+        catalogSha256: hash(durable),
+        snapshot: await observed()(durable),
+        pins: {},
+        reviewedAt: "2026-11-11T00:00:00Z",
+        reviewNote: "Synthetic policy reference; no actual runtime or deployment claim.",
+      },
+    },
+  };
+  assert.equal(exitCode(await check(reviewed, observed(), pins, [durable])), 0);
+  for (const policy of policies) {
+    await t.test(policy, async () => {
+      // Only this file's identity changes; the head and the other policy paths stay fixed.
+      const result = await check(reviewed, observed(policy), pins, [durable]);
+      assert.equal(result[0]?.outcome, "review-required", policy);
+      assert.equal(result[0]?.classification, "unknown");
+      assert.equal(exitCode(result), 1);
+      assert.ok(
+        result[0]?.links.includes(
+          `https://github.com/cloudflare/cloudflare-docs/tree/${fixture.head.object.sha}/${policy}`,
+        ),
+      );
+    });
+  }
+});
+
 test("release-note edits and moved tags require review; branch targets resolve to actual tag commits", async () => {
   const release: Source = { ...source, paths: [], ref: "" };
   const observed = await observer(async (path) =>
@@ -109,6 +171,62 @@ test("release-note edits and moved tags require review; branch targets resolve t
     [release],
   );
   assert.equal(exitCode(retagged), 1);
+});
+
+test("Meson annotated release resolves the source commit; moved tags, notes and archive/license pins require review", async () => {
+  const meson = sources.find((item) => item.id === "meson");
+  assert.ok(meson);
+  const reviewed = JSON.parse(
+    await readFile(new URL("baseline.json", import.meta.url), "utf8"),
+  ) as Baseline;
+  const prior = reviewed.entries.meson;
+  assert.ok(prior);
+  const onlyMeson: Baseline = { format: 1, entries: { meson: prior } };
+  const requests: string[] = [];
+  const mesonRequest = async (path: string): Promise<unknown> => {
+    requests.push(path);
+    switch (path) {
+      case "repos/mesonbuild/meson/releases/latest":
+        return fixture.meson.release;
+      case "repos/mesonbuild/meson/git/ref/tags/1.12.1":
+        return fixture.meson.tagRef;
+      case "repos/mesonbuild/meson/git/tags/958d178d20ffa043ed64a95e3e7af3632b4d1c45":
+        return fixture.meson.tag;
+      default:
+        assert.fail(`Unexpected Meson request: ${path}`);
+    }
+  };
+  const observed = await observer(mesonRequest)(meson);
+  assert.equal(requests.length, 3);
+  assert.equal(observed.commit, "70598bb7825f0f804fb31ec2795de5e79e7692a0");
+  assert.equal(observed.version, "1.12.1");
+  assert.deepEqual(observed, prior.snapshot);
+  assert.equal(exitCode(await check(onlyMeson, observer(mesonRequest), localPins, [meson])), 0);
+
+  for (const change of [
+    async (path: string) =>
+      path.includes("git/tags/")
+        ? { object: { type: "commit", sha: "d".repeat(40) } }
+        : mesonRequest(path),
+    async (path: string) =>
+      path.endsWith("releases/latest")
+        ? { ...fixture.meson.release, body: "Changed Python/build-option warning." }
+        : mesonRequest(path),
+  ]) {
+    const result = await check(onlyMeson, observer(change), localPins, [meson]);
+    assert.equal(exitCode(result), 1);
+    assert.equal(result[0]?.classification, "unknown");
+    assert.ok(result[0]?.links.includes("https://github.com/mesonbuild/meson/releases/tag/1.12.1"));
+  }
+  for (const key of ["source", "sourceArchiveSha256", "licenseSha256"]) {
+    const changed = {
+      ...(await localPins(meson)),
+      [`tools/unstale/platform-tools.json#meson/${key}`]: "0".repeat(64),
+    };
+    const result = await check(onlyMeson, observer(mesonRequest), async () => changed, [meson]);
+    assert.equal(exitCode(result), 1);
+    assert.equal(result[0]?.outcome, "review-required");
+  }
 });
 
 test("missing/unreviewed baselines, foreign responses and local pin drift cannot produce an all-clear", async () => {

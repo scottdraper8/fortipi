@@ -4,7 +4,8 @@
     "rootDir": "src",
     "outDir": "dist",
     "types": ["node"],
-    "lib": ["ES2024"]
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules"]

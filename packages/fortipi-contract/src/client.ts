@@ -14,6 +14,7 @@ export {
   knownEventTypes,
 } from "./generated/schemas.js";
 export type {
+  AdminArtifactReference,
   AdmissionReceipt,
   Approval,
   ByteReference,

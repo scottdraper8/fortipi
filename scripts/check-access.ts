@@ -3,6 +3,36 @@ import { createHash } from "node:crypto";
 
 class AccessError extends Error {}
 
+export const cloudflareAccessChecks = [
+  "account-metadata",
+  "workers-list",
+  "workers-ai-catalog",
+  "analytics-datasets-enabled",
+  "workers-dev-subdomain",
+] as const;
+export const npmAccessChecks = ["registry-identity", "publication-scope-configured"] as const;
+export interface CloudflareAccessResult {
+  schemaVersion: 1;
+  kind: "cloudflare";
+  accountBindingSha256: string;
+  checkedAt: string;
+  checks: readonly string[];
+}
+export interface NpmAccessResult {
+  schemaVersion: 1;
+  kind: "npm";
+  scope: string;
+  checkedAt: string;
+  checks: readonly string[];
+}
+function protectResult<T>(result: T, forbidden: string[]): T {
+  const json = JSON.stringify(result);
+  for (const value of forbidden)
+    if ([value, JSON.stringify(value).slice(1, -1)].some((part) => json.includes(part)))
+      throw new AccessError("Unsafe access result");
+  return result;
+}
+
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new AccessError(`Missing ${name}`);
@@ -146,7 +176,7 @@ async function analyticsAccess(account: string, token: string): Promise<void> {
   console.log("Infrastructure analytics datasets: enabled");
 }
 
-async function cloudflare(): Promise<void> {
+export async function checkCloudflareAccess(): Promise<CloudflareAccessResult> {
   const account = required("CLOUDFLARE_ACCOUNT_ID");
   if (!/^[a-fA-F0-9]{32}$/.test(account)) {
     throw new AccessError("CLOUDFLARE_ACCOUNT_ID must be a 32-character account ID");
@@ -199,30 +229,48 @@ async function cloudflare(): Promise<void> {
   console.log(`Account binding SHA-256: ${createHash("sha256").update(account).digest("hex")}`);
   console.log(`Workers.dev base: https://${subdomain}.workers.dev`);
   console.log("Write/deploy permissions will be verified by the actual deployment.");
+  const result: CloudflareAccessResult = {
+    schemaVersion: 1,
+    kind: "cloudflare",
+    accountBindingSha256: createHash("sha256").update(account).digest("hex"),
+    checkedAt: new Date().toISOString(),
+    checks: cloudflareAccessChecks,
+  };
+  return protectResult(result, [account, token]);
 }
 
-async function npm(): Promise<void> {
+export async function checkNpmAccess(): Promise<NpmAccessResult> {
   const token = required("NPM_TOKEN");
   const scope = required("NPM_SCOPE").replace(/^@/, "");
   if (!/^[a-z0-9][a-z0-9._-]*$/.test(scope)) {
     throw new AccessError("NPM_SCOPE must be an npm username or organization name");
   }
-  const result = await request("https://registry.npmjs.org", "/-/whoami", token);
-  if (typeof result.username !== "string" || !result.username) {
+  const identity = await request("https://registry.npmjs.org", "/-/whoami", token);
+  if (typeof identity.username !== "string" || !identity.username) {
     throw new AccessError("npm did not authenticate the token");
   }
   // A publishing token does not need organization-management permission.
   console.log("npm authentication: verified; publication scope configured");
   console.log("Publication rights and new-package creation remain unverified until publish.");
+  const result: NpmAccessResult = {
+    schemaVersion: 1,
+    kind: "npm",
+    scope,
+    checkedAt: new Date().toISOString(),
+    checks: npmAccessChecks,
+  };
+  return protectResult(result, [token]);
 }
 
-try {
-  const target = process.argv[2];
-  if (target === "cloudflare") await cloudflare();
-  else if (target === "npm") await npm();
-  else throw new AccessError("Expected target: cloudflare or npm");
-} catch (error) {
-  const detail = error instanceof AccessError ? error.message : "Unexpected failure";
-  console.error(`Access preflight failed: ${detail}`);
-  process.exitCode = 1;
+if (import.meta.main) {
+  try {
+    const target = process.argv[2];
+    if (target === "cloudflare") await checkCloudflareAccess();
+    else if (target === "npm") await checkNpmAccess();
+    else throw new AccessError("Expected target: cloudflare or npm");
+  } catch (error) {
+    const detail = error instanceof AccessError ? error.message : "Unexpected failure";
+    console.error(`Access preflight failed: ${detail}`);
+    process.exitCode = 1;
+  }
 }

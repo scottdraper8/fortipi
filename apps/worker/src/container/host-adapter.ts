@@ -4,7 +4,13 @@ import type {
   IWorkspaceContainerAPI,
   WorkspaceRef,
 } from "@cloudflare/computer/backends/container";
+import {
+  type RuntimeHostContext,
+  runtimeHostContextEnv,
+  runtimeHostOwnershipLabel,
+} from "../boundary/infrastructure.js";
 import { requireThat } from "../workspace/errors.js";
+import { hostContext, hostOwnershipDigest } from "./host-context.js";
 import { containerRuntimeHeader } from "./host-transport.js";
 
 type RequestStage = "before-status" | "port-capability" | "native-fetch" | "after-status";
@@ -29,13 +35,39 @@ export class FencedContainerAPI implements IWorkspaceContainerAPI {
   readonly transport: Fetcher;
   queryOnly = false;
   runtime: ContainerRuntimeInfo | undefined;
-  constructor(host: IWorkspaceContainerAPI, transport: Fetcher) {
+  readonly context: RuntimeHostContext;
+  readonly started: ((runtime: ContainerRuntimeInfo) => Promise<void>) | undefined;
+  constructor(
+    host: IWorkspaceContainerAPI,
+    transport: Fetcher,
+    context: RuntimeHostContext,
+    started?: (runtime: ContainerRuntimeInfo) => Promise<void>,
+  ) {
     this.host = host;
     this.transport = transport;
+    this.context = hostContext(context);
+    this.started = started;
   }
   async start(spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {
     requireThat(!this.queryOnly, "interrupted", "Query cannot start a container");
-    const runtime = await this.host.start(spec);
+    requireThat(
+      !Object.hasOwn(spec.env, runtimeHostContextEnv) &&
+        !Object.hasOwn(spec.labels ?? {}, runtimeHostOwnershipLabel),
+      "invalid_request",
+      "Caller cannot supply private Host assertions",
+    );
+    const context = this.context;
+    const serialized = JSON.stringify(context);
+    requireThat(
+      !serialized || new TextEncoder().encode(serialized).length <= 4096,
+      "invalid_request",
+      "Private Host assertion exceeds bound",
+    );
+    const runtime = await this.host.start({
+      ...spec,
+      env: { ...spec.env, [runtimeHostContextEnv]: serialized },
+      labels: { ...spec.labels, [runtimeHostOwnershipLabel]: hostOwnershipDigest(context) },
+    });
     requireThat(
       !this.runtime || this.runtime.runtimeId === runtime.runtimeId,
       "interrupted",
@@ -43,6 +75,7 @@ export class FencedContainerAPI implements IWorkspaceContainerAPI {
     );
     this.runtime = runtime;
     await this.host.setInactivityTimeout(60_000);
+    await this.started?.(runtime);
     return runtime;
   }
   async restart(_spec: ContainerLaunchSpec): Promise<ContainerRuntimeInfo> {

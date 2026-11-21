@@ -1,4 +1,5 @@
 import type * as D from "../../../src/boundary/dto.js";
+import type { Env } from "../../../src/boundary/env.js";
 import { within } from "../../../src/control/store.js";
 import { TestControlPlane as BaseControlPlane } from "./worker.js";
 
@@ -7,13 +8,12 @@ export { default, TestRecipient } from "./worker.js";
 export class TestControlPlane extends BaseControlPlane {
   private entered: (() => void) | undefined;
   private exchangeGate: Promise<void> | undefined;
-  protected override providerTransport(): typeof fetch {
-    const transport = super.providerTransport();
-    return async (input, init) => {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env, (transport) => async (input, init) => {
       this.entered?.();
       await this.exchangeGate;
       return transport(input, init);
-    };
+    });
   }
   async cancelledRefresh(ctx: D.AuthContext, credential: D.OAuthCredential) {
     let release: () => void = () => undefined;

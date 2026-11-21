@@ -5,12 +5,79 @@ import type { Env } from "../../../src/boundary/env.js";
 import { ControlPlane } from "../../../src/control/control-plane.js";
 import { Executors } from "../../../src/control/executors.js";
 import { EncryptedCredentialStore } from "../../../src/control/provider-auth-store.js";
-import { check, id, outcome } from "../../../src/control/store.js";
+import { check, hash, id, outcome } from "../../../src/control/store.js";
 import type { TestRecipient } from "./recipients.js";
 
 export { TestRecipient } from "./recipients.js";
 
 export class TestControlPlane extends ControlPlane {
+  async capacityUsage(): Promise<string> {
+    return JSON.stringify(this.capacity.usage());
+  }
+  async capacitySettlement(reservationId: string): Promise<string | undefined> {
+    const row = this.store.get<{ settlement?: { disposition: string; observedBytes?: number } }>(
+      "capacity_reservation",
+      reservationId,
+    );
+    return row?.settlement ? JSON.stringify(row.settlement) : undefined;
+  }
+  async streamRegistration(envelope: string): Promise<string> {
+    const identity: unknown = JSON.parse(envelope);
+    check(
+      identity &&
+        typeof identity === "object" &&
+        "registrationId" in identity &&
+        typeof identity.registrationId === "string",
+      "invalid_request",
+      "Missing fixture socket registration",
+    );
+    return JSON.stringify(
+      this.store.get<D.AuthorityRegistration>("recipient", identity.registrationId) ?? null,
+    );
+  }
+  async replaceTicketAgents(ticket: string, agents: string[]): Promise<void> {
+    this.ctx.storage.sql.exec(
+      "UPDATE cp_records SET value=json_set(value,'$.identity.resources.agentIds',json(?)) WHERE kind='ticket' AND key=?",
+      JSON.stringify(agents),
+      await hash(ticket),
+    );
+  }
+  async clientStreamTicketExpiry(
+    ticket: string,
+    mode: "read" | "expire",
+  ): Promise<{ expiresAt: number; used: boolean }> {
+    check(
+      /^[a-f0-9]{64}$/.test(ticket) && (mode === "read" || mode === "expire"),
+      "invalid_request",
+      "Invalid fixture ticket expiry request",
+    );
+    const key = await hash(ticket);
+    return this.store.tx(() => {
+      const read = () =>
+        this.ctx.storage.sql
+          .exec<{ audience: string; expiresAt: number; used: number }>(
+            "SELECT json_extract(value,'$.audience') AS audience,json_extract(value,'$.expiresAt') AS expiresAt,json_extract(value,'$.used') AS used FROM cp_records WHERE kind='ticket' AND key=?",
+            key,
+          )
+          .one();
+      const before = read();
+      check(
+        before.audience === "client-stream" &&
+          before.used === 0 &&
+          Number.isSafeInteger(before.expiresAt),
+        "invalid_request",
+        "Fixture requires a retained unused client stream ticket",
+      );
+      if (mode === "expire")
+        this.ctx.storage.sql.exec(
+          "UPDATE cp_records SET value=json_set(value,'$.expiresAt',?) WHERE kind='ticket' AND key=?",
+          Date.now() - 1,
+          key,
+        );
+      const after = read();
+      return { expiresAt: after.expiresAt, used: after.used !== 0 };
+    });
+  }
   async recoveredPresence(executorId: string, generation: number): Promise<D.Outcome<boolean>> {
     // Reconstruct only the component: use real retained workerd sockets and
     // storage, while its process-local heartbeat map starts empty.
@@ -25,52 +92,61 @@ export class TestControlPlane extends ControlPlane {
   async setTokenResponseMode(mode: "valid" | "redirect" | "oversize"): Promise<void> {
     this.tokenResponseMode = mode;
   }
-  protected override providerTransport(): typeof fetch {
-    return async (input, init) => {
-      this.refreshCalls++;
-      if (!(input instanceof Request) || input.redirect !== "manual" || init !== undefined)
-        throw new Error("Real Worker request must prevent automatic credential forwarding");
-      const url = input.url;
-      const raw = await input.text();
-      let access = "synthetic-refreshed-access";
-      if (String(url) === "https://auth.openai.com/api/accounts/oauth/token") {
-        if (
-          input.headers.get("Content-Type") !== "application/x-www-form-urlencoded" ||
-          new URLSearchParams(raw).get("resource") !== "https://api.openai.com/v1" ||
-          new URLSearchParams(raw).get("client_id") !== "synthetic-client"
-        )
-          throw new Error("Wrong OpenAI pinned protocol");
-      } else if (String(url) === "https://platform.claude.com/v1/oauth/token") {
-        const payload = JSON.parse(raw) as Record<string, unknown>;
-        if (
-          payload.client_id !== "9d1c250a-e61b-44d9-88ed-5944d1962f5e" ||
-          payload.grant_type !== "refresh_token"
-        )
-          throw new Error("Wrong Anthropic pinned protocol");
-      } else if (String(url) === "https://auth.openai.com/oauth/token") {
-        if (
-          input.headers.get("Content-Type") !== "application/x-www-form-urlencoded" ||
-          new URLSearchParams(raw).get("client_id") !== "app_EMoamEEZ73f0CkXaXp7hrann"
-        )
-          throw new Error("Wrong Codex pinned protocol");
-        access = `e30.${btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "synthetic-account" } })).replaceAll("=", "")}.signature`;
-      } else throw new Error("Wrong fixed token endpoint");
-      if (this.tokenResponseMode === "redirect")
-        return new Response(null, {
-          status: 302,
-          headers: { Location: "https://untrusted.invalid/token" },
-        });
-      if (this.tokenResponseMode === "oversize")
-        return new Response("x".repeat(65537), { headers: { "Content-Type": "application/json" } });
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      return Response.json({
-        access_token: access,
-        refresh_token: "synthetic-refreshed-refresh",
-        expires_in: 7200,
-        scope: "openid chatgpt.tokens.use.direct",
-      });
-    };
+  constructor(
+    ctx: DurableObjectState,
+    env: Env,
+    wrapTransport: (transport: typeof fetch) => typeof fetch = (transport) => transport,
+  ) {
+    super(
+      ctx,
+      env,
+      wrapTransport((input, init) => this.#providerRequest(input, init)),
+    );
   }
+  #providerRequest: typeof fetch = async (input, init) => {
+    this.refreshCalls++;
+    if (!(input instanceof Request) || input.redirect !== "manual" || init !== undefined)
+      throw new Error("Real Worker request must prevent automatic credential forwarding");
+    const url = input.url;
+    const raw = await input.text();
+    let access = "synthetic-refreshed-access";
+    if (String(url) === "https://auth.openai.com/api/accounts/oauth/token") {
+      if (
+        input.headers.get("Content-Type") !== "application/x-www-form-urlencoded" ||
+        new URLSearchParams(raw).get("resource") !== "https://api.openai.com/v1" ||
+        new URLSearchParams(raw).get("client_id") !== "synthetic-client"
+      )
+        throw new Error("Wrong OpenAI pinned protocol");
+    } else if (String(url) === "https://platform.claude.com/v1/oauth/token") {
+      const payload = JSON.parse(raw) as Record<string, unknown>;
+      if (
+        payload.client_id !== "9d1c250a-e61b-44d9-88ed-5944d1962f5e" ||
+        payload.grant_type !== "refresh_token"
+      )
+        throw new Error("Wrong Anthropic pinned protocol");
+    } else if (String(url) === "https://auth.openai.com/oauth/token") {
+      if (
+        input.headers.get("Content-Type") !== "application/x-www-form-urlencoded" ||
+        new URLSearchParams(raw).get("client_id") !== "app_EMoamEEZ73f0CkXaXp7hrann"
+      )
+        throw new Error("Wrong Codex pinned protocol");
+      access = `e30.${btoa(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "synthetic-account" } })).replaceAll("=", "")}.signature`;
+    } else throw new Error("Wrong fixed token endpoint");
+    if (this.tokenResponseMode === "redirect")
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "https://untrusted.invalid/token" },
+      });
+    if (this.tokenResponseMode === "oversize")
+      return new Response("x".repeat(65537), { headers: { "Content-Type": "application/json" } });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    return Response.json({
+      access_token: access,
+      refresh_token: "synthetic-refreshed-refresh",
+      expires_in: 7200,
+      scope: "openid chatgpt.tokens.use.direct",
+    });
+  };
   async deployment(): Promise<string> {
     return this.ctx.id.toString();
   }
@@ -251,9 +327,16 @@ export class TestControlPlane extends ControlPlane {
   ): Promise<D.TargetReservation | undefined> {
     return this.store.get("reservation", `${principalId}:${operationId}`);
   }
-  async refuseWrites(kind: "capacity" | "issuance" | null): Promise<void> {
+  async refuseWrites(kind: "capacity" | "issuance" | "ticket" | null): Promise<void> {
     this.ctx.storage.sql.exec("DROP TRIGGER IF EXISTS test_refuse_write");
-    const allowed = kind === "capacity" ? "capacity" : kind === "issuance" ? "issuance" : undefined;
+    const allowed =
+      kind === "capacity"
+        ? "capacity"
+        : kind === "issuance"
+          ? "issuance"
+          : kind === "ticket"
+            ? "ticket"
+            : undefined;
     if (allowed)
       this.ctx.storage.sql.exec(
         `CREATE TRIGGER test_refuse_write BEFORE INSERT ON cp_records WHEN NEW.kind='${allowed}' BEGIN SELECT RAISE(ABORT,'synthetic storage refusal'); END`,
@@ -401,7 +484,12 @@ export type FixtureControl = DurableObject<Env> &
   ControlPlaneRpc &
   Pick<
     TestControlPlane,
+    | "capacityUsage"
+    | "capacitySettlement"
     | "deployment"
+    | "streamRegistration"
+    | "replaceTicketAgents"
+    | "clientStreamTicketExpiry"
     | "recoveredPresence"
     | "drainTest"
     | "canary"
@@ -432,6 +520,14 @@ export default {
     if (url.pathname === "/canary")
       return Response.json(await cp.canary(url.searchParams.get("value") ?? undefined));
     if (url.pathname === "/reserved") return Response.json(await cp.reserved());
+    if (url.pathname === "/capacity-usage")
+      return new Response(await cp.capacityUsage(), {
+        headers: { "Content-Type": "application/json" },
+      });
+    if (url.pathname === "/capacity-settlement")
+      return Response.json(
+        JSON.parse((await cp.capacitySettlement(url.searchParams.get("id") ?? "")) ?? "null"),
+      );
     if (url.pathname === "/repair-state")
       return new Response(await cp.repairState(), {
         headers: { "Content-Type": "application/json" },
@@ -463,7 +559,11 @@ export default {
         ),
       );
     }
-    if (["/auth", "/revoke-bootstrap", "/reserve", "/seed-provider"].includes(url.pathname)) {
+    if (
+      ["/auth", "/revoke-bootstrap", "/reserve", "/seed-provider", "/settle-conservative"].includes(
+        url.pathname,
+      )
+    ) {
       const auth = await cp.authenticate({
         bearer: env.FORTIPI_ADMIN_TOKEN,
         deploymentId: await cp.deployment(),
@@ -471,6 +571,22 @@ export default {
         deadline: Date.now() + 30000,
       });
       if (url.pathname === "/auth" || !auth.ok) return Response.json({ authenticated: auth.ok });
+      if (url.pathname === "/settle-conservative") {
+        const reserved = await cp.reserveCapacity(auth.value, {
+          operationId: "restart_conservative",
+          ownerId: "owner",
+          policyVersion: 1,
+          bytes: 4096,
+          admissionSlots: 0,
+        });
+        if (!reserved.ok) return Response.json(reserved);
+        return Response.json(
+          await cp.settleCapacity(auth.value, {
+            reservationId: reserved.value.reservationId,
+            disposition: "consumed",
+          }),
+        );
+      }
       if (url.pathname === "/seed-provider")
         return Response.json(
           await cp.putProviderAuth(auth.value, {

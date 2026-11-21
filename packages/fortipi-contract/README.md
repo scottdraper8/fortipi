@@ -2,10 +2,39 @@
 
 Protocol **1.0**, schema **1.0.0**. Package versions are independent. The fifteen
 [JSON Schema 2020-12 documents](./schemas/common.schema.json) are authoritative;
-[OpenAPI 3.1](./openapi.yaml) describes all 69 HTTP operations, their exact
+[OpenAPI 3.1](./openapi.yaml) describes all 74 HTTP operations, their exact
 path/query/body, success/error statuses, audience, grant action, and byte limits.
 `src/route-catalog.ts` owns route allocation, not handlers. OpenAPI uses JSON syntax
 (valid YAML 1.2), so the same bytes can serve `/v1/openapi.json`.
+
+The five `/v1/executor/jobs/{jobId}` transfer operations use executor credentials
+and the exact execution ID, assignment digest and current connection epoch.
+The server derives the workspace, binding, leased base and original registered
+owner from the retained attempted assignment. Its one current owner grant must
+cover dispatch, the reserved actions, tool and all resources. These routes grant
+access only to that execution's Computer working copy; they do not grant general
+workspace reads or allow the executor to commit the canonical revision.
+
+An existing native assignment awaiting local consent returns the closed
+`waiting_for_local_policy` observation with its exact approval operation. This is
+FortiPi's own wire state. It does not alter a model SDK, prove that restarting is
+safe, or turn an unknown execution into a pending one. Consumers validate the
+operation and current identity, preserve the lease/deadline, and reject delayed
+waiting responses that would regress a newer running, result or terminal state.
+After local approval, the current native incarnation reports `preparing` while
+that durable assignment is queued or its working copy is being materialized,
+before the winning start claim. This state carries the same exact operation;
+it neither claims a running child nor permits replay after a crash. An uncertain
+claim still reports unknown. Cloud adapters reject both native preparation and
+local-consent observations.
+
+An executor sends `job.committed_ack` only after it has durably applied the
+matching `job.committed` proof to its ledger. The acknowledgment echoes the full
+`JobCommitted` payload; duplicate delivery is acknowledged again. ControlPlane
+checks the current executor identity and connection epoch and the exact retained
+proof before retiring delivery recovery. The original command and transport
+receipt remain retained. This acknowledgment grants no execution or workspace
+authority and performs no new side effect.
 
 Generate with `node packages/fortipi-contract/scripts/generate.ts`, then run the
 same command with `--check`. Generation resolves only local allowlisted schema
@@ -29,6 +58,14 @@ authority allocate a scoped descriptor and repeat that correlated read with
 transfers to start the producer. These requests retain the operation scope but
 have distinct body-bound request/correlation identities. Metadata is not a
 canonical byte copy or a substitute for checking current bytes and authority.
+
+`AdminOperation.artifacts` uses closed `AdminArtifactReference` records with the
+actual agent/conversations or workspace/revision scope and an exact admin byte
+route. Agent exports need no workspace identity. Download through the existing
+`getAdminArtifact` operation; workspace `ByteReference` helpers retain their own
+route checks. Private export producers receive the actual `exports.create` or
+`backups.create` action. Descriptors confer no authority: the owner checks current
+grants, endpoint/ID correlation, measured size/hash and immutable retained bytes.
 
 `UploadBegin.blobs` supplies one `{sha256,chunks}` plan for every distinct
 declared put, including puts superseded by later ordered mutations. Local
@@ -91,6 +128,16 @@ Digest helpers project their named preimages even when a structurally typed inpu
 contains a complete renewed lease. Native local commits may omit uploadId: their
 preparation and observation identify the effect without inventing an upload.
 Computer commit digests require the actual upload and immutable seal.
+
+An `applied` local observation may include `postManifest`, the complete retained
+manifest for that operation. Legacy hash-only observations remain valid, but a
+changed native result cannot commit without the complete matching manifest.
+Other observation states forbid this field. The executor revalidates the root,
+current authority and actual hash; the service verifies the manifest digest and
+operation/base/execution/intent correlation before workspace commit validation.
+Existing manifest and complete-frame limits still apply; oversized observations
+fail closed without truncation or replay. Closed older validators reject the new
+field, so consumers must qualify the same contract revision together.
 
 Every wire Assignment requires closed `operationContext` with exactly deploymentId,
 agentId, conversationId and safe nonnegative policyVersion. Private ExecutionRequest
@@ -577,7 +624,7 @@ Public package declarations retain full checks.
 
 | Claim                    | Oracle / actual observation                                                                                                                                                             | Sensitivity / limit                                                                                                                                                                              |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Route/schema coverage    | Independently enumerated69 method/path pairs, exact generated matrices, every ref resolved by real strict Ajv2020; browser bundles resolve no dependencies                              | No HTTP handlers, network auth or deployment proved                                                                                                                                              |
+| Route/schema coverage    | Independently enumerated74 method/path pairs, exact generated matrices, every ref resolved by real strict Ajv2020; browser bundles resolve no dependencies                              | No HTTP handlers, network auth or deployment proved                                                                                                                                              |
 | Schema/wire semantics    | Fixed valid/invalid config, grant, local, transfer, OAuth, event and boundary fixtures accept/reject as specified                                                                       | Temporal authority/CAS/no-follow/durability remain consumer obligations                                                                                                                          |
 | Event compatibility      | Unknown durable cursor advances; malformed known/volatile-sequence frames reject                                                                                                        | Disposable schema mutation removes known-type exclusions; malformed-known oracle actually fails, restore passes                                                                                  |
 | Deterministic generation | Real generator and --check compare all outputs without writes                                                                                                                           | Disposable declaration and OpenAPI drift each fail; regenerated/restored check passes                                                                                                            |

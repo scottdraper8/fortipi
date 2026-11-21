@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { parse, parseAllDocuments } from "yaml";
 import { filesBelow, projects, repository } from "./build-workspaces.ts";
+import { dependencyPatches } from "./dependency-patches.ts";
 
 export interface Manifest {
   name: string;
@@ -50,6 +51,7 @@ export interface SupplyChain {
 }
 export interface Lock {
   lockfileVersion: string;
+  overrides?: Record<string, string>;
   importers: Record<string, Record<string, Record<string, { specifier: string; version: string }>>>;
   packages: Record<string, { resolution: { integrity: string }; hasBin?: boolean }>;
   snapshots?: Record<
@@ -79,15 +81,16 @@ export async function yaml<T>(root: string, path: string): Promise<T> {
   );
   assert.equal(
     documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.specifier,
-    "12.18.0",
+    "12.22.0",
   );
-  assert.equal(documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.version, "12.18.0");
+  assert.equal(documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.version, "12.22.0");
   assert.deepEqual(Object.keys(documents[0]?.importers ?? {}), ["."]);
   assert.deepEqual(Object.keys(documents[0]?.importers["."] ?? {}), [
     "configDependencies",
     "packageManagerDependencies",
   ]);
   assert.deepEqual(documents[0]?.importers["."]?.configDependencies, {});
+  assert.equal(documents[0]?.overrides, undefined, "Manager dependency overrides forbidden");
   for (const importer of Object.values(documents[1]?.importers ?? {}))
     assert.equal(
       importer.packageManagerDependencies,
@@ -96,6 +99,7 @@ export async function yaml<T>(root: string, path: string): Promise<T> {
     );
   // pnpm 12 separately locks its own native package-manager distribution.
   const result: Lock = { lockfileVersion: "9.0", importers: {}, packages: {} };
+  if (documents[1]?.overrides) result.overrides = documents[1].overrides;
   for (const doc of documents) {
     assert.equal(String(doc.lockfileVersion), "9.0");
     result.snapshots = { ...result.snapshots, ...doc.snapshots };
@@ -143,47 +147,69 @@ const requiredHooks = [
   "fortipi-unstale",
 ];
 
-export async function checkPins(root = repository): Promise<void> {
-  const review = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+/** Data validation only. The caller supplies actual current source/lock hashes;
+ * no receipt field can suppress the remaining full policy/graph checks. */
+export function reviewedAdvisory(
+  review: SupplyChain,
+  retained: unknown,
+  inputs: { reviewSha256: string; locks: Record<string, string> },
+  now = Date.now(),
+): SupplyChain["advisory"] {
   assert.equal(review.format, 1);
   assert.deepEqual(review.advisory.findings, [], "Unresolved security advisories");
   let advisory = review.advisory;
-  let fresh:
-    | {
-        format: number;
-        reviewSha256: string;
-        locks: Record<string, string>;
-        advisory: SupplyChain["advisory"];
-      }
-    | undefined;
-  try {
-    fresh = await json(root, "dist/supply-chain/advisory-review.json");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  if (fresh) {
+  if (retained !== undefined) {
+    assert.ok(
+      retained && typeof retained === "object" && !Array.isArray(retained),
+      "Invalid retained advisory review",
+    );
+    const fresh = retained as {
+      format: unknown;
+      reviewSha256: unknown;
+      locks: Record<string, unknown>;
+      advisory: SupplyChain["advisory"];
+    };
     assert.equal(fresh.format, 1);
-    for (const [path, expected] of Object.entries({
-      "tools/unstale/supply-chain.json": fresh.reviewSha256,
-      "pnpm-lock.yaml": fresh.locks["pnpm-lock.yaml"],
-      "tools/unstale/pnpm-lock.yaml": fresh.locks["tools/unstale/pnpm-lock.yaml"],
-    })) {
-      assert.equal(
-        createHash("sha256")
-          .update(await readFile(resolve(root, path)))
-          .digest("hex"),
-        expected,
-        `Fresh advisory review input changed: ${path}`,
-      );
-    }
+    assert.equal(
+      fresh.reviewSha256,
+      inputs.reviewSha256,
+      "Fresh advisory review input changed: tools/unstale/supply-chain.json",
+    );
+    for (const [path, expected] of Object.entries(inputs.locks))
+      assert.equal(fresh.locks?.[path], expected, `Fresh advisory review input changed: ${path}`);
     advisory = fresh.advisory;
   }
   assert.deepEqual(advisory.findings, [], "Unresolved security advisories");
-  const advisoryAge = Date.now() - Date.parse(advisory.checkedAt);
+  const age = now - Date.parse(advisory.checkedAt);
   assert.ok(
-    advisoryAge >= -60_000 && advisoryAge <= 86_400_000,
+    age >= -60_000 && age <= 86_400_000,
     "Advisory graph review is stale/invalid; rerun review-supply-chain.ts --locks --check",
   );
+  return advisory;
+}
+export async function checkPins(root = repository, retainedReview?: unknown): Promise<void> {
+  await dependencyPatches(root, true);
+  const review = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+  let fresh = retainedReview;
+  if (fresh === undefined) {
+    try {
+      fresh = await json(root, "dist/supply-chain/advisory-review.json");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  const hash = async (path: string) =>
+    createHash("sha256")
+      .update(await readFile(resolve(root, path)))
+      .digest("hex");
+  const advisoryInputs = {
+    reviewSha256: await hash("tools/unstale/supply-chain.json"),
+    locks: {
+      "pnpm-lock.yaml": await hash("pnpm-lock.yaml"),
+      "tools/unstale/pnpm-lock.yaml": await hash("tools/unstale/pnpm-lock.yaml"),
+    },
+  };
+  const advisory = reviewedAdvisory(review, fresh, advisoryInputs);
   const manifests = new Map<string, Manifest>();
   for (const path of manifestPaths) {
     const manifest = await json<Manifest>(root, path);
@@ -203,9 +229,9 @@ export async function checkPins(root = repository): Promise<void> {
       }
   }
   const top = manifests.get("package.json");
-  assert.equal(top?.packageManager, "pnpm@12.18.0");
+  assert.equal(top?.packageManager, "pnpm@12.22.0");
   assert.equal(manifests.get("tools/unstale/package.json")?.packageManager, top?.packageManager);
-  assert.equal(top?.fortipi?.toolchain.node, "26.13.0");
+  assert.equal(top?.fortipi?.toolchain.node, "26.13.1");
   const reviewedIdentities = new Set<string>();
   for (const prefix of ["", "tools/unstale/"]) {
     const policy = await yaml<Record<string, unknown>>(root, `${prefix}pnpm-workspace.yaml`);
@@ -234,10 +260,10 @@ export async function checkPins(root = repository): Promise<void> {
       "ignoreDepScripts",
       "neverBuiltDependencies",
       "pnpmfile",
-      "overrides",
       "packageExtensions",
     ])
       assert.equal(policy[key], undefined, `Forbidden policy override: ${key}`);
+    assert.equal(policy.overrides, undefined, "Unreviewed runtime override");
     const approvals = policy.allowBuilds as Record<string, boolean>;
     assert.ok(approvals && typeof approvals === "object");
     for (const [id, allowed] of Object.entries(approvals)) {
@@ -252,6 +278,7 @@ export async function checkPins(root = repository): Promise<void> {
         );
     }
     const lock = await yaml<Lock>(root, `${prefix}pnpm-lock.yaml`);
+    assert.equal(lock.overrides, undefined, "Runtime overrides forbidden in lock");
     assert.equal(String(lock.lockfileVersion), "9.0");
     const ids = new Set(Object.keys(lock.packages));
     for (const [id, node] of Object.entries(lock.snapshots ?? {})) {
@@ -388,7 +415,19 @@ export async function checkPins(root = repository): Promise<void> {
     }
   for (const path of await filesBelow(resolve(root, ".github/workflows"))) {
     const workflow = await yaml<{
-      jobs: Record<string, { steps: { uses?: string; with?: Record<string, unknown> }[] }>;
+      jobs: Record<
+        string,
+        {
+          steps: {
+            uses?: string;
+            with?: Record<string, unknown>;
+            run?: string;
+            if?: string;
+            shell?: string;
+            "timeout-minutes"?: number;
+          }[];
+        }
+      >;
     }>(root, relative(root, path));
     for (const [job, config] of Object.entries(workflow.jobs)) {
       const hardening = config.steps[0];
@@ -398,6 +437,14 @@ export async function checkPins(root = repository): Promise<void> {
         `${job}: harden-runner must be first`,
       );
       assert.equal(hardening.with?.["egress-policy"], "block", `${job}: block egress is required`);
+      const health = config.steps[1];
+      assert.ok(
+        health?.run === "/usr/bin/systemctl is-active --quiet agent.service" &&
+          health.if === "runner.os == 'Linux'" &&
+          health.shell === "bash" &&
+          health["timeout-minutes"] === 1,
+        `${job}: Linux hardener health gate must precede checkout and network steps`,
+      );
       const endpoints = hardening.with?.["allowed-endpoints"];
       assert.equal(typeof endpoints, "string", `${job}: explicit endpoints are required`);
       assert.ok(
@@ -413,9 +460,12 @@ export async function checkPins(root = repository): Promise<void> {
       assert.equal(sha, top?.fortipi?.actions[name]?.sha, `Unreviewed Action ${name}`);
     }
   }
+  reviewedAdvisory(review, fresh, advisoryInputs);
+}
+
+if (import.meta.main) {
+  await checkPins(rootArgument());
   console.log(
     "Pins: exact manifests, both locked archive graphs, lifecycle/age policy and protected hooks verified",
   );
 }
-
-if (import.meta.main) await checkPins(rootArgument());

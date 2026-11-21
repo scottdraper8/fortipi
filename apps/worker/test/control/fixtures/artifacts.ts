@@ -1,4 +1,5 @@
 import type * as D from "../../../src/boundary/dto.js";
+import { permits, roleAllows } from "../../../src/control/authorization.js";
 import { same } from "../../../src/control/store.js";
 import { TestRecipient as BaseRecipient } from "./recipients.js";
 import type { FixtureControl } from "./worker.js";
@@ -73,6 +74,49 @@ export default {
   },
 };
 export class TestControlPlane extends BaseControlPlane {
+  private epochRelease: (() => void) | undefined;
+  private epochEntered = false;
+  async gateEpoch(stage: "hash" | "arm" | "drain"): Promise<void> {
+    this.epochEntered = false;
+    const gate = new Promise<void>((resolve) => {
+      this.epochRelease = resolve;
+    });
+    if (stage === "hash") {
+      const original = crypto.subtle.digest.bind(crypto.subtle);
+      crypto.subtle.digest = async (algorithm, data) => {
+        crypto.subtle.digest = original;
+        this.epochEntered = true;
+        await gate;
+        return original(algorithm, data);
+      };
+    } else if (stage === "arm") {
+      const original = this.store.arm.bind(this.store);
+      this.store.arm = async (at) => {
+        this.store.arm = original;
+        this.epochEntered = true;
+        await gate;
+        return original(at);
+      };
+    } else {
+      const original = this.delivery.drainCommand.bind(this.delivery);
+      this.delivery.drainCommand = async (key, executors) => {
+        this.delivery.drainCommand = original;
+        this.epochEntered = true;
+        await gate;
+        return original(key, executors);
+      };
+    }
+  }
+  async epochGateEntered(): Promise<boolean> {
+    return this.epochEntered;
+  }
+  async releaseEpochGate(): Promise<void> {
+    this.epochRelease?.();
+    this.epochRelease = undefined;
+  }
+  async epochCommands(): Promise<string> {
+    return JSON.stringify(this.store.page("command", 0, 16).map((row) => row.value));
+  }
   async refuseArtifactInbox(enabled: boolean): Promise<void> {
     this.ctx.storage.sql.exec("DROP TRIGGER IF EXISTS fixture_refuse_artifact_inbox");
     if (enabled)
@@ -109,6 +153,10 @@ export type ArtifactControl = FixtureControl &
     | "registrationRecord"
     | "leaseRecord"
     | "refuseArtifactInbox"
+    | "gateEpoch"
+    | "epochGateEntered"
+    | "releaseEpochGate"
+    | "epochCommands"
   >;
 /** Controlled durable proof authorities. They assert the private transport contract, not source3/5 enforcement. */
 export class TestRecipient extends BaseRecipient {
@@ -138,29 +186,32 @@ export class TestRecipient extends BaseRecipient {
     const body = await request.text();
     await this.ctx.storage.put("proof-last", { path, auth, body });
     const payload = JSON.parse(body) as D.JobCommitted;
-    const authorized = await this.env.CONTROL_PLANE.getByName("control").authorize({
-      principal: auth,
-      action: workspace
-        ? auth.grants.some(
-            (g) =>
-              g.resources.actions.includes("workspace.write") || g.resources.actions.includes("*"),
-          )
-          ? "workspace.write"
-          : "workspace.read"
-        : "jobs.dispatch",
-      resources: {
-        agentIds: ["agent"],
-        conversationIds: ["conversation"],
-        workspaceIds: ["workspace"],
-        executorIds: ["executor"],
-        backendIds: [],
-        tools: [],
-        actions: [],
-      },
-    });
+    const action = workspace
+      ? auth.grants.some(
+          (g) =>
+            g.resources.actions.includes("workspace.write") || g.resources.actions.includes("*"),
+        )
+        ? "workspace.write"
+        : "workspace.read"
+      : "jobs.dispatch";
+    const resources = {
+      agentIds: ["agent"],
+      conversationIds: ["conversation"],
+      workspaceIds: ["workspace"],
+      executorIds: ["executor"],
+      backendIds: [],
+      tools: [],
+      actions: [action],
+    };
+    // Match the real private proof peers: local current authority, no nested CP admission.
+    const current = async () =>
+      auth.deadline > Date.now() &&
+      (auth.credentialExpiresAt === null || auth.credentialExpiresAt > Date.now()) &&
+      auth.generation >= (await this.floor(`credential:${auth.credentialId}`)) &&
+      roleAllows(auth, action) &&
+      permits(auth.grants, resources, action);
     if (
-      !authorized.ok ||
-      !authorized.value.allowed ||
+      !(await current()) ||
       new TextEncoder().encode(body).length > 65536 ||
       !auth.registrationId ||
       (agent && path !== `/__fortipi/terminal-proof/${payload.identity.jobId}`)
@@ -171,6 +222,7 @@ export class TestRecipient extends BaseRecipient {
       return new Response(" ".repeat(65537), { headers: { "Cache-Control": "no-store" } });
     if (mode === "hold") await new Promise((resolve) => setTimeout(resolve, 800));
     if (mode === "hold-grant") await new Promise((resolve) => setTimeout(resolve, 2500));
+    if (!(await current())) return new Response(null, { status: 403 });
     const stored = await this.ctx.storage.get<D.JobCommitted>("proof");
     if (mode === "wrong-event" && stored)
       return Response.json(

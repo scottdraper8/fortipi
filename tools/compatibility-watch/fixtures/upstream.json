@@ -22,5 +22,22 @@
     "target_commitish": "main",
     "published_at": "2026-11-10T12:00:00Z",
     "body": "Synthetic fixture release note."
+  },
+  "meson": {
+    "release": {
+      "id": 394176810,
+      "draft": false,
+      "prerelease": false,
+      "tag_name": "1.12.1",
+      "target_commitish": "master",
+      "published_at": "2026-09-22T22:58:10Z",
+      "body": ""
+    },
+    "tagRef": {
+      "object": { "type": "tag", "sha": "958d178d20ffa043ed64a95e3e7af3632b4d1c45" }
+    },
+    "tag": {
+      "object": { "type": "commit", "sha": "70598bb7825f0f804fb31ec2795de5e79e7692a0" }
+    }
   }
 }

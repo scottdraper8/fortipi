@@ -61,9 +61,9 @@ async function main(): Promise<void> {
   for (const [id, record] of work) {
     let parent: string | undefined;
     if (id.startsWith("@esbuild/")) parent = "esbuild@0.28.2";
-    else if (id.startsWith("@biomejs/cli-")) parent = "@biomejs/biome@2.6.6";
-    else if (id.startsWith("@rolldown/binding-")) parent = "rolldown@1.3.1";
-    else if (id.startsWith("@cloudflare/workerd-")) parent = "workerd@1.20261110.1";
+    else if (id.startsWith("@biomejs/cli-")) parent = `@biomejs/biome@${record.version}`;
+    else if (id.startsWith("@rolldown/binding-")) parent = `rolldown@${record.version}`;
+    else if (id.startsWith("@cloudflare/workerd-")) parent = `workerd@${record.version}`;
     if (parent) {
       const source = supply.packages[parent];
       assert.ok(source);
