@@ -357,6 +357,11 @@ async function admissionMultiplicity(main: string, observe: Observe) {
     );
     observe("retry-admission", "exit");
     assert.equal(reply.status, 202, "Original accepted identity must remain retryable");
+    assert.equal(
+      reply.body.taskId,
+      originalTask,
+      "Retry must return the original accepted task identity",
+    );
     observe("retry-completion", "enter");
     await poll(
       async () =>
@@ -389,11 +394,6 @@ async function admissionMultiplicity(main: string, observe: Observe) {
       count,
       1,
       "Stable admission must retain one actual Pi input across a lost accepted response",
-    );
-    assert.equal(
-      reply.body.taskId,
-      originalTask,
-      "Retry must return the original accepted task identity",
     );
     return {
       actualPiInputs: count,
@@ -430,6 +430,19 @@ function falsifier(kind: Kind, error: unknown): Record<string, unknown> | undefi
       actualStaleOperationStatus: 200,
       requiredStatus: 403,
       actualAllowedDecisionBarrierReached: true,
+    };
+  if (
+    kind === "admission-identity" &&
+    typeof error.actual === "string" &&
+    typeof error.expected === "string" &&
+    error.actual !== error.expected &&
+    error.operator === "strictEqual" &&
+    error.message.split("\n")[0] === "Retry must return the original accepted task identity"
+  )
+    return {
+      changedAcceptedTaskIdentity: true,
+      requiredOriginalTaskIdentity: true,
+      actualAcceptedRetryStatus: 202,
     };
   if (
     kind === "admission-identity" &&

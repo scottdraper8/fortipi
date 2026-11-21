@@ -225,9 +225,10 @@ export function buildRegistry(deps: {
           String(task.input.conversationId),
         );
         if (mapped) {
-          const more = await projection.entries(mapped.conversationId);
-          if (more) {
-            await runtime.sleepUntil(Date.now() + 1, { phase: "project" }, context);
+          const progress = await projection.advance(mapped.conversationId);
+          if (progress.more) {
+            const delay = progress.blockedOnAdmission ? 5000 : 1;
+            await runtime.sleepUntil(Date.now() + delay, { phase: "project" }, context);
             return;
           }
         }
