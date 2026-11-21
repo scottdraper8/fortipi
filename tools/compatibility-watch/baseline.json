@@ -102,20 +102,20 @@
     "agents-lifecycle": {
       "catalogSha256": "6845cb5c33905cbac363710a051956451ab229dde00e4dbaf1cd5a9a7fbca352",
       "snapshot": {
-        "commit": "8d8acd0dd2a3b30d226e9f24e96557ebfd948374",
+        "commit": "56f5d5cc635df14d36a6a08b8e5a56113f08fb33",
         "version": "0.34.0",
         "paths": {
-          "packages/agents": "b5af0fcab41fa6007dbab01beceae4fd3c40c35d2170d5aeb337a402728e5137",
+          "packages/agents": "2dc23fcf41a6ff834c08fe3603661ed9ee7540345fa74892261319932d5ec49f",
           "packages/agents/package.json": "1bcc8ff9ad014b4a73c303e64c8e3a6e1a17562aa975864746e1209a420099ab",
           "docs/agents/harnesses/pi.md": "0f1bd86f6c404f053c250a33b1c98cb073b4cd4d47b5ec0faf5f62f2ba44e417"
         },
-        "sha256": "54c5e0ee902880f6d689b9213c759ed2a2e6dc2abaae984dd283d79714be91ad"
+        "sha256": "7ffb065c17dbe0920ef60a43cf9a444f22db4a7903fca637758ce7f9888203fb"
       },
       "pins": {
         "apps/worker/package.json#dependencies/agents": "0.34.0"
       },
-      "reviewedAt": "2026-11-21T05:36:33.085Z",
-      "reviewNote": "Reviewed81726f7d..8d8acd0d,4commits/62paths. Current exact agents0.34.0 published provenance resolves to8d8acd0d, identical to watched main; Pi peers are~1.6.0 and all current Pi pins are1.6.0. Lazy root creation/atomic init, wake scheduled before signal delivery, notify/onAbort and gateway-wire changes are shipped0.34 APIs, not an unpublished port requirement. Maintained AgentSession supplies onWake to Harness.open and uses PiHarness; hookTask is already adopted. Keep durable state forward-only across incompatible prior task versions. No source-only observation establishes runtime, provider, image or release compatibility. Evidence: current-lookahead-review/report.md."
+      "reviewedAt": "2026-11-21T13:51:56.305Z",
+      "reviewNote": "Reviewed exact8d8acd0d..56f5d5cc lookahead interval (10commits/138repository paths,69watched paths) from full Git objects; GitHub comparison omitted later patches. PiHarness, Lifecycle, WebSockets, pi-ai adapters, retries, manifest/exports/peers and Pi harness docs are byte-identical. Non-chat Agent changes concern child-run tail/reattach recovery and sequence cursors; observability adds continuation/repair fields and agent-tool types clarify same-isolate abort. FortiPi extends DurableObject with the unchanged capabilities, not Agent/AIChatAgent/Think, and does not call the changed Agent child-run APIs. Future chat turn-core/admission/recovery changes are inventoried, not fully behaviorally qualified or adopted. Installed agents0.34.0 remains authenticated published8d8acd0d with Pi1.6 peers; no pins, installed release reference, product, schema or migration changed. Source-only watch acknowledgment does not establish runtime/provider/native/deployed compatibility. Evidence:agents-56f5-review/report.md."
     },
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
