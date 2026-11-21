@@ -225,10 +225,9 @@ export function buildRegistry(deps: {
           String(task.input.conversationId),
         );
         if (mapped) {
-          const more = await projection.entries(mapped.conversationId);
-          if (more) {
-            // Admission repair needs a host turn; history pagination can continue promptly.
-            const delay = (await projection.hasPendingInput(mapped.conversationId)) ? 5000 : 1;
+          const progress = await projection.advance(mapped.conversationId);
+          if (progress.more) {
+            const delay = progress.blockedOnAdmission ? 5000 : 1;
             await runtime.sleepUntil(Date.now() + delay, { phase: "project" }, context);
             return;
           }

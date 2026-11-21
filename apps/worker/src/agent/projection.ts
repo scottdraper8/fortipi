@@ -12,22 +12,15 @@ export class Projection {
   constructor(conversations: Conversations) {
     this.conversations = conversations;
   }
-  async hasPendingInput(cid: string): Promise<boolean> {
-    const { store } = this.conversations.host;
-    const unmapped = await store.db.get<{ id: string }>(
-      "SELECT id FROM fp_records_v1 WHERE kind='input-pending' AND id>=? AND id<? LIMIT 1",
-      `${cid}:`,
-      `${cid};`,
-    );
-    return !!unmapped;
-  }
   async entries(cid: string): Promise<boolean> {
+    return (await this.advance(cid)).more;
+  }
+  async advance(cid: string): Promise<{ more: boolean; blockedOnAdmission: boolean }> {
     const { store, pi } = this.conversations.host;
     const row = await store.get<ConversationRow>("conversation", cid);
     check(row, "not_found", "Conversation unavailable");
-    // Pi may publish its user entry before the app receives the admission reply.
-    // Preserve causal order until every earlier placed input has its canonical ID.
-    if (await this.hasPendingInput(cid)) return true;
+    // Read the Pi page first: every owned input on it already has its durable
+    // admission intent. A later queued input cannot fence this earlier page.
     const page = await pi.session(row.piId).entries(
       {
         order: "ascending",
@@ -36,10 +29,50 @@ export class Projection {
       100,
       BACKGROUND_CONTEXT,
     );
+    const blocked = await this.#pendingEntries(row, new Set(page.items.map((entry) => entry.id)));
     for (const entry of page.items)
-      if (!row.bookmark || entry.id > Number(row.bookmark))
+      if (!row.bookmark || entry.id > Number(row.bookmark)) {
+        if (blocked.has(entry.id) && !(await store.get("input-entry", `${row.piId}:${entry.id}`)))
+          return { more: true, blockedOnAdmission: true };
         await this.conversations.projectEntry(row, entry);
-    return !!page.next;
+      }
+    return { more: !!page.next, blockedOnAdmission: false };
+  }
+  async #pendingEntries(row: ConversationRow, visible: Set<number>): Promise<Set<number>> {
+    const { store, pi } = this.conversations.host;
+    const blocked = new Set<number>();
+    if (!visible.size) return blocked;
+    const prefix = `${row.conversation.conversationId}:`;
+    const upper = `${row.conversation.conversationId};`;
+    let cursor = prefix;
+    // Bound each read and working set independently of the account's current
+    // admission limit, so lowering a plan cannot prevent older work recovering.
+    for (;;) {
+      const pending = await store.db.all<{ id: string }>(
+        "SELECT id FROM fp_records_v1 WHERE kind='input-pending' AND id>? AND id<? ORDER BY id LIMIT 100",
+        cursor,
+        upper,
+      );
+      if (!pending.length) return blocked;
+      const harness = await pi.pi();
+      const records = await harness.commit(
+        (tx) =>
+          Promise.all(
+            pending.map((input) =>
+              tx.submissionByRequest(
+                Number(row.piId) as ConversationId,
+                input.id.slice(prefix.length),
+              ),
+            ),
+          ),
+        BACKGROUND_CONTEXT,
+      );
+      for (const record of records)
+        if (record?.entry !== undefined && visible.has(record.entry)) blocked.add(record.entry);
+      const last = pending.at(-1);
+      if (pending.length < 100 || !last) return blocked;
+      cursor = last.id;
+    }
   }
   async admission(admission: Admission): Promise<boolean> {
     const { store, pi } = this.conversations.host;
