@@ -6,7 +6,11 @@ import { dirname, resolve } from "node:path";
 import type { Attribution, LicensePolicy } from "../tools/unstale/review-attributions.ts";
 import { archiveEntries, hash, licenseEntries } from "../tools/unstale/review-supply-chain.ts";
 import { packagePaths, repository } from "./build-workspaces.ts";
-import { type RuntimeConveyanceReceipt, reviewRuntimeConveyance } from "./check-licenses.ts";
+import {
+  archiveLicensePath,
+  type RuntimeConveyanceReceipt,
+  reviewRuntimeConveyance,
+} from "./check-licenses.ts";
 import type { Lock, Manifest, Review, SupplyChain } from "./check-pins.ts";
 import { json, yaml } from "./check-pins.ts";
 import { dependencyPatches, patchStatus } from "./dependency-patches.ts";
@@ -204,13 +208,14 @@ async function noticeInputs(root: string) {
       });
     }
     for (const [path, digest] of Object.entries(review.licenses).sort()) {
+      const portable = safe(archiveLicensePath(path));
       const bytes = text(
-        await file(root, `dist/supply-chain/licenses/${id.replaceAll("/", "__")}/${safe(path)}`),
+        await file(root, `dist/supply-chain/licenses/${id.replaceAll("/", "__")}/${portable}`),
         path,
       );
       assert.equal(hash(bytes), digest, `Checked license text changed: ${id}/${path}`);
       assert.deepEqual(bytes, entries.get(path), `Archive license text differs: ${id}/${path}`);
-      texts.push({ path: `archive/${path}`, source: `${id}/${path}`, bytes });
+      texts.push({ path: `archive/${portable}`, source: `${id}/${path}`, bytes });
     }
     const attribution = policy.attributions[id];
     if (

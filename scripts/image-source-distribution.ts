@@ -937,7 +937,7 @@ export async function verifySourceKit(
     assert.ok(path && digest);
     assert.equal(file(ownSource, path).sha256, digest, "Source revision metadata differs");
   }
-  assert.deepEqual([revision.node, revision.pnpm, revision.tar], ["26.13.1", "12.18.0", "7.5.22"]);
+  assert.deepEqual([revision.node, revision.pnpm, revision.tar], ["26.13.1", "12.22.0", "7.5.22"]);
   for (const name of ["computerd-build.ts", "security-update.ts", "trixie-security.InRelease"])
     file(entries, `source-kit-recipe/${name}`);
   assert.equal(

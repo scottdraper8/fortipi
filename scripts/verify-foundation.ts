@@ -155,7 +155,7 @@ export async function egressChecks(): Promise<void> {
     console.log("macOS StepSecurity network extension: activated and enabled");
   }
   const allowedRegistry = async () => {
-    const response = await fetch("https://registry.npmjs.org/pnpm/12.18.0", {
+    const response = await fetch("https://registry.npmjs.org/pnpm/12.22.0", {
       signal: AbortSignal.timeout(15_000),
     });
     try {

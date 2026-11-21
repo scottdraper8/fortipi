@@ -128,21 +128,21 @@ test("actual five supported packs produce source-bound staged legal files and pe
       const wasm = receipt.conveyance.components.find(
         (item) => item.archiveId === "blake3-wasm@2.1.5",
       );
-      assert.equal(wasm?.files.filter((file) => file.archivePath.endsWith(".wasm")).length, 3);
+      assert.equal(wasm, undefined);
       const miniflare = receipt.conveyance.components.find(
-        (item) => item.archiveId === "miniflare@5.20261113.0-beta",
+        (item) => item.archiveId === "miniflare@5.20261119.0-beta",
       );
       assert.ok(miniflare);
       const markdown = miniflare.files.filter((file) => file.archivePath.endsWith(".wasm"));
       assert.equal(markdown.length, 1);
       assert.equal(markdown[0]?.archivePath, "dist/src/mdream_edge_bg.wasm");
-      assert.equal(markdown[0]?.size, 239214);
+      assert.equal(markdown[0]?.size, 266878);
       assert.equal(
         markdown[0]?.sha256,
-        "db48fb63ec419083fdcd2100171bb5f40c5086164a9fe939286927727c91256b",
+        "3b774a60a939b34c30002b8d135f445f9b5ddbe83bf20b9a0e5f70dee77f8c39",
       );
       const markdownNotices = receipt.texts.filter(
-        (item) => item.archiveId === miniflare.archiveId && item.path.includes("/mdream/2.0.3/"),
+        (item) => item.archiveId === miniflare.archiveId && item.path.includes("/mdream/2.1.0/"),
       );
       assert.equal(markdownNotices.length, 4);
       const rustNotices = markdownNotices.find((item) => item.path.endsWith("RUST-NOTICES.md"));
@@ -238,7 +238,7 @@ test("actual five supported packs produce source-bound staged legal files and pe
 });
 
 test("the exact reviewed Markdown dependency member rejects archive, path, hash, license and attribution substitutions", async () => {
-  const source = closure.archives.find((item) => item.id === "miniflare@5.20261113.0-beta");
+  const source = closure.archives.find((item) => item.id === "miniflare@5.20261119.0-beta");
   assert.ok(source);
   const member = source.files.find((file) => file.path === "dist/src/mdream_edge_bg.wasm");
   assert.ok(member);
@@ -288,7 +288,7 @@ test("the genuine Markdown dependency bytes remain forbidden in owned outputs ev
       mode: constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE,
     });
   }
-  const id = "miniflare@5.20261113.0-beta";
+  const id = "miniflare@5.20261119.0-beta";
   const entries = archiveEntries(
     await regularBytes(resolve(facts, `dist/supply-chain/archives/${sha256(id)}.tgz`)),
   );

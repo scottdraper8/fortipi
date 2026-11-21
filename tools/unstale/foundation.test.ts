@@ -59,7 +59,7 @@ test("Windows package-manager locator resolves the installed native binary witho
     await writeFile(resolve(bin, "pnpm.cmd"), "Fixture shim: never executed");
     await writeFile(
       resolve(packageDirectory, "package.json"),
-      JSON.stringify({ name: "pnpm", version: "12.18.0" }),
+      JSON.stringify({ name: "pnpm", version: "12.22.0" }),
     );
     const native = resolve(packageDirectory, "pnpm.exe");
     await writeFile(native, "Fixture binary: path resolution only, never executed");
@@ -70,7 +70,7 @@ test("Windows package-manager locator resolves the installed native binary witho
     await mkdir(optionalDirectory, { recursive: true });
     await writeFile(
       resolve(optionalDirectory, "package.json"),
-      JSON.stringify({ name: optionalName, version: "12.18.0" }),
+      JSON.stringify({ name: optionalName, version: "12.22.0" }),
     );
     const optional = resolve(optionalDirectory, "pnpm.exe");
     await writeFile(optional, "Fixture optional binary: never executed");
@@ -79,7 +79,7 @@ test("Windows package-manager locator resolves the installed native binary witho
       resolve(packageDirectory, "package.json"),
       JSON.stringify({ name: "pnpm", version: "11.0.0" }),
     );
-    await assert.rejects(() => pnpmExecutable("win32", [bin]), /reviewed pnpm 12.18.0/);
+    await assert.rejects(() => pnpmExecutable("win32", [bin]), /reviewed pnpm 12.22.0/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -88,7 +88,7 @@ test("Windows package-manager locator resolves the installed native binary witho
 test("package-manager verification rejects a real executable with the wrong version", async () => {
   await assert.rejects(
     () => verifyPnpmExecutable(process.execPath),
-    /reviewed pnpm 12.18.0 native installation/,
+    /reviewed pnpm 12.22.0 native installation/,
   );
 });
 
@@ -105,14 +105,14 @@ test("Windows self-update shim selects the pinned engine instead of its older bo
       JSON.stringify({ name: "pnpm", version: "12.17.0" }),
     );
     const manifest = resolve(engine, "package.json");
-    await writeFile(manifest, JSON.stringify({ name: "pnpm", version: "12.18.0" }));
+    await writeFile(manifest, JSON.stringify({ name: "pnpm", version: "12.22.0" }));
     const native = resolve(engine, "pnpm.exe");
     await writeFile(native, "Fixture binary: never executed");
     // Pinned pnpm's generated shim ends in this raw data marker; no shell is evaluated.
     await writeFile(resolve(bin, "pnpm"), `#!/bin/sh\n# cmd-shim-target=${native}\r\n`);
     assert.equal(await pnpmExecutable("win32", [bin]), native);
     await writeFile(manifest, JSON.stringify({ name: "pnpm", version: "12.17.0" }));
-    await assert.rejects(() => pnpmExecutable("win32", [bin]), /reviewed pnpm 12.18.0/);
+    await assert.rejects(() => pnpmExecutable("win32", [bin]), /reviewed pnpm 12.22.0/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -200,8 +200,8 @@ test("reject manager resolution drift in the first pnpm lock document", async ()
   await fixture(async (root) => {
     const path = resolve(root, "pnpm-lock.yaml");
     const text = await readFile(path, "utf8");
-    assert.ok(text.includes("version: 12.18.0"));
-    await writeFile(path, text.replace("version: 12.18.0", "version: 12.17.0"));
+    assert.ok(text.includes("version: 12.22.0"));
+    await writeFile(path, text.replace("version: 12.22.0", "version: 12.17.0"));
   }, /12\.17\.0/);
 });
 

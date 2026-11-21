@@ -1614,6 +1614,42 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fkv-asset-handler@0.5.0; Sigstore transparency verification required at release"
     },
+    "@cloudflare/kv-asset-handler@0.5.1": {
+      "name": "@cloudflare/kv-asset-handler",
+      "version": "0.5.1",
+      "integrity": "sha512-48OysfSW3MkQY1XjkhkpPkgrEkOvgfoyHzA2eyX5wpzFpijC02uWigv3hkNdJdT3C7ybW/U17yYHXeR68pLeww==",
+      "published": "2026-11-18T21:35:37.905Z",
+      "reviewedAt": "2026-11-21T01:19:52.243Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "d4caeaf9eda2506ab9272a8d99bafb8e75d488f3bf923d6c2ab812e685773b9f",
+      "manifestSha256": "09910345ca432308f6d9571d5d6f10858bb5e158dedaa2142ed26227899bea5b",
+      "engines": {
+        "node": ">=22.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fkv-asset-handler@0.5.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/puppeteer@2.0.1": {
+      "name": "@cloudflare/puppeteer",
+      "version": "2.0.1",
+      "integrity": "sha512-u3rr+2iQzpA+l+LyzFO5aY0ssJyN+V1pm9xqmJXcSMldk6Uepr+hp4wunP5W0gYfuvo1N+J16xuyVIjcNpqV6Q==",
+      "published": "2026-11-16T14:44:24.612Z",
+      "reviewedAt": "2026-11-21T01:24:00.795Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "47b060acb04edac4cfe334587795aa5915f76dd571da5a474b2808709dc19f9f",
+      "manifestSha256": "a2740daf45f5fa0ff8ac4ed76fbe4a909dc553bfcb250bad15ae4fd1ca812585",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fpuppeteer@2.0.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/unenv-preset@2.16.2": {
       "name": "@cloudflare/unenv-preset",
       "version": "2.16.2",
@@ -1986,6 +2022,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261119.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workers-utils@0.56.0": {
+      "name": "@cloudflare/workers-utils",
+      "version": "0.56.0",
+      "integrity": "sha512-Fw3/zR+pQp+5hKn1CHIRkCYz49fyAb2qRqCq01jBGqlKL0rRnZyXYD4j0h9cjaWPYYQUOe5y6L7BNp2ZwsHg5A==",
+      "published": "2026-11-20T18:02:52.873Z",
+      "reviewedAt": "2026-11-21T01:19:52.450Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "4cc50fe385788f1c09d07d7e8fee10dc72a8b947cb28b579e9fe45e318cf665c",
+      "manifestSha256": "0f6ecbecefb4ff738ab52b97c8264007ffee1a68796cbaab04e81ab774b711e1",
+      "engines": {},
+      "peers": {
+        "vitest": "^4.1.0 || ^5.0.0"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-utils@0.56.0; Sigstore transparency verification required at release"
     },
     "@cspotcode/source-map-support@0.8.1": {
       "name": "@cspotcode/source-map-support",
@@ -3529,6 +3584,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.android-arm64@12.18.0; Sigstore transparency verification required at release"
     },
+    "@pnpm/exe.android-arm64@12.22.0": {
+      "name": "@pnpm/exe.android-arm64",
+      "version": "12.22.0",
+      "integrity": "sha512-n0kwk3uOtWGaSMJWUuxG8fLefRonw8jR27dhGzMcDz79Um37QKPLEGZAZF37iASbb2yBBQFl4hue6/SfQnmIdA==",
+      "published": "2026-11-17T20:01:00.355Z",
+      "reviewedAt": "2026-11-21T02:20:25.794Z",
+      "license": "MIT",
+      "archiveSha256": "98716543335d4d6a062dcc6d246823a271c821ad1109d8025643fa4dbcb072e5",
+      "manifestSha256": "096c7b2825291d550fa8eb170d28b039348b7adb4ff6e9bf73be0251b7909ca3",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.android-arm64@12.22.0; Sigstore transparency verification required at release"
+    },
     "@pnpm/exe.android-x64@12.18.0": {
       "name": "@pnpm/exe.android-x64",
       "version": "12.18.0",
@@ -3547,6 +3621,25 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.android-x64@12.18.0; Sigstore transparency verification required at release"
+    },
+    "@pnpm/exe.android-x64@12.22.0": {
+      "name": "@pnpm/exe.android-x64",
+      "version": "12.22.0",
+      "integrity": "sha512-1HERYEdvJEjU5p/lyI8g3YNEVdvVz6+omaqI1pKotZB9w92BlSXr0xTqur8X/8GAiE4B/pwZi8+eAi4v+KQVHg==",
+      "published": "2026-11-17T20:00:57.425Z",
+      "reviewedAt": "2026-11-21T02:20:26.354Z",
+      "license": "MIT",
+      "archiveSha256": "c25f3cba1055ec3573dc975a09a7dbe8bdc73090ad7b27561fb03414af566393",
+      "manifestSha256": "06f09025dfe3afaf42ecf2cc112d945769fbba8f64b6004417b8725e230a8de7",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.android-x64@12.22.0; Sigstore transparency verification required at release"
     },
     "@pnpm/exe.darwin-arm64@12.18.0": {
       "name": "@pnpm/exe.darwin-arm64",
@@ -3567,6 +3660,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.darwin-arm64@12.18.0; Sigstore transparency verification required at release"
     },
+    "@pnpm/exe.darwin-arm64@12.22.0": {
+      "name": "@pnpm/exe.darwin-arm64",
+      "version": "12.22.0",
+      "integrity": "sha512-CU0m1tFFVW2QD2PDVTsdejYGoPzhMq04l/MnwhpCuM2iBXkMXqV52kH24U5A2SYULV4Y/TTYsKL5InKZblVNvw==",
+      "published": "2026-11-17T20:00:53.985Z",
+      "reviewedAt": "2026-11-21T02:20:24.628Z",
+      "license": "MIT",
+      "archiveSha256": "07a1437593a2cf67299d5c4406c3c6c9a589337137394c36f9b477932e97a408",
+      "manifestSha256": "450ee998279c040a83112fd4daf5887825c25cd2e56ca601dbb760b9a171a97c",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.darwin-arm64@12.22.0; Sigstore transparency verification required at release"
+    },
     "@pnpm/exe.darwin-x64@12.18.0": {
       "name": "@pnpm/exe.darwin-x64",
       "version": "12.18.0",
@@ -3585,6 +3697,25 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.darwin-x64@12.18.0; Sigstore transparency verification required at release"
+    },
+    "@pnpm/exe.darwin-x64@12.22.0": {
+      "name": "@pnpm/exe.darwin-x64",
+      "version": "12.22.0",
+      "integrity": "sha512-XjVoliuAZjcyQJVymR+n3xmkw3SBME3Sg7wjKBTNbOaTGe3RLIkXt8D9YXOoSnET8gyhQrY8fwThFT+Ki6IVNw==",
+      "published": "2026-11-17T20:00:50.927Z",
+      "reviewedAt": "2026-11-21T02:20:26.163Z",
+      "license": "MIT",
+      "archiveSha256": "7ada0dc35444973ed245d9c65137145e7d3ce5b63088ae8724993b89b58fbb67",
+      "manifestSha256": "447a11fc45b85af6f906ff1fbb70d6631716e7bb8ec5df556340a6d4449cdc2f",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.darwin-x64@12.22.0; Sigstore transparency verification required at release"
     },
     "@pnpm/exe.freebsd-x64@12.18.0": {
       "name": "@pnpm/exe.freebsd-x64",
@@ -3605,6 +3736,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.freebsd-x64@12.18.0; Sigstore transparency verification required at release"
     },
+    "@pnpm/exe.freebsd-x64@12.22.0": {
+      "name": "@pnpm/exe.freebsd-x64",
+      "version": "12.22.0",
+      "integrity": "sha512-BefdhvM+nrLXHCRVFmNv5yp4Zhwz29nEP+UPhsvGRRp4YRzgmyxT9r0lVts3Lg0FzcKOtPbM3o0Hyb2y0JF3yw==",
+      "published": "2026-11-17T20:00:47.934Z",
+      "reviewedAt": "2026-11-21T02:20:29.258Z",
+      "license": "MIT",
+      "archiveSha256": "734ce8aca8faafadf91d1ea6a502236834b8c11d13afca39fe0cbf77e3300311",
+      "manifestSha256": "453c61af3013c133fc11682a25005d1d53c50918df2f9bcbac67fe19765a93bf",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.freebsd-x64@12.22.0; Sigstore transparency verification required at release"
+    },
     "@pnpm/exe.linux-arm64-musl@12.18.0": {
       "name": "@pnpm/exe.linux-arm64-musl",
       "version": "12.18.0",
@@ -3623,6 +3773,25 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-arm64-musl@12.18.0; Sigstore transparency verification required at release"
+    },
+    "@pnpm/exe.linux-arm64-musl@12.22.0": {
+      "name": "@pnpm/exe.linux-arm64-musl",
+      "version": "12.22.0",
+      "integrity": "sha512-72fwiRonMxFAY4Fb611eTaR+8bYwH91SnWCg3aODjhigCMURFe5Pom+TtYM/GMrme2yirGkHbpzU2u0lMMCwTQ==",
+      "published": "2026-11-17T20:00:41.375Z",
+      "reviewedAt": "2026-11-21T02:20:30.065Z",
+      "license": "MIT",
+      "archiveSha256": "11933204ac67665a08d9cc641efcb000e64ca020554df048ab8680b0101d49f0",
+      "manifestSha256": "d2de2cf86887746de73a5997005bdcbac01c7b3c17e20849ce4fdf7af5a9e80d",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-arm64-musl@12.22.0; Sigstore transparency verification required at release"
     },
     "@pnpm/exe.linux-arm64@12.18.0": {
       "name": "@pnpm/exe.linux-arm64",
@@ -3643,6 +3812,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-arm64@12.18.0; Sigstore transparency verification required at release"
     },
+    "@pnpm/exe.linux-arm64@12.22.0": {
+      "name": "@pnpm/exe.linux-arm64",
+      "version": "12.22.0",
+      "integrity": "sha512-1MZ3GfFCFckquAJP6WZ985Lrd5MP5YNA7vPZH79W+1QVzwl55fVMdsAOczdGnFeU4jqMwERnk129/1g9zYxhDw==",
+      "published": "2026-11-17T20:00:44.572Z",
+      "reviewedAt": "2026-11-21T02:20:30.525Z",
+      "license": "MIT",
+      "archiveSha256": "e02f7b7e2736e7cb4c787b91f94895c36a64f8b845d3bd96cbd62a84c398bbe4",
+      "manifestSha256": "818582b9d16d875f0153031dcfe43231473c7e6f381af25de02c11ceecef9b4b",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-arm64@12.22.0; Sigstore transparency verification required at release"
+    },
     "@pnpm/exe.linux-ppc64@12.18.0": {
       "name": "@pnpm/exe.linux-ppc64",
       "version": "12.18.0",
@@ -3661,6 +3849,25 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-ppc64@12.18.0; Sigstore transparency verification required at release"
+    },
+    "@pnpm/exe.linux-ppc64@12.22.0": {
+      "name": "@pnpm/exe.linux-ppc64",
+      "version": "12.22.0",
+      "integrity": "sha512-JOmNBnncDB+9pa8ddtIp9qrLrKwvgzV92xWEFAXSBrDcPIIAdD7imtk3kZnoiApdRzPbQHHj6JJKKVmOUXN0Bw==",
+      "published": "2026-11-17T20:00:38.233Z",
+      "reviewedAt": "2026-11-21T02:20:30.950Z",
+      "license": "MIT",
+      "archiveSha256": "0f96306fac03dceb9bf3ae9853902163ff975af396898ee5b31802d20b678c4b",
+      "manifestSha256": "b2e88380444752575eaaa6999314dee4859b0faf09276a4bc5ee8a6f8f6a7df0",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-ppc64@12.22.0; Sigstore transparency verification required at release"
     },
     "@pnpm/exe.linux-riscv64@12.18.0": {
       "name": "@pnpm/exe.linux-riscv64",
@@ -3681,6 +3888,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-riscv64@12.18.0; Sigstore transparency verification required at release"
     },
+    "@pnpm/exe.linux-riscv64@12.22.0": {
+      "name": "@pnpm/exe.linux-riscv64",
+      "version": "12.22.0",
+      "integrity": "sha512-4oJ2VAuzpEnySBxZ9uz9dwIZYqOcgJ7FWIFdPDf9QbkYo8NbskZ2ySgHwlDVnvQYGhTM45kFRDwjfhKYZJJ9PQ==",
+      "published": "2026-11-17T19:55:00.050Z",
+      "reviewedAt": "2026-11-21T02:20:33.651Z",
+      "license": "MIT",
+      "archiveSha256": "b9bc38f9f6c0a61a876023efd1ba05072690f2090e84d1b069452bf16242aff9",
+      "manifestSha256": "865d2608fad51360bf8ebabb8189e51bef72abbf3e2deef581a50b7a7a1c924d",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-riscv64@12.22.0; Sigstore transparency verification required at release"
+    },
     "@pnpm/exe.linux-s390x@12.18.0": {
       "name": "@pnpm/exe.linux-s390x",
       "version": "12.18.0",
@@ -3699,6 +3925,25 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-s390x@12.18.0; Sigstore transparency verification required at release"
+    },
+    "@pnpm/exe.linux-s390x@12.22.0": {
+      "name": "@pnpm/exe.linux-s390x",
+      "version": "12.22.0",
+      "integrity": "sha512-wLbmg1e+9qAUbqZ29/BUvAQwiZtvgzKg3kjDIN4tkxrCATnneM2G0agFpD9yLHD3FT5J8bUB8RWSur5vqm4Vnw==",
+      "published": "2026-11-17T19:54:57.002Z",
+      "reviewedAt": "2026-11-21T02:20:35.765Z",
+      "license": "MIT",
+      "archiveSha256": "69a24147d4e227cc4371799a36737b0fb6a0d3ec38c74decb261ce9d30c18d91",
+      "manifestSha256": "a8dae07975106c52f119019f1cad0ff44bc15bdfda1a16a10824e76c8998af08",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-s390x@12.22.0; Sigstore transparency verification required at release"
     },
     "@pnpm/exe.linux-x64-musl@12.18.0": {
       "name": "@pnpm/exe.linux-x64-musl",
@@ -3719,6 +3964,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-x64-musl@12.18.0; Sigstore transparency verification required at release"
     },
+    "@pnpm/exe.linux-x64-musl@12.22.0": {
+      "name": "@pnpm/exe.linux-x64-musl",
+      "version": "12.22.0",
+      "integrity": "sha512-ODMJgTVHvs/WOqQKE9Am5u7RztsNjXZpkn73z9z4SsU7Dtrr/3IQkjvsF1MGM9hbhMdGwl2BHAW91eCCipIsHQ==",
+      "published": "2026-11-17T19:54:46.489Z",
+      "reviewedAt": "2026-11-21T02:20:35.274Z",
+      "license": "MIT",
+      "archiveSha256": "a7726178020b1344f6141541d20c956faa01fcbf5b8e2e2450a50f05bdbd2cda",
+      "manifestSha256": "a98776de8fc00dafda810122128f6105a05e84dc6721c2479a1f4d2818579f27",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-x64-musl@12.22.0; Sigstore transparency verification required at release"
+    },
     "@pnpm/exe.linux-x64@12.18.0": {
       "name": "@pnpm/exe.linux-x64",
       "version": "12.18.0",
@@ -3737,6 +4001,44 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-x64@12.18.0; Sigstore transparency verification required at release"
+    },
+    "@pnpm/exe.linux-x64@12.22.0": {
+      "name": "@pnpm/exe.linux-x64",
+      "version": "12.22.0",
+      "integrity": "sha512-iBAZAYCYoow6g0aObKmprKkIBGO72mK4KFfqIrY7jIdHRkAbN67tcN0zgaPE39UAEdMcrkLhLwEml+VMxf8h8Q==",
+      "published": "2026-11-17T19:54:51.597Z",
+      "reviewedAt": "2026-11-21T02:20:35.527Z",
+      "license": "MIT",
+      "archiveSha256": "c0362f05e75732a8099e8aa7ec10faba7594e87ae14c768729270680d4151eae",
+      "manifestSha256": "b55d5241335d0181d5bb9ec18d95a03f51be39c2e00e26944e265f34e656fbdf",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.linux-x64@12.22.0; Sigstore transparency verification required at release"
+    },
+    "@pnpm/exe.netbsd-x64@12.22.0": {
+      "name": "@pnpm/exe.netbsd-x64",
+      "version": "12.22.0",
+      "integrity": "sha512-5y9seaGcEL2OH5p9PG1cZRnSQKENvzK8hTsTjkFxUxXM84OCDvSlaSLr4ABrjrxWKlo4k8bjnmW7NEwznlowGA==",
+      "published": "2026-11-17T19:54:42.985Z",
+      "reviewedAt": "2026-11-21T02:20:37.845Z",
+      "license": "MIT",
+      "archiveSha256": "1120fcbb60c9407186a25db036b928265ad05e6d7def4eefff1f56d08fc9e62d",
+      "manifestSha256": "e493fdbbe8c9efb9f4969a95f0bc8f5756a4fa96047486d6043ee6141b0e44e1",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.netbsd-x64@12.22.0; Sigstore transparency verification required at release"
     },
     "@pnpm/exe.win32-arm64@12.18.0": {
       "name": "@pnpm/exe.win32-arm64",
@@ -3757,6 +4059,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.win32-arm64@12.18.0; Sigstore transparency verification required at release"
     },
+    "@pnpm/exe.win32-arm64@12.22.0": {
+      "name": "@pnpm/exe.win32-arm64",
+      "version": "12.22.0",
+      "integrity": "sha512-eMJWsyECSWxhGDQwPokhES8dJX0dsu7E0tUfhxAaUnFxX7oBKKNS7kBY9yY75sNq4CmMNLjhOtBwrVjd3bQ1Hg==",
+      "published": "2026-11-17T19:54:39.914Z",
+      "reviewedAt": "2026-11-21T02:20:38.321Z",
+      "license": "MIT",
+      "archiveSha256": "85ec0d370b803c1f7cc3b8fe352cfc8d6eca7762004f1f7e61613bafd4cf8211",
+      "manifestSha256": "aa7be58a58945e4f56a68d8f5ad476f742d0eb8640043d4ec0512cdba754f448",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.win32-arm64@12.22.0; Sigstore transparency verification required at release"
+    },
     "@pnpm/exe.win32-x64@12.18.0": {
       "name": "@pnpm/exe.win32-x64",
       "version": "12.18.0",
@@ -3775,6 +4096,25 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.win32-x64@12.18.0; Sigstore transparency verification required at release"
+    },
+    "@pnpm/exe.win32-x64@12.22.0": {
+      "name": "@pnpm/exe.win32-x64",
+      "version": "12.22.0",
+      "integrity": "sha512-d0D0GIiDkdiUiENlz3sMOR3arSsApaXtBZl2+rDwbwtQJ5IIBopf4KVTSZDPr09yl2NUVglCS5roveGKpYCWOg==",
+      "published": "2026-11-17T19:54:36.687Z",
+      "reviewedAt": "2026-11-21T02:20:38.837Z",
+      "license": "MIT",
+      "archiveSha256": "e8d2686c994ac14a4b8f30ea02142c9810ddb92108d8367c8c95e257f0f9d211",
+      "manifestSha256": "1d1508b592bb2144621d58ef463a691af929f7f52d38490b858d90b544d6d8cd",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@pnpm%2fexe.win32-x64@12.22.0; Sigstore transparency verification required at release"
     },
     "@poppinss/colors@4.1.6": {
       "name": "@poppinss/colors",
@@ -4695,6 +5035,44 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "@types/node-fetch@2.6.13": {
+      "name": "@types/node-fetch",
+      "version": "2.6.13",
+      "integrity": "sha512-QGpRVpzSaUs30JBSGPjOg4Uveu384erbHBoT1zeONvyCfwQxIkUshLAOqN/k9EjGviPRmWTTe6aH2qySWKTVSw==",
+      "published": "2025-07-29T23:36:07.349Z",
+      "reviewedAt": "2026-11-21T01:19:52.241Z",
+      "license": "MIT",
+      "archiveSha256": "5d7f15de6f2614c3c08a4ddc2b51151ca219ca189018cf8f8b2e60c219291d49",
+      "manifestSha256": "a10fe67cd7bb746ab9a0fd0ac35190566eaedf2e54bc97b012490825603d2c1b",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "node-fetch/LICENSE": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@types/node@18.19.130": {
+      "name": "@types/node",
+      "version": "18.19.130",
+      "integrity": "sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==",
+      "published": "2025-10-09T17:35:38.540Z",
+      "reviewedAt": "2026-11-21T01:19:52.362Z",
+      "license": "MIT",
+      "archiveSha256": "30e36412dac091a634407127bea2c712c55de136e33c2d234b1529bb876418ca",
+      "manifestSha256": "e65d989fc7db9c38c5bc3d6c4bd6f742bbb7d500f91561e39a3f55483d11eaa7",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "node v18.19/LICENSE": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "@types/node@26.6.6": {
       "name": "@types/node",
       "version": "26.6.6",
@@ -4729,6 +5107,44 @@
       "scriptFiles": {},
       "licenses": {
         "retry/LICENSE": "dea9265341829002e2c23a7372393eb2ed6e26085fb623f38a4ba0af833f30a6"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "@types/yargs-parser@21.0.3": {
+      "name": "@types/yargs-parser",
+      "version": "21.0.3",
+      "integrity": "sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==",
+      "published": "2023-11-07T21:37:05.125Z",
+      "reviewedAt": "2026-11-21T01:19:52.389Z",
+      "license": "MIT",
+      "archiveSha256": "db762df1f459d7a9401ace02649c22d9edb52614d48d73ed3173fb1d8b4f5bc0",
+      "manifestSha256": "3c530a00514e42749bb5538ce8f99d30e0be5d0e62977136e9f44e5f17d883ae",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "yargs-parser/LICENSE": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "@types/yargs@17.0.24": {
+      "name": "@types/yargs",
+      "version": "17.0.24",
+      "integrity": "sha512-6i0aC7jV6QzQB8ne1joVZ0eSFIstHsCrobmOtghM11yGlH0j43FKL2UhWdELkyps0zuf7qVTUVCCR+tgSlyLLw==",
+      "published": "2023-03-27T18:38:00.815Z",
+      "reviewedAt": "2026-11-21T01:19:52.437Z",
+      "license": "MIT",
+      "archiveSha256": "ac1e0478cdcc1b82095910b7e41f07522bdf0fc0d7cabad3a0d581655b0b1f51",
+      "manifestSha256": "c7482cfc62b51a8e17902fb86350006fb679daafb8955c0072585e428bec2542",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "yargs/LICENSE": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
       },
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
@@ -5327,6 +5743,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/abbrev@5.0.0; Sigstore transparency verification required at release"
     },
+    "abort-controller@3.0.0": {
+      "name": "abort-controller",
+      "version": "3.0.0",
+      "integrity": "sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==",
+      "published": "2019-03-30T09:15:32.384Z",
+      "reviewedAt": "2026-11-21T01:19:52.509Z",
+      "license": "MIT",
+      "archiveSha256": "d2e249d5d010eb18e57c12c610d63e3ca3fa9dd0a5378009c1f465e21f50ab2f",
+      "manifestSha256": "3d64dcdcf9d0a1d045eb6bcaa5013d486f15527a3668e64b1155839a797da164",
+      "engines": {
+        "node": ">=6.5"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "dbbf03317f0101fed5643cd87ca80fb769e358fa4f428445bf2315deeb23a154"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "agent-base@7.1.4": {
       "name": "agent-base",
       "version": "7.1.4",
@@ -5368,6 +5805,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/agent-base@9.0.0; Sigstore transparency verification required at release"
+    },
+    "agentkeepalive@4.6.0": {
+      "name": "agentkeepalive",
+      "version": "4.6.0",
+      "integrity": "sha512-kja8j7PjmncONqaTsB8fQ+wE2mSU2DJ9D4XKoJ5PFWIdRMa6SLSN1ff4mOr4jCbfRSsxR4keIiySJU0N9T5hIQ==",
+      "published": "2024-12-29T02:57:11.450Z",
+      "reviewedAt": "2026-11-21T01:19:52.524Z",
+      "license": "MIT",
+      "archiveSha256": "c3de7513f9246cf89fcd2ba0460140a125c59d7be55639fbb985577571d1569a",
+      "manifestSha256": "8bdeeb4c6f66678c3a97b2fbc3a0c93b9e03dc021e85145859e1c72be7526822",
+      "engines": {
+        "node": ">= 8.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "1069803cb5c8700c35bda7de55532d6fd50faa0b583c698a6f8d232bd4c248f7"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
     },
     "agents@0.33.0": {
       "name": "agents",
@@ -5467,6 +5925,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "asynckit@0.4.0": {
+      "name": "asynckit",
+      "version": "0.4.0",
+      "integrity": "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==",
+      "published": "2016-06-14T18:29:05.418Z",
+      "reviewedAt": "2026-11-21T01:19:52.932Z",
+      "license": "MIT",
+      "archiveSha256": "8c254f30f70792645042e4d71f590ec49f8e386a475772f7430c73b964b57dcf",
+      "manifestSha256": "63eb9ff63be2e241ee6e80434d4641d6e9b5157d88bd3bbb692fcb2dfc8da4a9",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "1953150d5d4b10c7542cee6f6e0c613b2682545233f069d75cfff1936386ce10"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "base64-js@1.5.1": {
       "name": "base64-js",
       "version": "1.5.1",
@@ -5506,6 +5983,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/baseline-browser-mapping@2.11.35; Sigstore transparency verification required at release"
+    },
+    "basic-ftp@6.2.6": {
+      "name": "basic-ftp",
+      "version": "6.2.6",
+      "integrity": "sha512-0EjZCaodOz6yiokv2JA1VyKGNdGxULZ+GGlPgG9tm4d+T/bHtX1hUch8CumDneBfpIbiSdn7TaCGwpM+gwsOlw==",
+      "published": "2026-11-04T20:58:51.621Z",
+      "reviewedAt": "2026-11-21T01:24:00.587Z",
+      "license": "MIT",
+      "archiveSha256": "1b74e42bac3fcbe2f860beb2aabe20e549c3227e426bfdca089d0639b4163696",
+      "manifestSha256": "9fad4430ff32160f61c9145e4db6e7a4489477eaa5f54f4aa76528e60ef006f1",
+      "engines": {
+        "node": ">=10.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE.txt": "5b417c1f5ee996875e86b4959851c94e102edbbb3c68199bd3336c7351c924f9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/basic-ftp@6.2.6; Sigstore transparency verification required at release"
     },
     "bignumber.js@9.3.1": {
       "name": "bignumber.js",
@@ -5609,6 +6107,27 @@
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
     },
+    "call-bind-apply-helpers@1.0.2": {
+      "name": "call-bind-apply-helpers",
+      "version": "1.0.2",
+      "integrity": "sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==",
+      "published": "2025-02-12T19:24:56.950Z",
+      "reviewedAt": "2026-11-21T01:19:52.604Z",
+      "license": "MIT",
+      "archiveSha256": "073e9ff9dbabedf5c128020a677381e9f92c90188d118830b30a7656a7c37d2c",
+      "manifestSha256": "59639b628c6846f674857c6a613fd47e2e4d2a24036cdf0f7a62ac634f4c8a5f",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
     "caniuse-lite@1.0.30001823": {
       "name": "caniuse-lite",
       "version": "1.0.30001823",
@@ -5627,6 +6146,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/caniuse-lite@1.0.30001823; Sigstore transparency verification required at release"
+    },
+    "capnp-es@0.0.17": {
+      "name": "capnp-es",
+      "version": "0.0.17",
+      "integrity": "sha512-uIm/Aju0TNUkL51aBbhPl/2fWsSMiqDjnTnPYyx6oCAQReGCRDl7kZPDNZFer2WhOwR9+B/72olbxUV1GgoKbw==",
+      "published": "2026-11-09T07:56:02.770Z",
+      "reviewedAt": "2026-11-21T01:24:00.616Z",
+      "license": "MIT",
+      "archiveSha256": "67944269dc192ca9b08543ac08653ba86938958203255545ba0b83ca4958dd4d",
+      "manifestSha256": "75a839143756a33e79585f96be8a6dcd18fce7bdf802acb36ffebaa4598a7b82",
+      "engines": {},
+      "peers": {
+        "typescript": "^5.7.3 || ^6.0.0"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "1e3e80b1ea81cf154dddf089e9cd24cd09f5b7d9d0bbd382bee99ae24a0f9f6f"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
     },
     "capnweb@0.12.0": {
       "name": "capnweb",
@@ -5647,6 +6187,48 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/capnweb@0.12.0; Sigstore transparency verification required at release"
     },
+    "chalk@5.3.0": {
+      "name": "chalk",
+      "version": "5.3.0",
+      "integrity": "sha512-dLitG79d+GV1Nb/VYcCDFivJeK1hiukt9QjRNVOsUtTy1rR1YJsmpGGTZ3qJos+uw7WmWF4wUwBd9jxjocFC2w==",
+      "published": "2023-06-29T10:58:11.887Z",
+      "reviewedAt": "2026-11-21T01:19:52.650Z",
+      "license": "MIT",
+      "archiveSha256": "02ae1fe87987a93d08098699e0dd5a029ecd0f81466d497de5c9262077e232e9",
+      "manifestSha256": "ff033c93b0d4256138f9e4c59283d9f5ffbb0630bf2e87a1b15033e51cddc582",
+      "engines": {
+        "node": "^12.17.0 || ^14.13 || >=16.0.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/license": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "chokidar@4.0.3": {
+      "name": "chokidar",
+      "version": "4.0.3",
+      "integrity": "sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA==",
+      "published": "2024-12-18T22:21:34.451Z",
+      "reviewedAt": "2026-11-21T01:24:00.603Z",
+      "license": "MIT",
+      "archiveSha256": "61a29da9d314c2cd33a7be7327014814c4620673e3d4be41b120aa8544868389",
+      "manifestSha256": "4764fed21a281c69d98e06b4c3e7c22a8936069ed2d320330d9831d8a8bddd5a",
+      "engines": {
+        "node": ">= 14.16.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "bdfd5e0edb6089e6586c8f15e6a86fab83ffbeeda3b3b7b33734ccb8c5906965"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "chownr@3.0.0": {
       "name": "chownr",
       "version": "3.0.0",
@@ -5664,6 +6246,47 @@
       "scriptFiles": {},
       "licenses": {
         "package/LICENSE.md": "a49c9ba464796f65b59fca3f1e6ca40912df1e859f575383223f7ec6c5baae09"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "cloudflare@5.2.0": {
+      "name": "cloudflare",
+      "version": "5.2.0",
+      "integrity": "sha512-dVzqDpPFYR9ApEC9e+JJshFJZXcw4HzM8W+3DHzO5oy9+8rLC53G7x6fEf9A7/gSuSCxuvndzui5qJKftfIM9A==",
+      "published": "2025-10-02T10:21:14.283Z",
+      "reviewedAt": "2026-11-21T01:19:52.909Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "16f2ab36827c79aaaba761f6388dc46d81ae12ee9da231f492537824428525f5",
+      "manifestSha256": "09d7f1aa8357158b65f523a6e17c266c3f48b266354cb8e8d3e3a557326692a1",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "9ae223044ad95fa327df2dedc769844e721050edb9bf0352dcf791e76f0f99ef",
+        "package/src/internal/qs/LICENSE.md": "d8c77eaffed7f1f874b97f66ee47a557ae24fd59bae8ae14f9b1b84f26a94d2f"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "combined-stream@1.0.8": {
+      "name": "combined-stream",
+      "version": "1.0.8",
+      "integrity": "sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==",
+      "published": "2019-05-12T17:49:45.337Z",
+      "reviewedAt": "2026-11-21T01:19:52.833Z",
+      "license": "MIT",
+      "archiveSha256": "b6be5aabe53e90635beb77cd0e0ba7ae6a25c8cf903b15fcc342353e732e1512",
+      "manifestSha256": "761adece21443081ae818fe0e18864d7fa03f387075b89afa6cc5dd98356fafa",
+      "engines": {
+        "node": ">= 0.8"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/License": "47eb8ca82c798246774946d1be0f9aa08f025fa8325ced0947aeeb4c05fe5547"
       },
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
@@ -5837,6 +6460,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "delayed-stream@1.0.0": {
+      "name": "delayed-stream",
+      "version": "1.0.0",
+      "integrity": "sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==",
+      "published": "2015-04-30T22:10:29.726Z",
+      "reviewedAt": "2026-11-21T01:19:52.814Z",
+      "license": "MIT",
+      "archiveSha256": "ac38fce4217dfb1d772427c7d8d0d073e35ecd832915e97a61d9ab5c504129d3",
+      "manifestSha256": "4f5bd886efbd8feda6ac04db6ac1aa8b2e8dfc159503b0652667e1bc88efd4cb",
+      "engines": {
+        "node": ">=0.4.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/License": "47eb8ca82c798246774946d1be0f9aa08f025fa8325ced0947aeeb4c05fe5547"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "detect-libc@2.1.2": {
       "name": "detect-libc",
       "version": "2.1.2",
@@ -5858,6 +6502,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/detect-libc@2.1.2; Sigstore transparency verification required at release"
     },
+    "devtools-protocol@0.0.1182435": {
+      "name": "devtools-protocol",
+      "version": "0.0.1182435",
+      "integrity": "sha512-EmlkWb62wSbQNE1gRZZsi4KZYRaF5Skpp183LhRU7+sadKR06O1dHCjZmFSEG6Kv7P6S/UYLxcY3NlYwqKM99w==",
+      "published": "2023-08-11T04:26:21.296Z",
+      "reviewedAt": "2026-11-21T01:19:53.074Z",
+      "license": "BSD-3-Clause",
+      "archiveSha256": "ae172a8e40a86a6c13f06bdca36666d1cfd34d2f234e8e31252326efae23a166",
+      "manifestSha256": "1c58d543567c7818bb4bf82d7524e6b9cc293fb30c00925dfa03534b16a90906",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "7a209dd1b94cabdb5ea9c6f9164b9546ffa5daaa671e7767d49510db055f5c51"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "diff@8.0.4": {
       "name": "diff",
       "version": "8.0.4",
@@ -5877,6 +6540,48 @@
         "package/LICENSE": "eda81a415869e67809f6a9f3fd6056062cb83a462118e07eec5e92b2e0c40ce9"
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "dotenv@16.3.1": {
+      "name": "dotenv",
+      "version": "16.3.1",
+      "integrity": "sha512-IPzF4w4/Rd94bA9imS68tZBaYyBWSCE47V1RGuMrB94iyTOIEwRmVL2x/4An+6mETpLrKJ5hQkB8W4kFAadeIQ==",
+      "published": "2023-06-17T16:47:53.971Z",
+      "reviewedAt": "2026-11-21T01:19:53.224Z",
+      "license": "BSD-2-Clause",
+      "archiveSha256": "2e4101233953ae94349e08a26df333a033972e8ba0abf5a80f4e441de188ca8b",
+      "manifestSha256": "f8f2bc0895006d86b5143081d5007f9cde463877d88c86cf37704d8c8fd7cc50",
+      "engines": {
+        "node": ">=12"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "74b629b24865e1e83c5277ee84590b7937644d6fd959d0c7bdce758676cd2ced"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "dunder-proto@1.0.1": {
+      "name": "dunder-proto",
+      "version": "1.0.1",
+      "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
+      "published": "2024-12-17T02:12:47.047Z",
+      "reviewedAt": "2026-11-21T01:19:53.047Z",
+      "license": "MIT",
+      "archiveSha256": "ed1342228c82c10df9921c59d684df516a0cd6ed25b61e5f9d6330895326cfdb",
+      "manifestSha256": "24df71008e4225c858f389dd2728b76cf66b752256d42a38ed7930aacae7fe2b",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
     },
     "ecdsa-sig-formatter@1.0.11": {
@@ -5978,6 +6683,90 @@
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
     },
+    "es-define-property@1.0.1": {
+      "name": "es-define-property",
+      "version": "1.0.1",
+      "integrity": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
+      "published": "2024-12-06T18:16:02.148Z",
+      "reviewedAt": "2026-11-21T01:19:53.071Z",
+      "license": "MIT",
+      "archiveSha256": "5986b8b13121340a8b0d5c7d8f0f961aa80ef3a74515ca9cb7a78d86ed0385f7",
+      "manifestSha256": "3a2cb30dae30a96705dcd9aa2d5fb190cf8200f27badccfa5a81a4374e5708b4",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "es-errors@1.3.0": {
+      "name": "es-errors",
+      "version": "1.3.0",
+      "integrity": "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==",
+      "published": "2024-02-05T08:05:51.479Z",
+      "reviewedAt": "2026-11-21T01:19:53.184Z",
+      "license": "MIT",
+      "archiveSha256": "d14dd1c35b4bd3b8aca3219fd3627eb7f3eb49cf6b4c8a7ca58b91fd7a190993",
+      "manifestSha256": "1a0a0bcccc76b915cb64073317312840cf6363e9144b96f406d0059774dd5278",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "es-object-atoms@1.1.2": {
+      "name": "es-object-atoms",
+      "version": "1.1.2",
+      "integrity": "sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==",
+      "published": "2026-05-22T14:40:03.961Z",
+      "reviewedAt": "2026-11-21T01:19:53.201Z",
+      "license": "MIT",
+      "archiveSha256": "f295c5df6751c65b4b9492b03c88fab5e13419de28a51ecdf17e693b4a421af0",
+      "manifestSha256": "e4b7882975d10c68457945c883e1060d0b058af5b1216215c872263f42e12fc9",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "es-set-tostringtag@2.1.0": {
+      "name": "es-set-tostringtag",
+      "version": "2.1.0",
+      "integrity": "sha512-j6vWzfrGVfyXxge+O0x5sh6cvxAog0a/4Rdd2K36zCMV5eJ+/+tOAngRO8cODMNWbVRdVlmGZQL2YS3yR8bIUA==",
+      "published": "2025-01-02T04:44:14.435Z",
+      "reviewedAt": "2026-11-21T01:19:53.202Z",
+      "license": "MIT",
+      "archiveSha256": "5675f51a5c33ee402bff8a2a341a0390f85e82d3c199859244d2f67091b0b93d",
+      "manifestSha256": "c9506942c9ef472286aff079bb65b7f3edcaccbc7f59fac9f419787b570086e5",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "1a3aeb1f1398bd697d57c3c585faadf59d825aca6e3162cd7eeb72ff76eb2466"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "esbuild@0.28.2": {
       "name": "esbuild",
       "version": "0.28.2",
@@ -6039,6 +6828,27 @@
       "scriptFiles": {},
       "licenses": {
         "package/LICENSE": "2b83b63825dc264ca736b6b03addde4daad5cb57f67fc559178efa93c2b4a1b0"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "event-target-shim@5.0.1": {
+      "name": "event-target-shim",
+      "version": "5.0.1",
+      "integrity": "sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ==",
+      "published": "2019-02-19T06:00:52.075Z",
+      "reviewedAt": "2026-11-21T01:19:53.355Z",
+      "license": "MIT",
+      "archiveSha256": "f0717da2cde5c703b92e66906623724959c23ac14e9439c436b84c8a4f5b26bc",
+      "manifestSha256": "980bdd7706c72d04a4df2e3ee2c8ffccf3bc72bd8e7cd13ca38be00cafc6e8db",
+      "engines": {
+        "node": ">=6"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "97d87142793695cd73243de7258694abe85b3b6060fca7f247b0a2afa8219678"
       },
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
@@ -6245,6 +7055,67 @@
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
     },
+    "form-data-encoder@1.7.2": {
+      "name": "form-data-encoder",
+      "version": "1.7.2",
+      "integrity": "sha512-qfqtYan3rxrnCk1VYaA4H+Ms9xdpPqvLZa6xmMgFvhO32x7/3J/ExcTd6qpxM0vH2GdMI+poehyBZvqfMTto8A==",
+      "published": "2022-03-26T17:28:23.714Z",
+      "reviewedAt": "2026-11-21T01:19:53.353Z",
+      "license": "MIT",
+      "archiveSha256": "10fe00473ef143d5320cd84502ff41d24c586b98ad4cb9f9dd0ec5d10a25dbbe",
+      "manifestSha256": "13ede8cf63fea3f7549c9393c1f64edf57e4785787b43cda9743a31daa1ad822",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/license": "cd1dfbe6a9f582a5a9417cc42ca369cfb333ba5f914b1f40faad4222bf57f380"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "form-data@4.0.6": {
+      "name": "form-data",
+      "version": "4.0.6",
+      "integrity": "sha512-vKatAh4SlVfgbv+YtmhiRjhEMJsYpsG1Y2rMQtR+SVSbytsSD1YGzDIcrAJmdFec88u/+VoGmxnl+80gL1tRCQ==",
+      "published": "2026-06-12T17:37:53.689Z",
+      "reviewedAt": "2026-11-21T01:19:53.335Z",
+      "license": "MIT",
+      "archiveSha256": "fc4d94e9b629f5378367ba46da7d96115696c01e25c99cd57c2c9a3d098bb557",
+      "manifestSha256": "d5222c863d975ddefb3ec2c012d3c3ab92f51ef8f3f5c3080dee02c79d217665",
+      "engines": {
+        "node": ">= 6"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/License": "e5b780d4f38d1d3328e3e53186c4e62d3fa149ea6f2bacd5de5ad0c30ac85343"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "formdata-node@4.4.1": {
+      "name": "formdata-node",
+      "version": "4.4.1",
+      "integrity": "sha512-0iirZp3uVDjVGt9p49aTaqjk84TrglENEDuqfdlZQ1roC9CWlPk6Avf8EEnZNcAqPonwkG35x4n3ww/1THYAeQ==",
+      "published": "2022-08-22T09:47:44.953Z",
+      "reviewedAt": "2026-11-21T01:19:53.370Z",
+      "license": "MIT",
+      "archiveSha256": "89ef68c1218e49930edf9e635bd3b2e7beb9e4fb9248171a38da56f14e468fc4",
+      "manifestSha256": "5ea8e24f7e4e775adb189ae8f11c0cebd9fc6868902a9e3cf52725b30097bac3",
+      "engines": {
+        "node": ">= 12.20"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/license": "a1038921b5ad60cbad32c40b3fb1281b4715fa65961f4025cc6a1e72cde5f303"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "formdata-polyfill@4.0.10": {
       "name": "formdata-polyfill",
       "version": "4.0.10",
@@ -6283,6 +7154,25 @@
       "scriptFiles": {},
       "licenses": {
         "package/LICENSE": "2a8a5d6197bb97a018b8a190dd3ed853d750ca87c8e80c17aad41d6c6ff448e1"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "function-bind@1.1.2": {
+      "name": "function-bind",
+      "version": "1.1.2",
+      "integrity": "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==",
+      "published": "2023-10-12T19:08:19.687Z",
+      "reviewedAt": "2026-11-21T01:19:53.857Z",
+      "license": "MIT",
+      "archiveSha256": "704402651b02a1454f17d445fc7dd716efc282d059407126d58ef30a47e807aa",
+      "manifestSha256": "edb1c4faf4148e6e3d74ed8dbac1a1dc359a647ff4207aad4851396dc7a3559a",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "773e131a7684726005a7e4688a80b4620033bc08499bc1404dd1a1eb3bca725e"
       },
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
@@ -6371,6 +7261,48 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "get-intrinsic@1.3.0": {
+      "name": "get-intrinsic",
+      "version": "1.3.0",
+      "integrity": "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==",
+      "published": "2025-02-22T20:54:20.619Z",
+      "reviewedAt": "2026-11-21T01:19:53.482Z",
+      "license": "MIT",
+      "archiveSha256": "662e27e54e00fe46fbb08f9f4aacb054e3695dbe72cc14b436613fbcfb780544",
+      "manifestSha256": "45b14763baacc59b0fd7b39e3ad983d5d2aaf7f5ed682f2fce9edb469826c999",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "get-proto@1.0.1": {
+      "name": "get-proto",
+      "version": "1.0.1",
+      "integrity": "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==",
+      "published": "2025-01-02T20:08:02.949Z",
+      "reviewedAt": "2026-11-21T01:19:53.479Z",
+      "license": "MIT",
+      "archiveSha256": "eb2cc52afb1f1fd82c5fc2a58c2380f0f16fdcdb5631538f3c66887435d70681",
+      "manifestSha256": "73839e012ac7134a632c9d9fc6bdb700ac9ab5553cce39eb789ba2b65663e734",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "be46ce1e3b0479af9ce82d22b465a6d7d2ff084fca0aaf3d54172da2b5eb5781"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "google-auth-library@10.9.1": {
       "name": "google-auth-library",
       "version": "10.9.1",
@@ -6413,6 +7345,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "gopd@1.2.0": {
+      "name": "gopd",
+      "version": "1.2.0",
+      "integrity": "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==",
+      "published": "2024-12-04T16:21:52.727Z",
+      "reviewedAt": "2026-11-21T01:19:53.507Z",
+      "license": "MIT",
+      "archiveSha256": "d536d0de4dd285dc1468fbb7f39334a47ee0eec9c27f9b626a6e71466c9fda82",
+      "manifestSha256": "33ace32dc861f6da9d1fd9d0a44c66e8c6ff3b13358d070683c1c2978ff5f19f",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "d90bf0a089da4cf43d644ed240a0b3825dcdb705e64e38371d56995a4cc9e4c5"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "graceful-fs@4.2.11": {
       "name": "graceful-fs",
       "version": "4.2.11",
@@ -6430,6 +7383,88 @@
         "package/LICENSE": "f65c5d9f22a317b2a10803bd1868461ce6499c2ed7217bc80c0cc772a748789c"
       },
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "has-symbols@1.1.0": {
+      "name": "has-symbols",
+      "version": "1.1.0",
+      "integrity": "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==",
+      "published": "2024-12-02T16:34:17.679Z",
+      "reviewedAt": "2026-11-21T01:19:53.618Z",
+      "license": "MIT",
+      "archiveSha256": "4460c7532f28b8df2ddc9a1ec17816d43c24d4b9591dc6c5936b82f7f86ae7c5",
+      "manifestSha256": "5190268c0e3308d7446d1f7c036238f329f786938453e6017cb90980b3612e7a",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "206c1adcf206dc0031b11232f5b054ec5f1662407ab1ca415247921cab2068ab"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "has-tostringtag@1.0.2": {
+      "name": "has-tostringtag",
+      "version": "1.0.2",
+      "integrity": "sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==",
+      "published": "2024-02-01T21:44:00.130Z",
+      "reviewedAt": "2026-11-21T01:19:53.616Z",
+      "license": "MIT",
+      "archiveSha256": "dc1c74e3f1179a6271f84747d72c89f258aa46ad3e6464fae0e41737a7f0ef7b",
+      "manifestSha256": "30ab773c52021a6b800ea48f251abeeb1f6e378300f819204dfbb38d6e43f3ad",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "e2560e002e13281578c75c850061d9255c33d16d732939e8c2db64c2506642fa"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "hash-wasm@4.13.0": {
+      "name": "hash-wasm",
+      "version": "4.13.0",
+      "integrity": "sha512-GrWl7wsV46fKIXQZB5ebskLZLAmKL6d9RS0fspCxDeQyjoNu1AfTJTMLPOJyfzaQm0ldFiwFN21/w+sE/kgEFQ==",
+      "published": "2026-11-07T15:04:18.613Z",
+      "reviewedAt": "2026-11-21T01:24:00.814Z",
+      "license": "MIT",
+      "archiveSha256": "237a2735a3bb8725603a797fea1ba3e455d70e11f338518a65d42dab60182b68",
+      "manifestSha256": "9ecddbb4e5f2e6d4f55478273054400f1136626e77da80060556dd6db3ad6e00",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "c14dea172f72f2714284a0ac2ab1b00b5352a01409d58255a46227ffc541debd"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "hasown@2.0.4": {
+      "name": "hasown",
+      "version": "2.0.4",
+      "integrity": "sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==",
+      "published": "2026-05-28T18:11:39.940Z",
+      "reviewedAt": "2026-11-21T01:19:53.665Z",
+      "license": "MIT",
+      "archiveSha256": "e9d2b03f95573600e1c13124ce618e3142ed2c538d164595bedcd4408b8a4e4c",
+      "manifestSha256": "40b750c55a8bacf2c5ac316f5299dd44d48acc101c189a00cd59d39376b5eb89",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
     "http-proxy-agent@9.1.0": {
@@ -6494,6 +7529,25 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/https-proxy-agent@9.1.0; Sigstore transparency verification required at release"
+    },
+    "humanize-ms@1.2.1": {
+      "name": "humanize-ms",
+      "version": "1.2.1",
+      "integrity": "sha512-Fl70vYtsAFb/C06PTS9dZBo7ihau+Tu/DNCk/OyHhea07S+aeMWpFFkUaXRa8fI+ScZbEI8dfSxwY7gxZ9SAVQ==",
+      "published": "2017-05-19T04:31:29.217Z",
+      "reviewedAt": "2026-11-21T01:19:53.750Z",
+      "license": "MIT",
+      "archiveSha256": "540fe6db2179497c663d8f6b599c6ef0862d052748f35890a201ef3a27415e27",
+      "manifestSha256": "b5cf746b84d4d4afcda0f9fd59c2120fed5e7f7be1ec52293879a8c13f30eced",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "89807acf2309bd285f033404ee78581602f3cd9b819a16ac2f0e5f60ff4a473e"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
     },
     "import-meta-resolve@4.2.0": {
       "name": "import-meta-resolve",
@@ -6914,6 +7968,46 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/marked@18.0.11; Sigstore transparency verification required at release"
     },
+    "math-intrinsics@1.1.0": {
+      "name": "math-intrinsics",
+      "version": "1.1.0",
+      "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
+      "published": "2024-12-19T05:58:09.877Z",
+      "reviewedAt": "2026-11-21T01:19:53.753Z",
+      "license": "MIT",
+      "archiveSha256": "b8c2c35575493dc086df88cfc468a9e2651b6617336480ab3f00fcf853f443a7",
+      "manifestSha256": "39d74aa5a354153130706286dd60a2d8409ce0c8f66546eff2edcac0afff17e1",
+      "engines": {
+        "node": ">= 0.4"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "mdream@2.1.0": {
+      "name": "mdream",
+      "version": "2.1.0",
+      "integrity": "sha512-iYqnp2TjcwLslqrvwoObS0sc4gesbL+CDtc0Zqxo1ceg83ZammD3XFJ9xYlRNaMkbqtRkMmy4VSo/ZKckPv9fg==",
+      "published": "2026-11-10T10:23:00.459Z",
+      "reviewedAt": "2026-11-21T01:24:00.687Z",
+      "license": "MIT",
+      "archiveSha256": "01de483e7e8c6b53065809385a92e22f755a9cedb01cb061a4f9a13e309b933f",
+      "manifestSha256": "91b85a80589428436d9b32a5d99bc555ac7e6a95322dd05800549e815c936f68",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE.md": "b5a7e0557d37c8ccf1b1cbcda1842b8c4535d217f81f97c1cbad579042269cad"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/mdream@2.1.0; Sigstore transparency verification required at release"
+    },
     "mime-db@1.52.0": {
       "name": "mime-db",
       "version": "1.52.0",
@@ -7037,6 +8131,27 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261113.0-beta; Sigstore transparency verification required at release"
+    },
+    "miniflare@5.20261119.0-beta": {
+      "name": "miniflare",
+      "version": "5.20261119.0-beta",
+      "integrity": "sha512-HdNQIUPgde5Yg0qFaI6iiYd0aOxAgKQTXDstkBN2G1tPBdslNrUKdySwaGdBix0IFd+yh8M0gkqzw68dIZ2Ugw==",
+      "published": "2026-11-20T18:00:51.590Z",
+      "reviewedAt": "2026-11-21T01:19:53.835Z",
+      "license": "MIT",
+      "archiveSha256": "f00a9d505c79f9c9a8dde45fcdbf0567f0092bcd4646b856202c607f3d6fc281",
+      "manifestSha256": "ef8a075b955d60ccd6a880fa5dacd33fa4c9828b1234b09b8577eef245fa3974",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "kerberos": "^2.0.0"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261119.0-beta; Sigstore transparency verification required at release"
     },
     "minimist@1.2.8": {
       "name": "minimist",
@@ -7175,6 +8290,29 @@
       "scriptFiles": {},
       "licenses": {
         "package/LICENSE": "8ec1386f7f078b0c7cd25341cd80f332df902371cda9f40c10ec2b4007b420b7"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "node-fetch@2.7.0": {
+      "name": "node-fetch",
+      "version": "2.7.0",
+      "integrity": "sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==",
+      "published": "2023-08-23T17:18:39.396Z",
+      "reviewedAt": "2026-11-21T01:19:53.956Z",
+      "license": "MIT",
+      "archiveSha256": "a70348669b01db602faf140e984e61b01c4380f9b4bf5e460b7960902412832b",
+      "manifestSha256": "000a0b3b037d4e3e211e7b7ca559a5a62a39b96ca2c6bcdaed3aba0a545eedba",
+      "engines": {
+        "node": "4.x || >=6.0.0"
+      },
+      "peers": {
+        "encoding": "^0.1.0"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE.md": "84eaa985e1ef71b8c630e8aba73404c219ff425c6fdb45c62e998b58d4fbdc8e"
       },
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
@@ -7621,6 +8759,53 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/pnpm@12.18.0; Sigstore transparency verification required at release"
     },
+    "pnpm@12.22.0": {
+      "name": "pnpm",
+      "version": "12.22.0",
+      "integrity": "sha512-iUlAo9mlffpv03OZD7TkHgnC8tdtmC7R11J105Jn+Yj7Ti1AkAy+mSHGjZfGeqGhCW0nZjPbJI97NJJ6yd23pA==",
+      "published": "2026-11-17T20:01:11.036Z",
+      "reviewedAt": "2026-11-21T02:20:36.220Z",
+      "license": "MIT",
+      "archiveSha256": "aad29ce4c501d4618fe975fc949ce7f1d033c608a043fdcff4e6ef7a3736579e",
+      "manifestSha256": "1a3921a31d22c38179dc89b14799553442825c020a7ed801016fa96a9b4876d3",
+      "engines": {
+        "node": ">=18"
+      },
+      "peers": {},
+      "lifecycle": {
+        "preinstall": "node install.js",
+        "postinstall": "node install.js"
+      },
+      "scriptFiles": {
+        "package/dist/node_modules/get-pnpm/lib/install.js": "c9b70f5ed5f797af2e9761a58d0d2cca631638b31566f9b98f6e05d3fbdc8dfa",
+        "package/dist/node_modules/node-gyp/lib/install.js": "f0a0017fec48692a8eb8922b6eaff8d12f4a4eb1af4e42f23efa3e8797dff2c3",
+        "package/install.js": "f176986d8aad7d17c3328178928b9ba72d30b1a1c9edc94d2a279a51d8d6da6e"
+      },
+      "licenses": {
+        "package/dist/node_modules/@isaacs/fs-minipass/LICENSE": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+        "package/dist/node_modules/abbrev/LICENSE": "9e0d5c7989f7e9f07d7c4b158aceff270f235eb7464ace41c5e7b200834a43e0",
+        "package/dist/node_modules/confbox/LICENSE": "c6e83b9be7af3b907525722dadbd781848162e4fbfcbe20324f7a237d91ee0f3",
+        "package/dist/node_modules/env-paths/license": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0",
+        "package/dist/node_modules/exponential-backoff/LICENSE": "f5afc95c69e116ea6b1755f91a8763f53eadb78b4f1582a08d2d18586a03a117",
+        "package/dist/node_modules/fdir/LICENSE": "9a39f2aadab11a3697edd668ff2d8ad885b649737b7ab4d3bf12b34e5ada0c86",
+        "package/dist/node_modules/minizlib/LICENSE": "df05697a04b8997c79d423930534e59cc18828f6e22d0c8c2d62fcbea1c4f50b",
+        "package/dist/node_modules/node-gyp/gyp/LICENSE": "ca90abb6ed71de0774461ef9f928de33e748b617aeb79f9e52415cf08d69230e",
+        "package/dist/node_modules/node-gyp/gyp/pylib/packaging/LICENSE": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48",
+        "package/dist/node_modules/node-gyp/LICENSE": "662a1b0115251cfb29c6aed0f221f8847bc49c6365d1c53a62c9f4bccc2489c3",
+        "package/dist/node_modules/nopt/LICENSE": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+        "package/dist/node_modules/picomatch/LICENSE": "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
+        "package/dist/node_modules/proc-log/LICENSE": "dc32a0dee275e0a9aeffbc974dbf4899a30dcdc2e5ffa8934aecb69261065864",
+        "package/dist/node_modules/semver/LICENSE": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+        "package/dist/node_modules/tinyglobby/LICENSE": "22c68811e174cbbfb3813d4135918df4f540959c14d872e601d9abe83d3cde8f",
+        "package/dist/node_modules/undici/lib/web/fetch/LICENSE": "a21d6c8d3fc631198b97e57584697f7f9c37805c71c6cf9a12e4442b40394b88",
+        "package/dist/node_modules/undici/LICENSE": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27",
+        "package/dist/node_modules/which/LICENSE": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+        "package/dist/node_modules/node-gyp/gyp/pylib/packaging/LICENSE.APACHE": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+        "package/dist/node_modules/node-gyp/gyp/pylib/packaging/LICENSE.BSD": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/pnpm@12.22.0; Sigstore transparency verification required at release"
+    },
     "postal-mime@2.7.6": {
       "name": "postal-mime",
       "version": "2.7.6",
@@ -8015,6 +9200,23 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/tinyglobby@0.2.17; Sigstore transparency verification required at release"
     },
+    "tr46@0.0.3": {
+      "name": "tr46",
+      "version": "0.0.3",
+      "integrity": "sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw==",
+      "published": "2016-01-20T02:08:54.875Z",
+      "reviewedAt": "2026-11-21T01:19:53.946Z",
+      "license": "MIT",
+      "archiveSha256": "164ae1eb32cea353551bbc7f9358dcaae4ffabbe65ec37a92ca464a9570a2a0a",
+      "manifestSha256": "615087f58ee138fd35c2b414c355b72e36e5919725b8aecc1c34f6a5585b9779",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "ts-algebra@2.0.0": {
       "name": "ts-algebra",
       "version": "2.0.0",
@@ -8077,6 +9279,23 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
+    "undici-types@5.26.5": {
+      "name": "undici-types",
+      "version": "5.26.5",
+      "integrity": "sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==",
+      "published": "2023-10-23T07:27:24.774Z",
+      "reviewedAt": "2026-11-21T01:19:53.983Z",
+      "license": "MIT",
+      "archiveSha256": "503bffdea1bee0526fb2ac75a4ac01ee5e712f251fabdeb8da4b408a519ed465",
+      "manifestSha256": "7896d5b1dae2d52e4b8a7f1a611a47df36e83a2f00509661908d3698ed658138",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
     "undici-types@8.9.0": {
       "name": "undici-types",
       "version": "8.9.0",
@@ -8117,6 +9336,28 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/undici@7.30.1; Sigstore transparency verification required at release"
+    },
+    "undici@7.30.2": {
+      "name": "undici",
+      "version": "7.30.2",
+      "integrity": "sha512-mLyPQnHwUxaM/rideoK/+KL8DaAJLRl4aBCfmX444aCSLnIaomqPLtNRe2jdCYcsk5wZzXrDIQC8ZeYNRAYyIA==",
+      "published": "2026-11-05T09:06:58.994Z",
+      "reviewedAt": "2026-11-21T01:19:54.025Z",
+      "license": "MIT",
+      "archiveSha256": "2bf5b1c41724614729cb383f22c64506b6665869d385de862752c33763fcce1b",
+      "manifestSha256": "f413840d65b1b99ea0993e161f31055b924bf5bc9a06d11e7a3fb1d1ba177bef",
+      "engines": {
+        "node": ">=20.18.1"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/lib/web/fetch/LICENSE": "a21d6c8d3fc631198b97e57584697f7f9c37805c71c6cf9a12e4442b40394b88",
+        "package/LICENSE": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/undici@7.30.2; Sigstore transparency verification required at release"
     },
     "undici@8.12.4": {
       "name": "undici",
@@ -8222,6 +9463,65 @@
       },
       "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/web-streams-polyfill@3.3.3; Sigstore transparency verification required at release"
+    },
+    "web-streams-polyfill@4.0.0-beta.3": {
+      "name": "web-streams-polyfill",
+      "version": "4.0.0-beta.3",
+      "integrity": "sha512-QW95TCTaHmsYfHDybGMwO5IJIM93I/6vTRk+daHTWFPhwh+C8Cg7j7XyKrwrj8Ib6vYXe0ocYNrmzY4xAAN6ug==",
+      "published": "2022-05-24T19:52:20.773Z",
+      "reviewedAt": "2026-11-21T01:19:54.088Z",
+      "license": "MIT",
+      "archiveSha256": "b0535132060a59848b5a0855d394c569c20a10749486145f3f3a74f1f979b3b0",
+      "manifestSha256": "7e67878e41c54040ff749003b444d890aeb2dd468560d95eb770983e54ccd80d",
+      "engines": {
+        "node": ">= 14"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "ee2ec3f2c3216654c74a100b7c0733376fa3a6f31f1b9bab85904acc7cf9dc3a"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "webidl-conversions@3.0.1": {
+      "name": "webidl-conversions",
+      "version": "3.0.1",
+      "integrity": "sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==",
+      "published": "2016-01-04T06:08:05.108Z",
+      "reviewedAt": "2026-11-21T01:19:54.085Z",
+      "license": "BSD-2-Clause",
+      "archiveSha256": "e4dfc34b40947c2cf0038cd95fa6de21f4dac93224a7ad8e169205f5c2e22da8",
+      "manifestSha256": "e26568c06b82596d754c7490fd568b4b3f970b3b97c55020d42f65990d0c86af",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE.md": "a889cc4dbee2ae172c179856b25d75b0b7a5a136e1b97109b9b590b2ff1a879c"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
+    },
+    "whatwg-url@5.0.0": {
+      "name": "whatwg-url",
+      "version": "5.0.0",
+      "integrity": "sha512-saE57nupxk6v3HY35+jzBwYa0rKSy0XR8JSxZPwgLr7ys0IBzhGviA1/TUGJLmSVqs8pb9AnvICXEuOHLprYTw==",
+      "published": "2017-05-26T20:56:41.955Z",
+      "reviewedAt": "2026-11-21T01:19:54.124Z",
+      "license": "MIT",
+      "archiveSha256": "b09dc471f573a876eeac3902b8c1da62af5cdbbca2c6fba4a06f119f89cb7ed3",
+      "manifestSha256": "05a015c4176246f051bbaa3a543ed82480a4a4d85360283e049f159ba014b008",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE.txt": "6b7a1792144374d84dc5ed3655b8bbe2754d06f4f1f64a9fb8b9de2d6f448b85"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "provenance": "not published"
     },
     "which@2.0.2": {
       "name": "which",
@@ -8397,6 +9697,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.162.0; Sigstore transparency verification required at release"
     },
+    "wrangler@4.166.0": {
+      "name": "wrangler",
+      "version": "4.166.0",
+      "integrity": "sha512-qMz0sHGXqEC0Va8T6dAaG0ggp9tCcuHHYMUQzRKbtZg6+MPAPb6oBu1757IaeugNJHPAz+twHiA+zDyXWQLsLw==",
+      "published": "2026-11-20T18:13:51.879Z",
+      "reviewedAt": "2026-11-21T01:19:54.458Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "3333bd0b9491c76c2717582f69cb0d1ab2dab1c014e86aa859bc3ce04fa91d40",
+      "manifestSha256": "2049a42f375cf4fd5bf704bd084ff4ea255ae78650b8f03c0c10b4bdff59d5b8",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "@cloudflare/workers-types": "^5.20261119.1"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.166.0; Sigstore transparency verification required at release"
+    },
     "ws@8.21.0": {
       "name": "ws",
       "version": "8.21.0",
@@ -8545,10 +9866,26 @@
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/zod@4.6.7; Sigstore transparency verification required at release"
     }
   },
-  "exemptions": {},
+  "exemptions": {
+    "@cloudflare/workers-utils@0.56.0": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T18:02:52.873Z",
+      "integrity": "sha512-Fw3/zR+pQp+5hKn1CHIRkCYz49fyAb2qRqCq01jBGqlKL0rRnZyXYD4j0h9cjaWPYYQUOe5y6L7BNp2ZwsHg5A=="
+    },
+    "miniflare@5.20261119.0-beta": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T18:00:51.590Z",
+      "integrity": "sha512-HdNQIUPgde5Yg0qFaI6iiYd0aOxAgKQTXDstkBN2G1tPBdslNrUKdySwaGdBix0IFd+yh8M0gkqzw68dIZ2Ugw=="
+    },
+    "wrangler@4.166.0": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T18:13:51.879Z",
+      "integrity": "sha512-qMz0sHGXqEC0Va8T6dAaG0ggp9tCcuHHYMUQzRKbtZg6+MPAPb6oBu1757IaeugNJHPAz+twHiA+zDyXWQLsLw=="
+    }
+  },
   "advisory": {
-    "checkedAt": "2026-11-19T18:01:11.224Z",
-    "identities": 115,
+    "checkedAt": "2026-11-21T02:20:40.752Z",
+    "identities": 420,
     "findings": []
   }
 }

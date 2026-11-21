@@ -81,9 +81,9 @@ export async function yaml<T>(root: string, path: string): Promise<T> {
   );
   assert.equal(
     documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.specifier,
-    "12.18.0",
+    "12.22.0",
   );
-  assert.equal(documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.version, "12.18.0");
+  assert.equal(documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.version, "12.22.0");
   assert.deepEqual(Object.keys(documents[0]?.importers ?? {}), ["."]);
   assert.deepEqual(Object.keys(documents[0]?.importers["."] ?? {}), [
     "configDependencies",
@@ -229,7 +229,7 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
       }
   }
   const top = manifests.get("package.json");
-  assert.equal(top?.packageManager, "pnpm@12.18.0");
+  assert.equal(top?.packageManager, "pnpm@12.22.0");
   assert.equal(manifests.get("tools/unstale/package.json")?.packageManager, top?.packageManager);
   assert.equal(top?.fortipi?.toolchain.node, "26.13.1");
   const reviewedIdentities = new Set<string>();
@@ -263,8 +263,7 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
       "packageExtensions",
     ])
       assert.equal(policy[key], undefined, `Forbidden policy override: ${key}`);
-    const runtimeOverrides = prefix ? undefined : { "workerd@1.20261113.1": "1.20261119.1" };
-    assert.deepEqual(policy.overrides, runtimeOverrides, "Unreviewed runtime override");
+    assert.equal(policy.overrides, undefined, "Unreviewed runtime override");
     const approvals = policy.allowBuilds as Record<string, boolean>;
     assert.ok(approvals && typeof approvals === "object");
     for (const [id, allowed] of Object.entries(approvals)) {
@@ -279,7 +278,7 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
         );
     }
     const lock = await yaml<Lock>(root, `${prefix}pnpm-lock.yaml`);
-    assert.deepEqual(lock.overrides, runtimeOverrides, "Runtime override lock drift");
+    assert.equal(lock.overrides, undefined, "Runtime overrides forbidden in lock");
     assert.equal(String(lock.lockfileVersion), "9.0");
     const ids = new Set(Object.keys(lock.packages));
     for (const [id, node] of Object.entries(lock.snapshots ?? {})) {

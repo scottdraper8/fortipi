@@ -31,7 +31,7 @@ export { WorkspaceProxy };
 export class ProbeGateway extends WorkerEntrypoint {
   override async fetch(request: Request): Promise<Response> {
     const target =
-      request.url === "https://registry.npmjs.org/pnpm/12.18.0"
+      request.url === "https://registry.npmjs.org/pnpm/12.22.0"
         ? "allowed-registry"
         : request.url === "https://example.com/"
           ? "denied-example"

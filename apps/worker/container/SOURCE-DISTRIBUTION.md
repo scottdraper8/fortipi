@@ -30,7 +30,7 @@ Use a fresh checkout of the recorded commit from the published FortiPi repositor
 (`https://github.com/scottdraper8/fortipi`), preserving its Git identity. Compare
 the supplied source archive and recipe/metadata hashes before building. The release
 must publish that exact commit before distributing the kit. With the recorded
-Node26.13.1 and pnpm12.18.0 first on PATH, run `node scripts/install-dependencies.ts`
+Node26.13.1 and pnpm12.22.0 first on PATH, run `node scripts/install-dependencies.ts`
 at its root. This installs the exact reviewed `tar` dependency through the frozen
 lock; do not install a floating package or copy a dependency tree. The source
 snapshot supplies all installer/configuration inputs. Host `git`, `tar`, `ar`, `xz`,

@@ -28,8 +28,10 @@ const packages: Record<InstalledReference, string[]> = {
   "agents-lifecycle": ["agents@0.33.0"],
   "computer-fuse": ["@cloudflare/computer@0.11.1"],
   wrangler: [
-    "wrangler@4.162.0",
-    "miniflare@5.20261113.0-beta",
+    "wrangler@4.166.0",
+    "miniflare@5.20261119.0-beta",
+    "@cloudflare/workers-utils@0.56.0",
+    "undici@7.30.2",
     "workerd@1.20261119.1",
     "@cloudflare/workers-types@5.20261119.1",
   ],

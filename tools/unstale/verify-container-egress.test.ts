@@ -197,9 +197,9 @@ test("harness fetch observation preserves arguments, receiver, Promise and Respo
       headers: { "x-private": "diagnostic-private-header" },
     };
     for (const url of [
-      "https://registry.npmjs.org/pnpm/12.18.0",
+      "https://registry.npmjs.org/pnpm/12.22.0",
       "https://example.com/",
-      "https://registry.npmjs.org/pnpm/12.18.0",
+      "https://registry.npmjs.org/pnpm/12.22.0",
     ]) {
       const promise = Reflect.apply(globalThis.fetch, receiver, [url, init]);
       const actual = requests.at(-1);
@@ -241,12 +241,12 @@ test("harness observation preserves asynchronous cancellation and the original r
   globalThis.fetch = original;
   const observation = observeHarnessFetch();
   try {
-    await fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" });
+    await fetch("https://registry.npmjs.org/pnpm/12.22.0", { method: "HEAD" });
     const promise = fetch("https://example.com/", { method: "HEAD", signal: controller.signal });
     assert.equal(promise, pending);
     controller.abort();
     await assert.rejects(promise, (error) => error === failure);
-    await fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" });
+    await fetch("https://registry.npmjs.org/pnpm/12.22.0", { method: "HEAD" });
     const trace = observation.stop();
     assert.equal(trace.complete, true);
     assert.deepEqual(trace.events[3], {
@@ -277,7 +277,7 @@ test("harness diagnostics do not replace synchronous errors or clobber an interv
   const observation = observeHarnessFetch();
   try {
     assert.throws(
-      () => fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" }),
+      () => fetch("https://registry.npmjs.org/pnpm/12.22.0", { method: "HEAD" }),
       (error) => error === failure,
     );
     const replacement: typeof fetch = () => Promise.resolve(new Response());
@@ -309,15 +309,15 @@ test("harness observation delegates unrelated requests and bounds overflow or mi
   try {
     for (const urls of [
       [
-        "https://registry.npmjs.org/pnpm/12.18.0",
+        "https://registry.npmjs.org/pnpm/12.22.0",
         "https://example.com/",
-        "https://registry.npmjs.org/pnpm/12.18.0",
+        "https://registry.npmjs.org/pnpm/12.22.0",
         "https://example.com/",
       ],
       [
         "https://example.com/",
-        "https://registry.npmjs.org/pnpm/12.18.0",
-        "https://registry.npmjs.org/pnpm/12.18.0",
+        "https://registry.npmjs.org/pnpm/12.22.0",
+        "https://registry.npmjs.org/pnpm/12.22.0",
       ],
     ]) {
       const observation = observeHarnessFetch();
@@ -367,7 +367,7 @@ test("native request/socket correlation distinguishes policy redirection from re
   const sinkAddress = sink.address();
   assert.ok(allowAddress && typeof allowAddress === "object");
   assert.ok(sinkAddress && typeof sinkAddress === "object");
-  const registryUrl = "https://registry.npmjs.org/pnpm/12.18.0";
+  const registryUrl = "https://registry.npmjs.org/pnpm/12.22.0";
   const exampleUrl = "https://example.com/";
   const registry = {
     message:
@@ -604,11 +604,11 @@ test("original refusal retains its strict endpoint oracle and rejects uncorrelat
           : Promise.resolve(new Response(null, { status: 200 }));
       const observation = observeHarnessFetch();
       try {
-        await fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" });
+        await fetch("https://registry.npmjs.org/pnpm/12.22.0", { method: "HEAD" });
         const actual = fetch("https://example.com/", { method: "HEAD" });
         assert.equal(actual, promised);
         await assert.rejects(actual, (error) => error === failure);
-        await fetch("https://registry.npmjs.org/pnpm/12.18.0", { method: "HEAD" });
+        await fetch("https://registry.npmjs.org/pnpm/12.22.0", { method: "HEAD" });
         const trace = { ...observation.stop(), namespaceStable: true };
         assert.equal(trace.complete, true);
         const denied = trace.events[3];

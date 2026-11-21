@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",
-  "packageManager": "pnpm@12.18.0",
+  "packageManager": "pnpm@12.22.0",
   "engines": {
     "node": ">=26.13.1",
-    "pnpm": "12.18.0"
+    "pnpm": "12.22.0"
   },
   "scripts": {
     "build": "node scripts/build-workspaces.ts build",
@@ -48,7 +48,7 @@
   "fortipi": {
     "toolchain": {
       "node": "26.13.1",
-      "pnpm": "12.18.0",
+      "pnpm": "12.22.0",
       "python": "3.15.2",
       "go": "1.27.4",
       "preCommit": "4.7.0",

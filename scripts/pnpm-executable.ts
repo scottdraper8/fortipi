@@ -54,10 +54,10 @@ export async function pnpmExecutable(
           if (
             basename(target) !== "pnpm.exe" ||
             manifest.name !== "pnpm" ||
-            manifest.version !== "12.18.0" ||
+            manifest.version !== "12.22.0" ||
             !(await regularFile(target))
           )
-            throw new Error("Use the reviewed pnpm 12.18.0 native installation");
+            throw new Error("Use the reviewed pnpm 12.22.0 native installation");
           return target;
         }
       }
@@ -67,8 +67,8 @@ export async function pnpmExecutable(
         name: string;
         version: string;
       };
-      if (manifest.name !== "pnpm" || manifest.version !== "12.18.0")
-        throw new Error("Use the reviewed pnpm 12.18.0 native installation");
+      if (manifest.name !== "pnpm" || manifest.version !== "12.22.0")
+        throw new Error("Use the reviewed pnpm 12.22.0 native installation");
       // pnpm's official Windows installer creates this executable beside its package manifest.
       const native = resolve(dirname(manifestPath), "pnpm.exe");
       if (await regularFile(native)) return native;
@@ -78,15 +78,15 @@ export async function pnpmExecutable(
       const nativeManifest = JSON.parse(
         await readFile(packageLookup.resolve(`${packageName}/package.json`), "utf8"),
       ) as { name: string; version: string };
-      if (nativeManifest.name !== packageName || nativeManifest.version !== "12.18.0")
-        throw new Error("Use the reviewed pnpm 12.18.0 native installation");
+      if (nativeManifest.name !== packageName || nativeManifest.version !== "12.22.0")
+        throw new Error("Use the reviewed pnpm 12.22.0 native installation");
       const optional = packageLookup.resolve(`${packageName}/pnpm.exe`);
       if (await regularFile(optional)) return optional;
     } catch (error) {
       if (!missing(error)) throw error;
     }
   }
-  throw new Error("Cannot locate pnpm.exe; install pnpm 12.18.0 with its native build enabled");
+  throw new Error("Cannot locate pnpm.exe; install pnpm 12.22.0 with its native build enabled");
 }
 
 export async function verifyPnpmExecutable(
@@ -103,9 +103,9 @@ export async function verifyPnpmExecutable(
       timeout: 30_000,
       maxBuffer: 4096,
     });
-    if (version.stdout.trim() !== "12.18.0")
-      throw new Error("Use the reviewed pnpm 12.18.0 native installation");
-    return "12.18.0";
+    if (version.stdout.trim() !== "12.22.0")
+      throw new Error("Use the reviewed pnpm 12.22.0 native installation");
+    return "12.22.0";
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

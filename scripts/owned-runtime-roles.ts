@@ -442,8 +442,8 @@ async function pinnedExecutable() {
   const miniflare = createRequire(wrangler.resolve("miniflare"));
   const workerd = miniflare("workerd") as { default: string; version: string };
   if (
-    worker("wrangler/package.json").version !== "4.162.0" ||
-    wrangler("miniflare/package.json").version !== "5.20261113.0-beta" ||
+    worker("wrangler/package.json").version !== "4.166.0" ||
+    wrangler("miniflare/package.json").version !== "5.20261119.0-beta" ||
     workerd.version !== "1.20261119.1"
   )
     throw new Error("unreviewed runtime graph");

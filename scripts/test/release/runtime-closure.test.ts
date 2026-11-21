@@ -74,8 +74,11 @@ test("real frozen archives/patches and supported deploy preserve all owners and 
     "22f22b41516f08077500b3472fc1c4ee55f9686cbb90cef361b71f0bee94a440",
   );
   assert.ok(sharpWasm.nativeFiles.includes(sharpBinary.path));
-  const blake3 = closure.archives.find((value) => value.id === "blake3-wasm@2.1.5");
-  assert.ok(blake3 && !blake3.externalNative, "Reviewed MIT WASM remains independently conveyable");
+  const miniflare = closure.archives.find((value) => value.id === "miniflare@5.20261119.0-beta");
+  assert.ok(
+    miniflare && !miniflare.externalNative,
+    "Reviewed MIT WASM remains independently conveyable",
+  );
   const alias = closure.archives.find((value) => value.id === "agent-base@7.1.4");
   assert.ok(alias);
   assert.ok(alias.sourceAliases.some((value) => value.path === "dist/index.js"));
@@ -114,7 +117,7 @@ test("real frozen archives/patches and supported deploy preserve all owners and 
       ["https-proxy-agent", ["7.0.6", "9.1.0"]],
       ["agent-base", ["7.1.4", "9.0.0"]],
       ["ws", ["8.21.0", "8.22.2"]],
-      ["undici", ["7.30.1", "8.12.4"]],
+      ["undici", ["7.30.2", "8.12.4"]],
     ] as const) {
       const instances: ((typeof actualCli.instances)[number] | undefined)[] = versions.map(
         (version) =>
@@ -242,19 +245,21 @@ test("supported ordinary packs authenticate final dependency paths and preserve 
               file.sha256 === "22f22b41516f08077500b3472fc1c4ee55f9686cbb90cef361b71f0bee94a440",
           ),
         );
-        const blake3 = closure.archives.find((value) => value.id === "blake3-wasm@2.1.5");
-        assert.ok(blake3);
-        const allowedWasm = blake3.files.filter((file) => file.path.endsWith(".wasm"));
-        assert.equal(allowedWasm.length, 3);
+        const miniflare = closure.archives.find(
+          (value) => value.id === "miniflare@5.20261119.0-beta",
+        );
+        assert.ok(miniflare);
+        const allowedWasm = miniflare.files.filter((file) => file.path.endsWith(".wasm"));
+        assert.equal(allowedWasm.length, 1);
         for (const file of allowedWasm)
           assert.ok(
             plan.files.some(
               (actual) =>
-                actual.path.endsWith(`/blake3-wasm/${file.path}`) &&
+                actual.path.endsWith(`/miniflare/${file.path}`) &&
                 actual.size === file.size &&
                 actual.sha256 === file.sha256,
             ),
-            "Keep the independently reviewed MIT BLAKE3 WASM members",
+            "Keep the independently reviewed MIT Markdown WASM member",
           );
         const manifest = JSON.parse(
           await readFile(resolve(bundle.directory, "package.json"), "utf8"),
@@ -271,7 +276,7 @@ test("supported ordinary packs authenticate final dependency paths and preserve 
           ["https-proxy-agent", ["7.0.6", "9.1.0"]],
           ["agent-base", ["7.1.4", "9.0.0"]],
           ["ws", ["8.21.0", "8.22.2"]],
-          ["undici", ["7.30.1", "8.12.4"]],
+          ["undici", ["7.30.2", "8.12.4"]],
         ] as const) {
           const paths = versions.map(
             (version) =>

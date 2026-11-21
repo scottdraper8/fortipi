@@ -37,6 +37,11 @@ const allowed = new Set([
   "CC0-1.0",
 ]);
 
+/** Preserve archive identities while keeping staged notice paths portable. */
+export function archiveLicensePath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
 const exactExceptions: Record<string, string> = {
   "argparse@2.0.1": "Python-2.0",
   "argparse@3.0.4": "PSF-2.0",
@@ -132,24 +137,24 @@ export function assertRuntimeWasmMember(
     assert.match(member.path, /^dist\/wasm\/(?:browser|nodejs|web)\/blake3_js_bg\.wasm$/);
     return;
   }
-  assert.equal(archiveId, "miniflare@5.20261113.0-beta");
-  assert.equal(archiveSha256, "4777f56bb9e822fd249b05929dec2a82e1c9b9fc4cf5a757f7ef15cb9bd34785");
+  assert.equal(archiveId, "miniflare@5.20261119.0-beta");
+  assert.equal(archiveSha256, "f00a9d505c79f9c9a8dde45fcdbf0567f0092bcd4646b856202c607f3d6fc281");
   assert.equal(member.path, "dist/src/mdream_edge_bg.wasm");
-  assert.equal(member.size, 239214);
-  assert.equal(member.sha256, "db48fb63ec419083fdcd2100171bb5f40c5086164a9fe939286927727c91256b");
+  assert.equal(member.size, 266878);
+  assert.equal(member.sha256, "3b774a60a939b34c30002b8d135f445f9b5ddbe83bf20b9a0e5f70dee77f8c39");
   assert.equal(
     attribution?.source,
-    "https://github.com/cloudflare/workers-sdk/tree/79b890ab89a62823198a0c551c44ff647c80de4d",
+    "https://github.com/cloudflare/workers-sdk/tree/27b3f7150991e1208e5b3dd139953d9f7be389b5",
   );
   assert.ok(attribution);
   for (const [name, digest] of [
     ["LICENSE.md", "b5a7e0557d37c8ccf1b1cbcda1842b8c4535d217f81f97c1cbad579042269cad"],
     ["CORE-LICENSE", "d06451530138de11ec5cee38b458f1aa4259ada5587dc5317c225196d26914d6"],
-    ["RUST-NOTICES.md", "786b5b98e134b6d2c038e1156647096a502c2732b56184c88d4af021429c5846"],
-    ["component.json", "7aa18c9e3bf3fd5cff72e87911d8d7c64f23851ef1cec84b0879a8b9ae7e6012"],
+    ["RUST-NOTICES.md", "3d85d78b2d4a4563d0b260270feeba8d50af662b73465151e8ff8a7840d67435"],
+    ["component.json", "b4bebe6e25589e5d5e1a16b264808730b3afbb2355437ecc10cfec8b93562a10"],
   ]) {
     const records: Attribution["files"] = attribution.files.filter(
-      (file) => file.path === `tools/unstale/licenses/npm/mdream/2.0.3/${name}`,
+      (file) => file.path === `tools/unstale/licenses/npm/mdream/2.1.0/${name}`,
     );
     assert.equal(records.length, 1, "Missing exact mdream component attribution");
     assert.equal(records[0]?.sha256, digest);
@@ -468,13 +473,13 @@ export async function checkLicenses(root = repository, foundation = false): Prom
   const lock = await yaml<Lock>(root, "pnpm-lock.yaml");
   assert.equal(policy.format, 1);
   assert.deepEqual(policy.externalToolChain, [
-    "wrangler@4.162.0",
-    "miniflare@5.20261113.0-beta",
+    "wrangler@4.166.0",
+    "miniflare@5.20261119.0-beta",
     "sharp@0.35.5",
   ]);
   for (const [from, name, version] of [
-    ["wrangler@4.162.0", "miniflare", "5.20261113.0-beta"],
-    ["miniflare@5.20261113.0-beta", "sharp", "0.35.5"],
+    ["wrangler@4.166.0", "miniflare", "5.20261119.0-beta"],
+    ["miniflare@5.20261119.0-beta", "sharp", "0.35.5"],
   ]) {
     assert.ok(from && name && version);
     const nodes = Object.entries(lock.snapshots ?? {}).filter(([id]) => id.split("(")[0] === from);
@@ -567,7 +572,7 @@ export async function checkLicenses(root = repository, foundation = false): Prom
       }
     if (
       externalNative.has(id) ||
-      ["wrangler@4.162.0", "miniflare@5.20261113.0-beta", "sharp@0.35.5"].includes(id)
+      ["wrangler@4.166.0", "miniflare@5.20261119.0-beta", "sharp@0.35.5"].includes(id)
     ) {
       for (const [path, bytes] of entries)
         if (
@@ -582,7 +587,12 @@ export async function checkLicenses(root = repository, foundation = false): Prom
       await attribution(root, id, policy, review);
     for (const [path, bytes] of entries)
       if (licenses[path]) {
-        const target = resolve(root, "dist/supply-chain/licenses", id.replaceAll("/", "__"), path);
+        const target = resolve(
+          root,
+          "dist/supply-chain/licenses",
+          id.replaceAll("/", "__"),
+          archiveLicensePath(path),
+        );
         await mkdir(dirname(target), { recursive: true });
         await writeFile(target, bytes);
       }

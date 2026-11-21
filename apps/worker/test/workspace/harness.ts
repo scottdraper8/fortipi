@@ -19,7 +19,12 @@ export function workspaceConfig(paidJs = false) {
           },
         ],
       }
-    : freeInfrastructurePolicy;
+    : {
+        ...freeInfrastructurePolicy,
+        capabilities: freeInfrastructurePolicy.capabilities.map((capability) => ({
+          ...capability,
+        })),
+      };
   return {
     name: "fortipi-workspace-test",
     main:

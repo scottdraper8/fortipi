@@ -135,7 +135,7 @@ async function rootlessContext(inside: boolean): Promise<string> {
 
 async function namespaceEgress(): Promise<void> {
   const allowed = async () => {
-    const response = await fetch("https://registry.npmjs.org/pnpm/12.18.0", {
+    const response = await fetch("https://registry.npmjs.org/pnpm/12.22.0", {
       signal: AbortSignal.timeout(15000),
     });
     await response.body?.cancel();

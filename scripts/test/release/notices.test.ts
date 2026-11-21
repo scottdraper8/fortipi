@@ -151,9 +151,21 @@ test("portable notice CLI preserves actual SRI/source texts, runtime scope and a
     ),
     archiveEntries(archive).get("package/LICENSE"),
   );
+  const nodeTypes = await readFile(
+    resolve(root, `dist/supply-chain/archives/${hash(Buffer.from("@types/node@18.19.130"))}.tgz`),
+  );
+  assert.deepEqual(
+    await readFile(
+      resolve(
+        root,
+        "packages/fortipi-cli/licenses/%40types%2Fnode%4018.19.130/archive/node%20v18.19/LICENSE",
+      ),
+    ),
+    archiveEntries(nodeTypes).get("node v18.19/LICENSE"),
+  );
   const cli = await readFile(resolve(root, "packages/fortipi-cli/THIRD_PARTY_NOTICES.md"), "utf8");
   assert.ok(cli.includes("worker-assets/licenses/THIRD_PARTY_NOTICES.md"));
-  assert.ok(cli.includes("wrangler@4.162.0"));
+  assert.ok(cli.includes("wrangler@4.166.0"));
   assert.ok(cli.includes("@aws-sdk/credential-provider-http@3.972.86"));
   assert.ok(cli.includes('"inheritedFrom": "@aws-sdk/core@3.981.0"'));
   assert.ok(cli.includes("AWS SDK for JavaScript Team"));
