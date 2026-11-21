@@ -9,6 +9,7 @@ import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { createAI } from "agents/models/pi-ai";
+import { isCanonicalModelSecretRef } from "fortipi-contract";
 import { check, id, outcome, unwrap } from "../api/common.js";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
@@ -89,8 +90,7 @@ export async function buildModels(
           "Unsupported model secret binding",
         );
         check(
-          (selection.providerId === "openai" && ref === "OPENAI_API_KEY") ||
-            (selection.providerId === "anthropic" && ref === "ANTHROPIC_API_KEY"),
+          isCanonicalModelSecretRef(selection.providerId, ref),
           "invalid_request",
           "Provider secret binding mismatch",
         );

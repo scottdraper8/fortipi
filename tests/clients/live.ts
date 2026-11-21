@@ -4,6 +4,7 @@ import { lstat, mkdir, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
+  AgentConversationGrantScope,
   Conversation,
   DurableEvent,
   ResourceScope,
@@ -33,6 +34,7 @@ import {
   runExistingApplicationRecovery,
 } from "./platform-recovery.ts";
 import { publicFlow } from "./public-flow.ts";
+import type { PublicRole } from "./python.ts";
 import type { RoleContext } from "./roles.ts";
 
 /** Trusted inherited-IPC bridge only, separate from candidate read authority.
@@ -157,42 +159,21 @@ export async function liveContext(
         conversationId: conversations[0]!.conversationId,
         excludedConversationId: conversations[1]!.conversationId,
       }),
-    async authorizeCreated(title: string) {
+    async observeCreated(
+      title: string,
+      originalRole: PublicRole,
+      connection: ReturnType<typeof client>,
+    ) {
       let id: string | undefined;
       await until(async () => {
-        const page = await roles.call({
-          operationId: "listConversations",
-          path: { agentId: agent.agentId },
-          query: { limit: 100 },
-          body: undefined,
-        });
+        const page = await connection.conversations.list(originalRole.agentId, { limit: 100 });
         const created = page.items.filter((conversation) => conversation.title === title);
         assert.ok(created.length <= 1);
         id = created[0]?.conversationId;
         return !!id;
       });
       assert.ok(id);
-      const issued = await roles.issue({
-        requestId: randomUUID(),
-        role: "client",
-        expiresAt: Date.now() + 900000,
-        grants: [
-          {
-            grantId: randomUUID(),
-            version: 1,
-            resources: {
-              ...clientResources,
-              conversationIds: [conversations[2]!.conversationId, id],
-            },
-          },
-        ],
-      });
-      return {
-        endpoint: roles.endpoint,
-        token: issued.token,
-        agentId: agent.agentId,
-        conversationId: id,
-      };
+      return { ...originalRole, conversationId: id };
     },
     async infrastructure() {
       const observed = await client().negotiate();
@@ -264,6 +245,10 @@ export async function liveContext(
       if (usage !== "browser")
         actions.push("agents.list", "agents.read", "conversations.list", "conversations.create");
       if (usage === "tui") actions.push("tasks.cancel");
+      const resources: ResourceScope | AgentConversationGrantScope =
+        usage === "tui"
+          ? { ...clientResources, agentIds: [agent.agentId], conversationIds: ["*"], actions }
+          : { ...clientResources, conversationIds: [conversation.conversationId], actions };
       const issued = await roles.issue({
         requestId: randomUUID(),
         role: "client",
@@ -272,11 +257,7 @@ export async function liveContext(
           {
             grantId: randomUUID(),
             version: 1,
-            resources: {
-              ...clientResources,
-              conversationIds: [conversation.conversationId],
-              actions,
-            },
+            resources,
           },
         ],
       });

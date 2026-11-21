@@ -107,6 +107,55 @@ export async function deploy(
         workerBytesVerified: true,
       };
     }
+    // Check the existing logical service before reading credentials or making account writes.
+    // Protocol discovery establishes identity only, never account entitlement.
+    if (prepared.operator.runtime.execution.kind !== "native") {
+      let identity: unknown;
+      try {
+        const response = await (options.transport ?? fetch)(
+          `${prepared.operator.deployment.origin}/v1/protocol`,
+          {
+            method: "GET",
+            redirect: "error",
+            credentials: "omit",
+            headers: { accept: "application/json" },
+            signal: AbortSignal.any([
+              AbortSignal.timeout(Math.min(options.timeoutMs ?? 30000, 30000)),
+              ...(options.signal ? [options.signal] : []),
+            ]),
+          },
+        );
+        if (response.status !== 200 || response.redirected) {
+          await response.body?.cancel();
+          throw new Error("unavailable protocol");
+        }
+        const protocol: unknown = JSON.parse(
+          new TextDecoder("utf-8", { fatal: true }).decode(await boundedBytes(response, 1048576)),
+        );
+        check(
+          protocol &&
+            typeof protocol === "object" &&
+            !Array.isArray(protocol) &&
+            "protocolVersion" in protocol &&
+            protocol.protocolVersion === "1.0" &&
+            "deploymentId" in protocol &&
+            typeof protocol.deploymentId === "string" &&
+            /^[a-f0-9]{64}$/.test(protocol.deploymentId),
+          "invalid_protocol_identity",
+        );
+        identity = protocol.deploymentId;
+      } catch {
+        throw new CliError(
+          "paid_identity_unavailable_restore_existing_origin_or_bootstrap_native",
+          3,
+        );
+      }
+      check(
+        identity === prepared.operator.deployment.deploymentId,
+        "paid_identity_mismatch_check_origin_and_explicitly_reprepare",
+        3,
+      );
+    }
     let token: string | undefined;
     if (options.bootstrap === "existing") {
       // Trusted CI supplies exactly this value. It never goes to disk, child env, argv, or results.

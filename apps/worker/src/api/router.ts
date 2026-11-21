@@ -1,4 +1,11 @@
-import { routeCatalog, schemaRegistry, validateBrowserOrigin, wireLimits } from "fortipi-contract";
+import {
+  isCanonicalModelSecretRef,
+  requireCapability,
+  routeCatalog,
+  schemaRegistry,
+  validateBrowserOrigin,
+  wireLimits,
+} from "fortipi-contract";
 import openapi from "../../../../packages/fortipi-contract/openapi.yaml" with { type: "json" };
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
@@ -141,9 +148,8 @@ function discovery(
             ? !!env.FORTIPI_MODEL_AUTH_KEY
             : "auth" in m &&
               m.auth.kind === "secretRef" &&
-              (m.auth.secretRef === "OPENAI_API_KEY"
-                ? !!env.OPENAI_API_KEY
-                : !!env.ANTHROPIC_API_KEY),
+              isCanonicalModelSecretRef(m.providerId, m.auth.secretRef) &&
+              !!env[m.auth.secretRef],
     })),
     infrastructure: policy,
     limits: {
@@ -159,20 +165,28 @@ function discovery(
     },
     retention: { kind: "conversation-lifetime", retainedFloor: 0 },
     backends: [
-      {
-        kind: "cloud-js",
-        confinement: "isolated",
-        available:
-          !!env.LOADER &&
-          policy.capabilities.some((c) => c.capability === "loader" && c.state === "available"),
-      },
-      {
-        kind: "linux",
-        confinement: "isolated",
-        available:
-          !!env.LINUX_CONTAINERS &&
-          policy.capabilities.some((c) => c.capability === "containers" && c.state === "available"),
-      },
+      ...(
+        [
+          { kind: "cloud-js", capability: "loader", binding: !!env.LOADER },
+          { kind: "linux", capability: "containers", binding: !!env.LINUX_CONTAINERS },
+        ] as const
+      ).map(({ kind, capability, binding }) => {
+        const available =
+          binding &&
+          requireCapability(policy, capability, env.CONTROL_PLANE.idFromName("control").toString());
+        return {
+          kind,
+          confinement: "isolated" as const,
+          available,
+          ...(!available
+            ? {
+                reason: !binding
+                  ? `${capability} binding unavailable; configure the selected backend binding`
+                  : `Paid ${capability} capability required for this deployment's public identity`,
+              }
+            : {}),
+        };
+      }),
       { kind: "native", confinement: "host", available: true },
     ],
   };

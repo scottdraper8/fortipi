@@ -22,6 +22,7 @@ import {
   ticketsAndRevoke,
 } from "../../apps/worker/test/integration/tickets-revoke.ts";
 import { workspaceAtomicBytes } from "../../apps/worker/test/integration/workspace-portability.ts";
+import type { AgentConversationGrantScope } from "../../packages/fortipi-contract/dist/index.js";
 import {
   applicationRecoveryChannel,
   discoverApplicationRecoveryMode,
@@ -698,9 +699,19 @@ export async function runEvidence(
             roles = new RoleContext(runtime.endpoint, runtime.admin);
           try {
             const state = await provision(runtime, (body) => roles.issue(body));
+            const resources: AgentConversationGrantScope = {
+              ...state.clientResources,
+              agentIds: [state.agent.agentId],
+              conversationIds: ["*"],
+            };
+            const consentedClient = await roles.issue({
+              requestId: crypto.randomUUID(),
+              role: "client",
+              grants: [{ grantId: crypto.randomUUID(), version: 1, resources }],
+            });
             const role = {
               endpoint: runtime.endpoint,
-              token: state.client.token,
+              token: consentedClient.token,
               agentId: state.agent.agentId,
               conversationId: state.conversations[0]!.conversationId,
             };
@@ -717,12 +728,7 @@ export async function runEvidence(
               const deadline = Date.now() + 20000;
               let id: string | undefined;
               while (!id && Date.now() < deadline) {
-                const page = await roles.call({
-                  operationId: "listConversations",
-                  path: { agentId: role.agentId },
-                  query: { limit: 100 },
-                  body: undefined,
-                });
+                const page = await client.conversations.list(role.agentId, { limit: 100 });
                 const created = page.items.filter((conversation) => conversation.title === title);
                 assert.ok(
                   created.length <= 1,
@@ -733,23 +739,9 @@ export async function runEvidence(
               }
               assert.ok(
                 id,
-                "Actual public keyboard-created conversation must exist before a role can cover it",
+                "The initial public client must observe the actual keyboard-created conversation",
               );
-              const replacement = await roles.issue({
-                requestId: crypto.randomUUID(),
-                role: "client",
-                grants: [
-                  {
-                    grantId: crypto.randomUUID(),
-                    version: 1,
-                    resources: {
-                      ...state.clientResources,
-                      conversationIds: [...state.clientResources.conversationIds, id],
-                    },
-                  },
-                ],
-              });
-              return { ...role, token: replacement.token, conversationId: id };
+              return { ...role, conversationId: id };
             });
             const observation = { ...tuiObservation, keyboard, smoke: await smokeTui(ports, role) };
             roles.assertSanitized(observation);
@@ -762,7 +754,7 @@ export async function runEvidence(
         [
           ...localLimits,
           "Separate real plain-response and seeded-tool fixtures; no model/scheduler replacement or action injection",
-          "New conversation gets an explicit exact scoped role before reopen; no wildcard authority; necessary synthetic client file removed/revoked",
+          "Explicit all-conversation consent for one concrete fixture agent precedes TUI startup; unchanged ephemeral client role/file removed/revoked after use",
         ],
       );
       await measure(
@@ -1179,14 +1171,12 @@ export async function runEvidence(
         await measure(
           "live-installed-tui-keyboard",
           ["keyboardConversationTui", "installed-bin", "seed1010"],
-          "Actual installed TUI keys create with exact role issuance, select/send and display correlated committed tasks plus offline replay on the unchanged deployed service",
+          "Actual installed TUI keys create and auto-open with the initial consented client, select/send and display correlated committed tasks plus offline replay on the unchanged deployed service",
           async () => {
             const role = await context.publicRole(2, "tui");
-            return keyboardConversationTui(
-              installed!,
-              role,
-              context.clientForRole(role.token),
-              context.authorizeCreated,
+            const client = context.clientForRole(role.token);
+            return keyboardConversationTui(installed!, role, client, (title) =>
+              context.observeCreated(title, role, client),
             );
           },
           [

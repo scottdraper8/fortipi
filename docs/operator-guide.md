@@ -6,9 +6,9 @@ notices. Actual installed offline dry-build, native Windows
 protection and deployed verification remain acceptance gates; local artifact checks
 do not establish those outcomes.
 
-The operator file is exactly `{schemaVersion:1,deployment:{name,origin,accountId?},runtime:<Configuration>}`. Origin is a canonical HTTPS origin; account ID is an optional non-secret selection. Unknown fields are rejected. Only `runtime` becomes `vars.FORTIPI_CONFIG`; no credentials or local paths belong there. The [example](../packages/fortipi-cli/templates/operator-config.example.json) validates against the generated schema. Select Computer or explicit local workspace independently of native, cloud-JS or Linux execution. A missing local device remains a remote waiting condition. Local validation checks canonical capability declarations, not account entitlement or freshness that the contract does not establish.
+The operator file is exactly `{schemaVersion:1,deployment:{name,origin,deploymentId?,accountId?,allowedOrigins?},runtime:<Configuration>}`. Origin is a canonical HTTPS origin; account ID is an optional non-secret selection, and `allowedOrigins` lists permitted browser origins. Paid execution requires the existing public `deploymentId` described below. Unknown fields are rejected. Only `runtime` becomes `vars.FORTIPI_CONFIG`; no credentials or local paths belong there. The [example](../packages/fortipi-cli/templates/operator-config.example.json) validates against the generated schema. Select Computer or explicit local workspace independently of native, cloud-JS or Linux execution. A missing local device remains a remote waiting condition. Local validation checks canonical capability declarations, not account entitlement or freshness that the contract does not establish.
 
-Provider selections use `auth:{kind:"secretRef",secretRef:"PROVIDER_SECRET"}` for API keys, or `auth:{kind:"oauth",providerId:"openai"}` for OAuth. Workers AI uses the AI binding. OpenAI Codex is a distinct OAuth-only provider. Custom gateways require a reviewed credential-routing contract. Model usage budgets are not infrastructure policy.
+Provider selections use `providerId:"openai"` with `auth:{kind:"secretRef",secretRef:"OPENAI_API_KEY"}` for OpenAI API keys, or `providerId:"anthropic"` with `auth:{kind:"secretRef",secretRef:"ANTHROPIC_API_KEY"}` for Anthropic API keys. These are the only supported API-key bindings; arbitrary names and cross-provider pairs are rejected locally. OAuth uses `auth:{kind:"oauth",providerId:"openai"}` with the matching provider selection. Workers AI uses the AI binding. OpenAI Codex is a distinct OAuth-only provider. Custom gateways require a reviewed credential-routing contract. Model usage budgets are not infrastructure policy.
 
 The example uses Workers AI's catalog-listed
 [`@cf/meta/llama-3.3-70b-instruct-fp8-fast`](https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/).
@@ -39,6 +39,31 @@ still reconcile the actual applied remote migration history. A fresh Free/native
 configuration has neither Loader nor Containers. Linux preparation requires the
 actual reviewed image manifest digest and context; its config ID is not a pullable
 registry identity. Preparing a paid variant does not purchase or prove entitlement.
+
+Paid cloud-JS/Linux configuration additionally requires
+`deployment.deploymentId`: the existing service's **ControlPlane Durable Object ID**
+reported as `deploymentId` by the public `GET /v1/protocol` at the configured origin.
+Keep `deployment.name` as the Worker name. Neither that name nor a Worker version
+or rollout ID is the logical deployment identity. For a fresh service, deploy
+Free/native first, read its public identity, then explicitly prepare a Paid upgrade
+with verified capability evidence for that exact ID. Native configurations need
+no new field. Protocol identity alone proves neither Paid entitlement nor freshness.
+
+Paid initialization asks for this public ID and your existing policy/backend
+files. It never translates capability records. Historical name-bound Paid configs
+and prepared receipts fail closed: obtain matching canonical evidence and explicitly
+reprepare in a new directory; retain old receipts and hashes unchanged. Reconcile
+remote migration history explicitly if the rejected historical preparation cannot
+be used as `--previous-directory`.
+
+Before reading bootstrap credentials or writing secrets/deploying, Paid deployment
+performs a bounded, unauthenticated, no-redirect public protocol read of the existing
+origin and compares its ID with `deployment.deploymentId`. An unavailable or malformed
+identity requires restoring that origin or bootstrapping Free/native; a foreign ID
+requires checking the origin and explicitly repreparing with matching evidence.
+Dry-run skips this network preflight and has no account effects. Matching discovery
+and runtime capability gates still require Paid policy, exact identity and the actual
+Loader/Containers binding; protocol discovery grants no execution authority.
 
 Customer bootstrap is persisted in `~/.fortipi/PROFILE.json` before upload. Named CLI profiles are exact-origin application credentials, protected outside Git checkouts: POSIX directories 0700/files 0600, or restrictive current-user Windows ACLs. Link, hardlink, ownership, overwrite and parent checks fail closed. Never copy deployment credentials into an application profile. Lost setup replies reuse the protected identity; revocation remains authoritative.
 
@@ -84,7 +109,7 @@ fortipi deploy --directory PREPARED_DIRECTORY --bootstrap existing --non-interac
 
 Existing mode consumes its explicitly supplied `FORTIPI_ADMIN_TOKEN` through Wrangler stdin, without replacing it, persisting it or forwarding it through argv/child environment. Wrangler owns Cloudflare authentication. FortiPi does not read its auth files or GitHub secrets.
 
-For external API keys, select a binding first, then use `models configure --config operator.json --provider PROVIDER --auth binding --secret-ref NAME --directory PREPARED_DIRECTORY`. Wrangler prompts on the terminal; `--secret-stdin` instead gives Wrangler inherited stdin from the operator's protected source. Do not put keys in command arguments, JSON input, shell history or config. For OAuth use `models login --provider PROVIDER --directory PREPARED_DIRECTORY --profile production --request-id STABLE_ID`. Supported interactive methods belong to pinned Pi: OpenAI callback/manual full URL; Anthropic browser/copy code; Codex browser/device code. Noninteractive OAuth fails. Complete credentials, including OpenAI client ID/scopes or Codex account binding, are sent once through TLS and discarded. No local provider-auth cache is created.
+For external API keys, initialization offers the provider's canonical binding. Select that binding first, then use `models configure --config operator.json --provider openai --auth binding --secret-ref OPENAI_API_KEY --directory PREPARED_DIRECTORY` (Anthropic uses `--provider anthropic --secret-ref ANTHROPIC_API_KEY`). Wrangler prompts on the terminal; `--secret-stdin` instead gives Wrangler inherited stdin from the operator's protected source. Do not put keys in command arguments, JSON input, shell history or config. For OAuth use `models login --provider PROVIDER --directory PREPARED_DIRECTORY --profile production --request-id STABLE_ID`. Supported interactive methods belong to pinned Pi: OpenAI callback/manual full URL; Anthropic browser/copy code; Codex browser/device code. Noninteractive OAuth fails. Complete credentials, including OpenAI client ID/scopes or Codex account binding, are sent once through TLS and discarded. No local provider-auth cache is created.
 
 `FORTIPI_MODEL_AUTH_KEY` is separate random key material. Login checks secret names, preserves an unknown existing server key, and persists a newly generated local key before stdin upload. It reuses that same key after an interrupted upload. Missing/mismatched keys require repair; prepare, status and dry-run never provision keys.
 

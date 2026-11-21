@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { BackendConfig, InfrastructurePolicy, ModelConfig } from "fortipi-contract";
+import { canonicalModelSecretRef } from "fortipi-contract";
 import { operatorConfig, readConfig, readJson, writeConfig } from "./config.js";
 import { check } from "./errors.js";
 import type { CliInteraction } from "./interaction-types.js";
@@ -82,17 +83,15 @@ export async function initialize(
             ["oauth", "Supported Pi sign-in"],
             ["binding", "API key entered later through Wrangler"],
           ]);
-    model =
-      auth === "oauth"
-        ? { providerId, modelId, auth: { kind: "oauth", providerId } }
-        : {
-            providerId,
-            modelId,
-            auth: {
-              kind: "secretRef",
-              secretRef: await ask.text("Provider secret binding name (not its value):"),
-            },
-          };
+    if (auth === "oauth") model = { providerId, modelId, auth: { kind: "oauth", providerId } };
+    else {
+      const secretRef = canonicalModelSecretRef(providerId);
+      check(secretRef, "unsupported_model_secret_binding");
+      await ask.select("Provider API-key binding (value entered later through Wrangler):", [
+        [secretRef, secretRef],
+      ]);
+      model = { providerId, modelId, auth: { kind: "secretRef", secretRef } };
+    }
   }
   config.runtime.models = [model];
   const workspace = await ask.select("Workspace storage (independent of execution):", [
@@ -125,6 +124,14 @@ export async function initialize(
       ])) as "host" | "isolated",
     };
   } else {
+    await interaction.notify({
+      type: "info",
+      message:
+        "Paid execution upgrades an existing service. For a fresh service, first deploy Free/native, then read its public /v1/protocol deploymentId. This ControlPlane DO identity does not prove Paid entitlement. Never use the Worker name or rollout ID, or rewrite existing capability evidence; explicitly reprepare with matching evidence.",
+    });
+    config.deployment.deploymentId = await ask.text(
+      "Existing service's public /v1/protocol deploymentId (ControlPlane DO ID):",
+    );
     const policy = await readJson(
       await ask.text(
         "Path to your existing verified infrastructure policy JSON (no plan upgrade occurs):",

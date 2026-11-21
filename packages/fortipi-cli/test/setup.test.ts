@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import type { Protocol, ResourceScope } from "fortipi-contract";
+import type { CredentialMint, Protocol, ResourceScope } from "fortipi-contract";
 import { spawn as ptySpawn } from "node-pty";
 import { argv } from "../dist/argv.js";
 import { readConfig } from "../dist/config.js";
@@ -49,7 +49,7 @@ async function harness(
       : {
           providerId: "openai",
           modelId: "gpt-5",
-          auth: { kind: "secretRef", secretRef: "EXISTING_PROVIDER_KEY" },
+          auth: { kind: "secretRef", secretRef: "OPENAI_API_KEY" },
         },
   );
   const input = join(root, "operator.json");
@@ -77,6 +77,7 @@ async function harness(
     "",
     "",
     "",
+    "all",
     "login",
     "yes",
   ];
@@ -169,6 +170,7 @@ async function harness(
           calls.push("wrangler:names");
           return JSON.stringify([
             { name: "EXISTING_PROVIDER_KEY" },
+            { name: "OPENAI_API_KEY" },
             { name: "FORTIPI_MODEL_AUTH_KEY" },
           ]);
         }
@@ -259,6 +261,7 @@ async function harness(
           ...scope,
           agentIds: [agent.agentId],
           workspaceIds: [workspace.workspaceId],
+          conversationIds: state.plan.includeAgentConversations ? ["*"] : [],
           actions: ["agents.read", "conversations.create"],
         });
         assert.equal(body.role, "client");
@@ -360,6 +363,13 @@ test("guided setup composes real commands with persisted explicit grants, readin
   assert.equal(registered.state, "setup-pending");
   assert.equal(registered.reason, "workspace_or_execution_target_not_ready");
   assert.ok(h.minted());
+  const mint = h.minted() as CredentialMint;
+  assert.equal(mint.role, "client");
+  const grant = mint.grants[0];
+  assert.ok(grant);
+  assert.deepEqual(grant.resources.conversationIds, ["*"]);
+  assert.deepEqual(grant.resources.agentIds, ["agent-first"]);
+  assert.deepEqual(grant.resources.actions, ["agents.read", "conversations.create"]);
   h.targets(true);
   const complete = await h.run(true);
   assert.equal(complete.state, "setup-completed");
@@ -374,6 +384,23 @@ test("guided setup composes real commands with persisted explicit grants, readin
   const prepared = JSON.parse(await readFile(join(h.directory, "wrangler.json"), "utf8"));
   assert.equal(prepared.containers, undefined);
   assert.equal(prepared.worker_loaders, undefined);
+});
+
+test("resuming an older setup journal preserves its exact conversation scope", async (t) => {
+  const h = await harness(t);
+  h.models(false);
+  assert.equal((await h.run()).state, "setup-pending");
+  const journal = await h.journal();
+  delete journal.plan.includeAgentConversations;
+  const operator = await readConfig(h.input);
+  const path = join(h.root, operator.deployment.name, "setup-default.json");
+  await writeFile(path, JSON.stringify(journal), { mode: 0o600 });
+  h.models(true);
+  assert.equal((await h.run(true)).state, "setup-completed");
+  const mint = h.minted() as CredentialMint;
+  const grant = mint.grants[0];
+  assert.ok(grant);
+  assert.deepEqual(grant.resources.conversationIds, []);
 });
 
 test("lost deployment and one-time credential replies preserve identities and refuse blind replay", async (t) => {

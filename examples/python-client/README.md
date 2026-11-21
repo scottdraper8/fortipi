@@ -41,6 +41,8 @@ sufficient explicit client grants separately.
 checkpoint=None)` obtains a fresh native one-use ticket, applies a snapshot or
 checks the previous identity scope, catches up bounded HTTP replay and subscribes
 over [RFC6455](https://www.rfc-editor.org/rfc/rfc6455). `next()` returns a validated event or `None` on close/boundary EOF.
+If the subscribe ACK is paginated, its remaining HTTP pages drain through the
+ACK's fixed `through` watermark before queued socket events are applied.
 Unknown valid durable/volatile types remain generic DTOs. Malformed known types
 cannot use the future-event fallback. `wait_completion(task_id)` requires the
 actual durable task.completed DTO; an admission receipt or volatile delta is not
@@ -57,7 +59,8 @@ origin/conversation/deployment/principal/credential scope refuses resume. Recent
 duplicate proofs are bounded; an older unproven duplicate requires resynchronization.
 
 Each message/frame is bounded by validated public protocol limits; replay is at
-most 64 pages per catch-up and JSON nesting at most 128. The synchronous interface
+most 64 pages per catch-up (including the ACK page for its barrier) and JSON nesting
+at most 128. The synchronous interface
 has one reader, no background reconnect or automatic side-effect replay. HTTP and
 socket operations have finite deadlines (DNS resolution remains OS-managed).
 `Client.cancel()` interrupts HTTP and is checked at socket reads within 250ms;

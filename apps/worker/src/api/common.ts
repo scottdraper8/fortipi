@@ -161,9 +161,10 @@ export function permits(grants: readonly D.Grant[], resources: D.ResourceScope):
   return grants.some(
     (g) =>
       (g.expiresAt === undefined || g.expiresAt > Date.now()) &&
-      (Object.keys(resources) as (keyof D.ResourceScope)[]).every((k) =>
-        resources[k].every((v) => g.resources[k].includes(v) || g.resources[k].includes("*")),
-      ),
+      (Object.keys(resources) as (keyof D.ResourceScope)[]).every((k) => {
+        const allowed: readonly string[] = g.resources[k];
+        return resources[k].every((v) => allowed.includes(v) || allowed.includes("*"));
+      }),
   );
 }
 /** A per-key lane outside both Pi's commit line and the shared SQL queue. */

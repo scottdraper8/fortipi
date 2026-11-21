@@ -6,6 +6,7 @@ export type FortiPiValue =
   | AdminOperation
   | AdmissionReceipt
   | Agent
+  | AgentConversationGrantScope
   | AgentCreate
   | AgentPage
   | AgentPatch
@@ -129,6 +130,8 @@ export type FortiPiValue =
   | RevocationPending
   | RevocationReceipt
   | RotationReceipt
+  | ScopeIds
+  | ScopeNames
   | SealedStore
   | SealedStoreReference
   | Sequence
@@ -188,6 +191,14 @@ export type Id = string;
 export type Sha256 = string;
 export type Revision = string;
 export type Timestamp = number;
+/**
+ * @maxItems 100
+ */
+export type ScopeIds = Id[];
+/**
+ * @maxItems 100
+ */
+export type ScopeNames = string[];
 export type ModelConfig =
   | {
       providerId: "cloudflare";
@@ -1910,6 +1921,26 @@ export interface Agent {
   };
   status: "idle" | "active" | "waiting" | "unavailable";
 }
+/**
+ * Explicit access to all current and future conversations of the concrete listed agents. Other resource and action scopes remain independent.
+ */
+export interface AgentConversationGrantScope {
+  /**
+   * @minItems 1
+   * @maxItems 100
+   */
+  agentIds: Id[];
+  /**
+   * @minItems 1
+   * @maxItems 1
+   */
+  conversationIds: "*"[];
+  workspaceIds: ScopeIds;
+  actions: ScopeNames;
+  tools: ScopeNames;
+  executorIds: ScopeIds;
+  backendIds: ScopeIds;
+}
 export interface AgentCreate {
   requestId: Id;
   name: string;
@@ -2403,38 +2434,17 @@ export interface ConversationProjection {
 export interface Grant {
   grantId: Id;
   version: number;
-  resources: ResourceScope;
+  resources: ResourceScope | AgentConversationGrantScope;
   expiresAt?: Timestamp;
 }
 export interface ResourceScope {
-  /**
-   * @maxItems 100
-   */
-  agentIds: Id[];
-  /**
-   * @maxItems 100
-   */
-  conversationIds: Id[];
-  /**
-   * @maxItems 100
-   */
-  workspaceIds: Id[];
-  /**
-   * @maxItems 100
-   */
-  actions: string[];
-  /**
-   * @maxItems 100
-   */
-  tools: string[];
-  /**
-   * @maxItems 100
-   */
-  executorIds: Id[];
-  /**
-   * @maxItems 100
-   */
-  backendIds: Id[];
+  agentIds: ScopeIds;
+  conversationIds: ScopeIds;
+  workspaceIds: ScopeIds;
+  actions: ScopeNames;
+  tools: ScopeNames;
+  executorIds: ScopeIds;
+  backendIds: ScopeIds;
 }
 export interface TransportAck {
   deliveryId: Id;

@@ -4,6 +4,7 @@ import type { Configuration } from "fortipi-contract";
 import {
   effectiveLimits,
   freeInfrastructurePolicy,
+  isCanonicalModelSecretRef,
   requireCapability,
   validateBrowserOrigin,
 } from "fortipi-contract";
@@ -12,7 +13,14 @@ import { validate } from "./validation.js";
 
 export interface OperatorConfig {
   schemaVersion: 1;
-  deployment: { name: string; origin: string; accountId?: string; allowedOrigins?: string[] };
+  deployment: {
+    name: string;
+    origin: string;
+    /** Existing service's public ControlPlane DO identity from /v1/protocol. */
+    deploymentId?: string;
+    accountId?: string;
+    allowedOrigins?: string[];
+  };
   runtime: Configuration;
 }
 export function exactOrigin(value: string, allowLoopback = false): string {
@@ -45,7 +53,7 @@ export function operatorConfig(value: unknown): OperatorConfig {
     c.deployment &&
       typeof c.deployment === "object" &&
       Object.keys(c.deployment).every((k) =>
-        ["name", "origin", "accountId", "allowedOrigins"].includes(k),
+        ["name", "origin", "deploymentId", "accountId", "allowedOrigins"].includes(k),
       ) &&
       typeof c.deployment.name === "string" &&
       /^[a-z][a-z0-9-]{0,62}$/.test(c.deployment.name) &&
@@ -54,6 +62,12 @@ export function operatorConfig(value: unknown): OperatorConfig {
     "invalid_deployment",
   );
   exactOrigin(c.deployment.origin);
+  check(
+    c.deployment.deploymentId === undefined ||
+      (typeof c.deployment.deploymentId === "string" &&
+        /^[a-f0-9]{64}$/.test(c.deployment.deploymentId)),
+    "invalid_canonical_deployment_id_use_existing_public_protocol",
+  );
   const origins = c.deployment.allowedOrigins;
   if (origins !== undefined) {
     check(
@@ -87,10 +101,16 @@ export function operatorConfig(value: unknown): OperatorConfig {
     }
   }
   if (c.runtime.execution.kind !== "native") {
+    check(
+      c.deployment.deploymentId,
+      "paid_deployment_id_required_bootstrap_native_then_reprepare",
+      3,
+    );
     const capability = c.runtime.execution.kind === "linux" ? "containers" : "loader";
     check(
-      policy.profile === "verified" && requireCapability(policy, capability, c.deployment.name),
-      "paid_capability_required",
+      policy.profile === "verified" &&
+        requireCapability(policy, capability, c.deployment.deploymentId),
+      "paid_capability_required_for_canonical_deployment_id_reprepare",
       3,
     );
     // Contract evidence carries deployment identity; it has no account identity or expiry.
@@ -116,11 +136,16 @@ export function operatorConfig(value: unknown): OperatorConfig {
       );
       check(m.providerId !== "openai-codex" || m.auth.kind === "oauth", "codex_requires_oauth");
       check(!m.endpoint, "custom_provider_endpoint_requires_review", 3);
-      if (m.auth.kind === "secretRef")
+      if (m.auth.kind === "secretRef") {
         check(
           !["FORTIPI_ADMIN_TOKEN", "FORTIPI_MODEL_AUTH_KEY"].includes(m.auth.secretRef),
           "reserved_secret_reference",
         );
+        check(
+          isCanonicalModelSecretRef(m.providerId, m.auth.secretRef),
+          "unsupported_model_secret_binding",
+        );
+      }
     }
   }
   return c;

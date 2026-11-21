@@ -109,6 +109,8 @@ interface SetupPlan {
   scope: ResourceScope;
   includeAgent: boolean;
   includeWorkspace: boolean;
+  // Absent in older journals: never infer consent when resuming them.
+  includeAgentConversations?: boolean;
   providers: Record<string, string>;
 }
 type SetupStage =
@@ -214,6 +216,16 @@ async function collectPlan(options: SetupOptions): Promise<SetupPlan> {
   };
   validate("ResourceScope", scope);
   check(scope.actions.length > 0, "explicit_actions_required");
+  const includeAgentConversations =
+    role === "client" &&
+    (await ask.select("Conversation access within the granted agents:", [
+      ["all", "All current and future conversations in those agents"],
+      ["listed", "Only the existing conversation IDs listed above"],
+    ])) === "all";
+  check(
+    !includeAgentConversations || includeAgent || scope.agentIds.length > 0,
+    "conversation_grant_requires_agents",
+  );
   const plan: SetupPlan = {
     login:
       (await ask.select("Cloudflare sign-in:", [
@@ -232,6 +244,7 @@ async function collectPlan(options: SetupOptions): Promise<SetupPlan> {
     scope,
     includeAgent,
     includeWorkspace,
+    includeAgentConversations,
     providers: Object.fromEntries(
       config.runtime.models
         .filter((m) => m.providerId !== "cloudflare")
@@ -244,7 +257,7 @@ async function collectPlan(options: SetupOptions): Promise<SetupPlan> {
     check(executorId && /^[A-Za-z0-9_-]{1,128}$/.test(executorId), "executor_identity_required");
   await ui.notify({
     type: "info",
-    message: `Create this workspace and agent, then issue exactly this scoped credential? No conversation or model work starts.\n${JSON.stringify({ workspace: plan.workspace.config, agent: { name, model }, credential: { role, recipient, executorId }, scope, includeNewAgent: includeAgent, includeNewWorkspace: includeWorkspace }, null, 2)}`,
+    message: `Create this workspace and agent, then issue exactly this scoped credential? No conversation or model work starts.\n${JSON.stringify({ workspace: plan.workspace.config, agent: { name, model }, credential: { role, recipient, executorId }, scope, includeNewAgent: includeAgent, includeNewWorkspace: includeWorkspace, conversationAccess: includeAgentConversations ? "All current and future conversations in the granted agents" : "Only the listed conversation IDs" }, null, 2)}`,
   });
   check(
     (await ask.select("Apply this setup plan?", [
@@ -320,6 +333,17 @@ export async function guidedSetup(options: SetupOptions): Promise<SetupResult> {
     validate("WorkspaceBindingCreate", journal.plan.workspace);
     validate("AgentCreate", journal.plan.agent);
     validate("ResourceScope", journal.plan.scope);
+    check(
+      journal.plan.includeAgentConversations === undefined ||
+        typeof journal.plan.includeAgentConversations === "boolean",
+      "invalid_setup_conversation_scope",
+    );
+    check(
+      !journal.plan.includeAgentConversations ||
+        (journal.plan.credential.role === "client" &&
+          (journal.plan.includeAgent || journal.plan.scope.agentIds.length > 0)),
+      "conversation_grant_requires_agents",
+    );
     validate("Id", journal.plan.credential.requestId);
     validate("Id", journal.plan.credential.grantId);
     check(
@@ -576,6 +600,7 @@ export async function guidedSetup(options: SetupOptions): Promise<SetupResult> {
         resources.workspaceIds = [
           ...new Set([...resources.workspaceIds, journal.workspace.workspaceId]),
         ];
+      if (journal.plan.includeAgentConversations) resources.conversationIds = ["*"];
       const common = {
         requestId: plan.requestId,
         grants: [{ grantId: plan.grantId, version: 1, resources }],

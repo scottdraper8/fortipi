@@ -17,6 +17,14 @@ dummy comparison. Admin routes require the admin audience plus explicit grants.
 Role alone grants no conversation or tool access. Executors cannot acquire a
 client stream or use application/administration operations.
 
+Guided client setup offers explicit access to all current and future conversations
+within the selected concrete agents. This grant uses `conversationIds: ["*"]`
+and requires at least one concrete agent ID; it grants no access to other agents.
+Actions, tools, workspaces and execution targets retain their listed scopes.
+Choosing listed conversations retains exact IDs; an empty list grants none.
+Older setup journals retain exact conversation scope when resumed. Public request
+selectors and socket tickets always name concrete resources.
+
 Delegation checks every resource/action/tool/target and expiry against the
 issuer. Rotation publishes replacement issuance and old-identity invalidation
 in one SQLite transaction. Issuance material is returned once. An operator must

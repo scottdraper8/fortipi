@@ -649,7 +649,14 @@ class Subscription:
                 if frame.get("type") == "ack":
                     require(frame["requestId"] == request_id and
                             frame["operationId"] == "replayEvents", "unexpected_ack")
-                    self.apply_page(frame["receipt"], self.cursor)
+                    page = frame["receipt"]
+                    after = self.cursor
+                    through = self.apply_page(page, after)
+                    if page["hasMore"]:
+                        require(self.cursor > after, "invalid_replay")
+                        # Live delivery starts after this fixed subscription barrier.
+                        # Drain its remaining pages before applying any socket events.
+                        self.catch_up(max_pages=63, through=through)
                     break
                 require("durability" in frame, "unexpected_frame")
                 size += count
@@ -718,8 +725,7 @@ class Subscription:
                 page["hasMore"] == (page["nextAfter"] < page["through"]), "invalid_replay")
         return page["through"]
 
-    def catch_up(self, max_pages=64):
-        through = None
+    def catch_up(self, max_pages=64, *, through=None):
         for _ in range(max_pages):
             after = self.cursor
             page = self.client.replay(self.conversation_id, after, through=through)

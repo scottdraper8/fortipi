@@ -4,8 +4,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { build } from "esbuild";
+import type * as D from "fortipi-contract";
 import { canonicalJson } from "fortipi-contract";
 import { dependencyPatches } from "../../../scripts/dependency-patches.ts";
 import {
@@ -81,6 +83,7 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
   assert.equal(free.vars.FORTIPI_CONFIG.execution.kind, "native");
   await verifyPrepared(freeDir);
   const paid = structuredClone(native);
+  paid.deployment.deploymentId = "a".repeat(64);
   paid.runtime.infrastructure.profile = "verified";
   paid.runtime.infrastructure.accountPlan = "paid";
   paid.runtime.infrastructure.capabilities = [
@@ -88,7 +91,7 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
       capability: "loader",
       state: "available",
       accountPlan: "paid",
-      deploymentId: paid.deployment.name,
+      deploymentId: paid.deployment.deploymentId,
       observedAt: 1,
     },
   ];
@@ -110,7 +113,7 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
     capability: "containers",
     state: "available",
     accountPlan: "paid",
-    deploymentId: paid.deployment.name,
+    deploymentId: paid.deployment.deploymentId,
     observedAt: 1,
   });
   assert.ok(first.manifest.image);
@@ -299,4 +302,295 @@ test("dry-build success requires real emitted module bytes, not only a successfu
     },
   );
   assert.equal("workerBytesVerified" in result && result.workerBytesVerified, true);
+});
+
+test("canonical Paid preparation composes with public discovery and authoritative tool routing", async (t) => {
+  const directory = await temp(t);
+  // Controlled namespace/binding adapters; no Loader/container execution or entitlement claim.
+  const bundleDirectory = join(root, ".agent-docs/tmp", `paid-identity-${randomUUID()}`);
+  await mkdir(bundleDirectory, { recursive: true });
+  t.after(() => rm(bundleDirectory, { recursive: true, force: true }));
+  await build({
+    entryPoints: ["apps/worker/src/api/router.ts", "apps/worker/src/control/tool-context.ts"],
+    absWorkingDir: root,
+    outdir: bundleDirectory,
+    outbase: "apps/worker/src",
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    external: ["ajv", "ajv/*"],
+    loader: { ".yaml": "json" },
+    logLevel: "silent",
+  });
+  const { routeRequest } = (await import(
+    pathToFileURL(join(bundleDirectory, "api/router.js")).href
+  )) as { routeRequest(request: Request, env: unknown): Promise<Response> };
+  const { toolTopology } = (await import(
+    pathToFileURL(join(bundleDirectory, "control/tool-context.js")).href
+  )) as {
+    toolTopology(
+      directory: unknown,
+      executors: unknown,
+      env: unknown,
+      context: unknown,
+      input: { agentId: string; conversationId: string; tool: string; capabilities: string[] },
+    ): { workspaces: unknown[] };
+  };
+  const deploymentId = "a".repeat(64);
+  const manifest = (await verifyAssets()).manifest;
+  for (const kind of ["cloud-js", "linux"] as const) {
+    const c = await config();
+    c.deployment.deploymentId = deploymentId;
+    c.runtime.infrastructure.profile = "verified";
+    c.runtime.infrastructure.accountPlan = "paid";
+    c.runtime.infrastructure.capabilities = [
+      {
+        capability: kind === "cloud-js" ? "loader" : "containers",
+        state: "available",
+        accountPlan: "paid",
+        deploymentId,
+        observedAt: 1,
+      },
+    ];
+    c.runtime.execution =
+      kind === "cloud-js"
+        ? { kind, backendId: "cloud", modules: [], egress: [], onInterrupt: "fail" }
+        : {
+            kind,
+            backendId: "cloud",
+            host: "container",
+            imageDigest: manifest.image!.builtManifestDigest,
+            runtime: { cpuMs: 1000, memoryBytes: 268435456, timeoutMs: 1000 },
+          };
+    const input = join(directory, `${kind}.json`),
+      prepared = join(directory, kind);
+    await writeFile(input, JSON.stringify(c));
+    await prepare(input, prepared);
+    const receipt = await verifyPrepared(prepared);
+    const emitted = JSON.parse(await readFile(join(prepared, "wrangler.json"), "utf8"));
+    assert.equal(receipt.operator.deployment.deploymentId, deploymentId);
+    assert.notEqual(c.deployment.name, deploymentId);
+    assert.deepEqual(emitted.vars.FORTIPI_CONFIG, c.runtime, "Evidence is transported unchanged");
+    const runtime = emitted.vars.FORTIPI_CONFIG as D.Configuration;
+    const env: {
+      FORTIPI_CONFIG: D.Configuration;
+      LOADER?: object;
+      LINUX_CONTAINERS?: object;
+      CONTROL_PLANE: { idFromName(name: string): { toString(): string } };
+    } = {
+      FORTIPI_CONFIG: runtime,
+      LOADER: {},
+      LINUX_CONTAINERS: {},
+      CONTROL_PLANE: {
+        idFromName: (name: string) => {
+          assert.equal(name, "control");
+          return { toString: () => deploymentId };
+        },
+      },
+    };
+    const tool = kind === "cloud-js" ? "javascript" : "shell";
+    const resources: D.ResourceScope = {
+      agentIds: ["agent"],
+      conversationIds: ["conversation"],
+      workspaceIds: ["workspace"],
+      tools: [tool],
+      executorIds: [],
+      backendIds: ["cloud"],
+      actions: ["jobs.dispatch", "workspace.write"],
+    };
+    const ctx = {
+      role: "client",
+      deploymentId,
+      grants: [{ grantId: "grant", version: 1, resources }],
+    };
+    const binding = { workspaceId: "workspace", bindingVersion: 1, config: { kind: "computer" } };
+    const directoryAdapter = {
+      config: () => env.FORTIPI_CONFIG,
+      policy: () => env.FORTIPI_CONFIG.infrastructure,
+      registeredAuthority: () => ({ recipient: { kind: "agent", id: "agent" }, resources }),
+      cursor: () => 0,
+      token: () => "0",
+      store: { get: (name: string) => (name === "binding" ? binding : undefined), page: () => [] },
+    };
+    for (const fault of [
+      "none",
+      "foreign",
+      "free-policy",
+      "free-record",
+      "no-evidence",
+      "missing-binding",
+    ] as const) {
+      env.FORTIPI_CONFIG = structuredClone(runtime);
+      env.LOADER = {};
+      env.LINUX_CONTAINERS = {};
+      const policy = env.FORTIPI_CONFIG.infrastructure;
+      if (fault === "foreign") policy.capabilities[0]!.deploymentId = "b".repeat(64);
+      if (fault === "free-policy") policy.accountPlan = "free";
+      if (fault === "free-record") policy.capabilities[0]!.accountPlan = "free";
+      if (fault === "no-evidence") policy.capabilities = [];
+      if (fault === "missing-binding") {
+        delete env.LOADER;
+        delete env.LINUX_CONTAINERS;
+      }
+      const response = await routeRequest(new Request(`${c.deployment.origin}/v1/protocol`), env);
+      assert.equal(response.status, 200);
+      const protocol = (await response.json()) as D.Protocol;
+      assert.equal(protocol.deploymentId, deploymentId);
+      const backend = protocol.backends.find((b) => b.kind === kind)!;
+      assert.equal(backend.available, fault === "none", `${kind}: ${fault}`);
+      if (fault !== "none") {
+        assert.ok(backend.reason, "Unavailable cloud metadata must explain the gate");
+        assert.match(
+          backend.reason,
+          fault === "missing-binding" ? /binding unavailable/ : /Paid.*public identity/,
+        );
+      } else assert.equal(backend.reason, undefined);
+      const topology = toolTopology(directoryAdapter, {}, env, ctx, {
+        agentId: "agent",
+        conversationId: "conversation",
+        tool,
+        capabilities: [tool],
+      });
+      assert.equal(topology.workspaces.length, fault === "none" ? 1 : 0, `${kind}: ${fault}`);
+    }
+  }
+});
+
+test("Paid deploy rejects foreign/unavailable/malformed origin identity before bootstrap or Wrangler writes", async (t) => {
+  const directory = await temp(t),
+    c = await config();
+  const deploymentId = "a".repeat(64);
+  c.deployment.deploymentId = deploymentId;
+  c.runtime.execution = {
+    kind: "cloud-js",
+    backendId: "js",
+    modules: [],
+    egress: [],
+    onInterrupt: "fail",
+  };
+  c.runtime.infrastructure.profile = "verified";
+  c.runtime.infrastructure.accountPlan = "paid";
+  c.runtime.infrastructure.capabilities = [
+    {
+      capability: "loader",
+      state: "available",
+      accountPlan: "paid",
+      deploymentId,
+      observedAt: 1,
+    },
+  ];
+  const input = join(directory, "operator.json"),
+    prepared = join(directory, "prepared");
+  await writeFile(input, JSON.stringify(c));
+  await prepare(input, prepared);
+  const receiptBytes = await readFile(join(prepared, "prepare-receipt.json"));
+  let writes = 0,
+    reads = 0;
+  for (const fault of [
+    "foreign",
+    "unavailable",
+    "malformed",
+    "invalid-id",
+    "wrong-version",
+    "oversize",
+    "redirect",
+    "transport",
+  ] as const) {
+    const profileDirectory = join(directory, `no-bootstrap-${fault}`);
+    await assert.rejects(
+      deploy(
+        prepared,
+        {
+          bootstrap: "local",
+          profileDirectory,
+          transport: async (url, request) => {
+            reads++;
+            assert.equal(String(url), `${c.deployment.origin}/v1/protocol`);
+            assert.equal(request?.redirect, "error");
+            assert.equal(request?.credentials, "omit");
+            assert.equal(request?.method, "GET");
+            assert.deepEqual(request?.headers, { accept: "application/json" });
+            assert.ok(request?.signal);
+            if (fault === "transport") throw new Error("synthetic outage");
+            if (fault === "redirect")
+              return new Response(null, {
+                status: 302,
+                headers: { location: "https://foreign.example" },
+              });
+            if (fault === "unavailable") return new Response("unavailable", { status: 503 });
+            if (fault === "malformed") return new Response("{");
+            if (fault === "oversize") return new Response("x".repeat(1048577));
+            return Response.json({
+              protocolVersion: fault === "wrong-version" ? "2.0" : "1.0",
+              deploymentId: fault === "invalid-id" ? c.deployment.name : "b".repeat(64),
+            });
+          },
+        },
+        {
+          async run() {
+            writes++;
+            assert.fail("Identity refusal must precede every Wrangler call");
+          },
+        },
+      ),
+      fault === "foreign"
+        ? /paid_identity_mismatch.*reprepare/
+        : /paid_identity_unavailable.*bootstrap_native/,
+    );
+    await assert.rejects(lstat(profileDirectory), { code: "ENOENT" });
+    assert.deepEqual(await readFile(join(prepared, "prepare-receipt.json")), receiptBytes);
+  }
+  assert.equal(reads, 8);
+  assert.equal(writes, 0);
+  let reachedUpload = false;
+  await assert.rejects(
+    deploy(
+      prepared,
+      {
+        bootstrap: "local",
+        profileDirectory: join(directory, "synthetic-positive-bootstrap"),
+        transport: async (url) => {
+          assert.equal(String(url), `${c.deployment.origin}/v1/protocol`);
+          return Response.json({ protocolVersion: "1.0", deploymentId });
+        },
+      },
+      {
+        async run(request) {
+          // Stop at the substituted provider boundary; no real credential or account is used.
+          assert.deepEqual(request.args.slice(0, 3), ["secret", "put", "FORTIPI_ADMIN_TOKEN"]);
+          reachedUpload = true;
+          throw new Error("synthetic_matching_identity_reached_upload");
+        },
+      },
+    ),
+    /synthetic_matching_identity_reached_upload/,
+  );
+  assert.equal(reachedUpload, true, "A matching existing logical deployment passes preflight");
+  const result = await deploy(
+    prepared,
+    {
+      dryRun: true,
+      transport: async () => {
+        assert.fail("Dry-run must not contact the existing origin");
+      },
+    },
+    {
+      async run(request) {
+        assert.ok(request.args.includes("--dry-run"));
+        assert.equal(request.deploymentAuth, undefined);
+        assert.equal(request.input, undefined);
+        const out = request.args[request.args.indexOf("--outdir") + 1]!;
+        for (const record of (await verifyAssets()).manifest.files.filter(
+          (f) => f.kind === "worker",
+        )) {
+          const path = join(out, record.path.slice("worker/".length));
+          await mkdir(join(path, ".."), { recursive: true });
+          await cp(join(assets, record.path), path);
+        }
+        return "";
+      },
+    },
+  );
+  assert.equal("state" in result && result.state, "dry-build-completed");
+  assert.deepEqual(await readFile(join(prepared, "prepare-receipt.json")), receiptBytes);
 });

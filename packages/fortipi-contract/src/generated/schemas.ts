@@ -2618,40 +2618,56 @@ export const commonSchema = {
       title: "ResourceScope",
       type: "object",
       properties: {
+        agentIds: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeIds" },
+        conversationIds: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeIds",
+        },
+        workspaceIds: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeIds",
+        },
+        actions: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeNames" },
+        tools: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeNames" },
+        executorIds: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeIds",
+        },
+        backendIds: {
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeIds",
+        },
+      },
+      required: [
+        "agentIds",
+        "conversationIds",
+        "workspaceIds",
+        "actions",
+        "tools",
+        "executorIds",
+        "backendIds",
+      ],
+      additionalProperties: false,
+    },
+    AgentConversationGrantScope: {
+      title: "AgentConversationGrantScope",
+      description:
+        "Explicit access to all current and future conversations of the concrete listed agents. Other resource and action scopes remain independent.",
+      type: "object",
+      properties: {
         agentIds: {
           type: "array",
           items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+          minItems: 1,
           maxItems: 100,
         },
-        conversationIds: {
-          type: "array",
-          items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-          maxItems: 100,
-        },
+        conversationIds: { type: "array", items: { const: "*" }, minItems: 1, maxItems: 1 },
         workspaceIds: {
-          type: "array",
-          items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-          maxItems: 100,
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeIds",
         },
-        actions: {
-          type: "array",
-          items: { type: "string", minLength: 1, maxLength: 128 },
-          maxItems: 100,
-        },
-        tools: {
-          type: "array",
-          items: { type: "string", minLength: 1, maxLength: 128 },
-          maxItems: 100,
-        },
+        actions: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeNames" },
+        tools: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeNames" },
         executorIds: {
-          type: "array",
-          items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-          maxItems: 100,
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeIds",
         },
         backendIds: {
-          type: "array",
-          items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
-          maxItems: 100,
+          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeIds",
         },
       },
       required: [
@@ -2672,7 +2688,12 @@ export const commonSchema = {
         grantId: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
         version: { type: "integer", minimum: 0, maximum: 9007199254740991 },
         resources: {
-          $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope",
+          anyOf: [
+            { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope" },
+            {
+              $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/AgentConversationGrantScope",
+            },
+          ],
         },
         expiresAt: {
           $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Timestamp",
@@ -3325,6 +3346,18 @@ export const commonSchema = {
         "deadline",
       ],
       additionalProperties: false,
+    },
+    ScopeIds: {
+      title: "ScopeIds",
+      type: "array",
+      items: { $ref: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Id" },
+      maxItems: 100,
+    },
+    ScopeNames: {
+      title: "ScopeNames",
+      type: "array",
+      items: { type: "string", minLength: 1, maxLength: 128 },
+      maxItems: 100,
     },
   },
 } as const;
@@ -7425,6 +7458,8 @@ export const schemaRefs = {
   Empty: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Empty",
   CredentialRef: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/CredentialRef",
   ResourceScope: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ResourceScope",
+  AgentConversationGrantScope:
+    "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/AgentConversationGrantScope",
   Grant: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Grant",
   Recipient: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Recipient",
   Invalidation: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/Invalidation",
@@ -7453,6 +7488,8 @@ export const schemaRefs = {
   ChunkInventory: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ChunkInventory",
   WorkspaceLeaseDigestInput:
     "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/WorkspaceLeaseDigestInput",
+  ScopeIds: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeIds",
+  ScopeNames: "https://fortipi.dev/schemas/1.0.0/common.schema.json#/$defs/ScopeNames",
   WorkspaceConfig:
     "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/WorkspaceConfig",
   BackendConfig: "https://fortipi.dev/schemas/1.0.0/configuration.schema.json#/$defs/BackendConfig",

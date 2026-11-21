@@ -102,7 +102,10 @@ export async function tuiProfile(installed: Installed, role: PublicRole) {
       await file.close();
     }
     await platform.verifyProtection(credentialFile, false);
-    assert.equal(await module.applicationCredential(credentialFile, role.endpoint), role.token);
+    assert.ok(
+      (await module.applicationCredential(credentialFile, role.endpoint)) === role.token,
+      "Protected ephemeral profile must retain the supplied client credential",
+    );
     await module.saveProfiles(
       {
         version: 1,
@@ -258,7 +261,7 @@ export async function keyboardConversationTui(
   installed: Installed,
   role: PublicRole,
   client: FortiPiClient,
-  authorizeCreated: (title: string) => Promise<PublicRole>,
+  observeCreated: (title: string) => Promise<PublicRole>,
 ) {
   const profile = await tuiProfile(installed, role);
   const pty = terminal(
@@ -275,7 +278,7 @@ export async function keyboardConversationTui(
     profile.env,
   );
   const events: DurableEvent[] = [];
-  const observer = client.conversations.subscribe(role.conversationId, {
+  let observer = client.conversations.subscribe(role.conversationId, {
     agentId: role.agentId,
     maxReconnects: 0,
     onSnapshot() {},
@@ -291,48 +294,41 @@ export async function keyboardConversationTui(
     );
     const title = "seed1010-pty-created";
     pty.write(`/new ${title}\r`);
-    const createdRole = await authorizeCreated(title),
+    const createdRole = await observeCreated(title),
       createdConversationId = createdRole.conversationId;
     assert.equal(createdRole.endpoint, role.endpoint);
     assert.equal(createdRole.agentId, role.agentId);
     assert.notEqual(createdConversationId, role.conversationId);
-    await pty.wait((s) => s.includes("unauthorized") && s.includes("focus composer"));
-    // A new ID is outside the original exact grant. The trusted coordinator
-    // publicly issues a role for that ID before any authorized reopen. Only the
-    // minimal application token replaces this own protected ephemeral file.
-    const token = createdRole.token;
-    const sdk = (await import(
-      pathToFileURL(installed.resolveExport(`@${installed.candidate.scope}/fortipi-client/node`))
-        .href
-    )) as typeof import("../../packages/fortipi-client/dist/node.js");
-    const newlyAuthorized = new sdk.FortiPiClient({
-      endpoint: role.endpoint,
-      credentials: async () => token,
-      allowLoopbackHttp: new URL(role.endpoint).protocol === "http:",
-    });
+    assert.ok(
+      createdRole.token === role.token,
+      "Creation observer must preserve the initial client credential",
+    );
+    // /ids observes the actual auto-open selection before any manual /open.
+    await pty.wait((s) => s.includes("online") && s.includes(" | conversation | focus composer"));
+    pty.write("/ids\r");
+    await pty.wait(
+      (s) =>
+        s.includes("online") &&
+        s.replaceAll("\n", "").includes(`conversation ${createdConversationId}`),
+    );
+    pty.write("\t");
+    await pty.wait((s) => s.includes("focus composer"));
     assert.equal(
-      (await newlyAuthorized.conversations.get(createdConversationId)).conversation.conversationId,
+      (await client.conversations.get(createdConversationId)).conversation.conversationId,
       createdConversationId,
     );
-    const executor = (await import(
-      pathToFileURL(installed.resolveExport(`@${installed.candidate.scope}/fortipi-executor`)).href
-    )) as typeof import("../../packages/fortipi-executor/dist/index.js");
-    await executor.privateWrite(
-      profile.credentialFile,
-      JSON.stringify({ version: 1, endpoint: role.endpoint, role: "client", token }),
-    );
-    await executor.adapter().verifyProtection(profile.credentialFile, false);
-    await pty.wait((s) => s.includes("focus composer"));
-    // The HTTP client deliberately caches a still-valid role until401. Normal
-    // profile selection creates a new client after the explicit role change.
-    pty.write("/profiles\r");
-    await pty.wait((s) => s.includes(" | profiles | focus list") && s.includes("evidence"));
-    pty.write("\r");
-    await pty.wait((s) => s.includes(" | agents | focus list"));
-    pty.write("\t");
-    await pty.wait((s) => s.includes("focus transcript"));
-    pty.write("\t");
-    await pty.wait((s) => s.includes("focus composer"));
+    observer.close();
+    await observer.done;
+    events.length = 0;
+    observer = client.conversations.subscribe(createdConversationId, {
+      agentId: role.agentId,
+      maxReconnects: 0,
+      onSnapshot() {},
+      onEvent(event) {
+        if (event.durability === "durable") events.push(event);
+      },
+    });
+    await observer.ready;
     pty.write(`/open ${createdConversationId} ${role.agentId}\r`);
     try {
       await pty.wait((s) => s.includes("online") && s.includes(" | conversation | focus composer"));
@@ -343,8 +339,9 @@ export async function keyboardConversationTui(
       )) as typeof import("../../packages/fortipi-tui/dist/index.js");
       assert.fail(
         `Created-conversation reopen incomplete: ${JSON.stringify({
-          protectedRoleReplaced:
-            (await shown.applicationCredential(profile.credentialFile, role.endpoint)) === token,
+          protectedRoleUnchanged:
+            (await shown.applicationCredential(profile.credentialFile, role.endpoint)) ===
+            role.token,
           unauthorized: screen.includes("unauthorized"),
           invalidCredential: screen.includes("credential"),
           connectionOffline: screen.includes("offline"),
@@ -371,6 +368,16 @@ export async function keyboardConversationTui(
     );
     pty.write("\u001b[B\u001b[A\r");
     await pty.wait((s) => s.includes(" | conversation | focus composer") && s.includes("online"));
+    pty.write("/ids\r");
+    await pty.wait((s) => s.replaceAll("\n", "").includes(`conversation ${role.conversationId}`));
+    pty.write("\t");
+    await pty.wait((s) => s.includes("focus composer"));
+    pty.write(`/open ${createdConversationId} ${role.agentId}\r`);
+    await pty.wait((s) => s.includes(" | conversation | focus composer") && s.includes("online"));
+    pty.write("/ids\r");
+    await pty.wait((s) => s.replaceAll("\n", "").includes(`conversation ${createdConversationId}`));
+    pty.write("\u001b");
+    await pty.wait((s) => s.includes(" | conversation | focus composer"));
     pty.write("\t");
     await pty.wait((s) => s.includes("focus list"));
     pty.write("\t");
@@ -379,7 +386,7 @@ export async function keyboardConversationTui(
     await pty.wait((s) => s.includes("focus composer"));
     pty.resize(88, 28);
     pty.resize(130, 40);
-    before = await client.conversations.get(role.conversationId);
+    before = await client.conversations.get(createdConversationId);
     const cursorBefore = before.lastEventSeq;
     pty.write("seed1010-pty-keys\r");
     try {
@@ -387,7 +394,7 @@ export async function keyboardConversationTui(
         events.some((event) => event.eventSeq > cursorBefore && event.type === "task.completed"),
       );
     } catch {
-      const projection = await client.conversations.get(role.conversationId),
+      const projection = await client.conversations.get(createdConversationId),
         screen = await pty.currentScreen();
       assert.fail(
         `Keyboard completion unavailable: ${JSON.stringify({
@@ -404,7 +411,7 @@ export async function keyboardConversationTui(
         })}`,
       );
     }
-    const after = await client.conversations.get(role.conversationId);
+    const after = await client.conversations.get(createdConversationId);
     assert.equal(
       after.messages.filter((m) => m.role === "user" && m.content === "seed1010-pty-keys").length,
       1,
@@ -419,7 +426,7 @@ export async function keyboardConversationTui(
     pty.write("/disconnect\r");
     await pty.wait((s) => s.includes("offline"));
     const cursor = after.lastEventSeq;
-    const offline = await client.conversations.send(role.conversationId, {
+    const offline = await client.conversations.send(createdConversationId, {
       clientRequestId: crypto.randomUUID(),
       content: "seed1010-pty-offline",
       busyBehavior: "followUp",
@@ -429,7 +436,7 @@ export async function keyboardConversationTui(
     );
     pty.write("/reconnect\r");
     await pty.wait((s) => s.includes("online") && s.includes("seed1010-pty-offline"));
-    const restored = await client.conversations.get(role.conversationId);
+    const restored = await client.conversations.get(createdConversationId);
     assert.ok(restored.lastEventSeq > cursor);
     assert.equal(
       restored.messages.filter((m) => m.role === "user" && m.content === "seed1010-pty-offline")
@@ -459,6 +466,28 @@ export async function keyboardConversationTui(
         1,
         "Each final assistant identity must render once in the current screen",
       );
+    const shown = (await import(
+      pathToFileURL(installed.resolveExport(`@${installed.candidate.scope}/fortipi-tui`)).href
+    )) as typeof import("../../packages/fortipi-tui/dist/index.js");
+    assert.ok(
+      (await shown.applicationCredential(profile.credentialFile, role.endpoint)) === role.token,
+      "The initial protected client credential must remain unchanged through creation and replay",
+    );
+    // Keep profile selection coverage after the initial client's full lifecycle.
+    pty.write("/profiles\r");
+    await pty.wait((s) => s.includes(" | profiles | focus list") && s.includes("evidence"));
+    pty.write("\r");
+    await pty.wait((s) => s.includes(" | agents | focus list"));
+    pty.write("\t");
+    await pty.wait((s) => s.includes("focus transcript"));
+    pty.write("\t");
+    await pty.wait((s) => s.includes("focus composer"));
+    pty.write(`/open ${createdConversationId} ${role.agentId}\r`);
+    await pty.wait((s) => s.includes("online") && s.includes(" | conversation | focus composer"));
+    assert.ok(
+      (await shown.applicationCredential(profile.credentialFile, role.endpoint)) === role.token,
+      "Profile selection must preserve the initial client credential",
+    );
     const screenSha256 = await pty.screenDigest();
     pty.write("/quit\r");
     await pty.exit();
@@ -469,9 +498,11 @@ export async function keyboardConversationTui(
       screenCells: true,
       focusAndResize: true,
       keyboardCreatedConversationId: createdConversationId,
-      ungrantedNewConversationDenied: true,
-      exactCreatedConversationGrantIssued: true,
-      keyboardProfileReloadAfterRoleChange: true,
+      sameClientCreationAndOpen: true,
+      keyboardNewAutoOpenedCreatedConversation: true,
+      sameClientCreatedConversationSendSubscribeAndReplay: true,
+      noCredentialReplacement: true,
+      keyboardProfileSelectionWithSameCredential: true,
       keyboardListSelection: true,
       actualTaskId: created[0]!.taskId,
       keyboardSendCommitted: true,

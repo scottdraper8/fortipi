@@ -8,6 +8,7 @@ export type {
 } from "./generated/operations.js";
 export { knownEventTypes, schemaRefs, schemaRegistry } from "./generated/schemas.js";
 export type * from "./generated/types.js";
+export { canonicalModelSecretRef, isCanonicalModelSecretRef } from "./model-bindings.js";
 export type {
   AgentOperationId,
   ControlOperationId,

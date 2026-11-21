@@ -71,6 +71,7 @@ test("actual AD source-kit context cannot retain old built-image provenance afte
   const operator = await config();
   // Schema-valid static Linux selection, not evidence of this user's plan or
   // paid entitlement. This command does not contact Cloudflare or Docker.
+  operator.deployment.deploymentId = "a".repeat(64);
   operator.runtime.infrastructure.profile = "verified";
   operator.runtime.infrastructure.accountPlan = "paid";
   operator.runtime.infrastructure.capabilities = [
@@ -78,7 +79,7 @@ test("actual AD source-kit context cannot retain old built-image provenance afte
       capability: "containers",
       state: "available",
       accountPlan: "paid",
-      deploymentId: operator.deployment.name,
+      deploymentId: operator.deployment.deploymentId,
       observedAt: 1,
     },
   ];

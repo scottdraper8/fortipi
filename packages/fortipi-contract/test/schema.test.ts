@@ -586,6 +586,23 @@ test("only applied local observations may carry the retained complete post-manif
   };
   rejected("LocalObservation", nonApplied);
 });
+test("agent conversation grants cover future conversations without broadening concrete selectors", () => {
+  const granted = { ...resources, agentIds: ["agent_1"], conversationIds: ["*"] };
+  const grant = { grantId: "agent_conversations", version: 1, resources: granted };
+  accepted("Grant", grant);
+  rejected("ResourceScope", granted);
+  for (const patch of [
+    { agentIds: [] },
+    { agentIds: ["*"] },
+    { conversationIds: ["*", "conversation_1"] },
+    { workspaceIds: ["*"] },
+    { executorIds: ["*"] },
+    { backendIds: ["*"] },
+  ])
+    rejected("Grant", { ...grant, resources: { ...granted, ...patch } });
+  accepted("Grant", { ...grant, resources: { ...resources, conversationIds: [] } });
+});
+
 test("explicit approval and reconciliation bind exact operations and new-job authorization", () => {
   accepted("Grant", { grantId: "grant_1", version: 3, resources });
   const operation = {
