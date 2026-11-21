@@ -137,7 +137,7 @@ async function copyReviewedPatchInputs(root: string, installed: boolean): Promis
   }
 }
 
-async function fixture(change: (root: string) => Promise<void>, rejection: RegExp): Promise<void> {
+async function fixture(change: (root: string) => Promise<void>, rejection?: RegExp): Promise<void> {
   await mkdir(resolve(repository, "dist/foundation-fixtures"), { recursive: true });
   const root = await mkdtemp(resolve(repository, "dist/foundation-fixtures/case-"));
   try {
@@ -160,7 +160,7 @@ async function fixture(change: (root: string) => Promise<void>, rejection: RegEx
     await copyReviewedPatchInputs(root, true);
     // These are disposable mutation fixtures, not new advisory receipts. Use
     // the actual current parent review's observation while keeping its input
-    // files unchanged; each case must still reach its own intended rejection.
+    // files unchanged; each case must still reach its own intended result.
     const policy = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
     try {
       const current = await json<{ advisory: SupplyChain["advisory"] }>(
@@ -174,7 +174,8 @@ async function fixture(change: (root: string) => Promise<void>, rejection: RegEx
     await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(policy));
     await checkPins(root);
     await change(root);
-    await assert.rejects(() => checkPins(root), rejection);
+    if (rejection) await assert.rejects(() => checkPins(root), rejection);
+    else await assert.doesNotReject(() => checkPins(root));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -440,23 +441,66 @@ test("reject a newly introduced dependency install script", async () => {
   }, /Unreviewed lifecycle script ajv/);
 });
 
-test("reject expired exact release-age exemption", async () => {
+async function matureAgeExemption(root: string): Promise<void> {
+  const s = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+  const id = "ajv@8.20.0";
+  const r = s.packages[id];
+  assert.ok(r);
+  r.published = new Date(Date.now() - 172_800_000).toISOString();
+  s.exemptions[id] = {
+    reason: "Disposable mature-history fixture",
+    integrity: r.integrity,
+    expires: new Date(Date.parse(r.published) + 86_400_000).toISOString(),
+  };
+  const policy = await yaml<{ minimumReleaseAgeExclude: string[] }>(root, "pnpm-workspace.yaml");
+  if (!policy.minimumReleaseAgeExclude.includes(id)) policy.minimumReleaseAgeExclude.push(id);
+  await writeFile(resolve(root, "pnpm-workspace.yaml"), stringify(policy));
+  await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(s));
+}
+
+test("accept valid historical exact release-age exemption after maturity", async () => {
+  await fixture(matureAgeExemption);
+});
+
+test("reject a young archive without its exact reviewed release-age exemption", async () => {
   await fixture(async (root) => {
     const s = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
     const id = "ajv@8.20.0";
     const r = s.packages[id];
     assert.ok(r);
-    r.published = new Date(Date.now() - 172_800_000).toISOString();
-    s.exemptions[id] = {
-      reason: "Disposable expired-exemption negative",
-      integrity: r.integrity,
-      expires: new Date(Date.parse(r.published) + 86_400_000).toISOString(),
-    };
+    r.published = new Date(Date.now() - 3_600_000).toISOString();
+    delete s.exemptions[id];
     const policy = await yaml<{ minimumReleaseAgeExclude: string[] }>(root, "pnpm-workspace.yaml");
-    policy.minimumReleaseAgeExclude.push(id);
+    policy.minimumReleaseAgeExclude = policy.minimumReleaseAgeExclude.filter(
+      (value) => value !== id,
+    );
     await writeFile(resolve(root, "pnpm-workspace.yaml"), stringify(policy));
     await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(s));
-  }, /Expired release-age exemption/);
+  }, /Missing exact release-age exemption ajv@8\.20\.0/);
+});
+
+test("reject a mature age exemption with an expiry not derived from publication", async () => {
+  await fixture(async (root) => {
+    await matureAgeExemption(root);
+    const s = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+    const r = s.packages["ajv@8.20.0"];
+    const exemption = s.exemptions["ajv@8.20.0"];
+    assert.ok(r && exemption);
+    // A future expiry still cannot replace the exact publication-plus-24h date.
+    exemption.expires = new Date(Date.parse(r.published) + 259_200_000).toISOString();
+    await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(s));
+  }, /Expected values to be strictly equal/);
+});
+
+test("reject a mature age exemption with a different reviewed archive SRI", async () => {
+  await fixture(async (root) => {
+    await matureAgeExemption(root);
+    const s = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+    const exemption = s.exemptions["ajv@8.20.0"];
+    assert.ok(exemption);
+    exemption.integrity = `sha512-${"A".repeat(86)}==`;
+    await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(s));
+  }, /Expected values to be strictly equal/);
 });
 
 test("reject removed protected integrity hook", async () => {

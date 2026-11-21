@@ -136,8 +136,8 @@ test("lawful maturity and review metadata preserve byte identity, never raw enfo
   const settings = parse(await readFile(resolve(root, "pnpm-workspace.yaml"), "utf8")),
     recorded = JSON.parse(await readFile(resolve(root, "tools/unstale/supply-chain.json"), "utf8")),
     packageId = Object.keys(recorded.packages)[0]!;
-  // Compare one archive graph before/after retirement, independently of the
-  // current graph's age. Actual expiry enforcement is exercised separately.
+  // Compare one archive graph with/without retained age history, independently
+  // of the current graph's age. Full age checks run in the foundation fixtures.
   settings.minimumReleaseAgeExclude = [packageId];
   recorded.exemptions = {
     [packageId]: {

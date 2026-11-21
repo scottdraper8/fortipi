@@ -1524,7 +1524,10 @@ test("receipt hashes and fixed freshness reject changed results, unavailable cla
 });
 
 test("native aggregation preserves transported bytes/modes and the original observation age", {
-  timeout: 60000,
+  // Real five-package preparation precedes four separately bounded 30s children.
+  // Allow 120s for preparation/validation plus their 120s combined ceiling.
+  // This is one fixture aggregate, not a change to any child/product deadline.
+  timeout: 240000,
 }, async (t) => {
   const root = await temporary("fortipi-native-enforcement-");
   const path = await actualCapsule(resolve(root, "candidate"));

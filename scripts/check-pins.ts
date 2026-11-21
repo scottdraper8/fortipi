@@ -302,7 +302,6 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
       assert.ok(exemption && record && exemption.reason, `Missing age review ${id}`);
       assert.equal(exemption.integrity, record.integrity);
       assert.equal(Date.parse(exemption.expires), Date.parse(record.published) + 86_400_000);
-      assert.ok(Date.parse(exemption.expires) > Date.now(), `Expired release-age exemption ${id}`);
     }
     for (const [id, item] of Object.entries(lock.packages)) {
       reviewedIdentities.add(id);

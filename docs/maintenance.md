@@ -118,8 +118,9 @@ one minute future). Existing API/live bounds remain stricter where specified.
 
 Only paired age-exception retirement and metadata/advisory review refresh are
 excluded from immutable identity projections. Complete current workspace and
-source-policy hashes remain validation inputs; normal pins, exception expiry,
-SRI/signature/lifecycle/patch/license and fresh advisory enforcement still run.
+source-policy hashes remain validation inputs; normal pins, exact age-review
+validation, SRI/signature/lifecycle/patch/license and fresh advisory enforcement
+still run.
 A lock, archive, patch, image or coarse Worker/packages tree change invalidates
 the source reference. It needs normal review, never a copied timestamp.
 
@@ -128,8 +129,15 @@ The reviewed release cohort pins Wrangler4.166.0, Miniflare5.20261119.0-beta,
 configured. Earlier runtime regression controls distinguish old and repaired
 binaries; they do not identify the earlier Pi recovery stall. The runtime bundle
 and installed candidate must preserve the reviewed resolution, with separate
-native-platform qualification. Temporary release-age exceptions remain exact,
-integrity-bound and expire at the normal24h maturity time.
+native-platform qualification. Both workspaces retain `minimumReleaseAge: 1440`
+and `minimumReleaseAgeStrict: true`. An archive younger than 24h still needs an
+exact locked identity, review reason, matching SRI and expiry derived from its
+reviewed publication time plus 24h. A valid exact record may remain after natural
+maturity without causing a build failure; retirement is administrative cleanup.
+The pnpm YAML exclusion stays configured until paired retirement, so it is
+redundant for those identical already-mature bytes, not an independent native
+age check for that listed identity. Current raw policy bindings and all other
+security checks still apply.
 
 Candidate inventory retains exact report bytes. Owner10 detailSchemaVersion2
 binds candidate/source/report/cohort/reference digests; owner9 rechecks those
