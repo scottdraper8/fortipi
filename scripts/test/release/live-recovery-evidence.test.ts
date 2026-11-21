@@ -521,12 +521,15 @@ async function controlled() {
     await protect(resolve(consumer, "node_modules"));
     observePhase("setup");
     const installedWranglerUrl = pathToFileURL(resolve(cliRoot, "dist/wrangler.js"));
+    observePhase("setup-wrangler-import");
     const actualWrangler = await import(installedWranglerUrl.href);
+    observePhase("setup-wrangler-mock");
     mock.module(installedWranglerUrl, {
       cache: true,
       exports: { ...actualWrangler, wrangler: f.ports.wrangler },
     });
     const installationPath = resolve(root, "installation.json");
+    observePhase("setup-installation");
     await saveJson(installationPath, {
       schemaVersion: 1,
       consumer: await realpath(consumer),
@@ -537,6 +540,7 @@ async function controlled() {
       cliBin: resolve(cliRoot, "dist/bin.js"),
     });
     const deploymentPath = resolve(root, "deployment.json");
+    observePhase("setup-deployment");
     await saveJson(deploymentPath, f.input.before);
     const cli = {
       workerName: f.input.before.workerName,
@@ -557,6 +561,7 @@ async function controlled() {
     // Synthetic completed CI facts exercise the real producer/ZIP reader. They
     // deliberately do not satisfy the separate detailed infrastructure oracle.
     const integratedDirectory = resolve(root, "proofs/integrated/payload");
+    observePhase("setup-integrated-files");
     for (const id of integratedClaims)
       await saveJson(resolve(integratedDirectory, `claims/${id}.json`), {
         id,
@@ -564,6 +569,7 @@ async function controlled() {
         identity: { sourceCommit, candidateSha256: manifestHash },
         observation: { fixture: "outer source protocol only" },
       });
+    observePhase("setup-integrated-inventory");
     const integratedFiles = await inventory(integratedDirectory);
     const integratedGate: GateReceipt = {
       schemaVersion: 1,
@@ -589,6 +595,7 @@ async function controlled() {
       }),
     };
     await saveJson(resolve(integratedDirectory, "gate.json"), integratedGate);
+    observePhase("setup-integrated-archive");
     integratedZip = await directoryArchive(integratedDirectory);
     const integratedReference: ArtifactReference = {
       runId: 61,
@@ -598,6 +605,7 @@ async function controlled() {
       artifactDigest: `sha256:${sha256(integratedZip.bytes)}`,
       candidateSha256: manifestHash,
     };
+    observePhase("setup-proof-index");
     await saveJson(proofsPath, {
       schemaVersion: 1,
       candidateArtifact: integratedReference,
@@ -895,6 +903,7 @@ async function controlled() {
       // The child callback is returning; outer disposal/authentication and payload checks remain.
       observeAwait("post-child", "enter");
     };
+    observePhase("setup-prepare-mock");
     mock.module(new URL("../../prepare-release.ts", import.meta.url), {
       cache: true,
       exports: {
@@ -907,9 +916,11 @@ async function controlled() {
       },
     });
     const readerUrl = new URL("../../application-recovery-existing.ts", import.meta.url);
+    observePhase("setup-reader-import");
     const originalReader = (await import(
       readerUrl.href
     )) as typeof import("../../application-recovery-existing.ts");
+    observePhase("setup-reader-mock");
     mock.module(readerUrl, {
       cache: true,
       exports: {
@@ -936,7 +947,9 @@ async function controlled() {
     // the provider/child ports above. It proves refusal order and forwarding;
     // it does not qualify real selection artifacts or LIVE selection behavior.
     const selectionUrl = new URL("../../live-selection-evidence.ts", import.meta.url);
+    observePhase("setup-selection-import");
     const originalSelection = await import(selectionUrl.href);
+    observePhase("setup-selection-mock");
     mock.module(selectionUrl, {
       cache: true,
       exports: {
@@ -953,6 +966,7 @@ async function controlled() {
         },
       },
     });
+    observePhase("setup-outer-import");
     const { runLiveRecoveryEvidence } = await import("../../live-recovery-evidence.ts");
     // The outer privacy boundary intentionally hides causes. In this controlled
     // subprocess, retain only assertion method + allowlisted source locations.
@@ -998,6 +1012,7 @@ async function controlled() {
       proofsPath,
     };
     process.env.GITHUB_JOB = "wrong-job";
+    observePhase("guard-frame");
     await assert.rejects(
       runLiveRecoveryEvidence({ ...common, out: resolve(root, "bad-frame") }),
       /unavailable/,
@@ -1006,6 +1021,7 @@ async function controlled() {
     assert.equal(cloudReads, 0);
     assert.equal(childCalls, 0);
     process.env.GITHUB_JOB = "operate";
+    observePhase("guard-authority");
     for (const fault of ["superseded", "failed-job", "integrated-source"]) {
       authorityFault = fault;
       await assert.rejects(
@@ -1017,6 +1033,7 @@ async function controlled() {
       assert.equal(childCalls, 0);
     }
     authorityFault = "";
+    observePhase("guard-installed");
     const installedBytes = await readFile(resolve(cliRoot, "dist/wrangler.js"));
     await chmod(resolve(cliRoot, "dist/wrangler.js"), 0o600);
     await writeFile(
@@ -1038,6 +1055,7 @@ async function controlled() {
       await chmod(resolve(cliRoot, "dist/wrangler.js"), 0o444);
     }
     const selectionBefore = selectionCalls;
+    observePhase("guard-selection");
     refuseSelection = true;
     failures.length = 0;
     await assert.rejects(
@@ -1050,6 +1068,7 @@ async function controlled() {
     assert.equal(childCalls, 0);
     refuseSelection = false;
     const out = resolve(root, "claims");
+    observePhase("outer-perform");
     const result = await successful({ ...common, out });
     assert.equal(
       integratedDownloads,

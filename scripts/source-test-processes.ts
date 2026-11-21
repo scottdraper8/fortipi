@@ -417,6 +417,7 @@ export function sourceTestDiagnostic(line: string): boolean {
     roleDiagnostic(line) ||
     kernelDiagnostic(line) ||
     profileDiagnostic(line) ||
+    recoveryStartFailureDiagnostic(line) ||
     (/^# \{"diagnostic":"source-recovery-process","sourcePath":(?:null|"(?:packages\/fortipi-[a-z]+\/test|apps\/worker\/test|scripts\/test\/release|tests\/clients)\/[A-Za-z0-9._/-]+\.(?:test|spec)\.ts"),"harnessOrdinal":\d{1,6},"invocation":\d{1,3},"runtimeCount":(?:null|\d{1,4}),"runnableCount":(?:null|\d{1,4}),"rssKiB":(?:null|\d{1,14}),"cpuMs":(?:null|\d{1,14})\}$/.test(
       line,
     ) &&
@@ -530,6 +531,36 @@ function closedObservation(
   } catch {
     return null;
   }
+}
+function recoveryStartFailureDiagnostic(line: string): boolean {
+  const r = closedObservation(
+    line,
+    "source-recovery-start-failure",
+    "sourcePath,harnessOrdinal,invocation,marker,exitCode,signal",
+  );
+  return !!(
+    r &&
+    (r.sourcePath === null ||
+      (typeof r.sourcePath === "string" &&
+        testPath.test(r.sourcePath) &&
+        !r.sourcePath.includes("../"))) &&
+    typeof r.harnessOrdinal === "number" &&
+    r.harnessOrdinal > 0 &&
+    diagnosticInteger(r.harnessOrdinal, 999999) === r.harnessOrdinal &&
+    typeof r.invocation === "number" &&
+    r.invocation > 0 &&
+    diagnosticInteger(r.invocation, 999) === r.invocation &&
+    typeof r.marker === "string" &&
+    /^(?:address-in-use|module-unavailable|memory|permission|filesystem|build-service|runtime|unknown)$/.test(
+      r.marker,
+    ) &&
+    (r.exitCode === null ||
+      (typeof r.exitCode === "number" &&
+        Number.isInteger(r.exitCode) &&
+        Math.abs(r.exitCode) <= 255)) &&
+    (r.signal === null ||
+      (typeof r.signal === "string" && /^(?:SIG[A-Z0-9]{1,8}|other)$/.test(r.signal)))
+  );
 }
 function readinessDiagnostic(line: string): boolean {
   const r = closedObservation(
@@ -651,6 +682,25 @@ export type LiveRecoveryPhase =
   | "fixture"
   | "consumer"
   | "setup"
+  | "setup-wrangler-import"
+  | "setup-wrangler-mock"
+  | "setup-installation"
+  | "setup-deployment"
+  | "setup-integrated-files"
+  | "setup-integrated-inventory"
+  | "setup-integrated-archive"
+  | "setup-proof-index"
+  | "setup-prepare-mock"
+  | "setup-reader-import"
+  | "setup-reader-mock"
+  | "setup-selection-import"
+  | "setup-selection-mock"
+  | "setup-outer-import"
+  | "guard-frame"
+  | "guard-authority"
+  | "guard-installed"
+  | "guard-selection"
+  | "outer-perform"
   | "perform"
   | "readonly"
   | "cleanup";
@@ -663,6 +713,25 @@ const livePhases = new Set([
   "fixture",
   "consumer",
   "setup",
+  "setup-wrangler-import",
+  "setup-wrangler-mock",
+  "setup-installation",
+  "setup-deployment",
+  "setup-integrated-files",
+  "setup-integrated-inventory",
+  "setup-integrated-archive",
+  "setup-proof-index",
+  "setup-prepare-mock",
+  "setup-reader-import",
+  "setup-reader-mock",
+  "setup-selection-import",
+  "setup-selection-mock",
+  "setup-outer-import",
+  "guard-frame",
+  "guard-authority",
+  "guard-installed",
+  "guard-selection",
+  "outer-perform",
   "perform",
   "readonly",
   "cleanup",

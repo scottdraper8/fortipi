@@ -55,6 +55,50 @@ const readiness = {
 
 test("root phase and readiness forwarding rejects private or malformed records", async () => {
   const accepted: string[] = [];
+  const startup = {
+    diagnostic: "source-recovery-start-failure",
+    sourcePath: "apps/worker/test/agent/process-recovery.test.ts",
+    harnessOrdinal: 2,
+    invocation: 1,
+    marker: "unknown",
+    exitCode: 1,
+    signal: null,
+  };
+  for (const marker of [
+    "address-in-use",
+    "module-unavailable",
+    "memory",
+    "permission",
+    "filesystem",
+    "build-service",
+    "runtime",
+    "unknown",
+  ])
+    accepted.push(`# ${JSON.stringify({ ...startup, marker })}`);
+  for (const patch of [
+    { marker: privateValue },
+    { sourcePath: privateValue },
+    { sourcePath: "apps/worker/test/../private.test.ts" },
+    { harnessOrdinal: 1_000_000 },
+    { harnessOrdinal: 0 },
+    { invocation: 1000 },
+    { invocation: 0 },
+    { exitCode: 256 },
+    { exitCode: 1000 },
+    { signal: privateValue },
+    { payload: privateValue },
+  ])
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify({ ...startup, ...patch })}`), false);
+  const canonicalStartup = `# ${JSON.stringify(startup)}`;
+  assert.equal(
+    sourceTestDiagnostic(
+      canonicalStartup.replace(
+        '"marker":"unknown"',
+        `"marker":"${privateValue}","marker":"unknown"`,
+      ),
+    ),
+    false,
+  );
   for (const lastPhase of [
     "prepare",
     "listen",
@@ -350,8 +394,41 @@ test("live child failure preserves only bounded exit facts and actually observed
     { payload: privateValue },
   ])
     assert.equal(sourceTestDiagnostic(`# ${JSON.stringify({ ...record, ...patch })}`), false);
-  const phaseLines = ["packing", "prepare", "perform", "readonly", "cleanup"].map((p) =>
-    liveRecoveryPhaseLine(p, "enter"),
+  const setupPhases = [
+    "setup-wrangler-import",
+    "setup-wrangler-mock",
+    "setup-installation",
+    "setup-deployment",
+    "setup-integrated-files",
+    "setup-integrated-inventory",
+    "setup-integrated-archive",
+    "setup-proof-index",
+    "setup-prepare-mock",
+    "setup-reader-import",
+    "setup-reader-mock",
+    "setup-selection-import",
+    "setup-selection-mock",
+    "setup-outer-import",
+    "guard-frame",
+    "guard-authority",
+    "guard-installed",
+    "guard-selection",
+    "outer-perform",
+  ];
+  for (const phase of setupPhases) {
+    const failure = JSON.parse(
+      liveRecoveryFailureLine({
+        stdout: liveRecoveryPhaseLine(phase, "enter"),
+        killed: true,
+        signal: "SIGTERM",
+      }),
+    );
+    assert.equal(failure.lastPhase, phase);
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(failure)}`), true);
+    assert.equal(failure.lastInvocation, null);
+  }
+  const phaseLines = ["packing", "prepare", ...setupPhases, "perform", "readonly", "cleanup"].map(
+    (p) => liveRecoveryPhaseLine(p, "enter"),
   );
   const awaitLines: string[] = [];
   for (const invocation of ["positive", "tamper", "omitted"])

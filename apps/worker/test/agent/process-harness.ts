@@ -18,6 +18,7 @@ import {
   sourceRecoveryPath,
   sourceTestDiagnostic,
 } from "../../../../scripts/source-test-processes.ts";
+import { joinOwnedProcessGroup, startupMarker } from "./owned-process-group.ts";
 import {
   armProcessBarrier,
   type ProcessArm,
@@ -28,6 +29,15 @@ import {
 import { processProfile, processProfileLines } from "./process-profile.ts";
 
 const pause = (ms: number) => new Promise<void>((accept) => setTimeout(accept, ms));
+function exitFacts(child: ChildProcess) {
+  const code = child.exitCode;
+  const signal = child.signalCode;
+  return {
+    exitCode:
+      typeof code === "number" && Number.isInteger(code) && Math.abs(code) <= 255 ? code : null,
+    signal: signal === null ? null : /^SIG[A-Z0-9]{1,8}$/.test(signal) ? signal : "other",
+  };
+}
 export const processBootstrap = "synthetic-process-thread5-bootstrap-000000000000";
 export { processCueMatches } from "./process-observation.ts";
 
@@ -102,6 +112,7 @@ export async function processHarness(
   let child: ChildProcess | undefined,
     output = "";
   let childInvocation = 0;
+  let stopJoin: Promise<void> | undefined;
   const origin = `http://127.0.0.1:${port}`;
   const api = async <T>(
     path: string,
@@ -166,6 +177,7 @@ export async function processHarness(
   };
   async function start() {
     assert.ok(!child, "Previous process must be stopped");
+    stopJoin = undefined;
     childInvocation++;
     output = "";
     child = spawn(
@@ -284,6 +296,20 @@ export async function processHarness(
     } finally {
       observe(ready ? "ready" : "end");
       if (!ready) {
+        try {
+          console.log(
+            JSON.stringify({
+              diagnostic: "source-recovery-start-failure",
+              sourcePath,
+              harnessOrdinal: currentHarness,
+              invocation,
+              marker: startupMarker(output),
+              ...exitFacts(current),
+            }),
+          );
+        } catch {
+          /* Preserve the original readiness failure. */
+        }
         // Observe only after the original readiness decision. Never print process
         // arguments, identifiers, environment, paths or captured child output.
         let runtimeCount: number | null = null,
@@ -392,44 +418,54 @@ export async function processHarness(
       }
     }
   }
-  async function stop(signal: "SIGKILL" | "SIGTERM") {
-    if (!child) return;
+  function stop(signal: "SIGKILL" | "SIGTERM"): Promise<void> {
+    if (stopJoin) return stopJoin;
+    if (!child) return Promise.resolve();
     const current = child;
-    assert.ok(current.pid);
-    if (signal === "SIGKILL") {
-      // comm only: never inspect process arguments, environment or credentials.
-      const table = await promisify(execFile)("ps", ["-eo", "pid=,ppid=,pgid=,comm="]);
-      const group = table.stdout
-        .split("\n")
-        .map((row) => row.trim().split(/\s+/))
-        .filter((row) => Number(row[2]) === current.pid);
-      assert.ok(
-        group.some((row) => row.slice(3).join(" ").includes("workerd")),
-        "Must kill the actual workerd process, not only a wrapper",
-      );
-    }
-    const exited =
-      current.exitCode !== null || current.signalCode !== null
-        ? Promise.resolve()
-        : new Promise<void>((accept) => current.once("exit", () => accept()));
-    try {
-      process.kill(-current.pid, signal);
-    } catch (error) {
-      if (
-        (error as NodeJS.ErrnoException).code !== "ESRCH" ||
-        (current.exitCode === null && current.signalCode === null)
-      )
-        throw error;
-    }
-    await exited;
-    if (signal === "SIGKILL") assert.equal(current.signalCode, signal);
-    child = undefined;
+    stopJoin = (async () => {
+      assert.ok(current.pid);
+      const live = () => current.exitCode === null && current.signalCode === null;
+      if (signal === "SIGKILL" && live()) {
+        // comm only: never inspect process arguments, environment or credentials.
+        const table = await promisify(execFile)("ps", ["-eo", "pid=,ppid=,pgid=,comm="]);
+        const group = table.stdout
+          .split("\n")
+          .map((row) => row.trim().split(/\s+/))
+          .filter((row) => Number(row[2]) === current.pid);
+        assert.ok(
+          group.some((row) => row.slice(3).join(" ").includes("workerd")),
+          "Must kill the actual workerd process, not only a wrapper",
+        );
+      }
+      const exited =
+        current.exitCode !== null || current.signalCode !== null
+          ? Promise.resolve()
+          : new Promise<void>((accept) => current.once("exit", () => accept()));
+      const signalled = live();
+      if (signalled) {
+        try {
+          process.kill(-current.pid, signal);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH" || live()) throw error;
+        }
+      }
+      await exited;
+      await joinOwnedProcessGroup(current.pid);
+      if (signal === "SIGKILL" && signalled) assert.equal(current.signalCode, signal);
+      // A rejected join keeps both the child and this invocation's stop promise.
+      child = undefined;
+    })();
+    return stopJoin;
   }
   try {
     await start();
   } catch (error) {
-    await stop("SIGTERM");
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await stop("SIGTERM");
+      await rm(directory, { recursive: true, force: true });
+    } catch {
+      /* Preserve startup's original error; an unconfirmed join retains its block. */
+    }
     throw error;
   }
   return {
