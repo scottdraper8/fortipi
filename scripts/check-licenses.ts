@@ -320,7 +320,7 @@ export async function reviewRuntimeConveyance(
       for (const [path, digest] of Object.entries(review.licenses)) {
         const bytes = await runtimeFact(
           root,
-          `dist/supply-chain/licenses/${source.id.replaceAll("/", "__")}/${path}`,
+          `dist/supply-chain/licenses/${source.id.replaceAll("/", "__")}/${archiveLicensePath(path)}`,
         );
         assert.equal(hash(bytes), digest);
         assert.deepEqual(bytes, entries.get(path));
