@@ -55,6 +55,31 @@ const readiness = {
 
 test("root phase and readiness forwarding rejects private or malformed records", async () => {
   const accepted: string[] = [];
+  for (const lastPhase of [
+    "prepare",
+    "listen",
+    "environment",
+    "begin",
+    "hold-idle",
+    "sleep-successor",
+    "observe-successor",
+    "release-old",
+    "settle-old",
+    "check-wake",
+  ]) {
+    const record = { diagnostic: "source-fixed-wake-failure", lastPhase };
+    accepted.push(`# ${JSON.stringify(record)}`);
+    assert.equal(
+      sourceTestDiagnostic(`# ${JSON.stringify({ ...record, error: privateValue })}`),
+      false,
+    );
+  }
+  assert.equal(
+    sourceTestDiagnostic(
+      `# ${JSON.stringify({ diagnostic: "source-fixed-wake-failure", lastPhase: privateValue })}`,
+    ),
+    false,
+  );
   for (const mode of ["supersession", "hung takeover"])
     for (const phase of [
       "fixture",
@@ -97,7 +122,7 @@ test("root phase and readiness forwarding rejects private or malformed records",
   ].map((r) => `# ${JSON.stringify(r)}`);
   for (const record of [generation, readiness])
     refused.push(`# ${JSON.stringify({ ...record, payload: privateValue })}`);
-  const first = accepted[0];
+  const first = accepted.find((line) => line.includes('"mode":"supersession"'));
   assert.ok(first);
   refused.push(
     first.replace('"mode":"supersession"', `"mode":"${privateValue}","mode":"supersession"`),
@@ -389,6 +414,7 @@ test("only reviewed generation, boundary, live and device titles survive failure
     ),
     "trusted outer recovery preserves original receipts and child byte closure across perform/readonly verification",
     "cleanup-only ownership accepts completed failed/cancelled initial jobs without granting phase/custody proof; missing and unfinished ownership remain unavailable",
+    "actual PiHarness fixed wake preserves sleeping work across an older idle outcome",
   ]) {
     const output: string[] = [],
       accept = sourceFailureLines((line) => output.push(line));

@@ -79,6 +79,7 @@ if (process.execArgv.includes("--test") && selected.size > 0 && selected.size <=
 const admissionFailureName =
   "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries";
 const failureNames = new Set<string>([
+  "actual PiHarness fixed wake preserves sleeping work across an older idle outcome",
   "production Recovery supersession preserves distinct successor and bounded rows",
   "production Recovery hung takeover preserves distinct successor and bounded rows",
   "SAFE attempted boundary survives real service SIGKILL with retained execution identity",
@@ -121,6 +122,8 @@ const failureNames = new Set<string>([
   "candidate SAFE receipt recovery with executor reconnected before Agent activation",
 ]);
 const failurePaths = new Set<string>([
+  "apps/worker/test/agent/pi-fixed-wake.test.ts",
+  "apps/worker/test/agent/pi-fixed-wake-worker.ts",
   "apps/worker/test/agent/recovery-generation.test.ts",
   "scripts/test/release/live-recovery-evidence.test.ts",
   "scripts/test/release/device-phase-artifacts.test.ts",
@@ -385,6 +388,9 @@ export function sourceTestDiagnostic(line: string): boolean {
     nativeRecoveryDiagnostic(line) ||
     nativeObservationDiagnostic(line) ||
     /^# \{"diagnostic":"source-reentry-failure","phase":"(?:listen|fetch-once|fetch-twice|close|unknown)","kind":"(?:timeout|abort|assertion|other)","elapsedMs":(?:0|[1-9]\d{0,3}|[1-5]\d{4}|60000)\}$/.test(
+      line,
+    ) ||
+    /^# \{"diagnostic":"source-fixed-wake-failure","lastPhase":"(?:prepare|listen|environment|begin|hold-idle|sleep-successor|observe-successor|release-old|settle-old|check-wake)"\}$/.test(
       line,
     ) ||
     /^# \{"diagnostic":"source-pi-wake-failure","phase":"(?:prepare|observe-failure|recover|observe-replacement|check-replacement|settle-old|check-old|observe-terminal|check-terminal)"\}$/.test(
