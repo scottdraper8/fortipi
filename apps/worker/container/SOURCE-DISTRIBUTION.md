@@ -45,7 +45,7 @@ not distributable images. No model/deployment credentials are needed in this flo
 
 For a newly reviewed Computer/Node identity, `--prepare-inputs` authenticates and
 reconstructs source material without claiming an executable exists. On trusted
-Linux x64, `--freeze-embedded` then compiles the exact Computer0.11.1 source through
+Linux x64, `--freeze-embedded` then compiles the exact Computer0.11.4 source through
 the upstream esbuild recipe/bootstrap/addon shim and creates a SEA blob with the
 actual signed Node22.23.5 target. Only build-script entry/export mapping and
 diagnostic metadata are adapted; the complete adapter and original source ship.

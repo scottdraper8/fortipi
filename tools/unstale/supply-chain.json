@@ -870,6 +870,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@babel%2fcore@8.1.0; Sigstore transparency verification required at release"
     },
+    "@babel/core@8.1.3": {
+      "name": "@babel/core",
+      "version": "8.1.3",
+      "integrity": "sha512-kcHuFAOr6mQDd9acrkBd138f+HzIjFmhPAP3yMKL+M3/ncMEYjd3JKvdK7G+b1FR9tc0uhzo9PqgXMtLIL/qzg==",
+      "published": "2026-11-20T17:26:42.155Z",
+      "reviewedAt": "2026-11-21T04:30:23.412Z",
+      "license": "MIT",
+      "archiveSha256": "1f9feb89181f21b72447a9436d3d707c8c051b05279ce9743b6ec74b59dfe91c",
+      "manifestSha256": "a6ae0d44d0ced26bf38a9a5e5a1ea5320aa83adc82ae820c862f248ecfe6a5d2",
+      "engines": {
+        "node": "^22.18.0 || >=24.11.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:15.873Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/babel/babel@954e0ce395965a4bce820ac9d1b5e8530a0f2705; reverify exact release inputs"
+    },
     "@babel/generator@8.1.0": {
       "name": "@babel/generator",
       "version": "8.1.0",
@@ -890,6 +911,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@babel%2fgenerator@8.1.0; Sigstore transparency verification required at release"
+    },
+    "@babel/generator@8.1.3": {
+      "name": "@babel/generator",
+      "version": "8.1.3",
+      "integrity": "sha512-lfUz17Qtr+EinAoqyK1+4J5F0GtgsZjXktM5o+QXWM8KRUOauR/WuwBHWGU/aaSp4FI99M7rj6kg851XYWDvmQ==",
+      "published": "2026-11-20T17:25:35.051Z",
+      "reviewedAt": "2026-11-21T04:35:00.099Z",
+      "license": "MIT",
+      "archiveSha256": "d3b74aa519bd54b83b0d24611af780c966525ac735def6de1fcafc9a61b1f115",
+      "manifestSha256": "985efe1fe65bba744944f28e5395e379b238e1b45f0d203b8c109faa011d7e7d",
+      "engines": {
+        "node": "^22.18.0 || >=24.11.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:36:34.885Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/babel/babel@954e0ce395965a4bce820ac9d1b5e8530a0f2705; reverify exact release inputs"
     },
     "@babel/helper-annotate-as-pure@8.0.0": {
       "name": "@babel/helper-annotate-as-pure",
@@ -1107,6 +1149,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@babel%2fhelper-string-parser@8.0.8; Sigstore transparency verification required at release"
     },
+    "@babel/helper-string-parser@8.1.3": {
+      "name": "@babel/helper-string-parser",
+      "version": "8.1.3",
+      "integrity": "sha512-5HTuREtgj0xIc345zU4gtD2+3vIPkZpJw7wUYytt/mzBTQN2mWpGr1nxYiocYa2E8sWggRkrSg/k7BK51pAxIg==",
+      "published": "2026-11-20T17:25:18.390Z",
+      "reviewedAt": "2026-11-21T04:35:00.063Z",
+      "license": "MIT",
+      "archiveSha256": "7357136c82293efeed706373e5ba15aecc0c1ecc8e973a3ec4d4399d757206b2",
+      "manifestSha256": "e2aeb44166036147ee576316eb28622e4fc24d3f516e9131c8e4eace833ea836",
+      "engines": {
+        "node": "^22.18.0 || >=24.11.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:36:36.164Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/babel/babel@954e0ce395965a4bce820ac9d1b5e8530a0f2705; reverify exact release inputs"
+    },
     "@babel/helper-validator-identifier@8.0.6": {
       "name": "@babel/helper-validator-identifier",
       "version": "8.0.6",
@@ -1170,6 +1233,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@babel%2fhelpers@8.1.0; Sigstore transparency verification required at release"
     },
+    "@babel/helpers@8.1.3": {
+      "name": "@babel/helpers",
+      "version": "8.1.3",
+      "integrity": "sha512-s5s0hMqsgSVikMuK7XHFDlIJvZp5CdAFpJcgNF5b/6oRvVCS8n779zsJVQuwtUUu75/nCYceKvi+K2FDKcogXg==",
+      "published": "2026-11-20T17:26:02.531Z",
+      "reviewedAt": "2026-11-21T04:35:00.071Z",
+      "license": "MIT",
+      "archiveSha256": "8dead9d6fc77dbe2a002ff263abe747c980fd4ad19e575ecfbcd73e0c86ee41b",
+      "manifestSha256": "c3d491296bdf2bf243b9c8082658a6c04efbe4615607b0c4a25a32de5ac2d963",
+      "engines": {
+        "node": "^22.18.0 || >=24.11.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "4be9d87b56a306293223b490c0d0b245e9e94f39884147bf051a6c7b825aeb30"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:36:37.467Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/babel/babel@954e0ce395965a4bce820ac9d1b5e8530a0f2705; reverify exact release inputs"
+    },
     "@babel/parser@8.1.0": {
       "name": "@babel/parser",
       "version": "8.1.0",
@@ -1190,6 +1274,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@babel%2fparser@8.1.0; Sigstore transparency verification required at release"
+    },
+    "@babel/parser@8.1.3": {
+      "name": "@babel/parser",
+      "version": "8.1.3",
+      "integrity": "sha512-v3ck2WN7jn8gEJlEfIDEwTM8dCBjOac1CZjolvB6/r0O1ome6E7xS2cDQEOQqESRQZWWrLrhnjxD0qjmZ8QBgg==",
+      "published": "2026-11-20T17:26:02.259Z",
+      "reviewedAt": "2026-11-21T04:30:23.359Z",
+      "license": "MIT",
+      "archiveSha256": "cbf0167b676ebf35e4ecbb93d4138d715b1aa22fb5ff5bc9f35db44e175f6ca1",
+      "manifestSha256": "de918e8cfa1800f33697e552c50d35657b006a36b0b0ae83fb1484a916834c60",
+      "engines": {
+        "node": "^22.18.0 || >=24.11.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "2e97627cb278aa7556fb9e8817368302301a595b6c7582512b8d74c57b773652"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:17.181Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/babel/babel@954e0ce395965a4bce820ac9d1b5e8530a0f2705; reverify exact release inputs"
     },
     "@babel/plugin-proposal-decorators@8.0.2": {
       "name": "@babel/plugin-proposal-decorators",
@@ -1300,6 +1405,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@babel%2ftemplate@8.0.0; Sigstore transparency verification required at release"
     },
+    "@babel/template@8.1.2": {
+      "name": "@babel/template",
+      "version": "8.1.2",
+      "integrity": "sha512-9B3FA5HZWK7rTJ7nU2F03qAc/t80O/WB5YQ7NKYdvmMwpq7EUyN04APNQWpkqwSqWtOsuwR0jMSRYLFoAd1m9A==",
+      "published": "2026-11-11T19:54:58.278Z",
+      "reviewedAt": "2026-11-21T04:37:30.129Z",
+      "license": "MIT",
+      "archiveSha256": "fc50d159e8c702cd235332ea1999b99a758aa95912e0a5d5597d2a4a6925a496",
+      "manifestSha256": "6ad761536179b2ca24587e4de92b86eda45ff9f7f8f31b546d5427d23544deb1",
+      "engines": {
+        "node": "^22.18.0 || >=24.11.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:38:08.093Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/babel/babel@f34976075d218652b61273fec27f8b8883ede217; reverify exact release inputs"
+    },
     "@babel/traverse@8.1.0": {
       "name": "@babel/traverse",
       "version": "8.1.0",
@@ -1321,6 +1447,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@babel%2ftraverse@8.1.0; Sigstore transparency verification required at release"
     },
+    "@babel/traverse@8.1.3": {
+      "name": "@babel/traverse",
+      "version": "8.1.3",
+      "integrity": "sha512-Mil7E37zLel1sjGwcgAF0wn8tbTJp3LLVMb0fqgDxWJJm52NXBv3MJaqmNOp76qzInY/0uDH3rSZfl3BqCjHiw==",
+      "published": "2026-11-20T17:26:39.534Z",
+      "reviewedAt": "2026-11-21T04:35:00.137Z",
+      "license": "MIT",
+      "archiveSha256": "0383abf308b4401fa793d08cfa6486e6cd622ed7d5e82218f6eda13496003207",
+      "manifestSha256": "9b6e6390aef67bd5b1344f9296a1fedcc191b4281872ccefd88e5380aadce1a4",
+      "engines": {
+        "node": "^22.18.0 || >=24.11.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:36:38.725Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/babel/babel@954e0ce395965a4bce820ac9d1b5e8530a0f2705; reverify exact release inputs"
+    },
     "@babel/types@8.1.0": {
       "name": "@babel/types",
       "version": "8.1.0",
@@ -1341,6 +1488,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@babel%2ftypes@8.1.0; Sigstore transparency verification required at release"
+    },
+    "@babel/types@8.1.3": {
+      "name": "@babel/types",
+      "version": "8.1.3",
+      "integrity": "sha512-eBREGwDHRPHtdsg44t071GE2KRDEuJrf0J2uT5/qvJPB2+pfPZOKlx93dMZOFkE7QW5G0JWoczySD7a01Jf0iw==",
+      "published": "2026-11-20T17:26:00.593Z",
+      "reviewedAt": "2026-11-21T04:30:23.353Z",
+      "license": "MIT",
+      "archiveSha256": "9642030b6c0a1198e68dbf0f1a2ae91ea5ff843cf193a71b8befa8abeec30df4",
+      "manifestSha256": "e21a9357ed9d1081c025138dfbc45c0b3460194b7d2a4b89d256dfe305a7eec3",
+      "engines": {
+        "node": "^22.18.0 || >=24.11.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:18.408Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/babel/babel@954e0ce395965a4bce820ac9d1b5e8530a0f2705; reverify exact release inputs"
     },
     "@biomejs/biome@2.6.6": {
       "name": "@biomejs/biome",
@@ -1364,6 +1532,28 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fbiome@2.6.6; Sigstore transparency verification required at release"
     },
+    "@biomejs/biome@2.6.8": {
+      "name": "@biomejs/biome",
+      "version": "2.6.8",
+      "integrity": "sha512-kqZUFvX6/aYQOmzfRN5ANcfNS9wLH4aHLWWP/dQKyhRZVoA6rdWszA7DGugFcxPbMiznUyVYyukVl+ExZN4PQA==",
+      "published": "2026-11-15T14:34:16.910Z",
+      "reviewedAt": "2026-11-21T04:30:23.397Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "7d8090970cbdde759f8dc8b2a55893178c5f00f75a3a49a04874a931ee920cd6",
+      "manifestSha256": "cd7ed9920d80ab053b1e7d34260adf79a264b10b467c8fa38a64008ae64ff5df",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE-APACHE": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+        "package/LICENSE-MIT": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:20.872Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
+    },
     "@biomejs/cli-android-arm64@2.6.6": {
       "name": "@biomejs/cli-android-arm64",
       "version": "2.6.6",
@@ -1382,6 +1572,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-android-arm64@2.6.6; Sigstore transparency verification required at release"
+    },
+    "@biomejs/cli-android-arm64@2.6.8": {
+      "name": "@biomejs/cli-android-arm64",
+      "version": "2.6.8",
+      "integrity": "sha512-X4JKPLK85kfUTwuuaORFplnBfGjKkp62PsFhhcL7F/Tpltc7pyUofjlkkMnlZZLWsifFl7LNB8ngVrwJg1uo1Q==",
+      "published": "2026-11-15T14:35:52.527Z",
+      "reviewedAt": "2026-11-21T04:30:28.105Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "0538d931c49b519910abb56512f78a1c079319e5defcf108748ee49fa1218490",
+      "manifestSha256": "5a16be0c7db4e2527a0d54f92c510cb048095086a2a77decd8c0f0168390da84",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:22.084Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
     },
     "@biomejs/cli-android-x64@2.6.6": {
       "name": "@biomejs/cli-android-x64",
@@ -1402,6 +1611,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-android-x64@2.6.6; Sigstore transparency verification required at release"
     },
+    "@biomejs/cli-android-x64@2.6.8": {
+      "name": "@biomejs/cli-android-x64",
+      "version": "2.6.8",
+      "integrity": "sha512-C3Hk485vl+deEj53K08+SYYelPIPkdSZL3qHuD31Xi+qydVa4q2ze+aCYo1k3iJGWtvWtjHaGkDh7S2sX6wk8w==",
+      "published": "2026-11-15T14:36:34.482Z",
+      "reviewedAt": "2026-11-21T04:30:27.862Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "bfb2871dd55ae37384222f6feea704c306b3dc0fd2dd17e4390532f88431cfa4",
+      "manifestSha256": "a71b8b7f697ed14f1bc82d77682e1cf1cd45c1837cadaafe69087da7cbe931a6",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:23.230Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
+    },
     "@biomejs/cli-darwin-arm64@2.6.6": {
       "name": "@biomejs/cli-darwin-arm64",
       "version": "2.6.6",
@@ -1420,6 +1648,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-darwin-arm64@2.6.6; Sigstore transparency verification required at release"
+    },
+    "@biomejs/cli-darwin-arm64@2.6.8": {
+      "name": "@biomejs/cli-darwin-arm64",
+      "version": "2.6.8",
+      "integrity": "sha512-DHyj+JnRHcn4YdvpiqgTFZMYKSPELMCfFpNNlEuu1L8DKTGXhzW7raIwdsbo2Ie9nCljQLAQkVWQk/mwM0ueiA==",
+      "published": "2026-11-15T14:36:12.145Z",
+      "reviewedAt": "2026-11-21T04:30:27.330Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "05a72143395eb2fc387393b51444c9662513673ab4f8bb415dc17b93ad71c8fb",
+      "manifestSha256": "55288bf9520721ac6c021f1fac33d24338f69301a158b1c5b505a3b48038099a",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:24.464Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
     },
     "@biomejs/cli-darwin-x64@2.6.6": {
       "name": "@biomejs/cli-darwin-x64",
@@ -1440,6 +1687,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-darwin-x64@2.6.6; Sigstore transparency verification required at release"
     },
+    "@biomejs/cli-darwin-x64@2.6.8": {
+      "name": "@biomejs/cli-darwin-x64",
+      "version": "2.6.8",
+      "integrity": "sha512-QWWUPjlA0RnkkgYnFLUHZu+RrDc0FdK0A+wEPA+dENQJwsuSHMH89lspnAw2QUWWc9VHyfluGx1Xmp6Y2GZi8Q==",
+      "published": "2026-11-15T14:36:24.196Z",
+      "reviewedAt": "2026-11-21T04:30:28.390Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "3a2ba0bc6675ca2edc433cdb74adc568dcc69c5d3aa1132ce3ec173d0273f9de",
+      "manifestSha256": "479c8307ac09834299feb7984eb74155ce647e516abd1e7f37c51270464882a8",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:25.631Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
+    },
     "@biomejs/cli-linux-arm64-musl@2.6.6": {
       "name": "@biomejs/cli-linux-arm64-musl",
       "version": "2.6.6",
@@ -1458,6 +1724,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-linux-arm64-musl@2.6.6; Sigstore transparency verification required at release"
+    },
+    "@biomejs/cli-linux-arm64-musl@2.6.8": {
+      "name": "@biomejs/cli-linux-arm64-musl",
+      "version": "2.6.8",
+      "integrity": "sha512-WB9PhOitX+bRc0G3+GNJGlvbKoWn3JoB9z4E04JQizIC9aPCQyIvwvWG7QZHxw6k20Fi+dHLmZ2fSEmBa9HqiA==",
+      "published": "2026-11-15T14:36:41.905Z",
+      "reviewedAt": "2026-11-21T04:30:31.919Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "14354aac59ae47d8e035dfdd138a9dc87a93581c4cf9689cb470143582362eb7",
+      "manifestSha256": "28a8fea10e9cd24f3aa1c0f17a2892c0b7800bcba04f328563c6a1bc5fcd32a1",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:26.818Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
     },
     "@biomejs/cli-linux-arm64@2.6.6": {
       "name": "@biomejs/cli-linux-arm64",
@@ -1478,6 +1763,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-linux-arm64@2.6.6; Sigstore transparency verification required at release"
     },
+    "@biomejs/cli-linux-arm64@2.6.8": {
+      "name": "@biomejs/cli-linux-arm64",
+      "version": "2.6.8",
+      "integrity": "sha512-0Bjim8lKwnrvXUHoI4k3Tb51BjoiLEwDnovCI8nSzkk6wj3dShiuAjrx6+X0Hjf4ejR1sRZgTQiSDHlpy9vB7w==",
+      "published": "2026-11-15T14:36:32.626Z",
+      "reviewedAt": "2026-11-21T04:30:32.320Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "2db75b982f62fda24a864b3a4831ff9cc0899cc9673b3bd88de16dcf14b47290",
+      "manifestSha256": "c61996e698a86e6f98e86501e7923dff80d320ee90bc3138fe99f82f43b151b1",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:28.041Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
+    },
     "@biomejs/cli-linux-x64-musl@2.6.6": {
       "name": "@biomejs/cli-linux-x64-musl",
       "version": "2.6.6",
@@ -1496,6 +1800,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-linux-x64-musl@2.6.6; Sigstore transparency verification required at release"
+    },
+    "@biomejs/cli-linux-x64-musl@2.6.8": {
+      "name": "@biomejs/cli-linux-x64-musl",
+      "version": "2.6.8",
+      "integrity": "sha512-64Yzo+J4fEk7Kf9SMnVdVxC+Y2A2e/L86QTP9JjGQ57lsddyELLpbBcNMxSJggre2T1AvISwwSrOApkBAHDqNA==",
+      "published": "2026-11-15T14:43:37.576Z",
+      "reviewedAt": "2026-11-21T04:30:33.211Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "b5b56b1784ff7b881027ac753396ac3ea6e4394d58e608b7d6fb14fc7b295d55",
+      "manifestSha256": "42069200e540264e77a0b68347d177554653dccb7519f4f675d2f9ec44ae4576",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:29.209Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
     },
     "@biomejs/cli-linux-x64@2.6.6": {
       "name": "@biomejs/cli-linux-x64",
@@ -1516,6 +1839,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-linux-x64@2.6.6; Sigstore transparency verification required at release"
     },
+    "@biomejs/cli-linux-x64@2.6.8": {
+      "name": "@biomejs/cli-linux-x64",
+      "version": "2.6.8",
+      "integrity": "sha512-XIk3pLQT56I6Tti+u0DF8FtSNXjCMTPbxVTzfJ9cS2t1ImVKvrqV5b52GuEaJg6/wuiXvz0sjfb5saB4TPRjzA==",
+      "published": "2026-11-15T14:39:24.142Z",
+      "reviewedAt": "2026-11-21T04:30:32.978Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "e9fc491ffec6ba4024549b7c797937cd4f01855b4fe66a78220efe83b95be7f1",
+      "manifestSha256": "b24ef8b32274c4a3aecb26e15dbe69f6fb53dabb88c7bdaeff0a69b3cce33674",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:30.400Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
+    },
     "@biomejs/cli-win32-arm64@2.6.6": {
       "name": "@biomejs/cli-win32-arm64",
       "version": "2.6.6",
@@ -1535,6 +1877,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-win32-arm64@2.6.6; Sigstore transparency verification required at release"
     },
+    "@biomejs/cli-win32-arm64@2.6.8": {
+      "name": "@biomejs/cli-win32-arm64",
+      "version": "2.6.8",
+      "integrity": "sha512-ezjCEZzHIWE2pdh83a7zLVcAAcDaERcTcvfA7uWlxqz/1CuDxgtfO19pDg9B6YY4wKYIDvYBw2QCMnqIshSwmw==",
+      "published": "2026-11-15T14:37:44.762Z",
+      "reviewedAt": "2026-11-21T04:30:36.987Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "5fce527465a8e91b75c66d50790dead9b9ee1bd6a8c98f025be7ebc52d361ae1",
+      "manifestSha256": "c35ca73cef268253b74f4a3899303a7617b2bb4cf9e997fec8e64a7469866052",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:31.571Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
+    },
     "@biomejs/cli-win32-x64@2.6.6": {
       "name": "@biomejs/cli-win32-x64",
       "version": "2.6.6",
@@ -1553,6 +1914,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@biomejs%2fcli-win32-x64@2.6.6; Sigstore transparency verification required at release"
+    },
+    "@biomejs/cli-win32-x64@2.6.8": {
+      "name": "@biomejs/cli-win32-x64",
+      "version": "2.6.8",
+      "integrity": "sha512-cD6HvGczZUiAYsY8s2TxxXj2AHFzEdMomvVJfEjzOjBM45nGqIDfBpbtvwGQzDCN8X2yKKk9u1jnDZisT2nxIg==",
+      "published": "2026-11-15T14:37:55.522Z",
+      "reviewedAt": "2026-11-21T04:30:37.650Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "d56ae1bdc59b7c0321e6f86257a612f1e171cdc137bf94719cf1d87093b67c18",
+      "manifestSha256": "e8199624b146f29fa185c01e13e948e69a879d184ef52d5fcb78b285a33b92a8",
+      "engines": {
+        "node": ">=14.21.3"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:32.775Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/biomejs/biome@8b032240882efdb1f9c3d3c77392c11877b4d6bb; reverify exact release inputs"
     },
     "@cfworker/json-schema@4.1.6": {
       "name": "@cfworker/json-schema",
@@ -1594,6 +1974,30 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fcomputer@0.11.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/computer@0.11.4": {
+      "name": "@cloudflare/computer",
+      "version": "0.11.4",
+      "integrity": "sha512-OFjc8pTkXmc/lYEcLQHDE8OEfIYD1051xLv7K1eoeQLCrkHqKLuHntfB4K7u5AkO7JfXIEGy3sgmbtDoSou0KQ==",
+      "published": "2026-11-19T20:57:02.859Z",
+      "reviewedAt": "2026-11-21T04:30:33.256Z",
+      "license": "MIT",
+      "archiveSha256": "1d98bb4cd8e59c48ae89e50371aa5f8329071bf5363e268c3ed7119781cdefaf",
+      "manifestSha256": "cdba67bccfcdd12c59363c33ed1dacc213c5ac211174ef8addeffb62a7691f5e",
+      "engines": {},
+      "peers": {
+        "ai": "^6.0.196 || ^7.0.0",
+        "zod": "^4.6.6",
+        "vite": "^6.0.0 || ^7.0.0 || ^8.0.0",
+        "just-bash": "^3.6.0",
+        "@platformatic/vfs": "*",
+        "@cloudflare/workers-types": "^4.20260616.1 || ^5.20260921.1"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:34.715Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/cloudflare/computer@cd0146b2875b224b54fb56384f642c6416ad910a; reverify exact release inputs"
     },
     "@cloudflare/kv-asset-handler@0.5.0": {
       "name": "@cloudflare/kv-asset-handler",
@@ -2022,6 +2426,23 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261119.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workers-types@5.20261121.1": {
+      "name": "@cloudflare/workers-types",
+      "version": "5.20261121.1",
+      "integrity": "sha512-eLzyhm8/Qn+yshOObNIVsV8YJyWR9BOBCnnuqmrqY5uhsVDlLMdCmOQ34oC3eoVLkav94Dc7MWcfC+FuaxdNjA==",
+      "published": "2026-11-21T01:02:57.764Z",
+      "reviewedAt": "2026-11-21T04:30:33.504Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "f8953f475b36058c0fe290330521b8513e091f7b5f88ad5a277b10de40345eb6",
+      "manifestSha256": "b41b410863fa00cebf2b69b92e9fae6682541984862be3de0de764c095a7e3ec",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:36.408Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/cloudflare/workerd@d68413886563e376605e732a75320eefd32b5128; reverify exact release inputs"
     },
     "@cloudflare/workers-utils@0.56.0": {
       "name": "@cloudflare/workers-utils",
@@ -3729,6 +4150,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@oxc-project%2ftypes@0.157.0; Sigstore transparency verification required at release"
     },
+    "@oxc-project/types@0.159.0": {
+      "name": "@oxc-project/types",
+      "version": "0.159.0",
+      "integrity": "sha512-QWjWhxheluOJ82kDHNyps00UvRpQCtI34B5A/SzpgQycUD/79FuvT4I0aQIfE/bdPwKmX4QPftnywFBH6FxJhQ==",
+      "published": "2026-11-16T11:32:46.682Z",
+      "reviewedAt": "2026-11-21T04:37:30.179Z",
+      "license": "MIT",
+      "archiveSha256": "2af2fc3348d36a975d8aedf0b8823bfb1c916451705671702d96ca219ecdca5d",
+      "manifestSha256": "57bf8958ce437ea64b99061095668c82786cd170565f067999b8e61babc8f1db",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "95ced5ecf1133fbf41d409b5555c86c344f83f3b019926057ddbc07cfdcc27b3"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:38:10.164Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/oxc-project/oxc@d9483516f84068f867e0a3949ac0ec53ef82aa63; reverify exact release inputs"
+    },
     "@pnpm/exe.android-arm64@12.18.0": {
       "name": "@pnpm/exe.android-arm64",
       "version": "12.18.0",
@@ -4527,6 +4967,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-android-arm-eabi@1.3.1; Sigstore transparency verification required at release"
     },
+    "@rolldown/binding-android-arm-eabi@1.3.3": {
+      "name": "@rolldown/binding-android-arm-eabi",
+      "version": "1.3.3",
+      "integrity": "sha512-K1itOg1Xl50XyjLDa4qQZqaYsfiQbFbFRWXOEOupOsGr3whhm5ed4lgySd6Inohv2TB0+sdU4AxORKuS/TGang==",
+      "published": "2026-11-18T11:26:58.806Z",
+      "reviewedAt": "2026-11-21T04:30:34.401Z",
+      "license": "MIT",
+      "archiveSha256": "d250d7993c34b9f5ee7c791418cd668a82998b2146ce7be13a5c5fb814e896cb",
+      "manifestSha256": "3f869deb604bfc29ecc671c2121a5e879d6cfa2bea099096a314e86043d2a5d4",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:38.576Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
+    },
     "@rolldown/binding-android-arm64@1.3.1": {
       "name": "@rolldown/binding-android-arm64",
       "version": "1.3.1",
@@ -4545,6 +5004,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-android-arm64@1.3.1; Sigstore transparency verification required at release"
+    },
+    "@rolldown/binding-android-arm64@1.3.3": {
+      "name": "@rolldown/binding-android-arm64",
+      "version": "1.3.3",
+      "integrity": "sha512-re+E0E3YSJXjEFzdOvBgkVUev1Gg49ileia04qy+Djn0lIMBr7pnwVOYQ+4vc9XbLClCmMziasqXHM7KTmKNKQ==",
+      "published": "2026-11-18T11:30:35.125Z",
+      "reviewedAt": "2026-11-21T04:30:34.938Z",
+      "license": "MIT",
+      "archiveSha256": "f13637e46f0940caaae05727dbd99ac27ca6f4319b3db418b5bbd8dc84ccda2c",
+      "manifestSha256": "e91751fa136731a92353f08c899a50dba96a69582797b0186c58aa2ca5a541a2",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:39.451Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
     },
     "@rolldown/binding-darwin-arm64@1.3.1": {
       "name": "@rolldown/binding-darwin-arm64",
@@ -4565,6 +5043,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-darwin-arm64@1.3.1; Sigstore transparency verification required at release"
     },
+    "@rolldown/binding-darwin-arm64@1.3.3": {
+      "name": "@rolldown/binding-darwin-arm64",
+      "version": "1.3.3",
+      "integrity": "sha512-6pMLYsUiQJXPkUj/CG447hOBKtbe+hjWw/wbxe/mucoPKgnLSVRTzey7s0kXfqrjxhDd3gQ2hj6lgUKRumsIzw==",
+      "published": "2026-11-18T11:25:24.059Z",
+      "reviewedAt": "2026-11-21T04:30:35.677Z",
+      "license": "MIT",
+      "archiveSha256": "5345037383b559da2cbb0a46922c468498867241ea6adf2eeca58a33bd41d183",
+      "manifestSha256": "3992123324984259153c11d02d0eadb958dd598886323bda7951e2b6fb872efc",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:40.390Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
+    },
     "@rolldown/binding-darwin-x64@1.3.1": {
       "name": "@rolldown/binding-darwin-x64",
       "version": "1.3.1",
@@ -4583,6 +5080,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-darwin-x64@1.3.1; Sigstore transparency verification required at release"
+    },
+    "@rolldown/binding-darwin-x64@1.3.3": {
+      "name": "@rolldown/binding-darwin-x64",
+      "version": "1.3.3",
+      "integrity": "sha512-Lz+TskwvhceQgwnP+0ox5ZeL7HDDXHKWVRpOqC1Eo05y6rYyfvvep0msGqC95kQTykXrmGgP6qwJB1NdgNZVhg==",
+      "published": "2026-11-18T11:27:28.385Z",
+      "reviewedAt": "2026-11-21T04:30:36.280Z",
+      "license": "MIT",
+      "archiveSha256": "6c9806f6fcd2010e747561bda6d9cab8e5f73838c5b7f9a96cf082477234c8da",
+      "manifestSha256": "18502fe4645d81c00b3243b87d6c1613910bacbf09050ba23386cf0859251c1b",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:41.312Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
     },
     "@rolldown/binding-freebsd-x64@1.3.1": {
       "name": "@rolldown/binding-freebsd-x64",
@@ -4603,6 +5119,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-freebsd-x64@1.3.1; Sigstore transparency verification required at release"
     },
+    "@rolldown/binding-freebsd-x64@1.3.3": {
+      "name": "@rolldown/binding-freebsd-x64",
+      "version": "1.3.3",
+      "integrity": "sha512-sIzqNDbA7GFDXU8k9/vcJyV1p45mCe+xHOLo9qD7gdbTbMlwB+SpnFoP7WSpC2iYdGfOX9pjBxCfViRn/Nu3Jw==",
+      "published": "2026-11-18T11:30:53.110Z",
+      "reviewedAt": "2026-11-21T04:30:37.189Z",
+      "license": "MIT",
+      "archiveSha256": "6a24f1e4509f3049042111a9eca5ef85454b2ac428027aa2bcaaa6d12a671636",
+      "manifestSha256": "83e009c7e20e6147612bb5c9bf6a5146027e04ecace75ed6ecfef3130e40d517",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:42.196Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
+    },
     "@rolldown/binding-linux-arm-gnueabihf@1.3.1": {
       "name": "@rolldown/binding-linux-arm-gnueabihf",
       "version": "1.3.1",
@@ -4621,6 +5156,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-linux-arm-gnueabihf@1.3.1; Sigstore transparency verification required at release"
+    },
+    "@rolldown/binding-linux-arm-gnueabihf@1.3.3": {
+      "name": "@rolldown/binding-linux-arm-gnueabihf",
+      "version": "1.3.3",
+      "integrity": "sha512-HYysnZZ7HD3FM5RIBN6wDMoxtOjw4LS9HhRuQ57MsZt5XGpGRPxVpplvr7vUXRN+9MD8zb6vn1JRP06PXIuMYQ==",
+      "published": "2026-11-18T11:26:33.872Z",
+      "reviewedAt": "2026-11-21T04:30:37.842Z",
+      "license": "MIT",
+      "archiveSha256": "b07bc4ef175e5a32f9e3605dd38f539fbcd650188d19886d68a8078ab6256ecc",
+      "manifestSha256": "e8b23147a0c9f567fe9c5cffde3ad6520f7225c463743abbfbce150d0431bf02",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:43.059Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
     },
     "@rolldown/binding-linux-arm64-gnu@1.3.1": {
       "name": "@rolldown/binding-linux-arm64-gnu",
@@ -4641,6 +5195,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-linux-arm64-gnu@1.3.1; Sigstore transparency verification required at release"
     },
+    "@rolldown/binding-linux-arm64-gnu@1.3.3": {
+      "name": "@rolldown/binding-linux-arm64-gnu",
+      "version": "1.3.3",
+      "integrity": "sha512-XAyLqWSoEKVc8wsDbCIz5o2sBY6ye+0YByK9ib5QxFReoM1KHyThSHsdUODa1DKNzlEfae+p9QwK62LsVwo6Nw==",
+      "published": "2026-11-18T11:25:29.799Z",
+      "reviewedAt": "2026-11-21T04:30:38.381Z",
+      "license": "MIT",
+      "archiveSha256": "7409afd480a97e570796e39b40dcdaeeb8807ec09d97a00dafe657ad0d59cbac",
+      "manifestSha256": "72f42fac571c71c967f3b2fb75a75c477a21fdc63fb815f7f0b71e7bea418829",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:43.939Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
+    },
     "@rolldown/binding-linux-arm64-musl@1.3.1": {
       "name": "@rolldown/binding-linux-arm64-musl",
       "version": "1.3.1",
@@ -4659,6 +5232,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-linux-arm64-musl@1.3.1; Sigstore transparency verification required at release"
+    },
+    "@rolldown/binding-linux-arm64-musl@1.3.3": {
+      "name": "@rolldown/binding-linux-arm64-musl",
+      "version": "1.3.3",
+      "integrity": "sha512-oVyicDPj6vUVFRnuoQS7M2Ab8EkGWoq3a5ntyQqjtZoXfgVykIJqN2IAJSi9q9UyNoQUW0vbBLQSgGtlPJ40Kg==",
+      "published": "2026-11-18T11:31:15.021Z",
+      "reviewedAt": "2026-11-21T04:30:38.588Z",
+      "license": "MIT",
+      "archiveSha256": "7dd3cb97fbf4e3075c377f3b847f5ec8607385492277b083e53542c9e37a768d",
+      "manifestSha256": "43b25063d814d8712c50dc84923e5feb7d2c6ede6d0c58b116d9404f53d21ac2",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:44.772Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
     },
     "@rolldown/binding-linux-ppc64-gnu@1.3.1": {
       "name": "@rolldown/binding-linux-ppc64-gnu",
@@ -4679,6 +5271,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-linux-ppc64-gnu@1.3.1; Sigstore transparency verification required at release"
     },
+    "@rolldown/binding-linux-ppc64-gnu@1.3.3": {
+      "name": "@rolldown/binding-linux-ppc64-gnu",
+      "version": "1.3.3",
+      "integrity": "sha512-k7aFSWgUoi/X7jCst7UEof7pS5jc5ymD8mT/pdFE+pO1IBBI2+JU5Os4HEDqS/tYhetRggwM7MOiLP3cg1bSBQ==",
+      "published": "2026-11-18T11:29:45.398Z",
+      "reviewedAt": "2026-11-21T04:30:38.998Z",
+      "license": "MIT",
+      "archiveSha256": "01d0763f0ec335675c4357c5f0f08c26ed096d74509e7a1a77d623f5ce5e70ef",
+      "manifestSha256": "feca78974f90e244c8f032e10c55a6ac0b8b49bf40fa5fb94e8af921f9d5cb36",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:45.670Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
+    },
     "@rolldown/binding-linux-s390x-gnu@1.3.1": {
       "name": "@rolldown/binding-linux-s390x-gnu",
       "version": "1.3.1",
@@ -4697,6 +5308,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-linux-s390x-gnu@1.3.1; Sigstore transparency verification required at release"
+    },
+    "@rolldown/binding-linux-s390x-gnu@1.3.3": {
+      "name": "@rolldown/binding-linux-s390x-gnu",
+      "version": "1.3.3",
+      "integrity": "sha512-D5mxHpr1qIb1Pt5UT+Bm2p6vJ7+VxcxWcxZCYVDFzZwWRq9iLiEg4/ROsaXFQl1O8sDQZZJ55UoRWWMK64uH5w==",
+      "published": "2026-11-18T11:26:22.269Z",
+      "reviewedAt": "2026-11-21T04:30:39.198Z",
+      "license": "MIT",
+      "archiveSha256": "8fedec3186dcbc8b6ec65d4b8d4180d77bb5a9cf6074ec22ee080b8e220cd640",
+      "manifestSha256": "7b0680ec435dc236e312293a4293e70bb1524bc3448d9384a25d86bf0b238acc",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:46.518Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
     },
     "@rolldown/binding-linux-x64-gnu@1.3.1": {
       "name": "@rolldown/binding-linux-x64-gnu",
@@ -4717,6 +5347,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-linux-x64-gnu@1.3.1; Sigstore transparency verification required at release"
     },
+    "@rolldown/binding-linux-x64-gnu@1.3.3": {
+      "name": "@rolldown/binding-linux-x64-gnu",
+      "version": "1.3.3",
+      "integrity": "sha512-nmW1O4BbNEmQI9+KTHbJgbDv0EuyZy64oBnRlMCtLJ8lQMIJ/H/iziQ0g2IUlHEhNrSebGvs9cRrlRj8oEfP+g==",
+      "published": "2026-11-18T11:29:58.521Z",
+      "reviewedAt": "2026-11-21T04:30:39.703Z",
+      "license": "MIT",
+      "archiveSha256": "e80f5f631b15022cccbb4e8f6f828ecdb2e8783a4545fe4f9bdf2e06deef318c",
+      "manifestSha256": "051fba3348c5bcc0499267aa612bd63fa8c6bd26fb2e5bfbecf8323af7b23ce1",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:47.372Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
+    },
     "@rolldown/binding-linux-x64-musl@1.3.1": {
       "name": "@rolldown/binding-linux-x64-musl",
       "version": "1.3.1",
@@ -4735,6 +5384,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-linux-x64-musl@1.3.1; Sigstore transparency verification required at release"
+    },
+    "@rolldown/binding-linux-x64-musl@1.3.3": {
+      "name": "@rolldown/binding-linux-x64-musl",
+      "version": "1.3.3",
+      "integrity": "sha512-ivU4JFHK5nFzrRbzp3+vwYdLj8mFckH4oz3hEl5LH/YeThr9/m2N2vF3NvLevtHq6e0COimgrEVyYTwQhh4ODg==",
+      "published": "2026-11-18T11:33:07.514Z",
+      "reviewedAt": "2026-11-21T04:30:39.965Z",
+      "license": "MIT",
+      "archiveSha256": "15a0ae6a49176fe60c4c2925cf47a75f0723de65b1c7bee71ac0f2671ebf45d3",
+      "manifestSha256": "38044d3eed66d33bee1b4e61d29e4a0130eb694d369be96dc007ef8fc46cb93b",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:48.242Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
     },
     "@rolldown/binding-openharmony-arm64@1.3.1": {
       "name": "@rolldown/binding-openharmony-arm64",
@@ -4755,6 +5423,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-openharmony-arm64@1.3.1; Sigstore transparency verification required at release"
     },
+    "@rolldown/binding-openharmony-arm64@1.3.3": {
+      "name": "@rolldown/binding-openharmony-arm64",
+      "version": "1.3.3",
+      "integrity": "sha512-XxZoRIkNZ/7pFgvOA8QJmx3uFjMyVz7zS2/urzlaFffoOGclDvpUAMu3AHKT551E8JBKXLxIjpYxYMdF6Mz9vQ==",
+      "published": "2026-11-18T11:28:19.954Z",
+      "reviewedAt": "2026-11-21T04:30:40.217Z",
+      "license": "MIT",
+      "archiveSha256": "d1307c3ee66aa86d371d188f9cb4c9db479181cbeec270296d5e75979b3b66af",
+      "manifestSha256": "21a8dd1f74da2fcf26c8ad695e6628bcaa24368b9831ab44c190376baa795fba",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:49.095Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
+    },
     "@rolldown/binding-wasm32-wasi@1.3.1": {
       "name": "@rolldown/binding-wasm32-wasi",
       "version": "1.3.1",
@@ -4773,6 +5460,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-wasm32-wasi@1.3.1; Sigstore transparency verification required at release"
+    },
+    "@rolldown/binding-wasm32-wasi@1.3.3": {
+      "name": "@rolldown/binding-wasm32-wasi",
+      "version": "1.3.3",
+      "integrity": "sha512-bBl1MB2gF26PSPy3CiDLiv+A6JGI546WbsDR34LfKAywSGeBeQXaDanoDG6QdZDJs53M1QyJir5MTKTu1n4ptA==",
+      "published": "2026-11-18T11:26:18.413Z",
+      "reviewedAt": "2026-11-21T04:30:40.052Z",
+      "license": "MIT",
+      "archiveSha256": "14b87007e4fc0630a6467bf6445c78c223a6dd9c2c9d4ae5db8e960a3419da2a",
+      "manifestSha256": "1539457544d1c85f80120c2a95914cacdb5b21a3d020dc270c590134c94463e8",
+      "engines": {
+        "node": "^20.19.0 || ^22.13.0 || >=23.5.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:49.953Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
     },
     "@rolldown/binding-win32-arm64-msvc@1.3.1": {
       "name": "@rolldown/binding-win32-arm64-msvc",
@@ -4793,6 +5499,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-win32-arm64-msvc@1.3.1; Sigstore transparency verification required at release"
     },
+    "@rolldown/binding-win32-arm64-msvc@1.3.3": {
+      "name": "@rolldown/binding-win32-arm64-msvc",
+      "version": "1.3.3",
+      "integrity": "sha512-6rZur0hyen4LPhOxWIg7az1YX+Eo8Vvauc0D6lFYGK/QCvN+1XpnB8aFe3jQc/PBUGIReJJnLX3sS8h33/5v7A==",
+      "published": "2026-11-18T11:25:45.705Z",
+      "reviewedAt": "2026-11-21T04:30:40.805Z",
+      "license": "MIT",
+      "archiveSha256": "c66a41de2449bacc5190342c5ec63f161ea4a920425c85d43f3db8ae07db4b0a",
+      "manifestSha256": "50624ddce900f66df00722d980135072e69c02561b8ea12045f0f41bb8c47d50",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:50.980Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
+    },
     "@rolldown/binding-win32-x64-msvc@1.3.1": {
       "name": "@rolldown/binding-win32-x64-msvc",
       "version": "1.3.1",
@@ -4811,6 +5536,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@rolldown%2fbinding-win32-x64-msvc@1.3.1; Sigstore transparency verification required at release"
+    },
+    "@rolldown/binding-win32-x64-msvc@1.3.3": {
+      "name": "@rolldown/binding-win32-x64-msvc",
+      "version": "1.3.3",
+      "integrity": "sha512-Ggzyuq1mN7claruAZH10aiiM1N3LRCoMP5xDXPdU514ulL0D2bksCWgFqEmEM2/pDzEP7Dq+dcv7IH452jtr1w==",
+      "published": "2026-11-18T11:27:38.113Z",
+      "reviewedAt": "2026-11-21T04:30:40.872Z",
+      "license": "MIT",
+      "archiveSha256": "62c18872385a7b3d1ac970d75e04651d62c71342b038837403fbffe4716dc524",
+      "manifestSha256": "0bb6672576317e54c8a1cda0419bbcb425f65c06cfcb3aae06121d139a114404",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:51.883Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
     },
     "@rolldown/plugin-babel@0.2.4": {
       "name": "@rolldown/plugin-babel",
@@ -5121,6 +5865,25 @@
         "package/LICENSE": "09e436100bf926e78df875ec80cf3d0c643dfec779b52cfe2aa96afa0de714cb"
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "not published"
+    },
+    "@types/convert-source-map@2.0.3": {
+      "name": "@types/convert-source-map",
+      "version": "2.0.3",
+      "integrity": "sha512-ag0BfJLZf6CQz8VIuRIEYQ5Ggwk/82uvTQf27RcpyDNbY0Vw49LIPqAxk5tqYfrCs9xDaIMvl4aj7ZopnYL8bA==",
+      "published": "2023-11-07T01:02:58.095Z",
+      "reviewedAt": "2026-11-21T04:37:30.263Z",
+      "license": "MIT",
+      "archiveSha256": "d16b594b6a7a4536b0a095d3e5fedc962c83186109df260525b5702a94562b71",
+      "manifestSha256": "095d67ce6bb62897aa3a8b2ecd5577f5d5d34f9d875a5d8dbfe7010226dea920",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "convert-source-map/LICENSE": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+      },
+      "signature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
       "provenance": "not published"
     },
     "@types/gensync@1.0.5": {
@@ -5772,6 +6535,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@unstale%2fcli-darwin-arm64@0.2.12; Sigstore transparency verification required at release"
     },
+    "@unstale/cli-darwin-arm64@0.3.1": {
+      "name": "@unstale/cli-darwin-arm64",
+      "version": "0.3.1",
+      "integrity": "sha512-0L119tObVigOWAaVH2DVAP2lUmhFvqDHn8BU4OIMty5LuxCU/ZuuFMCl52c3bMHzXj7KPrWtBnwk2dycbt7r9Q==",
+      "published": "2026-11-14T05:04:04.755Z",
+      "reviewedAt": "2026-11-21T04:30:41.296Z",
+      "license": "AGPL-3.0-only",
+      "archiveSha256": "0bd6c2efb801f0e463a4f9075c90d14131e00f0cb3ee45c8551f77c0a0d7323c",
+      "manifestSha256": "b4dc99eb9c8188a408c43e2a340511785092bd7809b12e5c9a75b0c2a1e7d866",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:54.325Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/vuca-dev/unstale@04097202b5a519cae512ec957d459f373b57d99f; reverify exact release inputs"
+    },
     "@unstale/cli-darwin-x64@0.2.12": {
       "name": "@unstale/cli-darwin-x64",
       "version": "0.2.12",
@@ -5790,6 +6572,25 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@unstale%2fcli-darwin-x64@0.2.12; Sigstore transparency verification required at release"
+    },
+    "@unstale/cli-darwin-x64@0.3.1": {
+      "name": "@unstale/cli-darwin-x64",
+      "version": "0.3.1",
+      "integrity": "sha512-7+gnwAQarzD0ZsNfUFClO9ze9k0mKLNlBX/dT2KxW+OxZN8ivThPTwWKGXdy+0M/R3kW5g41dWuj0AIz7Y7VJQ==",
+      "published": "2026-11-14T05:04:43.226Z",
+      "reviewedAt": "2026-11-21T04:30:41.243Z",
+      "license": "AGPL-3.0-only",
+      "archiveSha256": "5ae48493566c876e16385239ab3692cfc60f847fb863d0c30b072c03fc03de70",
+      "manifestSha256": "0d9eb15dddf702de3e447145f132f33ae7e7135115be36b531264f8c5484232c",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:55.913Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/vuca-dev/unstale@04097202b5a519cae512ec957d459f373b57d99f; reverify exact release inputs"
     },
     "@unstale/cli-linux-arm64@0.2.12": {
       "name": "@unstale/cli-linux-arm64",
@@ -5810,6 +6611,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@unstale%2fcli-linux-arm64@0.2.12; Sigstore transparency verification required at release"
     },
+    "@unstale/cli-linux-arm64@0.3.1": {
+      "name": "@unstale/cli-linux-arm64",
+      "version": "0.3.1",
+      "integrity": "sha512-iHUXCScqFjhRFSSXeLUE/zqOmO9dK44KDhToioP4i3ypEZ2oapjIiDOam/+cp2xbagOkzvR6/6NZnrIYLHDGbA==",
+      "published": "2026-11-14T05:05:30.506Z",
+      "reviewedAt": "2026-11-21T04:30:42.052Z",
+      "license": "AGPL-3.0-only",
+      "archiveSha256": "5852f059402022fb9d3149fa4c7867bece88f1d1e94a1c2cb830b54c72953a0a",
+      "manifestSha256": "de17122f2e8d5eb121e7224d4ad1ba70ba9e2dcd33f8a28f7655e755f0dfe80f",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:57.413Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/vuca-dev/unstale@04097202b5a519cae512ec957d459f373b57d99f; reverify exact release inputs"
+    },
     "@unstale/cli-linux-x64@0.2.12": {
       "name": "@unstale/cli-linux-x64",
       "version": "0.2.12",
@@ -5829,6 +6649,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@unstale%2fcli-linux-x64@0.2.12; Sigstore transparency verification required at release"
     },
+    "@unstale/cli-linux-x64@0.3.1": {
+      "name": "@unstale/cli-linux-x64",
+      "version": "0.3.1",
+      "integrity": "sha512-5RyEjWamEEeMiKEZAkmpCw6kw97KbL+TQkz14cUhts2uIRkKkxWlDTW03QmfuSk+Nc17K5ZR6tYDr8gnXUIJNw==",
+      "published": "2026-11-14T05:04:20.785Z",
+      "reviewedAt": "2026-11-21T04:30:41.831Z",
+      "license": "AGPL-3.0-only",
+      "archiveSha256": "ddc2fe02287ae9b5a5d4493963cbf769b5632f3ae76b86efac0b80f013259fc8",
+      "manifestSha256": "6f2bc758e4ffa943a6133e1707bc4675c34d45e621d4825eed434510a99b835c",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:33:58.953Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/vuca-dev/unstale@04097202b5a519cae512ec957d459f373b57d99f; reverify exact release inputs"
+    },
     "@unstale/cli-win32-x64@0.2.12": {
       "name": "@unstale/cli-win32-x64",
       "version": "0.2.12",
@@ -5847,6 +6686,25 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@unstale%2fcli-win32-x64@0.2.12; Sigstore transparency verification required at release"
+    },
+    "@unstale/cli-win32-x64@0.3.1": {
+      "name": "@unstale/cli-win32-x64",
+      "version": "0.3.1",
+      "integrity": "sha512-swQcwgZl9iXN8FhNuGappQWW9jcR2khE6nF8FqIjkKG2DGH3hKlp1i6LDBn/SgIoPLbYaAi0QbOgTUeNa4RyKw==",
+      "published": "2026-11-14T05:05:22.150Z",
+      "reviewedAt": "2026-11-21T04:30:42.614Z",
+      "license": "AGPL-3.0-only",
+      "archiveSha256": "74832648a3097cdb17795d10fe6fcb32083de4e9eff37d28cedff0bb0d99676f",
+      "manifestSha256": "8519e9a29ae37dbfbe5111458033677090521f8769296efbf46bfb6fa3b325a7",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:34:00.538Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/vuca-dev/unstale@04097202b5a519cae512ec957d459f373b57d99f; reverify exact release inputs"
     },
     "@unstale/cli@0.2.12": {
       "name": "@unstale/cli",
@@ -5868,6 +6726,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@unstale%2fcli@0.2.12; Sigstore transparency verification required at release"
+    },
+    "@unstale/cli@0.3.1": {
+      "name": "@unstale/cli",
+      "version": "0.3.1",
+      "integrity": "sha512-6hHrswIlH8aL41C2VeaiqS6rryBXyHrWCzlF55c/EVCG/OcAmp/MBVwslqD4jh9fIPNUGPIaupTTNXuEADX6rQ==",
+      "published": "2026-11-14T05:04:23.410Z",
+      "reviewedAt": "2026-11-21T04:30:41.538Z",
+      "license": "AGPL-3.0-only",
+      "archiveSha256": "82eed4da825616d713365e8c2bf5111d1600805645898e649ff3cf5be489dda9",
+      "manifestSha256": "6e9a47b61f31e27d59533f5e5dfdfc204e75575595a2f39bde2a515991906f1a",
+      "engines": {
+        "node": ">=18"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:34:02.003Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/vuca-dev/unstale@04097202b5a519cae512ec957d459f373b57d99f; reverify exact release inputs"
     },
     "@xterm/headless@6.0.0": {
       "name": "@xterm/headless",
@@ -8926,6 +9805,28 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/playwright-core@1.65.0; Sigstore transparency verification required at release"
     },
+    "playwright-core@1.65.1": {
+      "name": "playwright-core",
+      "version": "1.65.1",
+      "integrity": "sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw==",
+      "published": "2026-11-13T21:36:08.743Z",
+      "reviewedAt": "2026-11-21T04:37:30.703Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "6f5a60be62a4fddfbe7d10c448d8fbd54547da3358f2f8a04211440471ee863e",
+      "manifestSha256": "8243ae9fe675146825391eba8e2b06db88ea5ec94b8291a7394525965f3e7a32",
+      "engines": {
+        "node": ">=20"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "45873d00a0dd243596deb4aa23b2493b3d1f0671921bf2538ea431d7380220eb",
+        "package/NOTICE": "6d602191187b35b9b01d2cffa01c8469c2c8d9de8a96f1bf868e0f264f51c81d"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:38:33.577Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/microsoft/playwright@cb1c1d0e6bcd407d0c8b189ad828f560cb485476; artifact gitHead bbd948344ea9a60bf1e6f125c02ca99b2b51593b is the reviewed direct version-only child via authenticated publish_manual workflow (separate source bridge); reverify exact release inputs"
+    },
     "playwright@1.65.0": {
       "name": "playwright",
       "version": "1.65.0",
@@ -8947,6 +9848,28 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/playwright@1.65.0; Sigstore transparency verification required at release"
+    },
+    "playwright@1.65.1": {
+      "name": "playwright",
+      "version": "1.65.1",
+      "integrity": "sha512-vJ1FuoOrNwOKHUIVEvSt3jT1L+wjjDpwhwIstKtfvTh8XIG4FG4bIFuvNdMxi81LGfAhUgUZleVFaOLY4RIUUw==",
+      "published": "2026-11-13T21:15:10.738Z",
+      "reviewedAt": "2026-11-21T04:30:42.093Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "e2ebec5abb40f511c7a4442e83042fd8a4e654c3367e120b76e94a61a8f91e01",
+      "manifestSha256": "66a5c412c28b7fe15902da5cb5d7dd503d1c8604d0afe46797fe31aa7dc1a6e0",
+      "engines": {
+        "node": ">=20"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "45873d00a0dd243596deb4aa23b2493b3d1f0671921bf2538ea431d7380220eb",
+        "package/NOTICE": "6d602191187b35b9b01d2cffa01c8469c2c8d9de8a96f1bf868e0f264f51c81d"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:36:39.859Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/microsoft/playwright@cb1c1d0e6bcd407d0c8b189ad828f560cb485476; artifact gitHead bbd948344ea9a60bf1e6f125c02ca99b2b51593b is the reviewed direct version-only child via authenticated publish_manual workflow (separate source bridge); reverify exact release inputs"
     },
     "pnpm@12.18.0": {
       "name": "pnpm",
@@ -9252,6 +10175,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/rolldown@1.3.1; Sigstore transparency verification required at release"
     },
+    "rolldown@1.3.3": {
+      "name": "rolldown",
+      "version": "1.3.3",
+      "integrity": "sha512-ksB1g74e7haRy02OYm4lOQAlr6sK6hBpAY5R+YC30Gkv4L1COwF6M9umBAYAPxWpGow6Vr+IXtyDjH9fq7A+Zg==",
+      "published": "2026-11-18T11:37:35.289Z",
+      "reviewedAt": "2026-11-21T04:30:42.063Z",
+      "license": "MIT",
+      "archiveSha256": "a96ed0d1398d794b9aac33375aea630b6893b4801df9e9e7a3913ffec9b6a4cc",
+      "manifestSha256": "b6f75211cffa42e9947a36d8dbb2198a234e6aad7b1b1a634bff8a5f107624e7",
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:34:51.246Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/rolldown/rolldown@8a576d2fb72eab5374059b5cb216ee35412ca019; reverify exact release inputs"
+    },
     "safe-buffer@5.2.1": {
       "name": "safe-buffer",
       "version": "5.2.1",
@@ -9415,6 +10359,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
+    },
+    "tar@7.5.23": {
+      "name": "tar",
+      "version": "7.5.23",
+      "integrity": "sha512-lkukzdoGngZHJZXxW4S/E4Fp9ghTDlyZXrQGRNoJ/LXvDKcXUTq2sg5yQe74po7Voea6n/IN09+wE/QvJMiifA==",
+      "published": "2026-11-11T18:11:10.985Z",
+      "reviewedAt": "2026-11-21T04:30:42.193Z",
+      "license": "BlueOak-1.0.0",
+      "archiveSha256": "0fa9bdbc6ad7dfbc1814e3dbe6166e1c5140e49646a7f91f3b5fcf0a9bb2db01",
+      "manifestSha256": "a19d6f10761450394badb32d46fb7a44734ed1c238651c786db2ab521103781f",
+      "engines": {
+        "node": ">=18"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE.md": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:34:52.387Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/isaacs/node-tar@eb92e178af52cd191d48eb70a846f61cc4dade1b; reverify exact release inputs"
     },
     "tinyglobby@0.2.17": {
       "name": "tinyglobby",
@@ -9618,6 +10583,29 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/undici@8.12.4; Sigstore transparency verification required at release"
+    },
+    "undici@8.13.1": {
+      "name": "undici",
+      "version": "8.13.1",
+      "integrity": "sha512-Kt7EaPjh0s93lJH/PmW3d5rhkcpUa6fS3jqZ7+YGxNd9L7Xy/i827xe4C2uhhq+pJebM4tQOl5AgHmW11G5Skg==",
+      "published": "2026-11-20T21:04:15.832Z",
+      "reviewedAt": "2026-11-21T04:30:42.199Z",
+      "license": "MIT",
+      "archiveSha256": "33cceb321835a0754c60a9ac681df71dddc2ee8aafd890f763414b51574182b5",
+      "manifestSha256": "c08de778828394960b7944e3b49f57ad6c924bc1a10c1ee699c554a11a7537e5",
+      "engines": {
+        "node": ">=22.19.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/lib/web/fetch/LICENSE": "a21d6c8d3fc631198b97e57584697f7f9c37805c71c6cf9a12e4442b40394b88",
+        "package/LICENSE": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27",
+        "package/lib/milo/LICENSE.md": "ca5cc852fbcbe4598fe1f8b04c103c8073a64fa9cbb14b358bfdd87232ae8bd9"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "verified 2026-11-21T04:34:53.663Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/nodejs/undici@2d30c323d2fd0906e2339beac8a8e7c360eb6445; reverify exact release inputs"
     },
     "unenv@2.0.0-rc.24": {
       "name": "unenv",
@@ -10158,11 +11146,56 @@
       "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
       "expires": "2026-11-21T16:02:37.929Z",
       "integrity": "sha512-h7lm9gfdsj8oq+CheccDC0zcWf2K2D+U13B0+zrWyBFnigjNXQ2ZAHtZsg5fO7AMcQq4c9jPlKc169FB1RzRGg=="
+    },
+    "@babel/core@8.1.3": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T17:26:42.155Z",
+      "integrity": "sha512-kcHuFAOr6mQDd9acrkBd138f+HzIjFmhPAP3yMKL+M3/ncMEYjd3JKvdK7G+b1FR9tc0uhzo9PqgXMtLIL/qzg=="
+    },
+    "@babel/parser@8.1.3": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T17:26:02.259Z",
+      "integrity": "sha512-v3ck2WN7jn8gEJlEfIDEwTM8dCBjOac1CZjolvB6/r0O1ome6E7xS2cDQEOQqESRQZWWrLrhnjxD0qjmZ8QBgg=="
+    },
+    "@babel/types@8.1.3": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T17:26:00.593Z",
+      "integrity": "sha512-eBREGwDHRPHtdsg44t071GE2KRDEuJrf0J2uT5/qvJPB2+pfPZOKlx93dMZOFkE7QW5G0JWoczySD7a01Jf0iw=="
+    },
+    "@cloudflare/workers-types@5.20261121.1": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-22T01:02:57.764Z",
+      "integrity": "sha512-eLzyhm8/Qn+yshOObNIVsV8YJyWR9BOBCnnuqmrqY5uhsVDlLMdCmOQ34oC3eoVLkav94Dc7MWcfC+FuaxdNjA=="
+    },
+    "undici@8.13.1": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T21:04:15.832Z",
+      "integrity": "sha512-Kt7EaPjh0s93lJH/PmW3d5rhkcpUa6fS3jqZ7+YGxNd9L7Xy/i827xe4C2uhhq+pJebM4tQOl5AgHmW11G5Skg=="
+    },
+    "@babel/generator@8.1.3": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T17:25:35.051Z",
+      "integrity": "sha512-lfUz17Qtr+EinAoqyK1+4J5F0GtgsZjXktM5o+QXWM8KRUOauR/WuwBHWGU/aaSp4FI99M7rj6kg851XYWDvmQ=="
+    },
+    "@babel/helper-string-parser@8.1.3": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T17:25:18.390Z",
+      "integrity": "sha512-5HTuREtgj0xIc345zU4gtD2+3vIPkZpJw7wUYytt/mzBTQN2mWpGr1nxYiocYa2E8sWggRkrSg/k7BK51pAxIg=="
+    },
+    "@babel/helpers@8.1.3": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T17:26:02.531Z",
+      "integrity": "sha512-s5s0hMqsgSVikMuK7XHFDlIJvZp5CdAFpJcgNF5b/6oRvVCS8n779zsJVQuwtUUu75/nCYceKvi+K2FDKcogXg=="
+    },
+    "@babel/traverse@8.1.3": {
+      "reason": "Exact approved current release; archive SRI, registry signature, lifecycle, license and exact-version OSV reviewed for foundation",
+      "expires": "2026-11-21T17:26:39.534Z",
+      "integrity": "sha512-Mil7E37zLel1sjGwcgAF0wn8tbTJp3LLVMb0fqgDxWJJm52NXBv3MJaqmNOp76qzInY/0uDH3rSZfl3BqCjHiw=="
     }
   },
   "advisory": {
-    "checkedAt": "2026-11-21T03:44:00.019Z",
-    "identities": 420,
+    "checkedAt": "2026-11-21T04:37:32.235Z",
+    "identities": 424,
     "findings": []
   }
 }

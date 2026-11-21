@@ -11,7 +11,7 @@ import { promisify } from "node:util";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const hashPattern = /^[a-f0-9]{64}$/;
-const computerSource = "812bce58d2ea3735c12e6f6181c269c4010293df";
+const computerSource = "cd0146b2875b224b54fb56384f642c6416ad910a";
 const runtimeArchive = "cdeb8670a0c81f51b4dc4ac61919f9b1ad917b304bf8221eb939570663d240f8";
 const inputs = {
   "embedded-freeze.json": "apps/worker/container/embedded-freeze.json",

@@ -107,12 +107,38 @@ export async function rejectedZodAdvisory(output: string): Promise<boolean> {
 
 import { json } from "./check-pins.ts";
 
-// unstale v0.2.12 onboarding::Bound gives a short positive --wait at least 60s
+// unstale v0.3.1 onboarding::Bound gives a short positive --wait at least 60s
 // for setup and twice that for its last-resort report/exit. Leave another 30s
 // (its default public-request timeout) for process/config startup and shutdown.
 // --wait 0 instead selects a 300s setup bound; it does not mean immediate setup.
-// https://github.com/vuca-dev/unstale/blob/v0.2.12/local/cli/src/onboarding.rs
+// https://github.com/vuca-dev/unstale/blob/v0.3.1/local/cli/src/onboarding.rs
 const coverageTimeout = 150_000;
+
+/** Public coverage only: never select model inference or read a user's model setup. */
+export function unstaleEnvironment(input: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    UNSTALE_CACHE_DIR: resolve(repository, ".unstale/cache"),
+    UNSTALE_CONFIG_DIR: resolve(repository, ".unstale/tool-config"),
+    // Official v0.3.1 util::EDGE_INFERENCE_DEFAULT is true. Keep this governed
+    // public registry/coverage check from collecting credentials or starting model steps.
+    UNSTALE_EDGE_INFERENCE: "0",
+  };
+  for (const key of [
+    "PATH",
+    "HOME",
+    "USERPROFILE",
+    "LOCALAPPDATA",
+    "APPDATA",
+    "SystemRoot",
+    "WINDIR",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "CI",
+  ])
+    if (input[key]) env[key] = input[key];
+  return env;
+}
 
 async function execute(
   binary: string,
@@ -127,22 +153,7 @@ async function execute(
   );
   return new Promise((accept, reject) => {
     // Public registry/catalog queries receive no registry or application credentials.
-    const env: NodeJS.ProcessEnv = {};
-    env.UNSTALE_CACHE_DIR = resolve(repository, ".unstale/cache");
-    for (const key of [
-      "PATH",
-      "HOME",
-      "USERPROFILE",
-      "LOCALAPPDATA",
-      "APPDATA",
-      "SystemRoot",
-      "WINDIR",
-      "TMPDIR",
-      "TEMP",
-      "TMP",
-      "CI",
-    ])
-      if (process.env[key]) env[key] = process.env[key];
+    const env = unstaleEnvironment();
     const child = spawn(binary, args, {
       cwd: repository,
       env,
@@ -186,14 +197,14 @@ async function main(): Promise<void> {
   );
   const name = `@unstale/cli-${key}`;
   const review = await json<SupplyChain>(repository, "tools/unstale/supply-chain.json");
-  const record = review.packages[`${name}@0.2.12`];
+  const record = review.packages[`${name}@0.3.1`];
   assert.ok(record, "Missing unstale native archive review");
   const require = createRequire(resolve(repository, "tools/unstale/package.json"));
   const launcherRequire = createRequire(require.resolve("@unstale/cli/package.json"));
   const manifest = launcherRequire.resolve(`${name}/package.json`);
   const relative = `bin/unstale${process.platform === "win32" ? ".exe" : ""}`;
   const binary = resolve(dirname(manifest), relative);
-  const entries = archiveEntries(await archive(name, "0.2.12", record.integrity));
+  const entries = archiveEntries(await archive(name, "0.3.1", record.integrity));
   const expected = entries.get(`package/${relative}`);
   assert.ok(expected, "Missing native unstale binary in reviewed archive");
   assert.equal(
@@ -201,7 +212,7 @@ async function main(): Promise<void> {
     hash(expected),
     "Installed unstale native integrity mismatch",
   );
-  assert.equal((await execute(binary, ["--version"])).output.trim(), "unstale 0.2.12");
+  assert.equal((await execute(binary, ["--version"])).output.trim(), "unstale 0.3.1");
   let initialized = true;
   try {
     await access(resolve(repository, ".unstale/config.json"));
@@ -251,7 +262,7 @@ async function main(): Promise<void> {
   await mkdir(resolve(repository, "dist/supply-chain"), { recursive: true });
   await writeFile(
     resolve(repository, "dist/supply-chain/unstale.json"),
-    `${JSON.stringify({ version: "0.2.12", platform: key, notifyExit: notify.code, statusExit: status.code, syncExit: sync.code, advisoryExit: advisories.code, advisoryCoverage: advisoryUnavailable || sync.code !== 0 ? "degraded" : "checked", acknowledged, reportSha256: hash(Buffer.from(report)), coverageSha256: hash(Buffer.from(coverage)), observedAt: new Date().toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ version: "0.3.1", platform: key, notifyExit: notify.code, statusExit: status.code, syncExit: sync.code, advisoryExit: advisories.code, advisoryCoverage: advisoryUnavailable || sync.code !== 0 ? "degraded" : "checked", acknowledged, reportSha256: hash(Buffer.from(report)), coverageSha256: hash(Buffer.from(coverage)), observedAt: new Date().toISOString() }, null, 2)}\n`,
   );
   console.log(
     status.output

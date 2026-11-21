@@ -117,7 +117,7 @@ test("real frozen archives/patches and supported deploy preserve all owners and 
       ["https-proxy-agent", ["7.0.6", "9.1.0"]],
       ["agent-base", ["7.1.4", "9.0.0"]],
       ["ws", ["8.21.0", "8.22.2"]],
-      ["undici", ["7.30.2", "8.12.4"]],
+      ["undici", ["7.30.2", "8.13.1"]],
     ] as const) {
       const instances: ((typeof actualCli.instances)[number] | undefined)[] = versions.map(
         (version) =>
@@ -288,7 +288,7 @@ test("supported ordinary packs authenticate final dependency paths and preserve 
           ["https-proxy-agent", ["7.0.6", "9.1.0"]],
           ["agent-base", ["7.1.4", "9.0.0"]],
           ["ws", ["8.21.0", "8.22.2"]],
-          ["undici", ["7.30.2", "8.12.4"]],
+          ["undici", ["7.30.2", "8.13.1"]],
         ] as const) {
           const paths = versions.map(
             (version) =>

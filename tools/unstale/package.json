@@ -9,6 +9,6 @@
     "node": ">=26.13.1"
   },
   "dependencies": {
-    "@unstale/cli": "0.2.12"
+    "@unstale/cli": "0.3.1"
   }
 }

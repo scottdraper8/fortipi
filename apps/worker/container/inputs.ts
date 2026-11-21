@@ -1,10 +1,10 @@
 /** Reviewed inputs; these digests identify inputs, never the final FortiPi image. */
 export const imageInputs = {
-  source: "812bce58d2ea3735c12e6f6181c269c4010293df",
-  sourceArchiveSha256: "ee20eae6939c82bd465933c3a591f96b362aa58fe344888307f7ea4839121f27",
+  source: "cd0146b2875b224b54fb56384f642c6416ad910a",
+  sourceArchiveSha256: "2df412cef0d8359ce190e34d5f0962209019667af393b7703c3f93aa7f4ce27a",
   embeddedNodeVersion: "22.23.5",
   embeddedNodeLicenseSha256: "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
-  computerVersion: "0.11.1",
+  computerVersion: "0.11.4",
   // This historical immutable image supplies ONLY the unchanged, source-checked addon.
   // Its old SEA executable is never copied into the new runtime image.
   computerd:

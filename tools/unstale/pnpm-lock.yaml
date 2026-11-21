@@ -176,62 +176,62 @@ importers:
   .:
     dependencies:
       '@unstale/cli':
-        specifier: 0.2.12
-        version: 0.2.12
+        specifier: 0.3.1
+        version: 0.3.1
 
 packages:
 
-  '@unstale/cli-darwin-arm64@0.2.12':
-    resolution: {integrity: sha512-DFW8XPHq4mmrF5ikQHsO2uH0P0HxUW4Oq9R9839AsqvBNi0+xiss41hmY5DfSa4KSsucTbOnxBEm55ElKJI5Gw==}
+  '@unstale/cli-darwin-arm64@0.3.1':
+    resolution: {integrity: sha512-0L119tObVigOWAaVH2DVAP2lUmhFvqDHn8BU4OIMty5LuxCU/ZuuFMCl52c3bMHzXj7KPrWtBnwk2dycbt7r9Q==}
     cpu: [arm64]
     os: [darwin]
 
-  '@unstale/cli-darwin-x64@0.2.12':
-    resolution: {integrity: sha512-dMPwjCmfAJPJrPIQY+ifb2C+cKS1pz+wLBP+P3GyzNVaiRTcEv1hrq/QF9V1I1mf/QCCwT1m+tGIFW+qxv7aJA==}
+  '@unstale/cli-darwin-x64@0.3.1':
+    resolution: {integrity: sha512-7+gnwAQarzD0ZsNfUFClO9ze9k0mKLNlBX/dT2KxW+OxZN8ivThPTwWKGXdy+0M/R3kW5g41dWuj0AIz7Y7VJQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@unstale/cli-linux-arm64@0.2.12':
-    resolution: {integrity: sha512-yV58+ZQFuCBhpGLebAp3Ir+RbwA0af0zd13bRsDrWhffF9O+4leSEgk63Pz+xtPNNTBXnr+xt0CXdGZrCV+XZg==}
+  '@unstale/cli-linux-arm64@0.3.1':
+    resolution: {integrity: sha512-iHUXCScqFjhRFSSXeLUE/zqOmO9dK44KDhToioP4i3ypEZ2oapjIiDOam/+cp2xbagOkzvR6/6NZnrIYLHDGbA==}
     cpu: [arm64]
     os: [linux]
 
-  '@unstale/cli-linux-x64@0.2.12':
-    resolution: {integrity: sha512-HuVv/qK6KqRrXm7ugckaVllahCKju8hmeMO+Cw9uZpUmfGHhggutl2o0mW9eA6xblZJ3V340qX2MTIymzgCzcg==}
+  '@unstale/cli-linux-x64@0.3.1':
+    resolution: {integrity: sha512-5RyEjWamEEeMiKEZAkmpCw6kw97KbL+TQkz14cUhts2uIRkKkxWlDTW03QmfuSk+Nc17K5ZR6tYDr8gnXUIJNw==}
     cpu: [x64]
     os: [linux]
 
-  '@unstale/cli-win32-x64@0.2.12':
-    resolution: {integrity: sha512-2R93KzKWxkeX3TsAGfXRUfj3XYqQoNtmI4ctOZky72+Z5KlY30DOXVD8kTlQuXjAMOzvZQpkTYiq5bTtkD7osw==}
+  '@unstale/cli-win32-x64@0.3.1':
+    resolution: {integrity: sha512-swQcwgZl9iXN8FhNuGappQWW9jcR2khE6nF8FqIjkKG2DGH3hKlp1i6LDBn/SgIoPLbYaAi0QbOgTUeNa4RyKw==}
     cpu: [x64]
     os: [win32]
 
-  '@unstale/cli@0.2.12':
-    resolution: {integrity: sha512-bg4rFUiut6gzpNZlF3sZIPFMjeCVLphy8hVVQ2XpiQxmlPhGDQkBOCargFV5ygdAGmo8mdNjYrkUwLRB8LWaFw==}
+  '@unstale/cli@0.3.1':
+    resolution: {integrity: sha512-6hHrswIlH8aL41C2VeaiqS6rryBXyHrWCzlF55c/EVCG/OcAmp/MBVwslqD4jh9fIPNUGPIaupTTNXuEADX6rQ==}
     engines: {node: '>=18'}
     hasBin: true
 
 snapshots:
 
-  '@unstale/cli-darwin-arm64@0.2.12':
+  '@unstale/cli-darwin-arm64@0.3.1':
     optional: true
 
-  '@unstale/cli-darwin-x64@0.2.12':
+  '@unstale/cli-darwin-x64@0.3.1':
     optional: true
 
-  '@unstale/cli-linux-arm64@0.2.12':
+  '@unstale/cli-linux-arm64@0.3.1':
     optional: true
 
-  '@unstale/cli-linux-x64@0.2.12':
+  '@unstale/cli-linux-x64@0.3.1':
     optional: true
 
-  '@unstale/cli-win32-x64@0.2.12':
+  '@unstale/cli-win32-x64@0.3.1':
     optional: true
 
-  '@unstale/cli@0.2.12':
+  '@unstale/cli@0.3.1':
     optionalDependencies:
-      '@unstale/cli-darwin-arm64': 0.2.12
-      '@unstale/cli-darwin-x64': 0.2.12
-      '@unstale/cli-linux-arm64': 0.2.12
-      '@unstale/cli-linux-x64': 0.2.12
-      '@unstale/cli-win32-x64': 0.2.12
+      '@unstale/cli-darwin-arm64': 0.3.1
+      '@unstale/cli-darwin-x64': 0.3.1
+      '@unstale/cli-linux-arm64': 0.3.1
+      '@unstale/cli-linux-x64': 0.3.1
+      '@unstale/cli-win32-x64': 0.3.1

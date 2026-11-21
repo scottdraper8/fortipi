@@ -13,6 +13,7 @@ import { pnpmExecutable, verifyPnpmExecutable } from "../../scripts/pnpm-executa
 import {
   readAdvisoryAuthority,
   rejectedZodAdvisory,
+  unstaleEnvironment,
   validateRejectedZodAuthorities,
 } from "../../scripts/run-unstale.ts";
 import {
@@ -226,12 +227,9 @@ test("reject an extra or changed runtime dependency override", async () => {
   await fixture(async (root) => {
     const path = resolve(root, "pnpm-lock.yaml");
     const lock = await readFile(path, "utf8");
-    assert.ok(lock.includes("workerd@1.20261113.1: 1.20261119.1"));
-    await writeFile(
-      path,
-      lock.replace("workerd@1.20261113.1: 1.20261119.1", "workerd@1.20261113.1: 1.20261118.1"),
-    );
-  }, /Runtime override lock drift/);
+    assert.ok(lock.includes("  undici@8.13.1:"));
+    await writeFile(path, `${lock}\noverrides:\n  undici@8.13.1: 8.12.4\n`);
+  }, /Runtime overrides forbidden in lock/);
 });
 
 test("reject stale graph advisory evidence", async () => {
@@ -493,4 +491,27 @@ test("reject disallowed license before copying any archive", async () => {
     await rm(root, { recursive: true, force: true });
   }
   await checkPins();
+});
+
+test("public Unstale coverage cannot inherit model setup, credentials or a re-enabled inference switch", () => {
+  const env = unstaleEnvironment({
+    PATH: "/public/bin",
+    HOME: "/synthetic-home",
+    TMPDIR: "/synthetic-tmp",
+    CI: "true",
+    UNSTALE_EDGE_INFERENCE: "1",
+    UNSTALE_CONFIG_DIR: "/foreign-config",
+    OPENAI_API_KEY: "synthetic-not-a-key",
+    GITHUB_TOKEN: "synthetic-not-a-token",
+    NODE_AUTH_TOKEN: "synthetic-not-a-token",
+    CODEX_HOME: "/foreign-codex",
+  });
+  assert.equal(env.HOME, "/synthetic-home", "Do not repurpose the caller's home");
+  assert.equal(env.PATH, "/public/bin");
+  assert.equal(env.TMPDIR, "/synthetic-tmp");
+  assert.equal(env.CI, "true");
+  assert.equal(env.UNSTALE_EDGE_INFERENCE, "0");
+  assert.equal(env.UNSTALE_CONFIG_DIR, resolve(repository, ".unstale/tool-config"));
+  for (const key of ["OPENAI_API_KEY", "GITHUB_TOKEN", "NODE_AUTH_TOKEN", "CODEX_HOME"])
+    assert.equal(env[key], undefined);
 });

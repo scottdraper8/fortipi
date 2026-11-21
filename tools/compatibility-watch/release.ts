@@ -26,14 +26,14 @@ const packages: Record<InstalledReference, string[]> = {
     "pi-tui",
   ].map((n) => `@earendil-works/${n}@1.6.0`),
   "agents-lifecycle": ["agents@0.34.0"],
-  "computer-fuse": ["@cloudflare/computer@0.11.1"],
+  "computer-fuse": ["@cloudflare/computer@0.11.4"],
   wrangler: [
     "wrangler@4.166.0",
     "miniflare@5.20261119.0-beta",
     "@cloudflare/workers-utils@0.56.0",
     "undici@7.30.2",
     "workerd@1.20261119.1",
-    "@cloudflare/workers-types@5.20261119.1",
+    "@cloudflare/workers-types@5.20261121.1",
   ],
 };
 export const releaseHash = (value: unknown): string =>
@@ -227,7 +227,7 @@ export async function releaseBasis(
   }
   // Existing source attribution and accepted image are separate from the client TGZ.
   const attribution = object(object(await json("tools/unstale/license-policy.json")).attributions)[
-    "@cloudflare/computer@0.11.1"
+    "@cloudflare/computer@0.11.4"
   ];
   const a = object(attribution);
   assert.equal(a.source, `https://github.com/cloudflare/computer/tree/${imageInputs.source}`);
