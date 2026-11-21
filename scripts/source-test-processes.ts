@@ -79,6 +79,7 @@ if (process.execArgv.includes("--test") && selected.size > 0 && selected.size <=
 const admissionFailureName =
   "integrated persistent runtime retains actual Pi input and repairs the same admission across both acknowledged SIGKILL boundaries";
 const failureNames = new Set<string>([
+  "an RPC callback can reenter its pending initialization more than once",
   "actual PiHarness fixed wake preserves sleeping work across an older idle outcome",
   "production Recovery supersession preserves distinct successor and bounded rows",
   "production Recovery hung takeover preserves distinct successor and bounded rows",
@@ -122,6 +123,8 @@ const failureNames = new Set<string>([
   "candidate SAFE receipt recovery with executor reconnected before Agent activation",
 ]);
 const failurePaths = new Set<string>([
+  "apps/worker/test/agent/runtime-reentry.test.ts",
+  "apps/worker/test/agent/reentry-worker.ts",
   "apps/worker/test/agent/pi-fixed-wake.test.ts",
   "apps/worker/test/agent/pi-fixed-wake-worker.ts",
   "apps/worker/test/agent/recovery-generation.test.ts",
@@ -207,16 +210,22 @@ export function sourceReentryFailureLine(
   error: unknown,
   elapsedMs: number,
 ): string {
-  let name: unknown;
+  let name: unknown, code: unknown;
   try {
-    if (error !== null && typeof error === "object") name = (error as { name?: unknown }).name;
+    if (error !== null && typeof error === "object") {
+      name = (error as { name?: unknown }).name;
+      code = (error as { code?: unknown }).code;
+    }
   } catch {
     // An error object's accessor cannot interfere with the original failure.
   }
   return JSON.stringify({
     diagnostic: "source-reentry-failure",
     phase:
-      typeof phase === "string" && ["listen", "fetch-once", "fetch-twice", "close"].includes(phase)
+      typeof phase === "string" &&
+      ["listen", "fetch-once", "fetch-twice", "close", "close-harness", "close-directory"].includes(
+        phase,
+      )
         ? phase
         : "unknown",
     kind:
@@ -226,7 +235,15 @@ export function sourceReentryFailureLine(
           ? "abort"
           : name === "AssertionError"
             ? "assertion"
-            : "other",
+            : code === "ENOTEMPTY"
+              ? "directory-not-empty"
+              : code === "EBUSY"
+                ? "resource-busy"
+                : code === "EPERM" || code === "EACCES"
+                  ? "permission"
+                  : code === "EMFILE" || code === "ENFILE"
+                    ? "file-limit"
+                    : "other",
     elapsedMs: Number.isFinite(elapsedMs) ? Math.min(60000, Math.max(0, Math.round(elapsedMs))) : 0,
   });
 }
@@ -387,7 +404,7 @@ export function sourceTestDiagnostic(line: string): boolean {
     liveRecoveryDiagnostic(line) ||
     nativeRecoveryDiagnostic(line) ||
     nativeObservationDiagnostic(line) ||
-    /^# \{"diagnostic":"source-reentry-failure","phase":"(?:listen|fetch-once|fetch-twice|close|unknown)","kind":"(?:timeout|abort|assertion|other)","elapsedMs":(?:0|[1-9]\d{0,3}|[1-5]\d{4}|60000)\}$/.test(
+    /^# \{"diagnostic":"source-reentry-failure","phase":"(?:listen|fetch-once|fetch-twice|close|close-harness|close-directory|unknown)","kind":"(?:timeout|abort|assertion|directory-not-empty|resource-busy|permission|file-limit|other)","elapsedMs":(?:0|[1-9]\d{0,3}|[1-5]\d{4}|60000)\}$/.test(
       line,
     ) ||
     /^# \{"diagnostic":"source-fixed-wake-failure","lastPhase":"(?:prepare|listen|environment|begin|hold-idle|sleep-successor|observe-successor|release-old|settle-old|check-wake)"\}$/.test(

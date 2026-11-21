@@ -41,7 +41,14 @@ function runtimeCallFrame(lines: string[], call: "await poll(" | "await launch()
 }
 
 test("reentry failure observation forwards bounded phases without error payloads", async () => {
-  for (const phase of ["listen", "fetch-once", "fetch-twice", "close"]) {
+  for (const phase of [
+    "listen",
+    "fetch-once",
+    "fetch-twice",
+    "close",
+    "close-harness",
+    "close-directory",
+  ]) {
     for (const [name, kind] of [
       ["TimeoutError", "timeout"],
       ["AbortError", "abort"],
@@ -56,6 +63,20 @@ test("reentry failure observation forwards bounded phases without error payloads
         kind,
         elapsedMs: 5000,
       });
+      assert.equal(sourceTestDiagnostic(`# ${line}`), true);
+    }
+    for (const [code, kind] of [
+      ["ENOTEMPTY", "directory-not-empty"],
+      ["EBUSY", "resource-busy"],
+      ["EPERM", "permission"],
+      ["EACCES", "permission"],
+      ["EMFILE", "file-limit"],
+      ["ENFILE", "file-limit"],
+      [canary, "other"],
+    ]) {
+      const line = sourceReentryFailureLine(phase, { code, message: canary, stack: canary }, 19);
+      assert.equal(line.includes(canary), false);
+      assert.equal(JSON.parse(line).kind, kind);
       assert.equal(sourceTestDiagnostic(`# ${line}`), true);
     }
   }
@@ -81,6 +102,12 @@ test("reentry failure observation forwards bounded phases without error payloads
     },
   };
   assert.equal(sourceReentryFailureLine(canary, opaque, Number.NaN).includes(canary), false);
+  const opaqueCode = {
+    get code(): never {
+      throw new Error(canary);
+    },
+  };
+  assert.equal(sourceReentryFailureLine("close-directory", opaqueCode, 19).includes(canary), false);
   const forgedPhase = { toString: () => "listen", payload: canary };
   assert.equal(sourceReentryFailureLine(forgedPhase, opaque, 5000).includes(canary), false);
   const output: string[] = [],

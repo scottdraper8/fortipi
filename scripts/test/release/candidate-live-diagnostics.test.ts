@@ -415,6 +415,7 @@ test("only reviewed generation, boundary, live and device titles survive failure
     "trusted outer recovery preserves original receipts and child byte closure across perform/readonly verification",
     "cleanup-only ownership accepts completed failed/cancelled initial jobs without granting phase/custody proof; missing and unfinished ownership remain unavailable",
     "actual PiHarness fixed wake preserves sleeping work across an older idle outcome",
+    "an RPC callback can reenter its pending initialization more than once",
   ]) {
     const output: string[] = [],
       accept = sourceFailureLines((line) => output.push(line));

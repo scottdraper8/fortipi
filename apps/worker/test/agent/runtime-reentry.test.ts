@@ -31,7 +31,8 @@ test("an RPC callback can reenter its pending initialization more than once", {
   process.env.XDG_CACHE_HOME = join(directory, "cache");
   const { createTestHarness } = await import("wrangler");
   const server = createTestHarness({ root: directory, workers: [{ configPath }] });
-  let phase: "listen" | "fetch-once" | "fetch-twice" | "close" = "listen";
+  let phase: "listen" | "fetch-once" | "fetch-twice" | "close-harness" | "close-directory" =
+    "listen";
   let entered = performance.now();
   const observe = (error: unknown) => {
     try {
@@ -41,11 +42,13 @@ test("an RPC callback can reenter its pending initialization more than once", {
     }
   };
   const close = async () => {
-    phase = "close";
+    phase = "close-harness";
     entered = performance.now();
     try {
       await server.close();
-      await rm(directory, { recursive: true, force: true });
+      phase = "close-directory";
+      entered = performance.now();
+      await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 });
     } catch (error) {
       observe(error);
       throw error;
