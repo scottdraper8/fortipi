@@ -64,31 +64,51 @@ test("actual PiHarness fixed wake preserves sleeping work across an older idle o
         "Real PiHarness must have produced an idle completion before interleaving",
       );
       lastPhase = "sleep-successor";
-      await probe.sleepingSuccessor();
+      const until = await probe.sleepingSuccessor();
       lastPhase = "observe-successor";
       for (let i = 0; i < 150; i++) {
         current = await probe.state();
-        if (current.taskStatus === "sleeping" && current.row && current.row.time > Date.now())
+        if (
+          current.taskStatus === "sleeping" &&
+          current.wake.active === false &&
+          current.wake.at === until &&
+          current.row?.time === until &&
+          current.alarm === until &&
+          until > Date.now()
+        )
           break;
         await pause(20);
       }
       assert.equal(current.taskStatus, "sleeping");
+      assert.equal(current.wake.active, false);
+      assert.equal(current.wake.at, until);
+      assert.equal(current.row?.id, "pi-wake");
+      assert.equal(current.row?.fn, "wake");
+      assert.equal(current.row?.time, until);
+      assert.equal(current.alarm, until);
       assert.ok(
         current.row && current.row.time > Date.now(),
         "Actual onWake must durably arm the future successor first",
       );
       const before = current;
       lastPhase = "release-old";
-      await probe.release();
+      const joined = await probe.releaseAndJoin();
+      assert.ok(joined >= 1, "Join the entered dispatch through outcome application and rearming");
       lastPhase = "settle-old";
       for (const result of await Promise.allSettled(drives))
         assert.equal(result.status, "fulfilled");
-      await pause(25);
       lastPhase = "check-wake";
       const after = await probe.state();
       console.log(JSON.stringify({ before, after }));
       assert.ok(after.row, "Older idle outcome must not erase PiHarness's newer durable wake");
       assert.ok(after.alarm !== null, "Sleeping Pi work requires an offline durable alarm");
+      assert.equal(after.taskStatus, "sleeping");
+      assert.equal(after.wake.active, false);
+      assert.equal(after.wake.at, until);
+      assert.equal(after.row.id, "pi-wake");
+      assert.equal(after.row.fn, "wake");
+      assert.equal(after.row.time, until);
+      assert.equal(after.alarm, until);
     } finally {
       await probe.release();
       await Promise.allSettled(drives);

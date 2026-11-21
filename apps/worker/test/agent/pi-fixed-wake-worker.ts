@@ -46,8 +46,17 @@ class HeldPiHarness extends PiHarness {
     if (this.row()) await this.lifecycle.jobs.reschedule("pi-wake", Date.now());
   }
 }
+/** Observe public alarm promises, including alarms installed on the host. */
+class ObservedLifecycle extends Lifecycle {
+  readonly alarmRuns = new Set<Promise<void>>();
+  override alarm(): Promise<void> {
+    const run = super.alarm().finally(() => this.alarmRuns.delete(run));
+    this.alarmRuns.add(run);
+    return run;
+  }
+}
 export class FixedWakeProbe extends DurableObject {
-  readonly lifecycle = Lifecycle.install(this);
+  readonly lifecycle = new ObservedLifecycle(this);
   readonly pi = new HeldPiHarness({
     harness: async ({ storage, context, onWake }) => {
       const registry = createRegistry();
@@ -58,6 +67,7 @@ export class FixedWakeProbe extends DurableObject {
   #task: TaskId<string> | undefined;
   constructor(ctx: DurableObjectState, env: object) {
     super(ctx, env);
+    this.lifecycle.installHandlers();
     this.lifecycle.use(this.pi);
   }
   async begin() {
@@ -80,16 +90,25 @@ export class FixedWakeProbe extends DurableObject {
   async sleepingSuccessor() {
     const harness = await this.pi.pi(),
       root = await harness.root(BACKGROUND_CONTEXT);
+    const until = Date.now() + 60000;
     this.#task = await harness.commit(
       (tx) =>
         tx.createTask(
           sleeper,
-          { until: Date.now() + 60000 },
+          { until },
           { conversationId: root.id, ownership: { kind: "conversation" }, abandonOnRestart: false },
         ),
       BACKGROUND_CONTEXT,
     );
     harness.resume();
+    return until;
+  }
+  async releaseAndJoin() {
+    const runs = [...this.lifecycle.alarmRuns];
+    if (runs.length === 0) throw new Error("Held wake must have an observed alarm invocation");
+    this.release();
+    await Promise.all(runs);
+    return runs.length;
   }
   release() {
     this.pi.release.resolve();
