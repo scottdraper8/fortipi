@@ -451,7 +451,7 @@ export async function processHarness(
       }
       await exited;
       await joinOwnedProcessGroup(current.pid);
-      if (signal === "SIGKILL" && signalled) assert.equal(current.signalCode, signal);
+      if (signal === "SIGKILL") assert.equal(current.signalCode, signal);
       // A rejected join keeps both the child and this invocation's stop promise.
       child = undefined;
     })();
