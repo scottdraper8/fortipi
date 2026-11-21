@@ -3,9 +3,9 @@ import { chmod, copyFile, mkdir, readdir, readFile, realpath, writeFile } from "
 import { availableParallelism } from "node:os";
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
-import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { observeDiagnosticLines } from "./bounded-diagnostic-lines.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
 import { sourceFailureLines, sourceTestDiagnostic } from "./source-test-processes.ts";
 
@@ -35,43 +35,6 @@ export function observeCandidateDiagnostics(
 /** Classify private TAP at its existing capture boundary, before wrapper truncation. */
 export function observeSourceTestFailures(stdout: Readable, emit: (line: string) => void): void {
   observeDiagnosticLines(stdout, sourceFailureLines(emit));
-}
-
-function observeDiagnosticLines(stream: Readable, acceptLine: (line: string) => void): void {
-  const decoder = new StringDecoder("utf8");
-  let partial = "",
-    dropping = false;
-  const flush = () => {
-    const line = partial.endsWith("\r") ? partial.slice(0, -1) : partial;
-    const eligible = !dropping;
-    partial = "";
-    dropping = false;
-    try {
-      if (eligible) acceptLine(line);
-    } catch {
-      /* Diagnostics cannot replace the child result. */
-    }
-  };
-  const accept = (text: string) => {
-    for (const character of text) {
-      if (character === "\n") flush();
-      else if (!dropping) {
-        // The classifier allows512 characters; retain one possible CR terminator.
-        if (partial.length + character.length > 513) {
-          partial = "";
-          dropping = true;
-        } else partial += character;
-      }
-    }
-  };
-  stream.on("data", (chunk: Buffer | string) =>
-    accept(typeof chunk === "string" ? chunk : decoder.write(chunk)),
-  );
-  stream.once("end", () => {
-    accept(decoder.end());
-    flush();
-  });
-  // A close without end is not a complete final line and deliberately does not flush.
 }
 
 /** Argument arrays only. A timeout terminates the child and remains a failure. */

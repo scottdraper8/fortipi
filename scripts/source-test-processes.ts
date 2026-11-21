@@ -4,6 +4,7 @@ import { lstatSync, readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { observeDiagnosticLines } from "./bounded-diagnostic-lines.ts";
 import type { KernelObservation } from "./owned-runtime-roles.ts";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -48,6 +49,12 @@ if (process.execArgv.includes("--test") && selected.size > 0 && selected.size <=
       if (matches.length !== 1) return;
       const path = matches[0];
       if (path === undefined) return;
+      // Observe this selected direct child's raw stderr before TAP ordering can
+      // hold its diagnostics behind another file. Forward only closed records.
+      if (child.stderr)
+        observeDiagnosticLines(child.stderr, (line) => {
+          if (sourceTestDiagnostic(line)) process.stderr.write(`${line}\n`);
+        });
       active++;
       emit({
         diagnostic: "source-test-process",

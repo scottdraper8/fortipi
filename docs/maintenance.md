@@ -123,15 +123,13 @@ SRI/signature/lifecycle/patch/license and fresh advisory enforcement still run.
 A lock, archive, patch, image or coarse Worker/packages tree change invalidates
 the source reference. It needs normal review, never a copied timestamp.
 
-The reviewed runtime repair pins `workerd@1.20261119.1` and matching Workers
-types while retaining Wrangler4.162.0/Miniflare5.20261113.0-beta. The sole allowed
-dependency override replaces their exact workerd1.20261113.1 requirement; other
-overrides remain forbidden. This release contains the repeated RPC reentry
-deadlock and deferred external-memory fixes. The regression control distinguishes
-old and repaired binaries; it does not identify the earlier Pi recovery stall.
-The runtime bundle and installed candidate must preserve the reviewed resolution,
-with separate native-platform qualification. Any initial release-age exceptions
-remain exact, integrity-bound and expire at the normal24h maturity time.
+The reviewed release cohort pins Wrangler4.166.0, Miniflare5.20261119.0-beta,
+`workerd@1.20261119.1` and Workers types5.20261121.1. No dependency override is
+configured. Earlier runtime regression controls distinguish old and repaired
+binaries; they do not identify the earlier Pi recovery stall. The runtime bundle
+and installed candidate must preserve the reviewed resolution, with separate
+native-platform qualification. Temporary release-age exceptions remain exact,
+integrity-bound and expire at the normal24h maturity time.
 
 Candidate inventory retains exact report bytes. Owner10 detailSchemaVersion2
 binds candidate/source/report/cohort/reference digests; owner9 rechecks those

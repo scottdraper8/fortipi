@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -18,7 +18,8 @@ import {
   sourceRecoveryPath,
   sourceTestDiagnostic,
 } from "../../../../scripts/source-test-processes.ts";
-import { joinOwnedProcessGroup, startupMarker } from "./owned-process-group.ts";
+import { type OwnedRuntime, spawnOwnedRuntime } from "../owned-runtime.ts";
+import { startupMarker } from "./owned-process-group.ts";
 import {
   armProcessBarrier,
   type ProcessArm,
@@ -29,9 +30,9 @@ import {
 import { processProfile, processProfileLines } from "./process-profile.ts";
 
 const pause = (ms: number) => new Promise<void>((accept) => setTimeout(accept, ms));
-function exitFacts(child: ChildProcess) {
-  const code = child.exitCode;
-  const signal = child.signalCode;
+function exitFacts(runtime: OwnedRuntime) {
+  const code = runtime.exitCode;
+  const signal = runtime.signalCode;
   return {
     exitCode:
       typeof code === "number" && Number.isInteger(code) && Math.abs(code) <= 255 ? code : null,
@@ -111,6 +112,7 @@ export async function processHarness(
   );
   let child: ChildProcess | undefined,
     output = "";
+  let owned: OwnedRuntime | undefined;
   let childInvocation = 0;
   let stopJoin: Promise<void> | undefined;
   const origin = `http://127.0.0.1:${port}`;
@@ -180,8 +182,7 @@ export async function processHarness(
     stopJoin = undefined;
     childInvocation++;
     output = "";
-    child = spawn(
-      process.execPath,
+    const runtime = spawnOwnedRuntime(
       [
         wrangler,
         "dev",
@@ -197,8 +198,6 @@ export async function processHarness(
       ],
       {
         cwd: directory,
-        detached: true,
-        stdio: ["ignore", "pipe", "pipe"],
         env: {
           PATH: process.env.PATH,
           WRANGLER_SEND_METRICS: "false",
@@ -207,6 +206,8 @@ export async function processHarness(
         },
       },
     );
+    owned = runtime;
+    child = runtime.root;
     const current = child;
     const invocation = childInvocation;
     let announcedPort: number | undefined;
@@ -230,8 +231,8 @@ export async function processHarness(
       ready = false;
     const observe = (event: "spawned" | "probe" | "ready" | "end") => {
       try {
-        const code = child?.exitCode,
-          signal = child?.signalCode;
+        const code = runtime.exitCode,
+          signal = runtime.signalCode;
         const line = JSON.stringify({
           diagnostic: "source-recovery-start",
           event,
@@ -268,8 +269,15 @@ export async function processHarness(
     observe("spawned");
     try {
       for (let i = 0; i < 300; i++) {
-        assert.equal(child.exitCode, null, "Wrangler exited before readiness");
-        assert.equal(child.signalCode, null, "Wrangler terminated by signal");
+        assert.equal(runtime.exitCode, null, "Wrangler exited before readiness");
+        assert.equal(runtime.signalCode, null, "Wrangler terminated by signal");
+        assert.ok(
+          !runtime.exited &&
+            !runtime.spawnError &&
+            current.exitCode === null &&
+            current.signalCode === null,
+          "Wrangler exited before readiness",
+        );
         assert.notEqual(
           announcementMatches(),
           false,
@@ -304,7 +312,7 @@ export async function processHarness(
               harnessOrdinal: currentHarness,
               invocation,
               marker: startupMarker(output),
-              ...exitFacts(current),
+              ...exitFacts(runtime),
             }),
           );
         } catch {
@@ -369,6 +377,7 @@ export async function processHarness(
         if (
           announcementMatches() === true &&
           child === current &&
+          !runtime.exited &&
           current.exitCode === null &&
           current.signalCode === null
         ) {
@@ -421,39 +430,18 @@ export async function processHarness(
   function stop(signal: "SIGKILL" | "SIGTERM"): Promise<void> {
     if (stopJoin) return stopJoin;
     if (!child) return Promise.resolve();
-    const current = child;
+    const current = child,
+      runtime = owned;
     stopJoin = (async () => {
       assert.ok(current.pid);
-      const live = () => current.exitCode === null && current.signalCode === null;
-      if (signal === "SIGKILL" && live()) {
-        // comm only: never inspect process arguments, environment or credentials.
-        const table = await promisify(execFile)("ps", ["-eo", "pid=,ppid=,pgid=,comm="]);
-        const group = table.stdout
-          .split("\n")
-          .map((row) => row.trim().split(/\s+/))
-          .filter((row) => Number(row[2]) === current.pid);
-        assert.ok(
-          group.some((row) => row.slice(3).join(" ").includes("workerd")),
-          "Must kill the actual workerd process, not only a wrapper",
-        );
-      }
-      const exited =
-        current.exitCode !== null || current.signalCode !== null
-          ? Promise.resolve()
-          : new Promise<void>((accept) => current.once("exit", () => accept()));
-      const signalled = live();
-      if (signalled) {
-        try {
-          process.kill(-current.pid, signal);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ESRCH" || live()) throw error;
-        }
-      }
-      await exited;
-      await joinOwnedProcessGroup(current.pid);
+      assert.ok(runtime && runtime.root === current);
+      await runtime.stop(signal, {
+        requireWorkerd: "Must kill the actual workerd process, not only a wrapper",
+      });
       if (signal === "SIGKILL") assert.equal(current.signalCode, signal);
       // A rejected join keeps both the child and this invocation's stop promise.
       child = undefined;
+      owned = undefined;
     })();
     return stopJoin;
   }

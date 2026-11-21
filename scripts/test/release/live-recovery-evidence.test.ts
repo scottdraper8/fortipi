@@ -2,6 +2,7 @@
 // and provider effects are synthetic; package/prepare/history/file operations are real.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { writeSync } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -1258,7 +1259,9 @@ if (process.argv.includes("--controlled-recovery")) {
       assert.match(result.stdout, /pre-credential guards and incomplete-phase refusal passed/);
     } catch (error) {
       try {
-        console.log(liveRecoveryFailureLine(error));
+        // Raw fd2 reaches the selected-child closed diagnostic observer even
+        // when another test file prevents TAP from flushing this file's output.
+        writeSync(2, `# ${liveRecoveryFailureLine(error)}\n`);
       } catch {
         /* Preserve the original child or assertion failure. */
       }

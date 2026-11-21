@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -23,7 +23,7 @@ import {
   processCueMatches,
   readProcessWitness,
 } from "../agent/process-observation.ts";
-import { killRuntime } from "./runtime-child.ts";
+import { type OwnedRuntime, spawnOwnedRuntime } from "../owned-runtime.ts";
 
 const repository = resolve(import.meta.dirname, "../../../..");
 let runtimeOrdinal = 0;
@@ -139,6 +139,7 @@ export async function start(options: RuntimeOptions = {}) {
   const runId = randomUUID();
   const armLaunches = new WeakMap<ProcessArm, number>();
   let child: ChildProcess | undefined;
+  let owned: OwnedRuntime | undefined;
   let invocation = 0,
     expectedArm: ProcessArm | undefined,
     cueSeen = false;
@@ -147,8 +148,7 @@ export async function start(options: RuntimeOptions = {}) {
     invocation++;
     expectedArm = undefined;
     cueSeen = false;
-    child = spawn(
-      process.execPath,
+    const runtime = spawnOwnedRuntime(
       [
         wrangler,
         "dev",
@@ -174,14 +174,14 @@ export async function start(options: RuntimeOptions = {}) {
       ],
       {
         cwd: directory,
-        detached: process.platform !== "win32",
-        stdio: ["ignore", "pipe", "pipe"],
         env: {
           ...offlineWranglerEnvironment(directory),
           ...(options.tls ? { NODE_EXTRA_CA_CERTS: options.tls.ca } : {}),
         },
       },
     );
+    owned = runtime;
+    child = runtime.root;
     const current = child,
       launched = invocation;
     // Retain only a bounded startup tail for the existing closed classifier.
@@ -250,7 +250,7 @@ export async function start(options: RuntimeOptions = {}) {
             fetchFailures,
             lastStatus,
             spawnError,
-            childAlive: child?.exitCode === null && child.signalCode === null,
+            childAlive: !runtime.exited && child?.exitCode === null && child.signalCode === null,
           }),
         );
       } catch {
@@ -262,7 +262,14 @@ export async function start(options: RuntimeOptions = {}) {
       await poll(
         async () => {
           attempts++;
-          assert.ok(!spawnError && child?.exitCode === null, "Local runtime did not stay running");
+          assert.ok(
+            !spawnError &&
+              !runtime.spawnError &&
+              !runtime.exited &&
+              child?.exitCode === null &&
+              child.signalCode === null,
+            "Local runtime did not stay running",
+          );
           try {
             const response = await fetch(`${endpoint}/health`, {
               signal: AbortSignal.timeout(300),
@@ -281,8 +288,8 @@ export async function start(options: RuntimeOptions = {}) {
     } catch (error) {
       observe("failed");
       try {
-        const code = current.exitCode;
-        const signal = current.signalCode;
+        const code = runtime.exitCode;
+        const signal = runtime.signalCode;
         const line = JSON.stringify({
           diagnostic: "source-recovery-start-failure",
           sourcePath,
@@ -308,21 +315,16 @@ export async function start(options: RuntimeOptions = {}) {
   }
   async function stop(abrupt: boolean) {
     if (!child) return;
-    const current = child;
+    const current = child,
+      runtime = owned;
     assert.ok(current.pid);
-    const closed =
-      current.exitCode === null
-        ? new Promise<void>((accept) => current.once("close", () => accept()))
-        : Promise.resolve();
-    await killRuntime(current.pid, abrupt);
-    await Promise.race([
-      closed,
-      new Promise<never>((_, reject) => {
-        const timer = setTimeout(() => reject(new Error("Runtime tree did not terminate")), 10000);
-        timer.unref();
-      }),
-    ]);
+    assert.ok(runtime && runtime.root === current);
+    await runtime.stop(abrupt ? "SIGKILL" : "SIGTERM", {
+      requireWorkerd: "Abrupt recovery must kill an actual workerd in the managed process group",
+      closeTimeoutMs: 10000,
+    });
     child = undefined;
+    owned = undefined;
   }
   const api = async <T>(
     path: string,
