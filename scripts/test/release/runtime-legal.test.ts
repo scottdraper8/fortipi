@@ -188,18 +188,22 @@ test("actual five supported packs produce source-bound staged legal files and pe
         assert.ok(text);
         assert.deepEqual(await regularBytes(resolve(output, text.path)), entries.get(path));
       }
-      const patched = receipt.conveyance.components.find(
-        (item) => item.archiveId === "@earendil-works/pi-ai@1.5.2",
+      const upstream = receipt.conveyance.components.find(
+        (item) => item.archiveId === "@earendil-works/pi-ai@1.6.0",
       );
-      assert.ok(patched?.patch);
-      const patch = receipt.texts.find(
-        (item) => item.archiveId === patched.archiveId && item.kind === "patch",
+      assert.ok(upstream);
+      assert.equal(upstream.patch, null);
+      assert.equal(upstream.changeStatus, "unmodified upstream archive");
+      assert.equal(
+        receipt.texts.some(
+          (item) => item.archiveId === upstream.archiveId && item.kind === "patch",
+        ),
+        false,
       );
-      assert.ok(patch);
-      assert.equal(patch.sha256, patched.patch.sha256);
-      assert.deepEqual(
-        await regularBytes(resolve(output, patch.path)),
-        await regularBytes(resolve(repository, patched.patch.path)),
+      assert.ok(
+        receipt.texts.some(
+          (item) => item.archiveId === upstream.archiveId && item.kind === "license",
+        ),
       );
       assert.match(
         (await readFile(resolve(output, "THIRD_PARTY_NOTICES.md"))).toString(),
@@ -214,12 +218,12 @@ test("actual five supported packs produce source-bound staged legal files and pe
     if (name === "fortipi-tui") {
       assert.ok(
         receipt.conveyance.external.some(
-          (item) => item.archiveId === "@earendil-works/pi-tui@1.5.2",
+          (item) => item.archiveId === "@earendil-works/pi-tui@1.6.0",
         ),
       );
       assert.equal(
         receipt.conveyance.components.some(
-          (item) => item.archiveId === "@earendil-works/pi-tui@1.5.2",
+          (item) => item.archiveId === "@earendil-works/pi-tui@1.6.0",
         ),
         false,
       );
@@ -304,7 +308,7 @@ test("the genuine Markdown dependency bytes remain forbidden in owned outputs ev
   );
 });
 
-test("missing original text or altered reviewed patch fails before output; existing legal output is never overwritten", {
+test("missing original text or unreviewed retired patch reactivation fails before output; existing legal output is never overwritten", {
   timeout: 120000,
 }, async () => {
   const plan = cliPlan();
@@ -324,9 +328,16 @@ test("missing original text or altered reviewed patch fails before output; exist
         ),
       );
     else {
-      const source = closure.archives.find((item) => item.id === "@earendil-works/pi-ai@1.5.2");
-      assert.ok(source?.patch);
-      await writeFile(resolve(changed, source.patch.path), "altered public patch\n");
+      const retired = (await readJson(resolve(changed, "patches/retired-pi16.json"))) as Record<
+        string,
+        { retired: string; previousReview: unknown }
+      >;
+      const entry = retired["@earendil-works/pi-ai@1.6.0"];
+      assert.ok(entry);
+      await writeFile(
+        resolve(changed, "patches/review.json"),
+        JSON.stringify({ [entry.retired]: entry.previousReview }),
+      );
     }
     const output = resolve(root, `${fault}-output`);
     await assert.rejects(generateRuntimeNotices(changed, closure, plan, output));

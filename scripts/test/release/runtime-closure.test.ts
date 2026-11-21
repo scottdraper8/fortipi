@@ -52,7 +52,7 @@ test("real frozen archives/patches and supported deploy preserve all owners and 
     for (const [path, identity] of Object.entries(patch.files))
       assert.equal(source.files.find((file) => file.path === path)?.sha256, identity.patchedSha256);
   }
-  const tui = closure.archives.find((value) => value.id === "@earendil-works/pi-tui@1.5.2");
+  const tui = closure.archives.find((value) => value.id === "@earendil-works/pi-tui@1.6.0");
   assert.ok(
     tui?.externalNative && tui.nativeFiles.length > 0,
     "Mixed native packages cannot become bundled JS",
@@ -133,8 +133,10 @@ test("real frozen archives/patches and supported deploy preserve all owners and 
       );
     }
     const patched = closure.archives.find((value) => value.name === "@earendil-works/pi-ai");
-    assert.ok(patched?.patch);
-    const patchedPath = Object.keys(patched.patch.files)[0]!;
+    assert.ok(patched);
+    assert.equal(patched.id, "@earendil-works/pi-ai@1.6.0");
+    assert.equal(patched.patch, null, "The upstream schema fix needs no local transformation");
+    const patchedPath = "dist/api/anthropic-messages.js";
     const patchedInstance = cli.instances.find(
       (instance) => instance.context.split("(")[0] === patched.id,
     );
@@ -161,10 +163,20 @@ test("real frozen archives/patches and supported deploy preserve all owners and 
       parser.end(raw);
     });
     assert.ok(originalPatchInput);
-    assert.equal(hash(originalPatchInput), patched.patch.files[patchedPath]!.originalSha256);
+    assert.equal(
+      hash(originalPatchInput),
+      patched.files.find((file) => file.path === patchedPath)?.sha256,
+    );
     const patchedFile = resolve(cli.directory, patchedInstance.directory, patchedPath);
     const actualPatched = await readFile(patchedFile);
-    await writeFile(`${patchedFile}.missing-patch`, originalPatchInput, {
+    assert.deepEqual(
+      actualPatched,
+      originalPatchInput,
+      "Retired patch output must equal the authenticated upstream member",
+    );
+    const changedUpstream = Buffer.from(originalPatchInput);
+    changedUpstream[0] = changedUpstream[0]! ^ 1;
+    await writeFile(`${patchedFile}.missing-patch`, changedUpstream, {
       flag: "wx",
       mode: 0o644,
     });

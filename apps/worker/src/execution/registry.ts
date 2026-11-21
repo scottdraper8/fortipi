@@ -7,8 +7,8 @@ import {
   defineTool,
   GenerationTask,
   hook,
+  hookTask,
   LiveDoc,
-  runEndTask,
   type TaskId,
   type ToolExecutionApi,
 } from "@earendil-works/pi-durable";
@@ -578,7 +578,7 @@ export function buildRegistry(deps: {
     hooks: [
       hook(GenerationTask, {
         afterRun: (_run, api) => ({
-          tasks: [runEndTask(projectTask, { conversationId: api.conversationId })],
+          tasks: [hookTask(projectTask, { conversationId: api.conversationId })],
         }),
       }),
     ],

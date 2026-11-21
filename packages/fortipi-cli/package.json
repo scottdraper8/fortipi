@@ -34,7 +34,7 @@
     "fortipi": "./dist/bin.js"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "1.5.2",
+    "@earendil-works/pi-ai": "1.6.0",
     "fortipi-contract": "workspace:*",
     "undici": "8.12.4",
     "wrangler": "4.166.0",

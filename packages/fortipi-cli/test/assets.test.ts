@@ -50,29 +50,20 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
     });
   await reproduce();
   assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
-  const patch = (await dependencyPatches(root, true))["agents@0.33.0"];
-  assert.ok(patch);
-  const stagedPatch = join(root, "dist/supply-chain/licenses/agents@0.33.0", patch.path);
-  const originalPatch = await readFile(stagedPatch);
-  assert.equal(hash(originalPatch), patch.sha256);
-  const bundledPatch = `licenses/agents_0.33.0/${patch.path}`;
+  assert.deepEqual(await dependencyPatches(root, true), {});
   assert.equal(
-    first.manifest.files.find((file) => file.path === bundledPatch)?.sha256,
-    patch.sha256,
+    first.manifest.files.some((file) => file.path.includes("/patches/")),
+    false,
   );
-  assert.deepEqual(await readFile(join(reproduction, bundledPatch)), originalPatch);
-  try {
-    await rm(stagedPatch);
-    await assert.rejects(reproduce, /Missing reviewed bundled dependency patch: agents@0\.33\.0/);
-    assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
-    assert.deepEqual(await readFile(join(reproduction, bundledPatch)), originalPatch);
-    await writeFile(stagedPatch, Buffer.concat([originalPatch, Buffer.from("\nchanged\n")]));
-    await assert.rejects(reproduce, /Bundled dependency patch changed: agents@0\.33\.0/);
-    assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
-    assert.deepEqual(await readFile(join(reproduction, bundledPatch)), originalPatch);
-  } finally {
-    await writeFile(stagedPatch, originalPatch);
-  }
+  const originalLicense = "licenses/agents_0.34.0/package/LICENSE";
+  const upstreamLicense = await readFile(
+    join(root, "dist/supply-chain/licenses/agents@0.34.0/package/LICENSE"),
+  );
+  assert.equal(
+    first.manifest.files.find((file) => file.path === originalLicense)?.sha256,
+    hash(upstreamLicense),
+  );
+  assert.deepEqual(await readFile(join(reproduction, originalLicense)), upstreamLicense);
   const native = await config();
   native.runtime.workspace = { kind: "local", executorId: "my-device", rootBindingId: "my-root" };
   const input = join(directory, "operator.json");

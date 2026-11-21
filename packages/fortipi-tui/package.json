@@ -34,6 +34,6 @@
   "dependencies": {
     "fortipi-client": "workspace:*",
     "fortipi-contract": "workspace:*",
-    "@earendil-works/pi-tui": "1.5.2"
+    "@earendil-works/pi-tui": "1.6.0"
   }
 }

@@ -112,7 +112,7 @@ test("portable notice CLI preserves actual SRI/source texts, runtime scope and a
   ];
   assert.deepEqual(byName.get("fortipi-client")?.components, client);
   assert.deepEqual(byName.get("fortipi-executor")?.components, client);
-  assert.ok(byName.get("fortipi-tui")?.components.includes("@earendil-works/pi-tui@1.5.2"));
+  assert.ok(byName.get("fortipi-tui")?.components.includes("@earendil-works/pi-tui@1.6.0"));
   for (const id of client)
     assert.ok(
       byName.get("fortipi-tui")?.components.includes(id),
@@ -236,11 +236,11 @@ test("missing original and inherited license facts fail closed instead of using 
   }
 });
 
-test("a real modified component retains its original source MIT text alongside the patch", async () => {
+test("a real upstream-fixed component retains its original source MIT text without a retired patch", async () => {
   // Select the already-locked private Worker component in a disposable public
   // notice closure; actual public manifests and dependencies remain untouched.
   const name = "@earendil-works/pi-durable";
-  const id = `${name}@1.5.2`;
+  const id = `${name}@1.6.0`;
   const manifestPath = resolve(root, "packages/fortipi-cli/package.json");
   const lockPath = resolve(root, "pnpm-lock.yaml");
   const manifestBytes = await readFile(manifestPath);
@@ -248,7 +248,7 @@ test("a real modified component retains its original source MIT text alongside t
   try {
     const manifest = JSON.parse(manifestBytes.toString()) as Manifest;
     manifest.dependencies ??= {};
-    manifest.dependencies[name] = "1.5.2";
+    manifest.dependencies[name] = "1.6.0";
     const documents = parseAllDocuments(lockBytes.toString()).map(
       (document) => document.toJSON() as Lock,
     );
@@ -267,13 +267,16 @@ test("a real modified component retains its original source MIT text alongside t
     );
     const directory = resolve(root, "packages/fortipi-cli/licenses", encodeURIComponent(id));
     const names = await files(directory);
-    assert.ok(names.includes("patches/@earendil-works__pi-durable@1.5.2.patch"));
+    assert.equal(
+      names.some((name) => name.startsWith("patches/")),
+      false,
+    );
     const hashes = await Promise.all(
       names.map(async (name) => hash(await readFile(resolve(directory, name)))),
     );
     assert.ok(
       hashes.includes("0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"),
-      "Modification text cannot replace the independently authenticated original MIT text",
+      "Patch retirement cannot remove the independently authenticated original MIT text",
     );
   } finally {
     await writeFile(manifestPath, manifestBytes);

@@ -24,8 +24,8 @@ const packages: Record<InstalledReference, string[]> = {
     "pi-codemode",
     "pi-telemetry",
     "pi-tui",
-  ].map((n) => `@earendil-works/${n}@1.5.2`),
-  "agents-lifecycle": ["agents@0.33.0"],
+  ].map((n) => `@earendil-works/${n}@1.6.0`),
+  "agents-lifecycle": ["agents@0.34.0"],
   "computer-fuse": ["@cloudflare/computer@0.11.1"],
   wrangler: [
     "wrangler@4.166.0",

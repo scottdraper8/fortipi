@@ -1328,6 +1328,116 @@
           "url": "https://raw.githubusercontent.com/cloudflare/browser-run/6bcf8351eaf74a1269a4bee1dcd34b28220dfeef/LICENSE"
         }
       ]
+    },
+    "@earendil-works/pi-durable@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-ai@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-schema@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/chord@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-codemode@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-telemetry@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-tui@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "agents@0.34.0": {
+      "source": "https://github.com/cloudflare/agents/tree/8d8acd0dd2a3b30d226e9f24e96557ebfd948374",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/agents/8d8acd0dd2a3b30d226e9f24e96557ebfd948374/LICENSE",
+          "sha256": "b33ae783f02478cd31787cd07cbf61cd3a6fbee1a50b2baf832b8f0fb7c600f7",
+          "url": "https://raw.githubusercontent.com/cloudflare/agents/8d8acd0dd2a3b30d226e9f24e96557ebfd948374/LICENSE"
+        }
+      ]
+    },
+    "@google/genai@2.32.0": {
+      "source": "https://github.com/googleapis/js-genai/tree/70501db66b27bbd3f150c8d370aa311417089987",
+      "evidence": "Exact v2.32.0 tag resolved by git ls-remote; package publishes no provenance; archive registry ECDSA/SRI and exact original legal texts independently verified",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/googleapis/js-genai/70501db66b27bbd3f150c8d370aa311417089987/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "url": "https://raw.githubusercontent.com/googleapis/js-genai/70501db66b27bbd3f150c8d370aa311417089987/LICENSE"
+        }
+      ]
+    },
+    "openai@7.59.0": {
+      "source": "https://github.com/openai/openai-node/tree/8ef550177fad00e6f661522be4ac51f23f063b3b",
+      "evidence": "Exact published npm gitHead; SLSA provenance requires separate verification; archive registry ECDSA/SRI and exact original legal texts independently verified",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/openai/openai-node/8ef550177fad00e6f661522be4ac51f23f063b3b/LICENSE",
+          "sha256": "636eb7d79da9bb6d515a4b3fd417aa26679eb3cf16396ddab4bc55fa74e616e4",
+          "url": "https://raw.githubusercontent.com/openai/openai-node/8ef550177fad00e6f661522be4ac51f23f063b3b/LICENSE"
+        }
+      ]
     }
   },
   "externalToolChain": ["wrangler@4.166.0", "miniflare@5.20261119.0-beta", "sharp@0.35.5"]

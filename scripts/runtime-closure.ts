@@ -535,7 +535,7 @@ export async function collectRuntimeClosure(root: string): Promise<RuntimeClosur
     archives,
     externalSubtrees: [],
   };
-  const tui = archives.find((item) => item.id === "@earendil-works/pi-tui@1.5.2");
+  const tui = archives.find((item) => item.id === "@earendil-works/pi-tui@1.6.0");
   if (tui) {
     // One reviewed non-leaf exception, not permission to externalize arbitrary
     // native-bearing dependency trees with floating transitive/peer edges.

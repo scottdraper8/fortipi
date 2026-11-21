@@ -12,6 +12,9 @@ export const queuedProjectionRegistrySha256 =
   "17a6139ea82337eaaab5e7b493a2f1fc9204b8c9a43726156b6ab0611b56b855";
 export const queuedProjectionFixedRegistrySha256 =
   "163703de2910d49fc2e445ec5a9afccc456d71ed0f9a17c6bc7e31b25335775b";
+// Published Pi 1.6 hook helper, with the same reviewed projection phase.
+export const queuedProjectionPi16RegistrySha256 =
+  "5a83ec572f07b1abbd1b166e08a58b7377004b290db18f8ee14ab00805848104";
 export const queuedProjectionGateCall =
   "await (conversations.host as unknown as { holdQueuedProjection(piId: number, caller: number): Promise<void> }).holdQueuedProjection(task.input.conversationId, runtime.taskId);\n";
 type Node = { type: string; start: number; end: number; [key: string]: unknown };
@@ -82,10 +85,12 @@ export function queuedProjectionGateSite(source: string): number {
 }
 export function instrumentQueuedProjectionRegistry(source: string) {
   assert.ok(
-    [queuedProjectionRegistrySha256, queuedProjectionFixedRegistrySha256].includes(
-      createHash("sha256").update(source).digest("hex"),
-    ),
-    "Only the frozen original or per-entry registry may receive the test gate",
+    [
+      queuedProjectionRegistrySha256,
+      queuedProjectionFixedRegistrySha256,
+      queuedProjectionPi16RegistrySha256,
+    ].includes(createHash("sha256").update(source).digest("hex")),
+    "Only a frozen original, per-entry or reviewed Pi 1.6 registry may receive the test gate",
   );
   assert.equal(source.includes("holdQueuedProjection"), false);
   const site = projectionSite(source);

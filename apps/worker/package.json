@@ -9,17 +9,17 @@
   },
   "dependencies": {
     "fortipi-contract": "workspace:*",
-    "agents": "0.33.0",
+    "agents": "0.34.0",
     "@cloudflare/computer": "0.11.1",
     "ajv": "8.20.0",
     "@modelcontextprotocol/client": "2.4.0",
     "zod": "4.6.7",
-    "@earendil-works/pi-durable": "1.5.2",
-    "@earendil-works/pi-ai": "1.5.2",
-    "@earendil-works/pi-schema": "1.5.2",
-    "@earendil-works/chord": "1.5.2",
-    "@earendil-works/pi-codemode": "1.5.2",
-    "@earendil-works/pi-telemetry": "1.5.2"
+    "@earendil-works/pi-durable": "1.6.0",
+    "@earendil-works/pi-ai": "1.6.0",
+    "@earendil-works/pi-schema": "1.6.0",
+    "@earendil-works/chord": "1.6.0",
+    "@earendil-works/pi-codemode": "1.6.0",
+    "@earendil-works/pi-telemetry": "1.6.0"
   },
   "devDependencies": {
     "@babel/core": "8.1.0",
