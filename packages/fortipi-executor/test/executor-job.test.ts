@@ -328,10 +328,9 @@ test("owned post-exit collection loses certainty at real lease expiry and revoca
     const local = runtime.locals.get("root");
     assert.ok(local);
     await importRoot(local);
-    // Bootstrap must finish before this unchanged short execution lease begins.
+    // Bootstrap must finish before the normal 30-second execution lease begins.
     const marker = join(f.path, "one-expiring-effect"),
       a = await assignment(nodeCommand(fixtureChild, "append-wait", marker));
-    a.identity.lease.expiresAt = Date.now() + 5000;
     await local.request(prepare(a, f.initial.manifestHash));
     const finish = local.nativeFinished.bind(local);
     local.nativeFinished = async (...args) => {
@@ -352,10 +351,14 @@ test("owned post-exit collection loses certainty at real lease expiry and revoca
     assert.equal(runtime.active.has(a.identity.jobId), true);
     assert.equal(f.ledger.get(a.identity.jobId)?.state, "running");
     assert.equal(f.ledger.get(a.identity.jobId)?.result, undefined);
-    // Setup and the real child may consume this short lease. The preceding case
-    // covers pending_sync while collection still owns a valid lease.
+    // Retain the normal grant through actual setup and start, then observe real
+    // expiry while collection is held. The preceding case covers pending_sync.
     await delay(Math.max(0, a.identity.lease.expiresAt - Date.now() + 1));
     assert.ok(Date.now() >= a.identity.lease.expiresAt);
+    assert.ok(
+      Date.now() < a.identity.deadline,
+      "Observe lease expiry while the operation deadline remains valid",
+    );
     assert.equal(runtime.active.has(a.identity.jobId), true);
     assert.equal(f.ledger.get(a.identity.jobId)?.result, undefined);
     assert.equal(runtime.queryExisting(a.identity).state, "unknown");
