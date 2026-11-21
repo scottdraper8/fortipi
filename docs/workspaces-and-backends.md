@@ -208,6 +208,11 @@ deployment-bound verified paid capabilities and the corresponding optional
 binding. Paid status alone neither raises the conservative infrastructure bounds
 nor provisions a feature. There are no model-provider usage budgets.
 
+Filesystem range requests share a 256 KiB traffic allowance per execution.
+Each request and response consumes at least 1 KiB, including reads at EOF.
+Larger stored files remain accessible through bounded byte windows under
+`/workspace`; the allowance also counts the actual response bytes.
+
 The optional Linux backend uses actual `ContainerBackend` and
 `LinuxContainerHost extends withWorkspaceContainer(...)`. The service entry must
 export `WorkspaceObject`, the selected host, and `WorkspaceProxy` from Computer.
@@ -268,7 +273,7 @@ The build requires reviewed Docker 29.9.3, Buildx 0.38.2 and embedded BuildKit
 0.34.2 using the default driver. The parent owns their installation and isolated
 Docker configuration. No local VM is installed by this tranche.
 
-Computer **0.11.1** is paired with its exact source. Its daemon bundle is compiled
+Computer **0.11.4** is paired with its exact source. Its daemon bundle is compiled
 from that source using the upstream esbuild/SEA bootstrap and addon shim. The
 actual SEA blob is generated and injected with signed official **Node22.23.5** on
 Linux x64; build-only postject1.0.0-alpha.6 and commander9.5.0 remain isolated.
@@ -290,11 +295,14 @@ source-file inventory. Computer's matching source archive and embedded Node
 22.23.5 aggregate license are pinned. The signed runtime/source archives, bounded
 build adapter, actual build receipt and effective zlib quilt patch inventory are
 included in the source kit. Historical AD image/runtime results apply only to AD.
-Computer's three new pending-sync tables are included in actual databaseSize
-observations; policy bounds are unchanged. Its replay fingerprint changes to2;
-FortiPi retains `onInterrupt:fail` and `modules:{}`, with no old-journal replay or
-new grant enabled. The real Loader close/reconnect and complete-sync tests cover
-the used lifecycle; native process-group cancellation requires the new Linux image.
+Computer's tables are included in actual `databaseSize` observations; policy
+bounds are unchanged and logical cleanup does not refund physical storage.
+FortiPi retains `onInterrupt:fail` and `modules:{}`. Local checks cover Loader
+close/reconnect, rooted range budgets and cancellation, staged-write failure,
+physical accounting and completed-workspace upgrades from 0.11.1. Upgrade evidence
+covers completed workspaces; mixed-version in-flight recovery and downgrades need
+separate qualification. Native process-group cancellation requires the matching
+Linux image and its runtime checks.
 These observations establish provenance inputs;
 reproducible build/relink rights, vulnerability review and license compliance of
 the final distribution remain independent release gates.
