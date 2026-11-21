@@ -34,6 +34,7 @@ import {
   type LiveRecoveryInvocation,
   type LiveRecoveryPhase,
   liveRecoveryAwaitLine,
+  liveRecoveryChildDeadlineMs,
   liveRecoveryFailureLine,
   liveRecoveryPhaseLine,
 } from "../../source-test-processes.ts";
@@ -82,7 +83,8 @@ let retainedCandidate: CandidateManifest;
 // Last entered callback only; it may have completed before a later guard fails.
 let lastPhase: LiveRecoveryPhase = "packing";
 // performance.now() is monotonic elapsed time from this child process's time origin.
-const traceElapsed = () => Math.min(220000, Math.max(0, Math.floor(performance.now())));
+const traceElapsed = () =>
+  Math.min(liveRecoveryChildDeadlineMs, Math.max(0, Math.floor(performance.now())));
 function observePhase(phase: LiveRecoveryPhase, event: "enter" | "caught" = "enter") {
   if (event === "enter") lastPhase = phase;
   try {
@@ -107,9 +109,14 @@ function observeAwait(step: LiveRecoveryAwait, event: "enter" | "exit") {
   }
 }
 
-async function preparePackages() {
+async function settlePreparation(operations: Promise<unknown>[]) {
+  // Settle every writer before failure cleanup can remove its private tree.
+  const results = await Promise.allSettled(operations);
+  for (const result of results) if (result.status === "rejected") throw result.reason;
+}
+
+async function prepareCandidate() {
   observePhase("packing");
-  root = await temporary("fortipi-recovery-protocol-");
   const directory = resolve(root, "candidate");
   await mkdir(directory);
   const c = candidate(); // API identity only is synthetic; all five package archives below are actual.
@@ -143,6 +150,9 @@ async function preparePackages() {
   manifestHash = sha256(await regularBytes(manifestPath));
   sourceCommit = c.sourceCommit;
   retainedCandidate = c;
+}
+
+async function prepareConfiguration() {
   const operator = await readJson(
     resolve(repository, "packages/fortipi-cli/templates/operator-config.example.json"),
   );
@@ -173,6 +183,12 @@ async function preparePackages() {
   assert.equal(result.code, 0);
   preparedReceipt = object(JSON.parse(result.stdout));
   config = object(await readJson(resolve(prepared, "wrangler.json")));
+}
+
+async function preparePackages() {
+  root = await temporary("fortipi-recovery-protocol-");
+  // Both branches consume the committed build and write disjoint private trees.
+  await settlePreparation([prepareCandidate(), prepareConfiguration()]);
 }
 
 async function fixture(fault = "") {
@@ -499,20 +515,22 @@ async function controlled() {
     await mkdir(cliRoot, { recursive: true });
     const cliPackage = c.packages.find((row) => row.sourceName === "fortipi-cli");
     assert.ok(cliPackage);
-    await extract({
-      file: resolve(dirname(manifestPath), cliPackage.tarball),
-      cwd: cliRoot,
-      strip: 1,
-    });
     const contractPackage = c.packages.find((row) => row.sourceName === "fortipi-contract");
     assert.ok(contractPackage);
     const contractRoot = resolve(consumer, "node_modules", `@${c.scope}/fortipi-contract`);
     await mkdir(contractRoot, { recursive: true });
-    await extract({
-      file: resolve(dirname(manifestPath), contractPackage.tarball),
-      cwd: contractRoot,
-      strip: 1,
-    });
+    await settlePreparation([
+      extract({
+        file: resolve(dirname(manifestPath), cliPackage.tarball),
+        cwd: cliRoot,
+        strip: 1,
+      }),
+      extract({
+        file: resolve(dirname(manifestPath), contractPackage.tarball),
+        cwd: contractRoot,
+        strip: 1,
+      }),
+    ]);
     async function protect(path: string): Promise<void> {
       const stat = await lstat(path);
       assert.ok(!stat.isSymbolicLink());
@@ -1248,13 +1266,22 @@ if (process.argv.includes("--controlled-recovery")) {
   await controlled();
 } else {
   test("trusted outer recovery preserves original receipts and child byte closure across perform/readonly verification", {
-    timeout: 240000,
+    timeout: liveRecoveryChildDeadlineMs + 20000,
   }, async () => {
     try {
       const result = await promisify(execFile)(
         process.execPath,
         ["--experimental-test-module-mocks", import.meta.filename, "--controlled-recovery"],
-        { cwd: repository, env: childEnvironment(), timeout: 220000, maxBuffer: 2_000_000 },
+        {
+          cwd: repository,
+          env: childEnvironment(),
+          // CI spent 186.5s before perform and reached its first observation at
+          // 219.7s. Budget genuine preparation (~220s), the whole ordered
+          // behavior sequence (~220s) and cleanup (~20s) under one hard ceiling.
+          // This fixture allowance does not change product/request deadlines.
+          timeout: liveRecoveryChildDeadlineMs,
+          maxBuffer: 2_000_000,
+        },
       );
       assert.match(result.stdout, /pre-credential guards and incomplete-phase refusal passed/);
     } catch (error) {

@@ -53,10 +53,10 @@ test("initial perform timeout retains the actual latest await and child elapsed 
 test("timed encoding preserves deadline equality and unknown time without leaking arbitrary data", () => {
   const privateValue = "PRIVATE_INPUT_MUST_NOT_ESCAPE";
   assert.equal(
-    liveRecoveryAwaitLine("initial-perform", "checkpoint-setup", "exit", 220000),
-    '{"diagnostic":"source-live-recovery-await","invocation":"initial-perform","step":"checkpoint-setup","event":"exit","elapsedMs":220000}',
+    liveRecoveryAwaitLine("initial-perform", "checkpoint-setup", "exit", 460000),
+    '{"diagnostic":"source-live-recovery-await","invocation":"initial-perform","step":"checkpoint-setup","event":"exit","elapsedMs":460000}',
   );
-  for (const elapsed of [-1, 220001, 1.5, Infinity, NaN, privateValue, {}]) {
+  for (const elapsed of [-1, 460001, 1.5, Infinity, NaN, privateValue, {}]) {
     const line = liveRecoveryAwaitLine("initial-perform", "local-proof", "enter", elapsed);
     assert.equal(line.includes(privateValue), false);
     assert.equal(JSON.parse(line).elapsedMs, null);
@@ -81,7 +81,7 @@ test("strict trace decoding rejects private payloads, unknown labels and forged 
     { step: privateValue },
     { event: privateValue },
     { elapsedMs: -1 },
-    { elapsedMs: 220001 },
+    { elapsedMs: 460001 },
     { elapsedMs: 1.5 },
     { elapsedMs: privateValue },
     { provider: privateValue },

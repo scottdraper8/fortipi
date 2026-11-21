@@ -40,6 +40,10 @@ async function fixture(fail?: "ordinary" | "gates") {
     resolve(repository, "scripts/source-test-processes.ts"),
     join(directory, "scripts/source-test-processes.ts"),
   );
+  await copyFile(
+    resolve(repository, "scripts/bounded-diagnostic-lines.ts"),
+    join(directory, "scripts/bounded-diagnostic-lines.ts"),
+  );
   return {
     directory,
     files,

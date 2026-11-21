@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, request as httpRequest } from "node:http";
 import { createServer } from "node:net";
@@ -22,7 +23,7 @@ async function port(): Promise<number> {
 }
 test("actual workerd Inspector observes delayed-publication cancellation and shutdown", {
   timeout: 25000,
-}, async () => {
+}, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "fortipi-inspector-race-"));
   const listenPort = await port(),
     inspectorPort = await port();
@@ -133,19 +134,33 @@ test("actual workerd Inspector observes delayed-publication cancellation and shu
       if (value.method === "Debugger.paused")
         socket!.send(JSON.stringify({ id: 999, method: "Debugger.resume" }));
     });
-    socket.send(JSON.stringify({ id: 1, method: "Runtime.enable" }));
-    for (let i = 0; i < 100 && !events.some((e) => e.id === 1); i++) await pause(5);
-    socket.send(JSON.stringify({ id: 2, method: "Debugger.enable" }));
-    socket.send(
-      JSON.stringify({
-        id: 3,
-        method: "Debugger.setPauseOnExceptions",
-        params: { state: "uncaught" },
-      }),
+    // Share one calibration deadline within the unchanged overall test budget.
+    const calibrationSignal = AbortSignal.any([t.signal, AbortSignal.timeout(5000)]);
+    async function waitForInspector(matches: (event: (typeof events)[number]) => boolean) {
+      for (;;) {
+        calibrationSignal.throwIfAborted();
+        const observed = events.find(matches);
+        if (observed) return observed;
+        await once(socket!, "message", { signal: calibrationSignal });
+      }
+    }
+    async function inspectorCommand(id: number, method: string, params?: Record<string, string>) {
+      socket!.send(JSON.stringify({ id, method, params }));
+      const reply = await waitForInspector((event) => event.id === id);
+      assert.ok(
+        "result" in reply && !("error" in reply),
+        `Inspector ${method} must acknowledge success`,
+      );
+    }
+    await inspectorCommand(1, "Runtime.enable");
+    await inspectorCommand(2, "Debugger.enable");
+    await inspectorCommand(3, "Debugger.setPauseOnExceptions", { state: "uncaught" });
+    await fetch(`${origin}/canary`, { signal: calibrationSignal });
+    await waitForInspector(
+      (event) =>
+        (event.method === "Runtime.exceptionThrown" || event.method === "Debugger.paused") &&
+        JSON.stringify(event).includes("workerd-unhandled-canary"),
     );
-    await pause(50);
-    await fetch(`${origin}/canary`);
-    await pause(100);
     const calibration = events.filter(
       (e) => e.method === "Runtime.exceptionThrown" || e.method === "Debugger.paused",
     );

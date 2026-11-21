@@ -772,8 +772,9 @@ const liveAwaits = new Set([
   "post-child",
 ]);
 const liveAwaitEvents = new Set(["enter", "exit"]);
-// Elapsed process time saturates at the existing controlled-child deadline.
-const liveElapsedMaximum = 220000;
+// Includes genuine package preparation, the whole ordered scenario and cleanup.
+export const liveRecoveryChildDeadlineMs = 460000;
+const liveElapsedMaximum = liveRecoveryChildDeadlineMs;
 const liveTraceLineMaximum = 192;
 function liveElapsed(value: unknown): boolean {
   return value === null || diagnosticInteger(value, liveElapsedMaximum) === value;
