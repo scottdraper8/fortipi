@@ -29,6 +29,7 @@ import {
 } from "./application-recovery-channel.ts";
 import {
   FULL_SOURCE_TEST_TIMEOUT_MS,
+  LOCAL_EVIDENCE_TIMEOUT_MS,
   observeSourceTestFailures,
   packagePaths,
   repository,
@@ -2245,7 +2246,7 @@ export async function runEvidence(
       ],
       repository,
       env,
-      900000,
+      mode === "local" ? LOCAL_EVIDENCE_TIMEOUT_MS : 900000,
       true,
       recovery
         ? (child) => {

@@ -25,7 +25,8 @@ jobs:
   policy-and-integration:
     if: github.event_name != 'workflow_dispatch' || (github.ref == 'refs/heads/main' && github.repository == 'scottdraper8/fortipi')
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # Candidate (50m), complete local acceptance (35m), setup/final hooks (15m).
+    timeout-minutes: 100
     permissions:
       contents: read
       actions: read

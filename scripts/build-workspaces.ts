@@ -14,6 +14,11 @@ export const publicPackages = ["contract", "client", "tui", "executor", "cli"] a
 export const packagePaths = publicPackages.map((name) => `packages/fortipi-${name}`);
 export const projects = [...packagePaths, "apps/worker"];
 export const FULL_SOURCE_TEST_TIMEOUT_MS = 40 * 60_000;
+// Local acceptance includes serial durability/infrastructure scenarios and
+// installed clients; Chromium runs alongside them. Bound the complete run and
+// leave its caller time for candidate validation and final payload checks.
+export const LOCAL_EVIDENCE_TIMEOUT_MS = 30 * 60_000;
+export const LOCAL_EVIDENCE_COMMAND_TIMEOUT_MS = LOCAL_EVIDENCE_TIMEOUT_MS + 5 * 60_000;
 
 /** Observe only complete closed stderr records; leave execFile's capture/error handling alone. */
 export function observeCandidateDiagnostics(
@@ -382,7 +387,7 @@ export async function main(command: string | undefined): Promise<void> {
           process.execPath,
           ["scripts/prepare-release.ts", "evidence", "--mode", "local", ...extra],
           repository,
-          900_000,
+          LOCAL_EVIDENCE_COMMAND_TIMEOUT_MS,
         );
       }
       return;
