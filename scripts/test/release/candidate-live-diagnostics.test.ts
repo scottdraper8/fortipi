@@ -379,7 +379,7 @@ test("live child failure preserves only bounded exit facts and actually observed
   );
 });
 
-test("only reviewed generation, boundary and live titles survive failure projection", () => {
+test("only reviewed generation, boundary, live and device titles survive failure projection", () => {
   for (const name of [
     "production Recovery supersession preserves distinct successor and bounded rows",
     "production Recovery hung takeover preserves distinct successor and bounded rows",
@@ -388,6 +388,7 @@ test("only reviewed generation, boundary and live titles survive failure project
         `SAFE ${mode} boundary survives real service SIGKILL with retained execution identity`,
     ),
     "trusted outer recovery preserves original receipts and child byte closure across perform/readonly verification",
+    "cleanup-only ownership accepts completed failed/cancelled initial jobs without granting phase/custody proof; missing and unfinished ownership remain unavailable",
   ]) {
     const output: string[] = [],
       accept = sourceFailureLines((line) => output.push(line));
