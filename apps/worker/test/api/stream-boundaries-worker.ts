@@ -165,10 +165,14 @@ export class TestAgentSession extends RuntimeAgent {
   observeSocketClose() {
     for (const socket of this.ctx.getWebSockets()) {
       const close = socket.close.bind(socket);
-      socket.close = (code, reason) => {
-        this.closeSamples.push({ code, attachment: socket.deserializeAttachment() });
-        close(code, reason);
-      };
+      // The SDK defines close as configurable but non-writable.
+      Object.defineProperty(socket, "close", {
+        configurable: true,
+        value: (code?: number, reason?: string) => {
+          this.closeSamples.push({ code, attachment: socket.deserializeAttachment() });
+          close(code, reason);
+        },
+      });
     }
     return this.ctx.getWebSockets().map((socket) => ({
       bufferedAmountPresent: "bufferedAmount" in socket,
