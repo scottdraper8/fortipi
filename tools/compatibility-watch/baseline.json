@@ -94,93 +94,93 @@
         "sha256": "d884d6565656e40303524afdc0f6c675aa78cd1b852e20f62035ebba27ac23e8"
       },
       "pins": {
-        "apps/worker/package.json#dependencies/@cloudflare/computer": "0.11.1"
+        "apps/worker/package.json#dependencies/@cloudflare/computer": "0.11.4"
       },
-      "reviewedAt": "2026-11-19T22:15:18.360Z",
-      "reviewNote": "2026-11-19 reviewed258ecaf5..cd0146b2/v0.11.4: two release commits; only version/changelog/lock metadata and image examples. Computer/computerd/DOFS/RPC/remote-exec sources, protocol schema, FUSE vendor/build scripts and licenses unchanged. Range reads, bounded exec result and passthrough already exist at258ecaf5; future lookahead only. Retain installed0.11.1/source812 and prior source-bound limits:58 executable JS lack SyncRPCServer/applyChangesSync;232maps retain unused applyChangesSync; DO apply is async, native batching uses Node SQLite. Prior supported Free/local Loader primitives reached depth1; unsupported manual nesting depth2 fails SAVEPOINT. Rewrite churn retains physical bytes: keep physical census/headroom and bounded child disposal; unlink is not reclamation. No required maintained correction, pin/image adoption or new livePaid/native/deployed assurance. Future actual-image binding remains parent work. Evidence: phase3/thread-9/fresh-computer-453-review.md."
+      "reviewedAt": "2026-11-21T05:36:33.085Z",
+      "reviewNote": "Current exact client pin0.11.4 and its authenticated published source cd0146b2875b224b54fb56384f642c6416ad910a now match this unchanged watched main snapshot. Update the old local-pin acknowledgment; no new upstream interval exists. Published package/companion manifests, exports and source identities are bound. A companion manifest is not the actual daemon/native image identity. Parent owns the separately reviewed storage/forward changes and pending genuine new Computer image/source-kit qualification. No old0.11.1 installed assumption, provider/native/deployed equivalence or automatic migration is retained. Evidence: current-lookahead-review/report.md and receipt.json."
     },
     "agents-lifecycle": {
       "catalogSha256": "6845cb5c33905cbac363710a051956451ab229dde00e4dbaf1cd5a9a7fbca352",
       "snapshot": {
-        "commit": "81726f7d18206a0864d183c219fad9fa6e7e28e6",
-        "version": "0.33.0",
+        "commit": "8d8acd0dd2a3b30d226e9f24e96557ebfd948374",
+        "version": "0.34.0",
         "paths": {
-          "packages/agents": "a9bdbec7799a9640a6dafa583078e75657b946d357e74bf85aad926e3cf202c3",
-          "packages/agents/package.json": "81bcb0c35c68b6628d71549b90be09c83a79330e78fcf9fe9e6a473e8f2356c6",
-          "docs/agents/harnesses/pi.md": "78143e635f7478e8ada50a8e75bea13f0adc6dc2e186b33ecaa1f924436e60fa"
+          "packages/agents": "b5af0fcab41fa6007dbab01beceae4fd3c40c35d2170d5aeb337a402728e5137",
+          "packages/agents/package.json": "1bcc8ff9ad014b4a73c303e64c8e3a6e1a17562aa975864746e1209a420099ab",
+          "docs/agents/harnesses/pi.md": "0f1bd86f6c404f053c250a33b1c98cb073b4cd4d47b5ec0faf5f62f2ba44e417"
         },
-        "sha256": "140ed684737f81a588d61d7a59195848070b0d075d5e9cc4b14f92be49837f2c"
+        "sha256": "54c5e0ee902880f6d689b9213c759ed2a2e6dc2abaae984dd283d79714be91ad"
       },
       "pins": {
-        "apps/worker/package.json#dependencies/agents": "0.33.0"
+        "apps/worker/package.json#dependencies/agents": "0.34.0"
       },
-      "reviewedAt": "2026-11-19T18:52:18.050Z",
-      "reviewNote": "Reviewed46daba47..81726f7d primary Lifecycle/Pi documentation and selected model/browser/chat deltas. Retain exact published0.33.0; future onFetchError/base-Agent/error/provider APIs are not adopted. Backport ONLY neutral HTTP500/no WebSocket diagnostic frame into existing reviewed5071 lifecycle repair; full member inverse preserves fencing/logging/non-Error handling. Six actual startup/capability failure cases plus unchanged fencing/generation checks independently pass; prior member and HTTP-only mutant discriminate. Pi doc model/default and optionalTUI changes remain lookahead. Current maintained imports remain Lifecycle/PiHarness/WebSockets/models-pi-ai, not blanket future-main compatibility. Source/patch and current runtime19 qualification are separately bound. No deployed/public-client proof inferred. Evidence: phase3/thread-9/compat-lifecycle-security-enforcer.md."
+      "reviewedAt": "2026-11-21T05:36:33.085Z",
+      "reviewNote": "Reviewed81726f7d..8d8acd0d,4commits/62paths. Current exact agents0.34.0 published provenance resolves to8d8acd0d, identical to watched main; Pi peers are~1.6.0 and all current Pi pins are1.6.0. Lazy root creation/atomic init, wake scheduled before signal delivery, notify/onAbort and gateway-wire changes are shipped0.34 APIs, not an unpublished port requirement. Maintained AgentSession supplies onWake to Harness.open and uses PiHarness; hookTask is already adopted. Keep durable state forward-only across incompatible prior task versions. No source-only observation establishes runtime, provider, image or release compatibility. Evidence: current-lookahead-review/report.md."
     },
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
       "snapshot": {
-        "commit": "2133617ff1ea1e5b8613a9604ab82594eedbeb5b",
+        "commit": "780bf31fcaeb252fa9b68df3964c735eae75bde3",
         "version": "1.6.0",
         "paths": {
           "packages/agent": "58ea5ce32b6fe780826e3d8c6f3494dfd4159ec8bfe8158e4f2b52000cb6a474",
-          "packages/ai": "7862e185137f1c337ff1b5447b2f890dd36167ad3517edf68ab6ee7c86bad7a3",
-          "packages/chord": "f735a4f9245fee9098992fe2ca875934b11984e4478a2c56473ae2bebac5c2c5",
+          "packages/ai": "f89c49d6efc53567a535abde5625e001d59872d2bf63ae6111c68f280d09a5dd",
+          "packages/chord": "47343c4886af5942776cdd61c83bad886e6195cf09f04297a033a86c810752e6",
           "packages/codemode": "fc89b511907b1f0730ec8e75e1a30af4decabd5114383030c12e6bf4474d70fc",
-          "packages/durable": "11866faadd1dde2a21fc792c19e7d417f16e88ed5d45f6499d836d9d3c029e1b",
+          "packages/durable": "695fe47285c5d1eb4f1d9fe9db89c4016f519d89b83e893c344ef6b7df3ced83",
           "packages/env": "07d6f04a2a9c013f1fe5ac6e0f593c29f27c6750cb2d9fa9015694e0eb6a5cdd",
-          "packages/mcp": "ee3c0f2e2a65c26835055643adbd3166e274d758cc9945f438b1fca6483d2b46",
+          "packages/mcp": "cbda0b71e0234208c155c0c472e7244cc56b243e459c79735a66bea7e1df3845",
           "packages/schema": "5ebc08e71afdac42c88ac8656c35028af92f9b7ba012b2e3d0d6685456566b6a",
           "packages/telemetry": "3055ffb3a317c6d4b6690a513eb992a862cfc507b6a06246eae3677dfcfd99a1",
-          "packages/tui": "2f1e04e73ae6c140bb6a5611bde272a616e50ae725f6532aa858e269a06b2404",
+          "packages/tui": "ac6c6d57fae658726d3e747799dcb96918d40644a1b4d4d21af0379e48ba8bb0",
           "packages/durable/package.json": "8c5c0c99a1b0585c03c117bf57a23e3ea345a049af2a898782860248584cee83"
         },
-        "sha256": "ad13f53f0280f8556263cea650bc8948361848f71bb21519cde8fbda2c44e0dd"
+        "sha256": "edeaab5c9178b3e68ab15e82c53c301fc18578b52073291da2e3dc9c33361476"
       },
       "pins": {
-        "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.5.2",
-        "apps/worker/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
-        "apps/worker/package.json#dependencies/@earendil-works/pi-schema": "1.5.2",
-        "apps/worker/package.json#dependencies/@earendil-works/chord": "1.5.2",
-        "apps/worker/package.json#dependencies/@earendil-works/pi-codemode": "1.5.2",
-        "apps/worker/package.json#dependencies/@earendil-works/pi-telemetry": "1.5.2",
-        "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.5.2",
-        "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.5.2"
+        "apps/worker/package.json#dependencies/@earendil-works/pi-durable": "1.6.0",
+        "apps/worker/package.json#dependencies/@earendil-works/pi-ai": "1.6.0",
+        "apps/worker/package.json#dependencies/@earendil-works/pi-schema": "1.6.0",
+        "apps/worker/package.json#dependencies/@earendil-works/chord": "1.6.0",
+        "apps/worker/package.json#dependencies/@earendil-works/pi-codemode": "1.6.0",
+        "apps/worker/package.json#dependencies/@earendil-works/pi-telemetry": "1.6.0",
+        "packages/fortipi-cli/package.json#dependencies/@earendil-works/pi-ai": "1.6.0",
+        "packages/fortipi-tui/package.json#dependencies/@earendil-works/pi-tui": "1.6.0"
       },
-      "reviewedAt": "2026-11-20T11:11:37.391Z",
-      "reviewNote": "Reviewed434dc5e4..2133617f: release stamps1.6.0; post-tag AI retry backoff removes completed listeners, P2 fork-index fix is outside FortiPi. Public Pi1.6.0 metadata exists; Chord1.6.0 returned404, no GitHub Release, tagfaac5858. Main is beyond tag; no archive/source equivalence inferred. Current1.5.2 exports runEndTask;1.6 source uses hookTask, so upgrade needs hook/storage/replay/cancel/patch/provider/TUI qualification. Exact1.5.2 archives and AI-schema/Durable-waiter patches retained. Prior OpenAI removal-ID/reason, Codex effort/token/instruction, ChatCompletions role/catalog1.5.3, Chord remote-hold/store/sync/archive/body-close and readonly TUI caveats remain. No installed adoption/security finding, cache/output-cap guarantee, original Linux cause/fix or provider/live/Paid clearance. Evidence: phase3/thread-9/a8bd-current-pi-review/report.md."
+      "reviewedAt": "2026-11-21T05:36:33.085Z",
+      "reviewNote": "Current exact Pi1.6.0 archives remain bound to published tag/source faac585884ae2c013a6b1400f3e9e77f10b34bac. Watched780bf31f is43commits later despite the same manifest version:425changed blob paths/150watched, complete366-section diff acquired; selected contract semantics only. Unreleased parks/wraps/onYield/beforeCompact/signals/CommitResult gain tags; only transaction-form submit becomes admit, ordinary submit stays. Current hookTask already belongs to published1.6.0; piStorageWatermark delegates the original commit result and receipts. Acknowledge future-main drift without changing fixed pins or requiring unpublished API adoption. No reproducible build, complete semantic audit or runtime/image/release clearance. Evidence: current-lookahead-review/report.md."
     },
     "wrangler": {
       "catalogSha256": "0e360bc91300477480cde21836d1fbe07c91a1c6d10727ea4fc01eb57cba9c3f",
       "snapshot": {
-        "commit": "f3f7bbc1fe609e14ea9a7be78a25551d270f1fce",
-        "version": "4.165.0",
+        "commit": "b00799168dc2580013ea3c9b7d4f4505e120afa2",
+        "version": "4.166.0",
         "paths": {
-          "packages/wrangler": "4c9d52bdf3d2f823b9c1cca9801d75f721a7893531849f71d0935f8667438b80",
-          "packages/wrangler/package.json": "a76fd7aeaf4e24cb6a85d0d7872b2f2789ef63723a4fb6d3a8ac2496c8ee3d05"
+          "packages/wrangler": "445bfc06808ee479a9075a3e9ff2f8b45308ad2913e2662e07a3302cb60d35d8",
+          "packages/wrangler/package.json": "d83b9ef3de2276467924a05c3bf70124a05e784a66eac73d4f3276d7ce24de37"
         },
-        "sha256": "53fae1671778b3d91224be04cc49ce29f3be55ff16390cb68d72a07b8626a4fc"
+        "sha256": "7426becf650f2bcd8a457614ad3f3fae94f72f8096485cbc3891088cee3193d2"
       },
       "pins": {
-        "apps/worker/package.json#devDependencies/wrangler": "4.162.0",
-        "packages/fortipi-cli/package.json#dependencies/wrangler": "4.162.0"
+        "apps/worker/package.json#devDependencies/wrangler": "4.166.0",
+        "packages/fortipi-cli/package.json#dependencies/wrangler": "4.166.0"
       },
-      "reviewedAt": "2026-11-20T08:59:09.608Z",
-      "reviewNote": "Reviewed56974d49..f3f7bbc1 (one commit), future main still4.165.0; installed4.162.0 unchanged. write-build-output.ts records prior Container output before cleaning; containers-shared skips docker image ls only with no current Containers and priorOutputHadContainers=false. Configured/removed Containers still clean tags; omitted flag retains old lookup. Vite carries the same flag; tests cover those branches. This is experimental cloudflare.config.ts/Build Output, not FortiPi legacy deploy --config/no_bundle path. Preserve explicit date/flags, image schema, exact Wrangler/Miniflare/workerd closure and real prepare/deploy requirements; no new VPC/D1/Artifacts or defaults adoption, stall-fix/provider/live/Paid clearance. Evidence: phase3/thread-9/f86-current-compat-review/report.md."
+      "reviewedAt": "2026-11-21T05:36:33.085Z",
+      "reviewNote": "Current exact4.166.0 pins resolve to published source27b3f7150991e1208e5b3dd139953d9f7be389b5. Watchedb0079916 keeps version4.166.0 but adds two post-release commits: remove dispatch-namespace rename and recover missing scripts after interrupted deploy. Do not attribute these to installed4.166.0. Baselinef3f7bbc1..b0079916 is12commits/146paths; release retry/config changes are separate from later main. Maintained deploy uses legacy deploy --config/no_bundle and no dispatch rename/new Images setting. Retain fixed Wrangler/Miniflare/workerd closure and explicit date/flags; no future-main port or image/provider equivalence inferred. Evidence: current-lookahead-review/report.md."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "065dcca0b991bbce9b70770b7053ce9d426edbb9",
-        "version": "v1.20261120.1",
-        "sha256": "022f28e34227fdcc5b32b7343161d14e10b6391345f82702c56f206274fcd81c",
+        "commit": "d68413886563e376605e732a75320eefd32b5128",
+        "version": "v1.20261121.1",
+        "sha256": "02441e8a4913843b9b5c4e008a074db574205be97d1d6a59748dcca7f73035e2",
         "paths": {}
       },
       "pins": {
-        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261119.1"
+        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261121.1"
       },
-      "reviewedAt": "2026-11-20T01:28:22.963Z",
-      "reviewNote": "Reviewed417403d5..065dcca0:78commits/276files, future20 reference only. Fetch TypeError/CONNECT TLS opt in; MessageChannel becomes lazy TS; autogated structuredClone keeps native serializer with WebIDL conversion. Direct clones omit options; no direct MessageChannel/CONNECT/R2/BrowserRun use. No current correction identified. Retain runtime1.20261119.1/types5.20261119.1, sole13->19 override and Wrangler4.162/Miniflare5beta13 interfaces. Inherited repeated-callback fail/pass, held-recovery and controlled-pack proofs concern19, not20. Ordinary consumer install/reification, native3OS/coherentCI/live acceptance remain required; signature/provenance/trust gates unchanged. No transitive20/deployed/provider/Paid equivalence or Pi-stall cause/fix. Evidence: phase3/thread-9/workerd20-compatibility-review.md."
+      "reviewedAt": "2026-11-21T05:36:33.085Z",
+      "reviewNote": "Watched releasev1.20261121.1 resolves d68413886563e376605e732a75320eefd32b5128; current Workers types5.20261121.1 published provenance matches that source. The installed local Wrangler4.166/Miniflare5beta19 simulator still uses workerd1.20261119.1; no override or runtime21 adoption is implied. Reviewed release20..21 primary diff/tree inventory and selected Fetch/body-error, structuredClone, streaming decoder and EventSource autogate changes; broad native/runtime changes are not fully audited. Keep2026-11-10 plus nodejs_compat/enable_request_signal/request_signal_passthrough. Types do not select a hosted runtime build. No deployed/new-image/Paid/ABI equivalence or automatic date/flag migration. Evidence: current-lookahead-review/report.md."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
@@ -205,10 +205,10 @@
         "paths": {}
       },
       "pins": {
-        "package.json#packageManager": "pnpm@12.18.0"
+        "package.json#packageManager": "pnpm@12.22.0"
       },
-      "reviewedAt": "2026-11-19T17:55:26.614Z",
-      "reviewNote": "Nov19 reviewed0470052..b8d3888/releases12.19–12.21. Retain12.18.0 for current frozenv9/default-isolated installs; no v13/loaded/hoisted/pnpr/runtime-download adoption. Reviewed offline URL-redaction security fix, bundled node-gyp undici6→7, peer/engine checks and script-group cleanup. Current locks contain no explicit URL credentials; installer is online frozen and explicitly selects root node-gyp13.1.0; locked undici7.30.1/8.12.4. Upstream bundled node-gyp uses EnvHttpProxyAgent, not the advisory dump interceptor; this is scoped reachability, not bundled-binary/security clearance. Adoption requires coherent exact-pin/engine/bootstrap/action/lock/native and frozen-install checks, with trust/build/skill restrictions retained. New snapshot verified. Details phase3/thread-9/compat-current-platform-review.md."
+      "reviewedAt": "2026-11-21T05:36:33.085Z",
+      "reviewNote": "Fresh maintained GitHub releases/latest still selects v12.21.0/b8d38883 with unchanged source fingerprint. Current exact local manager is12.22.0, not a downgrade to the API-selected older channel. Separate official v12.22.0 release449108884 was published2026-11-17; tag7a89d701 resolves eb0fda4ee3891f9c10e8bad83d1c3c5af343591f. Selected exact-tag code covers registry routes/options in age/trust verification identity and dlx build/policy cache identity; retain strict age/trust/script/skills controls and both manager documents. This updates only the local-pin watch acknowledgment, not a new install or whole environment certification. No newer-version chasing beyond the fixed cutoff. Evidence: current-lookahead-review/report.md."
     },
     "typescript": {
       "catalogSha256": "281424da318292a0ed0449e4fe3cc2b3be9e207251b80380700eb539925f768c",
@@ -274,127 +274,123 @@
   "releaseReference": {
     "format": 1,
     "cohort": {
-      "rootManifest": "c5caf6a930f9562efe7100defea7bd2ff648a480f19b0fabb998b75c5d348722",
-      "rootLock": "54db511df4861e3296d9367dc857e951d6bde6ed9e71e750e43e33298d067363",
-      "workspaceInputs": "023ff7ae2f5a6eeaaea91ecdfc89b6cc5e60efd5b8910fc630080a986ae8cf02",
-      "toolingLock": "75a3f7298cadaa5444d04a018fcc763bf2be45e8e569282f71bd40f69ecbd63e",
-      "sourcePolicyInputs": "e94c4ca3dda850bdd649ce7daadc2c5f6a9a9c808b39afdfcd9605e771618513",
-      "patchReview": "5ee7fb6488a9d356de3be0bee58e24c933ba07e360fc60d3b8a52e581301d2f4",
-      "patchTree": "ed05aa03cba2c97f0e1eedf49062ff1b91618b60",
+      "rootManifest": "976c23dd48a1e51b8d3e4378225ffa266d855b765c9832de4aaaf41726d309c7",
+      "rootLock": "78b158fa8f07ffe75c6abc48c58d8d852d30562032352f73f7c1aa2059716879",
+      "workspaceInputs": "5b96956693897ae619fc085cad719886e157c487c9db98493f969dfea9b19d93",
+      "toolingLock": "161efe95261afadcaf716c9762256ee68987135662e2b3874c27eafee8ffb90b",
+      "sourcePolicyInputs": "b87830caabb328c567d8f55e77a6a2a921e8ac42068bc9d2e7e69e34e0bad734",
+      "patchReview": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "patchTree": "e5504a1e4293d5e3d0d5ad6fbc65db673aa44b53",
       "platformTools": "34c2ec28d230f3583e1da8d1f7ef1e62e083e0c82ba078e332e036aac9419dfc",
-      "imageInputs": "be74003a3969ceb3e4eb6b7d45e612d54db50d412316c07efa4de458e6d5f39a",
+      "imageInputs": "595086ec03356174f22237b2eca51068431d234869bd6034f1b0c1c6de14c512",
       "productTrees": {
-        "worker": "f11b60660615ed0d641294ab9b9df9afe7a4c5cb",
-        "packages": "60f4fbd702f080b7a3c7d38732cd4e3103fecf24"
+        "worker": "4fddb6e5da5d329ff6f5822d73910b74bef3b0c9",
+        "packages": "b1135e32cf72069cc6787d6ade2e6f643b77dde1"
       },
       "image": {
-        "sourceCommit": "453040e8eb86fc45e45434dec1d82347333f9a56",
-        "metadataSha256": "d9dce0e96dfaac831824166fb6960cccd106b99e05f453b9d59ab27c0a052a33",
-        "builtManifestDigest": "sha256:094e72d0464f2095fd61031126da8e3443b676c18538169e8345ad75bfa1a505",
-        "sourceKitSha256": "913458e337ff82543629573a16b9df30cf10ac63e47693e5489e8b122c8807e5"
+        "sourceCommit": "08cb73f9669d9fd2f5fa1a6127bbdc6f0df5ad03",
+        "metadataSha256": "9add7f6b36647d27d52b659e08c56eff2e32f614f13dc954c5e5601f46c0e13c",
+        "builtManifestDigest": "sha256:ee1f81d8cde3df8e770867ad08e560e99fb55c9c5461dde105d52f247528330b",
+        "sourceKitSha256": "1eef8bedaa65d9dd2452bfc0f0a783f824e1f7d4bcb9e9fa804258e2bbd3e303"
       }
     },
-    "cohortSha256": "67ad13c6449148ce1614f545f6019cde459b952dbd9e52aa5ff7099737d182b2",
+    "cohortSha256": "1294987a6631f3e76769c992354764eab18b9f39a8adf9e7da92d56ec4effa2b",
     "references": {
       "pi-runtime": {
-        "sourceFactsSha256": "d1853d93b918ceeb5da681a105366d7e050f862b0936afcb01c903bb0d1ac9ac",
+        "sourceFactsSha256": "1900eefcab459e01c041e7f163fe05444c746212768be1804abcc09cf4362f44",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-20T12:29:16.864Z",
+        "basisReviewedAt": "2026-11-21T05:46:58.197Z",
         "primaryReferences": [
           {
-            "uri": "https://registry.npmjs.org/@earendil-works/chord/-/chord-1.5.2.tgz",
-            "sha256": "e3a9c74adc7162a38809a2cb1f5decb15842fb3b49f0912209881e57ae501030"
+            "uri": "https://registry.npmjs.org/@earendil-works/chord/-/chord-1.6.0.tgz",
+            "sha256": "3967193a8f1bdb79881e4f0715a170853a5946fbb4326f2403529a5a9faedc17"
           },
           {
-            "uri": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-1.5.2.tgz",
-            "sha256": "d5715efa834c23bfdf10a042b49df4ee169cc99000bf16d7998fab2d533b45f8"
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-1.6.0.tgz",
+            "sha256": "d68312ec574bc959cb7fee26da4f4876d067aed9bbbe76e876359e60d2294747"
           },
           {
-            "uri": "https://raw.githubusercontent.com/scottdraper8/fortipi/a3609006a7b77a64130a1a3caa2b7bfefe22f760/patches/@earendil-works__pi-ai@1.5.2.patch",
-            "sha256": "966118ea7d110bd1b0368f17cf3f8d144a2d9b260ed91ea043e53ffbbc1dec21"
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-codemode/-/pi-codemode-1.6.0.tgz",
+            "sha256": "22f7dabd30eeaac7e38a133b72008ccfc379732f2ed86d760297cb9d385a42db"
           },
           {
-            "uri": "https://registry.npmjs.org/@earendil-works/pi-codemode/-/pi-codemode-1.5.2.tgz",
-            "sha256": "ac81bf4f4f01ede1a534d6d0fca1ab13afd66506c00904e9d5a07f590ae302e0"
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-durable/-/pi-durable-1.6.0.tgz",
+            "sha256": "e76ddd7fdf50d53a9945de87adfd620f5734df6d57a075ef8168948ba6ddd855"
           },
           {
-            "uri": "https://registry.npmjs.org/@earendil-works/pi-durable/-/pi-durable-1.5.2.tgz",
-            "sha256": "915648ed07c48ca4a2cf8bde97e9b1693a0127cb1332225b6883bf0d5f6f9082"
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-schema/-/pi-schema-1.6.0.tgz",
+            "sha256": "a308dfc8981c5badc8e113a97d5390788d6bcc82ed4e2aa2708844438ef88d25"
           },
           {
-            "uri": "https://raw.githubusercontent.com/scottdraper8/fortipi/e5a7fe03b6c25926b28ea5b5e78d7f7a1f3cf388/patches/@earendil-works__pi-durable@1.5.2.patch",
-            "sha256": "2e4a878a49ac70b158956b55e1131dd595b91a88fe86de2cacfae2f1c7abe536"
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-telemetry/-/pi-telemetry-1.6.0.tgz",
+            "sha256": "7a28233ebfdd751940619be6a879bda0fe6eb31ac2056e8798e16293c0c39ec5"
           },
           {
-            "uri": "https://registry.npmjs.org/@earendil-works/pi-schema/-/pi-schema-1.5.2.tgz",
-            "sha256": "5f351297ff74bec1ed4c6a974475ae41f194e023c14f0cf61a427e4fa17cf76a"
-          },
-          {
-            "uri": "https://registry.npmjs.org/@earendil-works/pi-telemetry/-/pi-telemetry-1.5.2.tgz",
-            "sha256": "0d29dbee830c74af7115035c7cb326c1e9da2f690a3f6f95620597092da9f9ee"
-          },
-          {
-            "uri": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-1.5.2.tgz",
-            "sha256": "2fdd7609ee61e7c275a528e32d62093c2c298d3f9254ad3048451df2063e6bda"
+            "uri": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-1.6.0.tgz",
+            "sha256": "8e27e6a876eb0b1cc13dcabdd614ba23fafaea6ced81aa695d6d3397e57f0fa5"
           }
         ],
-        "limitation": "Same exact1.5.2 archives and declared Pi transformations; maintained Worker context/SQLite/PiHarness and AI/TUI imports unchanged by runtime repair. Current future-main review records onAbort/Chord admission/worker-store and readonly TUI/provider deltas without adoption. Original remote-hold race remains scoped outside supported wrappers; remote/store adoption reopens review. Current Worker tree/cohort rebound to reviewed Agents redaction and runtime19 changes. No new provider, native-platform, deployed recovery or future-advisory clearance. Source86012d4f review: Retains accepted pre-arm intent discovery and release-after-drain ordering. Fresh fixture startup/cleanup have separate finite bounds while the recovery operation retains 25 seconds and its real 15.1-second wait. Native RESULT requires a genuine committed receipt or exact proven publication expiry and authorized public reconciliation; original completion and outcome invariants remain. Existing trace requests include their operation key. Closed LIVE invocation/await observations preserve all backend awaits, guards and deadlines. Controlled inverses and independent focused checks qualify these test changes only; historical Linux causes remain unproven. SDK facts, pins, production source and qualified453 image are unchanged; whole CI/native/candidate/live and Paid evidence remain required."
+        "limitation": "Published Pi1.6.0 source faac5858 and exact archive/legal/provenance bindings reviewed; hookTask migration, actual queued progress/retries, committed workspace recovery and completed1.5-to1.6 conversation reopen pass locally. Later watched main is distinct; no unpublished admission/tag rewrite, downgrade, in-flight migration, external provider or deployed-recovery claim."
       },
       "agents-lifecycle": {
-        "sourceFactsSha256": "a34a982d22a8917350f1cff490e9b602740c078d7410437c9444034e604bff7c",
+        "sourceFactsSha256": "e4dfc243cbb0f2d3947635ebe9ed224116bd4e4c41ab63c6cd89192142c0bb42",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-20T12:29:16.864Z",
+        "basisReviewedAt": "2026-11-21T05:46:58.197Z",
         "primaryReferences": [
           {
-            "uri": "https://registry.npmjs.org/agents/-/agents-0.33.0.tgz",
-            "sha256": "985a3e04db1c8500b6dbc6c79cbb1aa43579fef2f2ad903bde7cd3bfa764ff7f"
-          },
-          {
-            "uri": "https://raw.githubusercontent.com/scottdraper8/fortipi/d070e8baa3e8bfc7c4ec52fab2db39fdfed41063/patches/agents@0.33.0.patch",
-            "sha256": "ec6855764c1e76c69c0fd42d170d7b23d438aeec38dca95ca75579956144f5a3"
+            "uri": "https://registry.npmjs.org/agents/-/agents-0.34.0.tgz",
+            "sha256": "4093600913e5a0ccef3a6b2b6faf99dca61c46d4c4c95320a872cde4379fcbfa"
           }
         ],
-        "limitation": "Exact0.33.0 archive with no published gitHead inference. Existing5071 job-fencing repair plus independently reviewed two-statement fetch-error redaction; original/fenced/fixed member identities and source817 are verified. Actual six failure cases and existing fencing/generation controls discriminate old and restored behavior. Native Node/runtime19 combination is a new reviewed cohort, requiring fresh coherent CI/native/platform and deployed proof. No future onFetchError API or broad SDK transport equivalence. Source86012d4f review: Retains accepted pre-arm intent discovery and release-after-drain ordering. Fresh fixture startup/cleanup have separate finite bounds while the recovery operation retains 25 seconds and its real 15.1-second wait. Native RESULT requires a genuine committed receipt or exact proven publication expiry and authorized public reconciliation; original completion and outcome invariants remain. Existing trace requests include their operation key. Closed LIVE invocation/await observations preserve all backend awaits, guards and deadlines. Controlled inverses and independent focused checks qualify these test changes only; historical Linux causes remain unproven. SDK facts, pins, production source and qualified453 image are unchanged; whole CI/native/candidate/live and Paid evidence remain required."
+        "limitation": "Exact Agents0.34.0 source8d8acd0d and archive/legal/provenance bindings reviewed. Published supersession/generation fencing and neutral HTTP/WS handling replace the retired local patch, with actual focused controls and PiHarness checks. This does not establish arbitrary future main, every transport/provider, three-OS client or deployed behavior."
       },
       "computer-fuse": {
-        "sourceFactsSha256": "645d0bdc91df175b152b1b5590017e8d4ed2a020c78d646ab3bbccd298b005e3",
+        "sourceFactsSha256": "2f5d8d1267c10139a4172a2d8d1226620b3d64eacdd86bbbcf26e8411e12375c",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-20T12:29:16.864Z",
+        "basisReviewedAt": "2026-11-21T05:46:58.197Z",
         "primaryReferences": [
           {
-            "uri": "https://registry.npmjs.org/@cloudflare/computer/-/computer-0.11.1.tgz",
-            "sha256": "fdcfad1b6f27b9133597c8355dca3ec3311207c5f51f9b7e3538c467ce4ed7cb"
+            "uri": "https://registry.npmjs.org/@cloudflare/computer/-/computer-0.11.4.tgz",
+            "sha256": "1d98bb4cd8e59c48ae89e50371aa5f8329071bf5363e268c3ed7119781cdefaf"
           },
           {
-            "uri": "https://github.com/cloudflare/computer/archive/812bce58d2ea3735c12e6f6181c269c4010293df.tar.gz",
-            "sha256": "ee20eae6939c82bd465933c3a591f96b362aa58fe344888307f7ea4839121f27"
+            "uri": "https://github.com/cloudflare/computer/archive/cd0146b2875b224b54fb56384f642c6416ad910a.tar.gz",
+            "sha256": "2df412cef0d8359ce190e34d5f0962209019667af393b7703c3f93aa7f4ce27a"
           }
         ],
-        "limitation": "Exact client0.11.1/capnweb and source812 retained; qualified image identity is bound by cohort.image. Independent current-path review distinguishes58 executable JS files without SyncRPCServer/applyChangesSync from232 maps retaining unused helper. Supported DO apply is asynchronous; native receiver uses Node SQLite; direct database nesting/custom receivers are unsupported. Rewrites retain physical storage until bounded disposable-child retirement; preserve census/headroom checks. No0.11.3 GC/mount adoption or new native/livePaid proof. Keep runtimeVerified:false, licenseReviewRequired:true, registryDigest:null metadata. Source86012d4f review: Retains accepted pre-arm intent discovery and release-after-drain ordering. Fresh fixture startup/cleanup have separate finite bounds while the recovery operation retains 25 seconds and its real 15.1-second wait. Native RESULT requires a genuine committed receipt or exact proven publication expiry and authorized public reconciliation; original completion and outcome invariants remain. Existing trace requests include their operation key. Closed LIVE invocation/await observations preserve all backend awaits, guards and deadlines. Controlled inverses and independent focused checks qualify these test changes only; historical Linux causes remain unproven. SDK facts, pins, production source and qualified453 image are unchanged; whole CI/native/candidate/live and Paid evidence remain required."
+        "limitation": "Computer0.11.4 sourcecd0146b2 and archive/source/legal bindings reviewed. Actual completed0.11.1 workspace forward reopen, rooted bounded ranges, stream overwrite/failure, physical accounting and reconnect pass locally. The exact selected rootless image/source kit08cb73f9 has real FUSE, recipient and library/helper replacement CI evidence plus maintained import and independent source-kit verification. Its rootful counterpart has a distinct identity and separate evidence. Durable public source delivery, registry publication and deployed/Paid/whole-release acceptance remain separate gates."
       },
       "wrangler": {
-        "sourceFactsSha256": "c74830d39b33b0873d420df8dfcc398b18dec0dad679b08df660dbb183b25948",
+        "sourceFactsSha256": "023221a375346e2174e82d770ca2f426847dd6df3c25ae56e681332de7939f35",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-20T12:29:16.864Z",
+        "basisReviewedAt": "2026-11-21T05:46:58.197Z",
         "primaryReferences": [
           {
-            "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261119.1.tgz",
-            "sha256": "6b4bcc7839e1b115bb356b0b48991631bfbcc5a93242c61a03a92006b1ce5c28"
+            "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261121.1.tgz",
+            "sha256": "f8953f475b36058c0fe290330521b8513e091f7b5f88ad5a277b10de40345eb6"
           },
           {
-            "uri": "https://registry.npmjs.org/miniflare/-/miniflare-5.20261113.0-beta.tgz",
-            "sha256": "4777f56bb9e822fd249b05929dec2a82e1c9b9fc4cf5a757f7ef15cb9bd34785"
+            "uri": "https://registry.npmjs.org/@cloudflare/workers-utils/-/workers-utils-0.56.0.tgz",
+            "sha256": "4cc50fe385788f1c09d07d7e8fee10dc72a8b947cb28b579e9fe45e318cf665c"
+          },
+          {
+            "uri": "https://registry.npmjs.org/miniflare/-/miniflare-5.20261119.0-beta.tgz",
+            "sha256": "f00a9d505c79f9c9a8dde45fcdbf0567f0092bcd4646b856202c607f3d6fc281"
+          },
+          {
+            "uri": "https://registry.npmjs.org/undici/-/undici-7.30.2.tgz",
+            "sha256": "2bf5b1c41724614729cb383f22c64506b6665869d385de862752c33763fcce1b"
           },
           {
             "uri": "https://registry.npmjs.org/workerd/-/workerd-1.20261119.1.tgz",
             "sha256": "641cc9ff16806ba8c5fc02825a3b99bbc1417fc8a544b3fc48bc01700a612b5c"
           },
           {
-            "uri": "https://registry.npmjs.org/wrangler/-/wrangler-4.162.0.tgz",
-            "sha256": "bdc0366417fbeea506296931be1c5dd91c131043f8873e31601e03ed4c31956a"
+            "uri": "https://registry.npmjs.org/wrangler/-/wrangler-4.166.0.tgz",
+            "sha256": "3333bd0b9491c76c2717582f69cb0d1ab2dab1c014e86aa859bc3ce04fa91d40"
           }
         ],
-        "limitation": "Exact Wrangler4.162.0/Miniflare5.20261113.0-beta interfaces retained with reviewed exact workerd13->19 override and matching types19. Seven new archives and explicit finite age exceptions are verified; declared source/peer/context changes and version guards match. Controlled scoped pack resolves bundled19 from both Wrangler and Miniflare and pins all five native variants19; ordinary consumer install/reification and current native3OS/candidate/live qualification remain required. Unused future VPC/D1/Artifacts/config APIs are not adopted. No prior intermittent Pi-stall cause/fix, provider-runtime equivalence or Paid rollout clearance. Source86012d4f review: Retains accepted pre-arm intent discovery and release-after-drain ordering. Fresh fixture startup/cleanup have separate finite bounds while the recovery operation retains 25 seconds and its real 15.1-second wait. Native RESULT requires a genuine committed receipt or exact proven publication expiry and authorized public reconciliation; original completion and outcome invariants remain. Existing trace requests include their operation key. Closed LIVE invocation/await observations preserve all backend awaits, guards and deadlines. Controlled inverses and independent focused checks qualify these test changes only; historical Linux causes remain unproven. SDK facts, pins, production source and qualified453 image are unchanged; whole CI/native/candidate/live and Paid evidence remain required."
+        "limitation": "Published Wrangler4.166.0 and its selected Miniflare beta19/workerd19/Undici7.30.2 chain are reviewed without overrides; types21 and separate CLI Undici8.13.1 retain distinct identities. Actual current Worker dry bundle and full build pass. Watched future main and hosted Cloudflare runtime are distinct; installed consumers, native3OS, candidate and deployed verification remain separate."
       }
     }
   }
