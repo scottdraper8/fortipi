@@ -1,5 +1,6 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
-import { lstat, realpath } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { lstat, opendir, realpath } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { isAbsolute, resolve, win32 } from "node:path";
 import { promisify } from "node:util";
@@ -45,19 +46,19 @@ export function windowsUtilityEnvironment(): Record<string, string> {
 function literal(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
-async function ps(command: string): Promise<string> {
+async function ps(command: string, input?: string, timeout = 10000): Promise<string> {
   const pending = exec(
     systemFile("WindowsPowerShell\\v1.0\\powershell.exe"),
     powershellArgs(`$ErrorActionPreference='Stop';${command}`),
     {
       windowsHide: true,
-      timeout: 10000,
+      timeout,
       maxBuffer: 65536,
       env: windowsUtilityEnvironment(),
     },
   );
   pending.child.stdin?.on("error", () => {});
-  pending.child.stdin?.end(); // Public ChildProcess API: PowerShell must receive EOF on redirected stdin.
+  pending.child.stdin?.end(input); // Public ChildProcess API: always deliver EOF on redirected stdin.
   let stdout: string;
   try {
     ({ stdout } = await pending);
@@ -175,7 +176,9 @@ export class WindowsAttributeReader {
     }
     return child;
   }
-  query(path: string): Promise<number> {
+  query(path: string, timeout = 10000): Promise<number> {
+    if (!Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 10000)
+      return Promise.reject(new Error("Windows attribute query time bound"));
     if (!path.isWellFormed() || path.includes("\0"))
       return Promise.reject(new Error("Windows attribute path is invalid"));
     if (Buffer.byteLength(path, "utf8") > 131072)
@@ -194,7 +197,10 @@ export class WindowsAttributeReader {
       return Promise.reject(new Error("Windows attribute sequence exhausted"));
     }
     return new Promise<number>((resolve, reject) => {
-      const timer = setTimeout(() => this.fail(child, "Windows attribute query timed out"), 10000);
+      const timer = setTimeout(
+        () => this.fail(child, "Windows attribute query timed out"),
+        timeout,
+      );
       this.pending.set(id, { resolve, reject, timer });
       // Only base64 path data enters stdin. No caller text is executable PowerShell.
       try {
@@ -211,14 +217,145 @@ interface Dacl {
   me: string;
   tokenOwner: string;
   protected: boolean;
+  accepted: boolean;
   rules: { sid: string; allow: boolean; rights: number }[];
+}
+// One policy for individual executor state and batched artifact verification.
+const daclPolicy = `function Test-FortiPiDacl($a,[bool]$directory,[string]$me){
+  if($a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $me -or ($directory -and !$a.AreAccessRulesProtected)){return $false};
+  $full=$false;foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){
+    $s=$r.IdentityReference.Value;if($r.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow -or ($s -ne $me -and $s -ne 'S-1-5-18')){return $false};
+    if($s -eq $me -and (([int64]$r.FileSystemRights -band 2032127) -eq 2032127)){$full=$true}
+  };return $full
+}`;
+function protectDacl(directory: boolean): string {
+  // Direct BCL/typed SID calls do not depend on cmdlet autoload or account-name lookup.
+  return `$acl=[System.Security.AccessControl.${directory ? "DirectorySecurity" : "FileSecurity"}]::new();$acl.SetOwner($sid);$acl.SetAccessRuleProtection($true,$false);$flags=[System.Security.AccessControl.InheritanceFlags]${directory ? "'ContainerInherit,ObjectInherit'" : "'None'"};foreach($s in @($sid,[System.Security.Principal.SecurityIdentifier]::new('S-1-5-18'))){$r=[System.Security.AccessControl.FileSystemAccessRule]::new($s,[System.Security.AccessControl.FileSystemRights]::FullControl,$flags,[System.Security.AccessControl.PropagationFlags]::None,[System.Security.AccessControl.AccessControlType]::Allow);$acl.AddAccessRule($r)};[System.IO.${directory ? "Directory" : "File"}]::SetAccessControl($p,$acl)`;
 }
 async function inspectDacl(path: string, directory: boolean): Promise<Dacl> {
   return JSON.parse(
     await ps(
-      `$a=[System.IO.${directory ? "Directory" : "File"}]::GetAccessControl(${literal(path)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');$identity=[System.Security.Principal.WindowsIdentity]::GetCurrent();$me=$identity.User.Value;$b=[System.Text.StringBuilder]::new();[void]$b.Append('{"owner":"'+$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value+'","me":"'+$me+'","tokenOwner":"'+$identity.Owner.Value+'","protected":'+$a.AreAccessRulesProtected.ToString().ToLowerInvariant()+',"rules":[');$sep='';foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){[void]$b.Append($sep+'{"sid":"'+$r.IdentityReference.Value+'","allow":'+($r.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow).ToString().ToLowerInvariant()+',"rights":'+([int64]$r.FileSystemRights).ToString([System.Globalization.CultureInfo]::InvariantCulture)+'}');$sep=','};[void]$b.Append(']}');[Console]::Out.Write($b.ToString())`,
+      `${daclPolicy};$a=[System.IO.${directory ? "Directory" : "File"}]::GetAccessControl(${literal(path)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');$identity=[System.Security.Principal.WindowsIdentity]::GetCurrent();$me=$identity.User.Value;$accepted=Test-FortiPiDacl $a $${directory} $me;$b=[System.Text.StringBuilder]::new();[void]$b.Append('{"owner":"'+$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value+'","me":"'+$me+'","tokenOwner":"'+$identity.Owner.Value+'","protected":'+$a.AreAccessRulesProtected.ToString().ToLowerInvariant()+',"accepted":'+$accepted.ToString().ToLowerInvariant()+',"rules":[');$sep='';foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){[void]$b.Append($sep+'{"sid":"'+$r.IdentityReference.Value+'","allow":'+($r.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow).ToString().ToLowerInvariant()+',"rights":'+([int64]$r.FileSystemRights).ToString([System.Globalization.CultureInfo]::InvariantCulture)+'}');$sep=','};[void]$b.Append(']}');[Console]::Out.Write($b.ToString())`,
     ),
   ) as Dacl;
+}
+
+const payloadEntryLimit = 16384;
+const payloadInputLimit = 8 * 1024 * 1024;
+interface PayloadEntry {
+  path: string;
+  directory: boolean;
+  stat: Stats;
+}
+async function payloadEntries(root: string, deadline: number): Promise<PayloadEntry[]> {
+  const entries: PayloadEntry[] = [];
+  const pending = [{ path: root, depth: 0 }];
+  let bytes = 0;
+  while (pending.length) {
+    if (performance.now() >= deadline) throw new Error("Windows payload traversal time bound");
+    const entry = pending.pop();
+    if (!entry) throw new Error("Windows payload traversal rejected");
+    const { path, depth } = entry;
+    if (!path.isWellFormed() || path.includes("\0") || path.length > 32767 || depth > 64)
+      throw new Error("Windows payload path bound");
+    const stat = await lstat(path),
+      directory = stat.isDirectory();
+    if (
+      stat.isSymbolicLink() ||
+      (!directory && (!stat.isFile() || stat.nlink !== 1)) ||
+      (!entries.length && !directory)
+    )
+      throw new Error("Windows payload type rejected");
+    const remaining = Math.floor(deadline - performance.now());
+    if (remaining <= 0) throw new Error("Windows payload traversal time bound");
+    // Native attributes must reject every reparse kind before opendir or descendant expansion.
+    const attributes = await attributeReader.query(path, remaining);
+    if (
+      !Number.isInteger(attributes) ||
+      (attributes & 1024) !== 0 ||
+      ((attributes & 16) !== 0) !== directory
+    )
+      throw new Error("Windows payload attributes rejected");
+    if (performance.now() >= deadline) throw new Error("Windows payload traversal time bound");
+    bytes += 3 + Buffer.byteLength(path, "utf8") * 2;
+    if (entries.length >= payloadEntryLimit || bytes > payloadInputLimit)
+      throw new Error("Windows payload traversal bound");
+    entries.push({ path, directory, stat });
+    if (directory) {
+      const names: string[] = [];
+      for await (const item of await opendir(path)) {
+        if (
+          performance.now() >= deadline ||
+          names.length + pending.length + entries.length >= payloadEntryLimit
+        )
+          throw new Error("Windows payload traversal bound");
+        names.push(item.name);
+      }
+      for (const name of names.sort().reverse())
+        pending.push({ path: resolve(path, name), depth: depth + 1 });
+    }
+  }
+  if (performance.now() >= deadline) throw new Error("Windows payload traversal time bound");
+  return entries;
+}
+async function windowsPayloadTree(root: string, prepare: boolean): Promise<void> {
+  try {
+    if (process.platform !== "win32") throw new Error("Windows payload operation required");
+    const deadline = performance.now() + 10000;
+    root = resolve(root);
+    if ((await realpath(root)).toLowerCase() !== root.toLowerCase())
+      throw new Error("Windows payload alias rejected");
+    const entries = await payloadEntries(root, deadline);
+    const input = entries
+      .map(
+        (entry) => `${entry.directory ? "D" : "F"}:${Buffer.from(entry.path).toString("base64")}\n`,
+      )
+      .join("");
+    if (Buffer.byteLength(input) > payloadInputLimit)
+      throw new Error("Windows payload input bound");
+    const program = `${daclPolicy};$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User;$me=$sid.Value;$count=0;
+      while($null -ne ($line=[Console]::ReadLine())){
+        $count++;if($count -gt ${payloadEntryLimit}){throw 'bound'};
+        $parts=$line.Split(':',2);if($parts.Length -ne 2 -or ($parts[0] -ne 'D' -and $parts[0] -ne 'F')){throw 'input'};
+        $p=[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($parts[1]));$directory=$parts[0] -eq 'D';
+        $attributes=[System.IO.File]::GetAttributes($p);if(($attributes -band 1024) -ne 0 -or ((($attributes -band 16) -ne 0) -ne $directory)){throw 'type'};
+        ${prepare ? `if($directory){${protectDacl(true)}}else{${protectDacl(false)}};` : ""}
+        $a=if($directory){[System.IO.Directory]::GetAccessControl($p,[System.Security.AccessControl.AccessControlSections]'Owner,Access')}else{[System.IO.File]::GetAccessControl($p,[System.Security.AccessControl.AccessControlSections]'Owner,Access')};
+        if(!(Test-FortiPiDacl $a $directory $me)){throw 'protection'}
+      };if($count -ne ${entries.length}){throw 'incomplete'};[Console]::Out.Write('payload-ok')`;
+    const remaining = Math.floor(deadline - performance.now());
+    if (remaining <= 0 || (await ps(program, input, remaining)) !== "payload-ok")
+      throw new Error("Windows payload batch rejected");
+    // No cached identity/ACL authority: detect replacement or traversal changes during the batch.
+    const after = await payloadEntries(root, deadline);
+    if (
+      after.length !== entries.length ||
+      after.some((entry, index) => {
+        const before = entries[index];
+        return (
+          !before ||
+          entry.path !== before.path ||
+          entry.directory !== before.directory ||
+          entry.stat.dev !== before.stat.dev ||
+          entry.stat.ino !== before.stat.ino ||
+          entry.stat.size !== before.stat.size ||
+          entry.stat.mtimeMs !== before.stat.mtimeMs
+        );
+      })
+    )
+      throw new Error("Windows payload changed during verification");
+  } catch {
+    // Keep OS utility errors, local names and ACL identities inside this boundary.
+    throw new Error("Windows payload protection rejected");
+  }
+}
+/** Only callers that created/own a staging tree may prepare it. Never called by verification. */
+export async function protectWindowsPayloadTree(root: string): Promise<void> {
+  await windowsPayloadTree(root, true);
+}
+/** Read-only DACL/entry verification, including every intermediate directory. */
+export async function verifyWindowsPayloadTree(root: string): Promise<void> {
+  await windowsPayloadTree(root, false);
 }
 /** Only SQLite sidecars under an already protected database/parent may tighten a token-default owner. */
 export async function verifyWindowsSqliteSidecar(
@@ -281,11 +418,8 @@ export function windows(): PlatformAdapter {
     platform: "win32",
     confinement: "host",
     async protect(path, directory) {
-      const type = directory ? "DirectorySecurity" : "FileSecurity";
       await ps(
-        // Windows PowerShell runs on .NET Framework. Typed SID overloads avoid account-name resolution;
-        // direct BCL calls do not depend on Security/Management/Utility cmdlet module autoload.
-        `$p=${literal(path)};$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User;$acl=[System.Security.AccessControl.${type}]::new();$acl.SetOwner($sid);$acl.SetAccessRuleProtection($true,$false);$flags=[System.Security.AccessControl.InheritanceFlags]${directory ? "'ContainerInherit,ObjectInherit'" : "'None'"};foreach($s in @($sid,[System.Security.Principal.SecurityIdentifier]::new('S-1-5-18'))){$r=[System.Security.AccessControl.FileSystemAccessRule]::new($s,[System.Security.AccessControl.FileSystemRights]::FullControl,$flags,[System.Security.AccessControl.PropagationFlags]::None,[System.Security.AccessControl.AccessControlType]::Allow);$acl.AddAccessRule($r)};[System.IO.${directory ? "Directory" : "File"}]::SetAccessControl($p,$acl)`,
+        `$p=${literal(path)};$sid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User;${protectDacl(directory)}`,
       );
     },
     async verifyProtection(path, directory) {
@@ -294,14 +428,7 @@ export function windows(): PlatformAdapter {
         throw new Error("unsafe state type");
       await this.verifyEntry(path, stat);
       const result = await inspectDacl(path, directory);
-      if (
-        result.owner !== result.me ||
-        (directory && !result.protected) ||
-        !result.rules.some(
-          (r) => r.sid === result.me && r.allow && (r.rights & 2032127) === 2032127,
-        ) ||
-        result.rules.some((r) => !r.allow || ![result.me, "S-1-5-18"].includes(r.sid))
-      )
+      if (result.accepted !== true)
         throw new Error(
           `unsafe executor DACL: ${JSON.stringify({ directory, ownerIsCurrentUser: result.owner === result.me, ownerIsProcessDefault: result.owner === result.tokenOwner, protected: result.protected, ruleCount: result.rules.length, rules: result.rules.slice(0, 8).map((r) => ({ subject: r.sid === result.me ? "current-user" : r.sid === "S-1-5-18" ? "system" : "other", allow: r.allow, rights: r.rights })) })}`,
         );

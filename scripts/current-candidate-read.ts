@@ -264,11 +264,13 @@ export async function verifyCurrentCandidateRead(
   assert.ok(created >= start && created <= end, "Candidate artifact outside candidate job window");
   const expires = time(saved.expires_at);
   assert.ok(expires > Date.now(), "Expired current candidate artifact");
-  const actual = await request.verifyArtifact(ref, "candidate.json");
-  assert.ok(
-    actual && actual.equals(bytes),
-    "Current candidate bytes differ from actual producer archive",
-  );
+  try {
+    const actual = await request.verifyArtifact(ref, "candidate.json");
+    assert.ok(actual?.equals(bytes), "Current candidate bytes differ from actual producer archive");
+  } catch (error) {
+    observeNativeEvidenceFailure("candidate-zip-authentication", error);
+    throw error;
+  }
   // A slow ZIP read must not confer authority to a superseded run or changed source.
   await frame(candidate, hash, context);
   await run(candidate, request);
