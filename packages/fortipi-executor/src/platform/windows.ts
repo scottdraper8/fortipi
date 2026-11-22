@@ -217,10 +217,9 @@ interface Dacl {
   me: string;
   tokenOwner: string;
   protected: boolean;
-  accepted: boolean;
   rules: { sid: string; allow: boolean; rights: number }[];
 }
-// One policy for individual executor state and batched artifact verification.
+// Batch policy mirrors the baseline TypeScript predicate for individual executor state.
 const daclPolicy = `function Test-FortiPiDacl($a,[bool]$directory,[string]$me){
   if($a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $me -or ($directory -and !$a.AreAccessRulesProtected)){return $false};
   $full=$false;foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){
@@ -235,7 +234,7 @@ function protectDacl(directory: boolean): string {
 async function inspectDacl(path: string, directory: boolean): Promise<Dacl> {
   return JSON.parse(
     await ps(
-      `${daclPolicy};$a=[System.IO.${directory ? "Directory" : "File"}]::GetAccessControl(${literal(path)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');$identity=[System.Security.Principal.WindowsIdentity]::GetCurrent();$me=$identity.User.Value;$accepted=Test-FortiPiDacl $a $${directory} $me;$b=[System.Text.StringBuilder]::new();[void]$b.Append('{"owner":"'+$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value+'","me":"'+$me+'","tokenOwner":"'+$identity.Owner.Value+'","protected":'+$a.AreAccessRulesProtected.ToString().ToLowerInvariant()+',"accepted":'+$accepted.ToString().ToLowerInvariant()+',"rules":[');$sep='';foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){[void]$b.Append($sep+'{"sid":"'+$r.IdentityReference.Value+'","allow":'+($r.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow).ToString().ToLowerInvariant()+',"rights":'+([int64]$r.FileSystemRights).ToString([System.Globalization.CultureInfo]::InvariantCulture)+'}');$sep=','};[void]$b.Append(']}');[Console]::Out.Write($b.ToString())`,
+      `$a=[System.IO.${directory ? "Directory" : "File"}]::GetAccessControl(${literal(path)},[System.Security.AccessControl.AccessControlSections]'Owner,Access');$identity=[System.Security.Principal.WindowsIdentity]::GetCurrent();$me=$identity.User.Value;$b=[System.Text.StringBuilder]::new();[void]$b.Append('{"owner":"'+$a.GetOwner([System.Security.Principal.SecurityIdentifier]).Value+'","me":"'+$me+'","tokenOwner":"'+$identity.Owner.Value+'","protected":'+$a.AreAccessRulesProtected.ToString().ToLowerInvariant()+',"rules":[');$sep='';foreach($r in $a.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier])){[void]$b.Append($sep+'{"sid":"'+$r.IdentityReference.Value+'","allow":'+($r.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow).ToString().ToLowerInvariant()+',"rights":'+([int64]$r.FileSystemRights).ToString([System.Globalization.CultureInfo]::InvariantCulture)+'}');$sep=','};[void]$b.Append(']}');[Console]::Out.Write($b.ToString())`,
     ),
   ) as Dacl;
 }
@@ -428,7 +427,14 @@ export function windows(): PlatformAdapter {
         throw new Error("unsafe state type");
       await this.verifyEntry(path, stat);
       const result = await inspectDacl(path, directory);
-      if (result.accepted !== true)
+      if (
+        result.owner !== result.me ||
+        (directory && !result.protected) ||
+        !result.rules.some(
+          (r) => r.sid === result.me && r.allow && (r.rights & 2032127) === 2032127,
+        ) ||
+        result.rules.some((r) => !r.allow || ![result.me, "S-1-5-18"].includes(r.sid))
+      )
         throw new Error(
           `unsafe executor DACL: ${JSON.stringify({ directory, ownerIsCurrentUser: result.owner === result.me, ownerIsProcessDefault: result.owner === result.tokenOwner, protected: result.protected, ruleCount: result.rules.length, rules: result.rules.slice(0, 8).map((r) => ({ subject: r.sid === result.me ? "current-user" : r.sid === "S-1-5-18" ? "system" : "other", allow: r.allow, rights: r.rights })) })}`,
         );
