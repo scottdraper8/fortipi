@@ -25,6 +25,7 @@ interface LocalUpload {
   stageId?: string;
   applyAttempted: boolean;
   observation?: D.LocalObservation;
+  capacityReservationId?: string;
 }
 const ref = (ctx: D.AuthContext): D.CredentialRef => ({
   credentialId: ctx.credentialId,
@@ -176,8 +177,8 @@ export class LocalUploads {
       bytes: metadataBytes,
       admissionSlots: 0,
     };
-    unwrap(await this.owner.reserveCapacity(ctx, admission));
-    unwrap(await this.owner.control().reserveCapacity(ctx, admission));
+    const capacity = unwrap(await this.owner.reserveCapacity(ctx, admission));
+    const installCapacity = unwrap(await this.owner.control().reserveCapacity(ctx, admission));
     return this.owner.mutex.run(() =>
       this.owner.state.transaction(() => {
         const current = this.owner.current();
@@ -236,6 +237,7 @@ export class LocalUploads {
           deadline: target.deadline,
         };
         const row: LocalUpload = {
+          capacityReservationId: capacity.reservationId,
           request: input.body,
           owner: ref(ctx),
           binding: current.binding,
@@ -252,6 +254,10 @@ export class LocalUploads {
           },
         };
         this.owner.state.put(`local-upload:${uploadId}`, row);
+        this.owner.state.put(
+          `install-capacity:${capacity.reservationId}`,
+          installCapacity.reservationId,
+        );
         this.owner.state.put(key, { digest: requestDigest, uploadId });
         this.owner.state.put(
           "local-upload-count",
@@ -761,6 +767,11 @@ export class LocalUploads {
     }
   }
   private close(row: LocalUpload): void {
+    if (row.capacityReservationId)
+      this.owner.state.put(`storage-completed:${row.capacityReservationId}`, {
+        kind: "local-upload",
+        uploadId: row.status.uploadId,
+      });
     this.owner.state.put(
       "local-upload-count",
       Math.max(0, (this.owner.state.get<number>("local-upload-count") ?? 0) - 1),

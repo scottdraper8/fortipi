@@ -108,7 +108,7 @@ export interface SocketIdentity extends T.CredentialRef {
   originMode: T.OriginMode;
   registrationId: string;
   expiresAt: number;
-  executor?: { executorId: string; generation: number };
+  executor?: { executorId: string; generation: number; ledgerId: string; ledgerInstanceId: string };
 }
 interface TargetScope {
   operationId: string;
@@ -176,7 +176,7 @@ export type CancelDisposition = T.CancellationDisposition;
 export type ExecutorDelivery = {
   executorId: string;
   generation: number;
-  connectionEpoch: number;
+  connectionEpoch?: number;
   frame: T.ExecutorFrame;
 };
 export type DeliveryAck = T.TransportAck;
@@ -221,6 +221,27 @@ export interface ExecutionRequest {
   bindingVersion: number;
   capabilities: string[];
   approval?: T.ApprovalOperation;
+}
+/** Private CP-to-Workspace proof; never a public credential or arbitrary revision selector. */
+export interface ExecutorWorkspaceAccess {
+  assignment: T.Assignment;
+  /** Exact retained current lease observation; the original assignment/digests stay immutable. */
+  lease: T.Lease;
+}
+/** Private LinuxContainerHost.fetch stop intent; only the retained exact runtime may be stopped. */
+export interface RuntimeQuiesceRequest {
+  requestId: string;
+  runtimeId: string;
+  /** Recorded sha256:<64 lowercase hex> image identity, never inferred from a later deployment. */
+  imageDigest: string;
+}
+/** Returned only after actual native destruction and a stopped observation; exact retries retain this receipt. */
+export interface RuntimeQuiescence {
+  requestId: string;
+  runtimeId: string;
+  imageDigest: string;
+  stopped: true;
+  observedAt: number;
 }
 export interface PreparedExecution {
   preparationId: string;
@@ -332,6 +353,7 @@ export type FinalizeJob = {
 );
 export interface ExportRequest {
   exportId: string;
+  action: "exports.create" | "backups.create";
   resources: T.ResourceScope;
   maxBytes: number;
   deadline: number;
@@ -339,7 +361,7 @@ export interface ExportRequest {
 export interface ExportDescriptor {
   exportId: string;
   state: "ready" | "partial" | "unavailable";
-  artifacts: T.ByteReference[];
+  artifacts: (T.ByteReference | T.AdminArtifactReference)[];
   unavailableWorkspaceIds: string[];
   credentialsExcluded: true;
 }
@@ -420,7 +442,9 @@ export type PolicyDecision =
   | { decision: "approval"; policyVersion: number; operation: T.ApprovalOperation }
   | { decision: "deny"; reason: string; policyVersion: number };
 export interface RoutingInput {
-  operation: T.ApprovalOperation;
+  operation: Pick<T.ApprovalOperation, "tool" | "capabilities">;
+  preference?: T.Configuration["routing"];
+  explicitTarget?: T.BackendRef;
   eligible: {
     target: T.BackendRef;
     grants: T.Grant[];
@@ -429,6 +453,46 @@ export interface RoutingInput {
     revisionCompatible: boolean;
     confinement: "host" | "isolated";
   }[];
+}
+/** Private, scoped topology. No credentials, physical roots or grant records cross this port. */
+export interface ToolContextRequest {
+  agentId: string;
+  conversationId: string;
+  tool: string;
+  capabilities: string[];
+  workspaceId?: string;
+  pageToken?: string;
+  executorPageToken?: string;
+  limit?: number;
+  /** A dispatch override is a direct scoped lookup, never a grant. */
+  target?: T.BackendRef;
+}
+export interface ToolTopology {
+  routing: T.Configuration["routing"];
+  nextPageToken?: string;
+  nextExecutorPageToken?: string;
+  workspaces: {
+    workspaceId: string;
+    bindingVersion: number;
+    configured: boolean;
+    targets: {
+      target: T.BackendRef;
+      capabilities: string[];
+      confinement: "host" | "isolated";
+      argumentFormat: "native-shell" | "javascript-module" | "cloud-shell";
+      platform?: "darwin" | "linux" | "win32";
+    }[];
+  }[];
+}
+export interface CurrentToolContext extends Omit<ToolTopology, "workspaces"> {
+  /** Capability descriptions are shared across workspaces, not repeated for every binding. */
+  targets: ToolTopology["workspaces"][number]["targets"];
+  argumentContracts: Record<string, string>;
+  workspaces: (Omit<ToolTopology["workspaces"][number], "targets"> & {
+    baseRevision: string;
+    provider: "computer" | "local";
+    targets: T.BackendRef[];
+  })[];
 }
 export type RoutingDecision =
   | { kind: "selected"; target: T.BackendRef }

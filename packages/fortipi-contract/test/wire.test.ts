@@ -53,6 +53,11 @@ const expected = [
   "POST /v1/connections/tickets",
   "GET /v1/stream",
   "GET /v1/executor/session",
+  "GET /v1/executor/jobs/{jobId}/manifest",
+  "GET /v1/executor/jobs/{jobId}/blobs/{sha256}",
+  "POST /v1/executor/jobs/{jobId}/uploads",
+  "PUT /v1/executor/jobs/{jobId}/uploads/{uploadId}/blobs/{sha256}/chunks/{chunkIndex}",
+  "POST /v1/executor/jobs/{jobId}/uploads/{uploadId}/validate",
   "GET /v1/executor/transfers/{transferId}/input/chunks/{chunkIndex}",
   "PUT /v1/executor/transfers/{transferId}/output/chunks/{chunkIndex}",
   "GET /v1/executor/transfers/{transferId}",
@@ -71,7 +76,7 @@ const expected = [
 test("full independently enumerated route surface and resolvable schema/OpenAPI refs", () => {
   assert.deepEqual(routeCatalog.map((r) => `${r.method} ${r.path}`).sort(), expected.sort());
   assert.equal(new Set(routeCatalog.map((r) => r.operationId)).size, expected.length);
-  assert.equal(routeCatalog.length, 69);
+  assert.equal(routeCatalog.length, 74);
   const spec = JSON.parse(readFileSync(new URL("../openapi.yaml", import.meta.url), "utf8"));
   assert.equal(spec.openapi, "3.1.0");
   const { get, ajv } = validators();

@@ -36,154 +36,154 @@
     },
     "@img/sharp-libvips-darwin-arm64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-darwin-x64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-arm@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-arm64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-ppc64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-riscv64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-s390x@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linux-x64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linuxmusl-arm64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-libvips-linuxmusl-x64@1.3.4": {
       "license": "LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-win32-arm64@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-win32-ia32@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-win32-x64@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
     },
     "@img/sharp-wasm32@0.35.5": {
       "license": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
-      "reason": "Parent exact external deployment-tool graph decision, 2026-11-10; dependency metadata only. CLI spawns independently installed Wrangler; no native/tool conveyance in FortiPi bytes.",
+      "reason": "Exact external-only native identity in the governed CLI deployment-tool graph. Its bytes remain external; authenticated non-native runtime bundles have separate source-plan and license review.",
       "obligations": [
         "Preserve full compound license expression; SUL applies only to owned code",
-        "Only CLI runtime -> wrangler@4.160.0 -> miniflare@5.20261110.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
-        "No copy, vendor, link, rebundle, native/WASM tool bytes or node_modules in any own package/Worker/CLI assets/templates/image",
+        "Only CLI runtime -> wrangler@4.166.0 -> miniflare@5.20261119.0-beta -> sharp@0.35.5 -> exact native identity; Worker dev tooling also isolated",
+        "Do not copy, vendor, link or rebundle this exact native/WASM component into any own package/Worker/CLI assets/templates/image. Source-authenticated non-native dependency files may be ordinary bundles under their separately reviewed original licenses.",
         "Future native conveyance fails closed pending exact complete GPL/LGPL/MPL/Apache/MIT texts, matching component sources+patches/build/relink/replacement evidence",
         "Packaging sources: sharp-libvips ebb95f8add54eee8bed840e3fb587e4cbec857d7; sharp 51a990faa26ade5586a4934ac9673c98d8893326; representative review not a native rebuild certification"
       ]
@@ -706,19 +706,19 @@
         }
       ]
     },
-    "miniflare@5.20261110.0-beta": {
-      "source": "https://github.com/cloudflare/workers-sdk/tree/2674eefba808df5ef027572ede4cea377fb8e138",
-      "evidence": "Published exact-version SLSA source claim; archive registry signature/SRI separately verified; transparency proof remains release verification",
+    "miniflare@5.20261110.1-beta": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/cc238b23844081895df4145172512bb34e9be87a",
+      "evidence": "Published exact-version SLSA source claim at cc238b23844081895df4145172512bb34e9be87a; subject digest matched reviewed archive; archive registry signature/SRI separately verified; Sigstore transparency proof remains release verification",
       "files": [
         {
-          "path": "tools/unstale/licenses/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-MIT",
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-MIT",
           "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
-          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-MIT"
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-MIT"
         },
         {
-          "path": "tools/unstale/licenses/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-APACHE",
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-APACHE"
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-APACHE"
         }
       ]
     },
@@ -744,19 +744,19 @@
         }
       ]
     },
-    "wrangler@4.160.0": {
-      "source": "https://github.com/cloudflare/workers-sdk/tree/2674eefba808df5ef027572ede4cea377fb8e138",
-      "evidence": "Published exact-version SLSA source claim; archive registry signature/SRI separately verified; transparency proof remains release verification",
+    "wrangler@4.160.1": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/cc238b23844081895df4145172512bb34e9be87a",
+      "evidence": "Published exact-version SLSA source claim at cc238b23844081895df4145172512bb34e9be87a; subject digest matched reviewed archive; archive registry signature/SRI separately verified; Sigstore transparency proof remains release verification",
       "files": [
         {
-          "path": "tools/unstale/licenses/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-MIT",
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-MIT",
           "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
-          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-MIT"
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-MIT"
         },
         {
-          "path": "tools/unstale/licenses/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-APACHE",
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
-          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/2674eefba808df5ef027572ede4cea377fb8e138/LICENSE-APACHE"
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/cc238b23844081895df4145172512bb34e9be87a/LICENSE-APACHE"
         }
       ]
     },
@@ -942,7 +942,1227 @@
           "url": "https://raw.githubusercontent.com/lovell/sharp-libvips/ebb95f8add54eee8bed840e3fb587e4cbec857d7/THIRD-PARTY-NOTICES.md"
         }
       ]
+    },
+    "@aws-sdk/credential-provider-http@3.972.86": {
+      "source": "@aws-sdk/core@3.981.0",
+      "inheritedFrom": "@aws-sdk/core@3.981.0",
+      "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
+      "files": []
+    },
+    "@aws-sdk/credential-provider-login@3.972.91": {
+      "source": "@aws-sdk/core@3.981.0",
+      "inheritedFrom": "@aws-sdk/core@3.981.0",
+      "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
+      "files": []
+    },
+    "@aws-sdk/credential-provider-login@3.972.92": {
+      "source": "@aws-sdk/core@3.981.0",
+      "inheritedFrom": "@aws-sdk/core@3.981.0",
+      "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
+      "files": []
+    },
+    "@aws-sdk/nested-clients@3.998.3": {
+      "source": "@aws-sdk/core@3.981.0",
+      "inheritedFrom": "@aws-sdk/core@3.981.0",
+      "evidence": "Exact SRI/hash-checked published archive package.json explicitly grants Apache-2.0, credits AWS SDK for JavaScript Team and names aws/aws-sdk-js-v3 with its package directory; independently matched public npm aws-sdk-bot publication. Archive inspection found no LICENSE, copyright header or NOTICE. Retain this exact manifest/author/repository attribution and the complete standard Apache-2.0 text from reviewed @aws-sdk/core@3.981.0. No omitted NOTICE/author is invented, no source revision correspondence is asserted, and actual distributed bundle attribution remains a release gate.",
+      "files": []
+    },
+    "@cloudflare/workers-types@5.20261112.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/e0240debf4d6a5042a02a45311b51c61d13bd0fb",
+      "evidence": "Exact npm gitHead and generated declarations matched published workerd release; archive omits legal text. Full source LICENSE preserved; registry signature/SRI verified separately, Sigstore transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/e0240debf4d6a5042a02a45311b51c61d13bd0fb/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/e0240debf4d6a5042a02a45311b51c61d13bd0fb/LICENSE"
+        }
+      ]
+    },
+    "wrangler@4.161.0": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/1e688baedfe8b61b091043832b438c362590953a",
+      "evidence": "Exact published release tag and SLSA source claim at 1e688baedfe8b61b091043832b438c362590953a; subject digest matched reviewed archive; registry signature/SRI independently verified. Original project dual license texts retained; Sigstore transparency remains release verification. Bundled Netlify build-info11.3.1 MIT archive/text reviewed and retained separately; no native/tool copying authorization.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/netlify-build-info/11.3.1/LICENSE",
+          "sha256": "4a370afa20e5f2f64b911a864bdf19632f5ac98931c56527d7e594b8f8d7f50f",
+          "url": "https://registry.npmjs.org/@netlify/build-info/-/build-info-11.3.1.tgz#package/LICENSE"
+        }
+      ]
+    },
+    "miniflare@5.20261110.2-beta": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/1e688baedfe8b61b091043832b438c362590953a",
+      "evidence": "Exact published release tag and SLSA source claim at 1e688baedfe8b61b091043832b438c362590953a; subject digest matched reviewed archive; registry signature/SRI independently verified. Original project dual license texts retained; Sigstore transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/1e688baedfe8b61b091043832b438c362590953a/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@cloudflare/computer@0.11.1": {
+      "source": "https://github.com/cloudflare/computer/tree/812bce58d2ea3735c12e6f6181c269c4010293df",
+      "evidence": "Exact npm gitHead/source archive and reviewed published source maps; MIT source license unchanged. remote-exec-only capnp-es0.0.16/picomatch4.0.7 notice scope reviewed separately; no new API enabled.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/computer/812bce58d2ea3735c12e6f6181c269c4010293df/LICENSE",
+          "sha256": "df3e141c129d1804bea95fe087b157b156241b3bb1a4664808630aa85f2cd8fc",
+          "url": "https://raw.githubusercontent.com/cloudflare/computer/812bce58d2ea3735c12e6f6181c269c4010293df/LICENSE"
+        }
+      ]
+    },
+    "wrangler@4.162.0": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/79b890ab89a62823198a0c551c44ff647c80de4d",
+      "evidence": "Exact published release/source79b890 and archive-subject/source/DSSE leaf-signature checks; registry ECDSA/SRI verified separately. Sigstore trust-chain/transparency remains release verification. Original source license texts match prior reviewed bytes; no owned output conveyance permission.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/netlify-build-info/11.3.1/LICENSE",
+          "sha256": "4a370afa20e5f2f64b911a864bdf19632f5ac98931c56527d7e594b8f8d7f50f",
+          "url": "https://registry.npmjs.org/@netlify/build-info/-/build-info-11.3.1.tgz#package/LICENSE"
+        }
+      ]
+    },
+    "miniflare@5.20261113.0-beta": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/79b890ab89a62823198a0c551c44ff647c80de4d",
+      "evidence": "Exact published release/source79b890 and archive-subject/source/DSSE leaf-signature checks; registry ECDSA/SRI verified separately. Sigstore trust-chain/transparency remains release verification. Original source license texts match prior reviewed bytes; no owned output conveyance permission. Includes exact unmodified mdream2.0.3 MIT WASM member239214B/db48fb63, its source/copyright and conservative checksum-authenticated Rust source/build-candidate notices; candidates are not asserted exact compiled inventory.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/79b890ab89a62823198a0c551c44ff647c80de4d/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.0.3/LICENSE.md",
+          "sha256": "b5a7e0557d37c8ccf1b1cbcda1842b8c4535d217f81f97c1cbad579042269cad",
+          "url": "https://registry.npmjs.org/mdream/-/mdream-2.0.3.tgz#package/LICENSE.md"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.0.3/CORE-LICENSE",
+          "sha256": "d06451530138de11ec5cee38b458f1aa4259ada5587dc5317c225196d26914d6",
+          "url": "https://raw.githubusercontent.com/harlan-zw/mdream/a7a88026a221126b7e21c579ed41dd2ebb6cb809/crates/core/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.0.3/RUST-NOTICES.md",
+          "sha256": "786b5b98e134b6d2c038e1156647096a502c2732b56184c88d4af021429c5846",
+          "url": "https://github.com/harlan-zw/mdream/blob/a7a88026a221126b7e21c579ed41dd2ebb6cb809/crates/Cargo.lock"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.0.3/component.json",
+          "sha256": "7aa18c9e3bf3fd5cff72e87911d8d7c64f23851ef1cec84b0879a8b9ae7e6012",
+          "url": "https://github.com/harlan-zw/mdream/blob/a7a88026a221126b7e21c579ed41dd2ebb6cb809/crates/Cargo.lock"
+        }
+      ]
+    },
+    "workerd@1.20261113.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29",
+      "evidence": "Exact published gitHead/release/SLSA source and archive subject/DSSE leaf signature checked; registry signature/SRI verified separately. Full immutable source LICENSE matches prior reviewed bytes; all four generated type files match source. Sigstore trust/transparency remains release gate.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29/LICENSE"
+        }
+      ]
+    },
+    "@cloudflare/workers-types@5.20261113.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29",
+      "evidence": "Exact published gitHead/release/SLSA source and archive subject/DSSE leaf signature checked; registry signature/SRI verified separately. Full immutable source LICENSE matches prior reviewed bytes; all four generated type files match source. Sigstore trust/transparency remains release gate.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/6cd7d1ae63824aa532ab855ff7c5719c8aab9c29/LICENSE"
+        }
+      ]
+    },
+    "@cloudflare/workerd-darwin-64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
+    },
+    "@cloudflare/workerd-darwin-arm64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
+    },
+    "@cloudflare/workerd-linux-64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
+    },
+    "@cloudflare/workerd-linux-arm64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
+    },
+    "@cloudflare/workerd-windows-64@1.20261113.1": {
+      "source": "workerd@1.20261113.1",
+      "inheritedFrom": "workerd@1.20261113.1",
+      "evidence": "Exact optional platform identity declared by the authenticated parent archive; own signed/SRI native archive subject/source verified at6cd7. Native format/CPU headers checked; retain parent source LICENSE. No cross-platform execution claimed.",
+      "files": []
+    },
+    "workerd@1.20261119.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/417403d5d5d0af855302f97cae3ab93525fa4690",
+      "evidence": "Exact published gitHead and SLSA417403d5 source agree; DSSE leaf signature and SHA512 archive subject checked. Registry signature/SRI verified separately. Full immutable source LICENSE matches prior reviewed bytes. No generated-type equivalence or cross-platform execution inferred; Sigstore certificate trust/transparency remains a release gate.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/417403d5d5d0af855302f97cae3ab93525fa4690/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/417403d5d5d0af855302f97cae3ab93525fa4690/LICENSE"
+        }
+      ]
+    },
+    "@cloudflare/workerd-linux-64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workerd-darwin-64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workerd-windows-64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workerd-linux-arm64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workerd-darwin-arm64@1.20261119.1": {
+      "source": "workerd@1.20261119.1",
+      "inheritedFrom": "workerd@1.20261119.1",
+      "evidence": "Exact optional platform identity from authenticated parent; own registry signature/SRI, SLSA417403d5 source, SHA512 archive subject and DSSE leaf signature checked. Retain full immutable parent LICENSE; cross-platform execution and Sigstore trust/transparency remain release gates.",
+      "files": []
+    },
+    "@cloudflare/workers-types@5.20261119.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/417403d5d5d0af855302f97cae3ab93525fa4690",
+      "evidence": "Exact published gitHead and SLSA417403d5 source agree; DSSE leaf signature and SHA512 archive subject checked. Registry signature/SRI verified separately. Full immutable source LICENSE matches prior reviewed bytes. No generated-type equivalence or cross-platform execution inferred; Sigstore certificate trust/transparency remains a release gate.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/417403d5d5d0af855302f97cae3ab93525fa4690/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/417403d5d5d0af855302f97cae3ab93525fa4690/LICENSE"
+        }
+      ]
+    },
+    "@cloudflare/kv-asset-handler@0.5.1": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/5b44e5e2f9df23b38b17903d6f4194919042828e",
+      "evidence": "Published exact-version SLSA source claim; archive registry signature/SRI separately verified; transparency proof remains release verification",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/5b44e5e2f9df23b38b17903d6f4194919042828e/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/5b44e5e2f9df23b38b17903d6f4194919042828e/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/5b44e5e2f9df23b38b17903d6f4194919042828e/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/5b44e5e2f9df23b38b17903d6f4194919042828e/LICENSE-APACHE"
+        }
+      ]
+    },
+    "wrangler@4.166.0": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/27b3f7150991e1208e5b3dd139953d9f7be389b5",
+      "evidence": "Exact published SLSA archive subject and source commit plus DSSE leaf signature checked; registry ECDSA/SRI verified by review-supply-chain. Full Sigstore trust-chain/transparency remains release verification. Upstream immutable source license texts retained; this grants no owned-output conveyance permission.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/hash-wasm/4.13.0/LICENSE",
+          "sha256": "c14dea172f72f2714284a0ac2ab1b00b5352a01409d58255a46227ffc541debd",
+          "url": "https://registry.npmjs.org/hash-wasm/-/hash-wasm-4.13.0.tgz#package/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/chokidar/4.0.3/LICENSE",
+          "sha256": "bdfd5e0edb6089e6586c8f15e6a86fab83ffbeeda3b3b7b33734ccb8c5906965",
+          "url": "https://registry.npmjs.org/chokidar/-/chokidar-4.0.3.tgz#package/LICENSE"
+        }
+      ]
+    },
+    "miniflare@5.20261119.0-beta": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/27b3f7150991e1208e5b3dd139953d9f7be389b5",
+      "evidence": "Exact published SLSA archive subject and source commit plus DSSE leaf signature checked; registry ECDSA/SRI verified by review-supply-chain. Full Sigstore trust-chain/transparency remains release verification. Upstream immutable source license texts retained; this grants no owned-output conveyance permission. Includes byte-identical mdream2.1.0 WASM (266878 bytes), original MIT texts and checksum-authenticated conservative Rust source/build-candidate notices. No exact compiled Rust inventory claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/browser-run/6bcf8351eaf74a1269a4bee1dcd34b28220dfeef/LICENSE",
+          "sha256": "a27ca07269b3518550b2e83aed13eadd7d14d924b5864e14889b40cf227530ca",
+          "url": "https://raw.githubusercontent.com/cloudflare/browser-run/6bcf8351eaf74a1269a4bee1dcd34b28220dfeef/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/basic-ftp/6.2.6/LICENSE.txt",
+          "sha256": "5b417c1f5ee996875e86b4959851c94e102edbbb3c68199bd3336c7351c924f9",
+          "url": "https://registry.npmjs.org/basic-ftp/-/basic-ftp-6.2.6.tgz#package/LICENSE.txt"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/capnp-es/0.0.17/LICENSE",
+          "sha256": "1e3e80b1ea81cf154dddf089e9cd24cd09f5b7d9d0bbd382bee99ae24a0f9f6f",
+          "url": "https://registry.npmjs.org/capnp-es/-/capnp-es-0.0.17.tgz#package/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.1.0/LICENSE.md",
+          "sha256": "b5a7e0557d37c8ccf1b1cbcda1842b8c4535d217f81f97c1cbad579042269cad",
+          "url": "https://registry.npmjs.org/mdream/-/mdream-2.1.0.tgz#package/LICENSE.md"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.1.0/CORE-LICENSE",
+          "sha256": "d06451530138de11ec5cee38b458f1aa4259ada5587dc5317c225196d26914d6",
+          "url": "https://raw.githubusercontent.com/harlan-zw/mdream/7e28f9691d44480d949afad136a20635c1b189a7/crates/core/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.1.0/RUST-NOTICES.md",
+          "sha256": "3d85d78b2d4a4563d0b260270feeba8d50af662b73465151e8ff8a7840d67435",
+          "url": "https://github.com/harlan-zw/mdream/blob/7e28f9691d44480d949afad136a20635c1b189a7/crates/Cargo.lock"
+        },
+        {
+          "path": "tools/unstale/licenses/npm/mdream/2.1.0/component.json",
+          "sha256": "b4bebe6e25589e5d5e1a16b264808730b3afbb2355437ecc10cfec8b93562a10",
+          "url": "https://github.com/harlan-zw/mdream/blob/7e28f9691d44480d949afad136a20635c1b189a7/crates/Cargo.lock"
+        }
+      ]
+    },
+    "@cloudflare/workers-utils@0.56.0": {
+      "source": "https://github.com/cloudflare/workers-sdk/tree/27b3f7150991e1208e5b3dd139953d9f7be389b5",
+      "evidence": "Exact published SLSA archive subject and source commit plus DSSE leaf signature checked; registry ECDSA/SRI verified by review-supply-chain. Full Sigstore trust-chain/transparency remains release verification. Upstream immutable source license texts retained; this grants no owned-output conveyance permission.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-MIT",
+          "sha256": "9bb3b077cc8628334bab25961223dd8207252c8a56aa054195be38f1c042aaf4",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://raw.githubusercontent.com/cloudflare/workers-sdk/27b3f7150991e1208e5b3dd139953d9f7be389b5/LICENSE-APACHE"
+        }
+      ]
+    },
+    "tr46@0.0.3": {
+      "source": "https://github.com/jsdom/tr46/tree/a8009f9ce80ff5dbe71dd71e203afe4e4c878d28",
+      "evidence": "Exact signed npm manifest declares MIT and names Sebastian Mayr. Published gitHead a8009f9ce80ff5dbe71dd71e203afe4e4c878d28 contains no license text. Retain the same author's first full upstream MIT grant at 3a6f29721e7063b9ffd421e461a54beae6170001 as supplemental license evidence; it is a later license-text revision, not an assertion of source equivalence.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/jsdom/tr46/3a6f29721e7063b9ffd421e461a54beae6170001/LICENSE.md",
+          "sha256": "eeed1ca176eebad5c73870e233cfff03981fecd319c969475dfa3633036c336b",
+          "url": "https://raw.githubusercontent.com/jsdom/tr46/3a6f29721e7063b9ffd421e461a54beae6170001/LICENSE.md"
+        }
+      ]
+    },
+    "undici-types@5.26.5": {
+      "source": "https://github.com/nodejs/undici/tree/9197790ae0d015b40b75fd0c5cdb7420704b5272",
+      "evidence": "Exact published npm gitHead or SLSA source claim and immutable original license texts; archive registry signature/SRI separately verified. Full provenance trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/nodejs/undici/9197790ae0d015b40b75fd0c5cdb7420704b5272/LICENSE",
+          "sha256": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27",
+          "url": "https://raw.githubusercontent.com/nodejs/undici/9197790ae0d015b40b75fd0c5cdb7420704b5272/LICENSE"
+        }
+      ]
+    },
+    "@cloudflare/puppeteer@2.0.1": {
+      "source": "https://github.com/cloudflare/browser-run/tree/6bcf8351eaf74a1269a4bee1dcd34b28220dfeef",
+      "evidence": "Exact published npm gitHead or SLSA source claim and immutable original license texts; archive registry signature/SRI separately verified. Full provenance trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/browser-run/6bcf8351eaf74a1269a4bee1dcd34b28220dfeef/LICENSE",
+          "sha256": "a27ca07269b3518550b2e83aed13eadd7d14d924b5864e14889b40cf227530ca",
+          "url": "https://raw.githubusercontent.com/cloudflare/browser-run/6bcf8351eaf74a1269a4bee1dcd34b28220dfeef/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-durable@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-ai@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-schema@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/chord@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-codemode@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-telemetry@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "@earendil-works/pi-tui@1.6.0": {
+      "source": "https://github.com/earendil-works/pi/tree/faac585884ae2c013a6b1400f3e9e77f10b34bac",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48",
+          "url": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/LICENSE"
+        }
+      ]
+    },
+    "agents@0.34.0": {
+      "source": "https://github.com/cloudflare/agents/tree/8d8acd0dd2a3b30d226e9f24e96557ebfd948374",
+      "evidence": "Exact published SLSA subject matches compressed archive; immutable source and original MIT license inspected; registry ECDSA/SRI separately verified. Full Sigstore trust/transparency remains release verification.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/agents/8d8acd0dd2a3b30d226e9f24e96557ebfd948374/LICENSE",
+          "sha256": "b33ae783f02478cd31787cd07cbf61cd3a6fbee1a50b2baf832b8f0fb7c600f7",
+          "url": "https://raw.githubusercontent.com/cloudflare/agents/8d8acd0dd2a3b30d226e9f24e96557ebfd948374/LICENSE"
+        }
+      ]
+    },
+    "@google/genai@2.32.0": {
+      "source": "https://github.com/googleapis/js-genai/tree/70501db66b27bbd3f150c8d370aa311417089987",
+      "evidence": "Exact v2.32.0 tag resolved by git ls-remote; package publishes no provenance; archive registry ECDSA/SRI and exact original legal texts independently verified",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/googleapis/js-genai/70501db66b27bbd3f150c8d370aa311417089987/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "url": "https://raw.githubusercontent.com/googleapis/js-genai/70501db66b27bbd3f150c8d370aa311417089987/LICENSE"
+        }
+      ]
+    },
+    "openai@7.59.0": {
+      "source": "https://github.com/openai/openai-node/tree/8ef550177fad00e6f661522be4ac51f23f063b3b",
+      "evidence": "Exact published npm gitHead; SLSA provenance requires separate verification; archive registry ECDSA/SRI and exact original legal texts independently verified",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/openai/openai-node/8ef550177fad00e6f661522be4ac51f23f063b3b/LICENSE",
+          "sha256": "636eb7d79da9bb6d515a4b3fd417aa26679eb3cf16396ddab4bc55fa74e616e4",
+          "url": "https://raw.githubusercontent.com/openai/openai-node/8ef550177fad00e6f661522be4ac51f23f063b3b/LICENSE"
+        }
+      ]
+    },
+    "@babel/core@8.1.3": {
+      "source": "https://github.com/babel/babel/tree/954e0ce395965a4bce820ac9d1b5e8530a0f2705",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE",
+          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+          "url": "https://raw.githubusercontent.com/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE"
+        }
+      ]
+    },
+    "@babel/parser@8.1.3": {
+      "source": "https://github.com/babel/babel/tree/954e0ce395965a4bce820ac9d1b5e8530a0f2705",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/packages/babel-parser/LICENSE",
+          "sha256": "2e97627cb278aa7556fb9e8817368302301a595b6c7582512b8d74c57b773652",
+          "url": "https://raw.githubusercontent.com/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/packages/babel-parser/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE",
+          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+          "url": "https://raw.githubusercontent.com/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE"
+        }
+      ]
+    },
+    "@babel/types@8.1.3": {
+      "source": "https://github.com/babel/babel/tree/954e0ce395965a4bce820ac9d1b5e8530a0f2705",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE",
+          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+          "url": "https://raw.githubusercontent.com/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE"
+        }
+      ]
+    },
+    "@biomejs/biome@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-android-arm64@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-android-x64@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-darwin-arm64@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-darwin-x64@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-linux-arm64-musl@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-linux-arm64@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-linux-x64-musl@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-linux-x64@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-win32-arm64@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@biomejs/cli-win32-x64@2.6.8": {
+      "source": "https://github.com/biomejs/biome/tree/8b032240882efdb1f9c3d3c77392c11877b4d6bb",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT",
+          "sha256": "4f6a0d776a00c0f46e1da1879321896071494229aa3219862a625e4560691a3a",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/packages/@biomejs/biome/LICENSE-APACHE"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT",
+          "sha256": "35365b6285e1f8cac61549f321befdbbe6139bf1e3d7ef6ccf1f1294ab015202",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-MIT"
+        },
+        {
+          "path": "tools/unstale/licenses/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE",
+          "sha256": "e2746aba8799f7a3378259f36a83a079e811ca7926cbdd248a2eb7ca9cbbac5d",
+          "url": "https://raw.githubusercontent.com/biomejs/biome/8b032240882efdb1f9c3d3c77392c11877b4d6bb/LICENSE-APACHE"
+        }
+      ]
+    },
+    "@cloudflare/computer@0.11.4": {
+      "source": "https://github.com/cloudflare/computer/tree/cd0146b2875b224b54fb56384f642c6416ad910a",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/computer/cd0146b2875b224b54fb56384f642c6416ad910a/LICENSE",
+          "sha256": "df3e141c129d1804bea95fe087b157b156241b3bb1a4664808630aa85f2cd8fc",
+          "url": "https://raw.githubusercontent.com/cloudflare/computer/cd0146b2875b224b54fb56384f642c6416ad910a/LICENSE"
+        }
+      ]
+    },
+    "@cloudflare/workers-types@5.20261121.1": {
+      "source": "https://github.com/cloudflare/workerd/tree/d68413886563e376605e732a75320eefd32b5128",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/cloudflare/workerd/d68413886563e376605e732a75320eefd32b5128/LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://raw.githubusercontent.com/cloudflare/workerd/d68413886563e376605e732a75320eefd32b5128/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-android-arm-eabi@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-android-arm64@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-darwin-arm64@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-darwin-x64@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-freebsd-x64@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-linux-arm-gnueabihf@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-linux-arm64-gnu@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-linux-arm64-musl@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-linux-ppc64-gnu@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-linux-s390x-gnu@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-linux-x64-gnu@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-linux-x64-musl@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-openharmony-arm64@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-wasm32-wasi@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-win32-arm64-msvc@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@rolldown/binding-win32-x64-msvc@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "@unstale/cli-darwin-arm64@0.3.1": {
+      "source": "https://github.com/vuca-dev/unstale/tree/04097202b5a519cae512ec957d459f373b57d99f",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE",
+          "sha256": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed",
+          "url": "https://raw.githubusercontent.com/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE"
+        }
+      ]
+    },
+    "@unstale/cli-darwin-x64@0.3.1": {
+      "source": "https://github.com/vuca-dev/unstale/tree/04097202b5a519cae512ec957d459f373b57d99f",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE",
+          "sha256": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed",
+          "url": "https://raw.githubusercontent.com/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE"
+        }
+      ]
+    },
+    "@unstale/cli-linux-arm64@0.3.1": {
+      "source": "https://github.com/vuca-dev/unstale/tree/04097202b5a519cae512ec957d459f373b57d99f",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE",
+          "sha256": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed",
+          "url": "https://raw.githubusercontent.com/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE"
+        }
+      ]
+    },
+    "@unstale/cli-linux-x64@0.3.1": {
+      "source": "https://github.com/vuca-dev/unstale/tree/04097202b5a519cae512ec957d459f373b57d99f",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE",
+          "sha256": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed",
+          "url": "https://raw.githubusercontent.com/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE"
+        }
+      ]
+    },
+    "@unstale/cli-win32-x64@0.3.1": {
+      "source": "https://github.com/vuca-dev/unstale/tree/04097202b5a519cae512ec957d459f373b57d99f",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE",
+          "sha256": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed",
+          "url": "https://raw.githubusercontent.com/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE"
+        }
+      ]
+    },
+    "@unstale/cli@0.3.1": {
+      "source": "https://github.com/vuca-dev/unstale/tree/04097202b5a519cae512ec957d459f373b57d99f",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE",
+          "sha256": "8d56b405468aad11f87ab5763f901e276e08d9646ff5c8481b1762b6b789e9ed",
+          "url": "https://raw.githubusercontent.com/vuca-dev/unstale/04097202b5a519cae512ec957d459f373b57d99f/LICENSE"
+        }
+      ]
+    },
+    "rolldown@1.3.3": {
+      "source": "https://github.com/rolldown/rolldown/tree/8a576d2fb72eab5374059b5cb216ee35412ca019",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE",
+          "sha256": "23ecfff35a5a2e80d92142f75228912c3b1abc4b5a8337a821ff4397e2f9f734",
+          "url": "https://raw.githubusercontent.com/rolldown/rolldown/8a576d2fb72eab5374059b5cb216ee35412ca019/LICENSE"
+        }
+      ]
+    },
+    "tar@7.5.23": {
+      "source": "https://github.com/isaacs/node-tar/tree/eb92e178af52cd191d48eb70a846f61cc4dade1b",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/isaacs/node-tar/eb92e178af52cd191d48eb70a846f61cc4dade1b/LICENSE.md",
+          "sha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+          "url": "https://raw.githubusercontent.com/isaacs/node-tar/eb92e178af52cd191d48eb70a846f61cc4dade1b/LICENSE.md"
+        }
+      ]
+    },
+    "undici@8.13.1": {
+      "source": "https://github.com/nodejs/undici/tree/2d30c323d2fd0906e2339beac8a8e7c360eb6445",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/nodejs/undici/2d30c323d2fd0906e2339beac8a8e7c360eb6445/LICENSE",
+          "sha256": "a6db8096b2707bc0102d256917d4d33f298ba36d8c3f25de067a2b5bb379db27",
+          "url": "https://raw.githubusercontent.com/nodejs/undici/2d30c323d2fd0906e2339beac8a8e7c360eb6445/LICENSE"
+        }
+      ]
+    },
+    "@babel/generator@8.1.3": {
+      "source": "https://github.com/babel/babel/tree/954e0ce395965a4bce820ac9d1b5e8530a0f2705",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE",
+          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+          "url": "https://raw.githubusercontent.com/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE"
+        }
+      ]
+    },
+    "@babel/helper-string-parser@8.1.3": {
+      "source": "https://github.com/babel/babel/tree/954e0ce395965a4bce820ac9d1b5e8530a0f2705",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE",
+          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+          "url": "https://raw.githubusercontent.com/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE"
+        }
+      ]
+    },
+    "@babel/helpers@8.1.3": {
+      "source": "https://github.com/babel/babel/tree/954e0ce395965a4bce820ac9d1b5e8530a0f2705",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/packages/babel-helpers/LICENSE",
+          "sha256": "4be9d87b56a306293223b490c0d0b245e9e94f39884147bf051a6c7b825aeb30",
+          "url": "https://raw.githubusercontent.com/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/packages/babel-helpers/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE",
+          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+          "url": "https://raw.githubusercontent.com/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE"
+        }
+      ]
+    },
+    "@babel/traverse@8.1.3": {
+      "source": "https://github.com/babel/babel/tree/954e0ce395965a4bce820ac9d1b5e8530a0f2705",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE",
+          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+          "url": "https://raw.githubusercontent.com/babel/babel/954e0ce395965a4bce820ac9d1b5e8530a0f2705/LICENSE"
+        }
+      ]
+    },
+    "playwright@1.65.1": {
+      "source": "https://github.com/microsoft/playwright/tree/cb1c1d0e6bcd407d0c8b189ad828f560cb485476",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim. Playwright authenticated workflow-start commit and direct version-only child npm gitHead are separately recorded in the bounded source bridge.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/microsoft/playwright/cb1c1d0e6bcd407d0c8b189ad828f560cb485476/LICENSE",
+          "sha256": "45873d00a0dd243596deb4aa23b2493b3d1f0671921bf2538ea431d7380220eb",
+          "url": "https://raw.githubusercontent.com/microsoft/playwright/cb1c1d0e6bcd407d0c8b189ad828f560cb485476/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/microsoft/playwright/cb1c1d0e6bcd407d0c8b189ad828f560cb485476/NOTICE",
+          "sha256": "6d602191187b35b9b01d2cffa01c8469c2c8d9de8a96f1bf868e0f264f51c81d",
+          "url": "https://raw.githubusercontent.com/microsoft/playwright/cb1c1d0e6bcd407d0c8b189ad828f560cb485476/NOTICE"
+        }
+      ]
+    },
+    "@babel/template@8.1.2": {
+      "source": "https://github.com/babel/babel/tree/f34976075d218652b61273fec27f8b8883ede217",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/babel/babel/f34976075d218652b61273fec27f8b8883ede217/LICENSE",
+          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+          "url": "https://raw.githubusercontent.com/babel/babel/f34976075d218652b61273fec27f8b8883ede217/LICENSE"
+        }
+      ]
+    },
+    "@oxc-project/types@0.159.0": {
+      "source": "https://github.com/oxc-project/oxc/tree/d9483516f84068f867e0a3949ac0ec53ef82aa63",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/oxc-project/oxc/d9483516f84068f867e0a3949ac0ec53ef82aa63/LICENSE",
+          "sha256": "95ced5ecf1133fbf41d409b5555c86c344f83f3b019926057ddbc07cfdcc27b3",
+          "url": "https://raw.githubusercontent.com/oxc-project/oxc/d9483516f84068f867e0a3949ac0ec53ef82aa63/LICENSE"
+        }
+      ]
+    },
+    "playwright-core@1.65.1": {
+      "source": "https://github.com/microsoft/playwright/tree/cb1c1d0e6bcd407d0c8b189ad828f560cb485476",
+      "evidence": "Official pacote and Sigstore verify npm publish/SLSA, trusted roots, Fulcio/SCT and Merkle inclusion/signed checkpoint. Exact compressed subject, certificate/source commit and original legal texts reviewed for the fixed cutoff; no reproducible-build or native-image claim. Playwright authenticated workflow-start commit and direct version-only child npm gitHead are separately recorded in the bounded source bridge.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/microsoft/playwright/cb1c1d0e6bcd407d0c8b189ad828f560cb485476/LICENSE",
+          "sha256": "45873d00a0dd243596deb4aa23b2493b3d1f0671921bf2538ea431d7380220eb",
+          "url": "https://raw.githubusercontent.com/microsoft/playwright/cb1c1d0e6bcd407d0c8b189ad828f560cb485476/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/microsoft/playwright/cb1c1d0e6bcd407d0c8b189ad828f560cb485476/NOTICE",
+          "sha256": "6d602191187b35b9b01d2cffa01c8469c2c8d9de8a96f1bf868e0f264f51c81d",
+          "url": "https://raw.githubusercontent.com/microsoft/playwright/cb1c1d0e6bcd407d0c8b189ad828f560cb485476/NOTICE"
+        }
+      ]
     }
   },
-  "externalToolChain": ["wrangler@4.160.0", "miniflare@5.20261110.0-beta", "sharp@0.35.5"]
+  "externalToolChain": ["wrangler@4.166.0", "miniflare@5.20261119.0-beta", "sharp@0.35.5"]
 }

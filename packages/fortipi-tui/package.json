@@ -13,7 +13,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=26.13.0"
+    "node": ">=26.13.1"
   },
   "exports": {
     ".": {
@@ -34,6 +34,6 @@
   "dependencies": {
     "fortipi-client": "workspace:*",
     "fortipi-contract": "workspace:*",
-    "@earendil-works/pi-tui": "1.5.2"
+    "@earendil-works/pi-tui": "1.6.0"
   }
 }

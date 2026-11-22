@@ -6,12 +6,14 @@ import {
 } from "fortipi-contract";
 import type * as D from "../boundary/dto.js";
 import type { Env } from "../boundary/env.js";
-import { emptyScope, requireGrant } from "./authorization.js";
+import { contains, emptyScope, permits, requireGrant, roleAllows } from "./authorization.js";
 import type { LocalTransport } from "./delivery.js";
 import { valid } from "./directory.js";
+import type { DispatchRecord } from "./dispatch.js";
 import type { Executors } from "./executors.js";
 import type { Identities } from "./identity.js";
 import { check, hash, id, json, ref, type Store, same } from "./store.js";
+import type { ExecutorState } from "./tickets.js";
 
 export interface LocalReadEvidence {
   request: D.LocalReadRequest;
@@ -30,6 +32,205 @@ export class LocalWorkspace {
     this.identities = identities;
     this.executors = executors;
     this.env = env;
+  }
+  #preparationContext(ctx: D.AuthContext, input: D.LocalPrepare): D.AuthContext {
+    this.identities.current(ctx);
+    validateLocalLease(input, "prepare", Date.now());
+    const reservation = this.store.get<D.TargetReservation>(
+      "reservation",
+      `${ctx.principalId}:${input.operationId}`,
+    );
+    check(
+      reservation &&
+        same(reservation.credential, ref(ctx)) &&
+        same(input.credential, ref(ctx)) &&
+        reservation.operationDigest === input.operationDigest &&
+        reservation.workspaceId === input.workspaceId &&
+        reservation.bindingVersion === input.bindingVersion &&
+        input.deadline <= reservation.deadline &&
+        reservation.target.kind === "executor" &&
+        reservation.target.executorId === input.executorId &&
+        reservation.target.generation === input.executorGeneration &&
+        reservation.registrationIds.workspace === input.lease.registrationId &&
+        reservation.ownerKind === input.lease.ownerKind &&
+        (reservation.ownerKind === "job"
+          ? input.lease.ownerKind === "job" &&
+            input.lease.jobId === reservation.jobId &&
+            (input.mode.kind !== "native-execution" ||
+              (input.mode.jobId === reservation.jobId &&
+                input.mode.executionId === reservation.executionId))
+          : reservation.baseRevision === input.baseRevision &&
+            input.mode.kind !== "native-execution"),
+      "unauthorized",
+      "Preparation no longer matches its retained reservation",
+    );
+    const disposition = this.store.get<{ state?: string }>("lease", input.lease.leaseId)?.state;
+    check(
+      disposition !== "released" && disposition !== "releasing",
+      "conflict",
+      "Local lease is closing or released",
+    );
+    const registration = this.store.get<D.AuthorityRegistration>(
+      "recipient",
+      reservation.registrationIds.workspace,
+    );
+    const resources = {
+      ...emptyScope(),
+      agentIds: reservation.agentId ? [reservation.agentId] : [],
+      conversationIds: reservation.conversationId ? [reservation.conversationId] : [],
+      workspaceIds: [input.workspaceId],
+      executorIds: [input.executorId],
+      actions: ["workspace.write"],
+    };
+    requireGrant(ctx, "workspace.write", resources);
+    check(
+      registration?.recipient.kind === "workspace" &&
+        registration.registrationId === reservation.registrationIds.workspace &&
+        registration.recipient.id === input.workspaceId &&
+        same(registration.credential, ref(ctx)) &&
+        contains(registration.resources, resources) &&
+        registration.executor?.executorId === input.executorId &&
+        registration.executor.generation === input.executorGeneration &&
+        ctx.grants.some(
+          (grant) =>
+            (grant.expiresAt === undefined || Date.now() < grant.expiresAt) &&
+            contains(grant.resources, registration.resources),
+        ),
+      "unauthorized",
+      "Preparation requires its current retained Workspace registration",
+    );
+    const executor = this.store.get<ExecutorState>("executor", input.executorId);
+    check(
+      executor && executor.status !== "revoked" && executor.generation === input.executorGeneration,
+      "unauthorized",
+      "Preparation executor generation changed",
+    );
+    return { ...ctx, registrationId: registration.registrationId };
+  }
+  #jobObservation(ctx: D.AuthContext, input: D.LocalObserve): void {
+    this.identities.current(ctx);
+    validateLocalLease(input, "observe", Date.now());
+    const retained = this.store.get<{
+      request: D.LocalPrepare;
+      preparation: D.LocalPrepared;
+      intent: D.LocalCommitIntent;
+    }>("local_prepared", `${ctx.principalId}:${input.operationId}`);
+    const reservation = this.store.get<D.TargetReservation>(
+      "reservation",
+      `${ctx.principalId}:${input.operationId}`,
+    );
+    check(
+      retained &&
+        reservation?.ownerKind === "job" &&
+        reservation.actions.includes("workspace.write") &&
+        retained.request.mode.kind === "native-execution" &&
+        retained.request.mode.jobId === reservation.jobId &&
+        retained.request.mode.executionId === reservation.executionId &&
+        same(reservation.credential, ref(ctx)) &&
+        same(input.credential, ref(ctx)) &&
+        input.lease.ownerKind === "job" &&
+        input.lease.jobId === reservation.jobId &&
+        input.lease.registrationId === reservation.registrationIds.workspace &&
+        input.preparationId === retained.preparation.preparationId &&
+        input.commitId === retained.intent.commitId,
+      "unauthorized",
+      "Observation requires its retained native job preparation",
+    );
+    const {
+      kind: _prepare,
+      mode: _mode,
+      expectedManifestHash: _hash,
+      ...preparedScope
+    } = retained.request;
+    const { kind: _observe, preparationId: _preparation, ...observedScope } = input;
+    const currentLease = this.store.get<{ lease: D.Lease }>("lease", input.lease.leaseId)?.lease;
+    check(
+      same(preparedScope, observedScope) ||
+        (currentLease && same({ ...preparedScope, lease: currentLease }, observedScope)),
+      "conflict",
+      "Observation changed its retained preparation scope",
+    );
+    const dispatch = this.store.get<DispatchRecord>("dispatch", reservation.executionId);
+    check(
+      dispatch?.attempted &&
+        same(dispatch.intent.reservation, reservation) &&
+        dispatch.intent.assignment.identity.assignmentDigest ===
+          retained.request.mode.assignmentDigest &&
+        dispatch.intent.assignment.identity.baseRevision === input.baseRevision,
+      "conflict",
+      "Observation lacks its actual retained execution",
+    );
+    const resources = {
+      ...emptyScope(),
+      agentIds: [reservation.agentId],
+      conversationIds: [reservation.conversationId],
+      workspaceIds: [reservation.workspaceId],
+      executorIds: [input.executorId],
+      tools: [dispatch.intent.assignment.tool],
+      actions: [...new Set([...reservation.actions, "jobs.dispatch", "workspace.write"])],
+    };
+    requireGrant(ctx, "jobs.dispatch", resources);
+    requireGrant(ctx, "workspace.write", resources);
+    const registration = this.store.get<D.AuthorityRegistration>(
+      "recipient",
+      ctx.registrationId ?? "",
+    );
+    check(
+      registration?.recipient.kind === "agent" &&
+        registration.recipient.id === reservation.agentId &&
+        registration.registrationId === ctx.registrationId &&
+        same(registration.credential, ref(ctx)) &&
+        contains(registration.resources, {
+          ...resources,
+          actions: ["jobs.dispatch"],
+          // Only this operation's original reservation predates the retained tool assignment.
+          ...(registration.registrationId === reservation.registrationIds.agent &&
+          registration.resources.tools.length === 0
+            ? { tools: [] }
+            : {}),
+        }) &&
+        ctx.grants.some(
+          (grant) =>
+            (grant.expiresAt === undefined || Date.now() < grant.expiresAt) &&
+            contains(grant.resources, resources) &&
+            contains(grant.resources, registration.resources),
+        ),
+      "unauthorized",
+      "Observation requires its current registered Agent and one operation grant",
+    );
+    const executor = this.store.get<ExecutorState>("executor", input.executorId);
+    check(
+      executor && executor.status !== "revoked" && executor.generation === input.executorGeneration,
+      "unauthorized",
+      "Observation executor generation changed",
+    );
+  }
+  #jobReceipt(ctx: D.AuthContext, input: D.LocalReceiptAck): void {
+    check(
+      input.receipt.providerKind === "local" &&
+        input.lease.ownerKind === "job" &&
+        input.receipt.jobId === input.lease.jobId &&
+        input.receipt.preparationId === input.preparationId &&
+        input.receipt.operationId === input.operationId &&
+        input.receipt.workspaceId === input.workspaceId &&
+        input.receipt.baseRevision === input.baseRevision,
+      "conflict",
+      "Receipt changed its retained native operation",
+    );
+    const { kind: _kind, receipt, ...scope } = input;
+    this.#jobObservation(ctx, { ...scope, kind: "observe", commitId: receipt.commitId });
+  }
+  completion(ctx: D.AuthContext, input: D.LocalWorkspaceRequest): boolean {
+    if (!valid("workspaces", "LocalWorkspaceRequest", input)) return false;
+    if (input.kind !== "observe" && input.kind !== "receipt") return false;
+    try {
+      if (input.kind === "receipt") this.#jobReceipt(ctx, input);
+      else this.#jobObservation(ctx, input);
+      return true;
+    } catch {
+      // Invalid closures use ordinary admission; request() retains the full validation.
+      return false;
+    }
   }
   async renew(ctx: D.AuthContext, lease: D.WorkspaceOperationLease): Promise<void> {
     const prepared = this.store.get<{ request: D.LocalPrepare }>(
@@ -65,6 +266,20 @@ export class LocalWorkspace {
       "Invalid local request",
     );
     const mutating = input.kind === "prepare" || input.kind === "apply";
+    const resources = {
+      ...emptyScope(),
+      workspaceIds: [input.workspaceId],
+      executorIds: [input.executorId],
+    };
+    const privateObservation =
+      (input.kind === "observe" || input.kind === "receipt") &&
+      !(roleAllows(ctx, "workspace.read") && permits(ctx.grants, resources, "workspace.read"));
+    const currentObservation = () => {
+      if (privateObservation && input.kind === "observe") this.#jobObservation(ctx, input);
+      if (privateObservation && input.kind === "receipt") this.#jobReceipt(ctx, input);
+    };
+    currentObservation();
+    if (input.kind === "prepare") this.#preparationContext(ctx, input);
     if (input.kind === "prepare" && input.mode.kind === "staged-change") {
       const caps = this.executors.transferLimits(input.executorId, input.executorGeneration);
       check(
@@ -82,11 +297,9 @@ export class LocalWorkspace {
     }
     if (input.kind === "prepare" && input.mode.kind === "staged-change")
       await validateLocalStage(input.mode);
-    requireGrant(ctx, mutating ? "workspace.write" : "workspace.read", {
-      ...emptyScope(),
-      workspaceIds: [input.workspaceId],
-      executorIds: [input.executorId],
-    });
+    if (input.kind === "prepare") this.#preparationContext(ctx, input);
+    if (!privateObservation)
+      requireGrant(ctx, mutating ? "workspace.write" : "workspace.read", resources);
     if (input.kind !== "observe" && input.kind !== "receipt")
       check(same(ref(ctx), input.credential), "unauthorized", "Local authority mismatch");
     if (mutating)
@@ -140,9 +353,13 @@ export class LocalWorkspace {
         Date.now(),
       );
     const digest = await hash(json(input));
+    currentObservation();
+    if (input.kind === "prepare") this.#preparationContext(ctx, input);
     const correlationId = await hash(
       `${ctx.principalId}:${input.operationId}:${input.kind}:${digest}`,
     );
+    currentObservation();
+    if (input.kind === "prepare") this.#preparationContext(ctx, input);
     let stored = this.store.get<LocalTransport>("local_transport", correlationId);
     // Nonterminal observation is a query of current journal evidence, not a cached outcome.
     if (
@@ -223,6 +440,7 @@ export class LocalWorkspace {
         commitId: input.receipt.commitId,
         commitDigest: input.receipt.commitDigest,
       });
+      currentObservation();
       check(
         found.ok && same(found.value, input.receipt),
         "conflict",
@@ -235,6 +453,8 @@ export class LocalWorkspace {
     else {
       this.store.tx(() => {
         this.identities.current(ctx);
+        currentObservation();
+        if (input.kind === "prepare") this.#preparationContext(ctx, input);
         if (input.kind === "apply") {
           const key = `${ctx.principalId}:${input.operationId}`;
           check(
@@ -261,6 +481,8 @@ export class LocalWorkspace {
         },
         ctx.deadline,
       );
+      currentObservation();
+      if (input.kind === "prepare") this.#preparationContext(ctx, input);
       check(
         frame.type === "workspace.response" &&
           frame.payload.correlationId === correlationId &&
@@ -336,13 +558,15 @@ export class LocalWorkspace {
         "Preparation does not match request",
       );
       const preparation = response as D.LocalPrepared;
+      const workspaceContext = () => this.#preparationContext(ctx, input);
+      workspaceContext();
       const authority = this.env.WORKSPACES.getByName(input.workspaceId);
       check(
         (await authority.contractVersion) === "1.0",
         "unsupported",
         "Workspace contract mismatch",
       );
-      const intent = await authority.prepareLocalCommit(ctx, {
+      const intent = await authority.prepareLocalCommit(workspaceContext(), {
         scope: {
           operationId: input.operationId,
           operationDigest: input.operationDigest,
@@ -362,6 +586,7 @@ export class LocalWorkspace {
           ? { expectedPostManifestHash: input.mode.postManifestHash }
           : {}),
       });
+      workspaceContext();
       check(
         intent.ok &&
           intent.value.preparationId === preparation.preparationId &&
@@ -384,18 +609,20 @@ export class LocalWorkspace {
         "conflict",
         "Workspace intent digest mismatch",
       );
-      this.identities.current(ctx);
-      this.store.put("local_prepared", `${ctx.principalId}:${input.operationId}`, {
-        request: input,
-        preparation,
-        intent: intent.value,
-      });
-      const known = this.store.get<{ lease: D.Lease }>("lease", intent.value.scope.lease.leaseId);
-      if (!known || known.lease.leaseVersion <= intent.value.scope.lease.leaseVersion)
-        this.store.put("lease", intent.value.scope.lease.leaseId, {
-          ...known,
-          lease: intent.value.scope.lease,
+      this.store.tx(() => {
+        workspaceContext();
+        this.store.put("local_prepared", `${ctx.principalId}:${input.operationId}`, {
+          request: input,
+          preparation,
+          intent: intent.value,
         });
+        const known = this.store.get<{ lease: D.Lease }>("lease", intent.value.scope.lease.leaseId);
+        if (!known || known.lease.leaseVersion <= intent.value.scope.lease.leaseVersion)
+          this.store.put("lease", intent.value.scope.lease.leaseId, {
+            ...known,
+            lease: intent.value.scope.lease,
+          });
+      });
     }
     if (input.kind === "apply" || input.kind === "observe")
       check(
@@ -429,6 +656,7 @@ export class LocalWorkspace {
         "Receipt response lacks a durable acknowledgment",
       );
     this.identities.current(ctx);
+    currentObservation();
     return response;
   }
 }

@@ -9,7 +9,7 @@ export async function assignedJob(
     cp: Pick<ControlPlaneRpc, "reserveTarget" | "recordDispatchIntent" | "assignOnce">;
   },
   actor: D.AuthContext,
-  options: { leaseExpiresAt?: number } = {},
+  options: { leaseExpiresAt?: number; actions?: string[]; deferAssignment?: boolean } = {},
 ) {
   const operation: D.OperationDigestInput = {
     deploymentId: h.deploymentId,
@@ -36,7 +36,7 @@ export async function assignedJob(
       workspaceId: "workspace",
       bindingVersion: 1,
       target: operation.target,
-      actions: ["jobs.dispatch", "workspace.write"],
+      actions: options.actions ?? ["jobs.dispatch", "workspace.write"],
       deadline: operation.deadline,
       expiresAt: options.leaseExpiresAt ?? Date.now() + 30000,
     }),
@@ -89,6 +89,6 @@ export async function assignedJob(
     rootBindingId: "root",
   };
   value(await h.cp.recordDispatchIntent(actor, { reservation, assignment, expectedJobVersion: 1 }));
-  value(await h.cp.assignOnce(actor, assignment));
+  if (!options.deferAssignment) value(await h.cp.assignOnce(actor, assignment));
   return { assignment, reservation, identity: assignment.identity };
 }

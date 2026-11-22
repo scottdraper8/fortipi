@@ -8,8 +8,14 @@ import { repository } from "../../scripts/build-workspaces.ts";
 import { checkLicenses } from "../../scripts/check-licenses.ts";
 import type { Manifest, SupplyChain } from "../../scripts/check-pins.ts";
 import { checkPins, json, manifestPaths, yaml } from "../../scripts/check-pins.ts";
+import type { DependencyPatch } from "../../scripts/dependency-patches.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "../../scripts/pnpm-executable.ts";
-import { rejectedZodAdvisory, validateRejectedZodAuthorities } from "../../scripts/run-unstale.ts";
+import {
+  readAdvisoryAuthority,
+  rejectedZodAdvisory,
+  unstaleEnvironment,
+  validateRejectedZodAuthorities,
+} from "../../scripts/run-unstale.ts";
 import {
   createPtyProbeResponder,
   macosNetworkExtensionActive,
@@ -54,7 +60,7 @@ test("Windows package-manager locator resolves the installed native binary witho
     await writeFile(resolve(bin, "pnpm.cmd"), "Fixture shim: never executed");
     await writeFile(
       resolve(packageDirectory, "package.json"),
-      JSON.stringify({ name: "pnpm", version: "12.18.0" }),
+      JSON.stringify({ name: "pnpm", version: "12.22.0" }),
     );
     const native = resolve(packageDirectory, "pnpm.exe");
     await writeFile(native, "Fixture binary: path resolution only, never executed");
@@ -65,7 +71,7 @@ test("Windows package-manager locator resolves the installed native binary witho
     await mkdir(optionalDirectory, { recursive: true });
     await writeFile(
       resolve(optionalDirectory, "package.json"),
-      JSON.stringify({ name: optionalName, version: "12.18.0" }),
+      JSON.stringify({ name: optionalName, version: "12.22.0" }),
     );
     const optional = resolve(optionalDirectory, "pnpm.exe");
     await writeFile(optional, "Fixture optional binary: never executed");
@@ -74,7 +80,7 @@ test("Windows package-manager locator resolves the installed native binary witho
       resolve(packageDirectory, "package.json"),
       JSON.stringify({ name: "pnpm", version: "11.0.0" }),
     );
-    await assert.rejects(() => pnpmExecutable("win32", [bin]), /reviewed pnpm 12.18.0/);
+    await assert.rejects(() => pnpmExecutable("win32", [bin]), /reviewed pnpm 12.22.0/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -83,7 +89,7 @@ test("Windows package-manager locator resolves the installed native binary witho
 test("package-manager verification rejects a real executable with the wrong version", async () => {
   await assert.rejects(
     () => verifyPnpmExecutable(process.execPath),
-    /reviewed pnpm 12.18.0 native installation/,
+    /reviewed pnpm 12.22.0 native installation/,
   );
 });
 
@@ -100,20 +106,38 @@ test("Windows self-update shim selects the pinned engine instead of its older bo
       JSON.stringify({ name: "pnpm", version: "12.17.0" }),
     );
     const manifest = resolve(engine, "package.json");
-    await writeFile(manifest, JSON.stringify({ name: "pnpm", version: "12.18.0" }));
+    await writeFile(manifest, JSON.stringify({ name: "pnpm", version: "12.22.0" }));
     const native = resolve(engine, "pnpm.exe");
     await writeFile(native, "Fixture binary: never executed");
     // Pinned pnpm's generated shim ends in this raw data marker; no shell is evaluated.
     await writeFile(resolve(bin, "pnpm"), `#!/bin/sh\n# cmd-shim-target=${native}\r\n`);
     assert.equal(await pnpmExecutable("win32", [bin]), native);
     await writeFile(manifest, JSON.stringify({ name: "pnpm", version: "12.17.0" }));
-    await assert.rejects(() => pnpmExecutable("win32", [bin]), /reviewed pnpm 12.18.0/);
+    await assert.rejects(() => pnpmExecutable("win32", [bin]), /reviewed pnpm 12.22.0/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-async function fixture(change: (root: string) => Promise<void>, rejection: RegExp): Promise<void> {
+async function copyReviewedPatchInputs(root: string, installed: boolean): Promise<void> {
+  await mkdir(resolve(root, "patches"), { recursive: true });
+  await copyFile(resolve(repository, "patches/review.json"), resolve(root, "patches/review.json"));
+  const patches = await json<Record<string, DependencyPatch>>(repository, "patches/review.json");
+  for (const [id, patch] of Object.entries(patches)) {
+    const target = resolve(root, patch.path);
+    await mkdir(dirname(target), { recursive: true });
+    await copyFile(resolve(repository, patch.path), target);
+    if (!installed) continue;
+    const name = id.slice(0, id.lastIndexOf("@"));
+    for (const file of Object.keys(patch.files)) {
+      const local = `apps/worker/node_modules/${name}/${file}`;
+      await mkdir(dirname(resolve(root, local)), { recursive: true });
+      await copyFile(resolve(repository, local), resolve(root, local));
+    }
+  }
+}
+
+async function fixture(change: (root: string) => Promise<void>, rejection?: RegExp): Promise<void> {
   await mkdir(resolve(repository, "dist/foundation-fixtures"), { recursive: true });
   const root = await mkdtemp(resolve(repository, "dist/foundation-fixtures/case-"));
   try {
@@ -133,9 +157,25 @@ async function fixture(change: (root: string) => Promise<void>, rejection: RegEx
       await mkdir(dirname(resolve(root, path)), { recursive: true });
       await copyFile(resolve(repository, path), resolve(root, path));
     }
+    await copyReviewedPatchInputs(root, true);
+    // These are disposable mutation fixtures, not new advisory receipts. Use
+    // the actual current parent review's observation while keeping its input
+    // files unchanged; each case must still reach its own intended result.
+    const policy = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+    try {
+      const current = await json<{ advisory: SupplyChain["advisory"] }>(
+        repository,
+        "dist/supply-chain/advisory-review.json",
+      );
+      policy.advisory = current.advisory;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(policy));
     await checkPins(root);
     await change(root);
-    await assert.rejects(() => checkPins(root), rejection);
+    if (rejection) await assert.rejects(() => checkPins(root), rejection);
+    else await assert.doesNotReject(() => checkPins(root));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -162,8 +202,8 @@ test("reject manager resolution drift in the first pnpm lock document", async ()
   await fixture(async (root) => {
     const path = resolve(root, "pnpm-lock.yaml");
     const text = await readFile(path, "utf8");
-    assert.ok(text.includes("version: 12.18.0"));
-    await writeFile(path, text.replace("version: 12.18.0", "version: 12.17.0"));
+    assert.ok(text.includes("version: 12.22.0"));
+    await writeFile(path, text.replace("version: 12.22.0", "version: 12.17.0"));
   }, /12\.17\.0/);
 });
 
@@ -173,6 +213,24 @@ test("reject a permissions.build override of denied dependency scripts", async (
     policy.permissions = { "workerd@1.20261110.1": { build: true } };
     await writeFile(resolve(root, "pnpm-workspace.yaml"), stringify(policy));
   }, /Forbidden policy override: permissions/);
+});
+
+test("reject an extra or changed runtime dependency override", async () => {
+  for (const overrides of [
+    { "workerd@1.20261113.1": "1.20261118.1" },
+    { "workerd@1.20261113.1": "1.20261119.1", undici: "7.30.1" },
+  ])
+    await fixture(async (root) => {
+      const policy = await yaml<Record<string, unknown>>(root, "pnpm-workspace.yaml");
+      policy.overrides = overrides;
+      await writeFile(resolve(root, "pnpm-workspace.yaml"), stringify(policy));
+    }, /Unreviewed runtime override/);
+  await fixture(async (root) => {
+    const path = resolve(root, "pnpm-lock.yaml");
+    const lock = await readFile(path, "utf8");
+    assert.ok(lock.includes("  undici@8.13.1:"));
+    await writeFile(path, `${lock}\noverrides:\n  undici@8.13.1: 8.12.4\n`);
+  }, /Runtime overrides forbidden in lock/);
 });
 
 test("reject stale graph advisory evidence", async () => {
@@ -237,6 +295,21 @@ test("reject literal harden-runner endpoints that reproduced blocked bootstrap",
   }, /allowed-endpoints contains an internal newline/);
 });
 
+test("reject an action-success job that omits its early Linux service check", async () => {
+  await fixture(async (root) => {
+    const path = resolve(root, ".github/workflows/ci.yml");
+    const workflow = await yaml<{ jobs: Record<string, { steps: { run?: string }[] }> }>(
+      root,
+      ".github/workflows/ci.yml",
+    );
+    const job = workflow.jobs["policy-and-integration"];
+    assert.ok(job);
+    assert.equal(job.steps[1]?.run, "/usr/bin/systemctl is-active --quiet agent.service");
+    job.steps.splice(1, 1);
+    await writeFile(path, stringify(workflow));
+  }, /Linux hardener health gate must precede checkout and network steps/);
+});
+
 test("keep ordinary YAML single-document when relaxing only pnpm lock validation", async () => {
   await fixture(async (root) => {
     const path = resolve(root, ".pre-commit-config.yaml");
@@ -246,6 +319,65 @@ test("keep ordinary YAML single-document when relaxing only pnpm lock validation
       text.replace("exclude: '(^|/)pnpm-lock\\.yaml$'", "args: [--allow-multiple-documents]"),
     );
   }, /pnpm-lock/);
+});
+
+test("advisory authentication stays on its fixed endpoint and unavailable authorities block", async () => {
+  const token = "fixture-only-advisory-credential";
+  const github = "https://api.github.com/advisories/GHSA-mrhx-c7xc-m3w5";
+  const cve =
+    "https://raw.githubusercontent.com/CVEProject/cvelistV5/main/cves/2023/54xxx/CVE-2023-54404.json";
+  const calls: {
+    url: string;
+    authorization: string | null;
+    redirect: RequestRedirect | undefined;
+  }[] = [];
+  const transport: typeof fetch = async (input, init) => {
+    const headers = new Headers(init?.headers);
+    calls.push({
+      url: String(input),
+      authorization: headers.get("authorization"),
+      redirect: init?.redirect,
+    });
+    return new Response("{}", { status: 200 });
+  };
+  await readAdvisoryAuthority(cve, token, transport);
+  await readAdvisoryAuthority(github, token, transport);
+  await readAdvisoryAuthority(github, undefined, transport);
+  assert.deepEqual(calls, [
+    { url: cve, authorization: null, redirect: "error" },
+    { url: github, authorization: `Bearer ${token}`, redirect: "error" },
+    { url: github, authorization: null, redirect: "error" },
+  ]);
+  for (const url of [
+    "https://api.github.com/advisories/other",
+    `${github}?other`,
+    "https://example.com/",
+  ])
+    await assert.rejects(
+      () => readAdvisoryAuthority(url, token, transport),
+      /Unknown advisory authority/,
+    );
+  assert.equal(calls.length, 3);
+  await assert.rejects(
+    () =>
+      readAdvisoryAuthority(
+        github,
+        token,
+        async () =>
+          new Response(token, {
+            status: 403,
+            headers: { "x-ratelimit-remaining": "0" },
+          }),
+      ),
+    (error: Error) => {
+      assert.match(
+        error.message,
+        /GitHub advisory authority unavailable: HTTP 403; quota exhausted/,
+      );
+      assert.ok(!error.message.includes(token));
+      return true;
+    },
+  );
 });
 
 test("changed or ambiguous GHSA assessments never inherit the exact Zod disposition", () => {
@@ -309,23 +441,66 @@ test("reject a newly introduced dependency install script", async () => {
   }, /Unreviewed lifecycle script ajv/);
 });
 
-test("reject expired exact release-age exemption", async () => {
+async function matureAgeExemption(root: string): Promise<void> {
+  const s = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+  const id = "ajv@8.20.0";
+  const r = s.packages[id];
+  assert.ok(r);
+  r.published = new Date(Date.now() - 172_800_000).toISOString();
+  s.exemptions[id] = {
+    reason: "Disposable mature-history fixture",
+    integrity: r.integrity,
+    expires: new Date(Date.parse(r.published) + 86_400_000).toISOString(),
+  };
+  const policy = await yaml<{ minimumReleaseAgeExclude: string[] }>(root, "pnpm-workspace.yaml");
+  if (!policy.minimumReleaseAgeExclude.includes(id)) policy.minimumReleaseAgeExclude.push(id);
+  await writeFile(resolve(root, "pnpm-workspace.yaml"), stringify(policy));
+  await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(s));
+}
+
+test("accept valid historical exact release-age exemption after maturity", async () => {
+  await fixture(matureAgeExemption);
+});
+
+test("reject a young archive without its exact reviewed release-age exemption", async () => {
   await fixture(async (root) => {
     const s = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
     const id = "ajv@8.20.0";
     const r = s.packages[id];
     assert.ok(r);
-    r.published = new Date(Date.now() - 172_800_000).toISOString();
-    s.exemptions[id] = {
-      reason: "Disposable expired-exemption negative",
-      integrity: r.integrity,
-      expires: new Date(Date.parse(r.published) + 86_400_000).toISOString(),
-    };
+    r.published = new Date(Date.now() - 3_600_000).toISOString();
+    delete s.exemptions[id];
     const policy = await yaml<{ minimumReleaseAgeExclude: string[] }>(root, "pnpm-workspace.yaml");
-    policy.minimumReleaseAgeExclude.push(id);
+    policy.minimumReleaseAgeExclude = policy.minimumReleaseAgeExclude.filter(
+      (value) => value !== id,
+    );
     await writeFile(resolve(root, "pnpm-workspace.yaml"), stringify(policy));
     await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(s));
-  }, /Expired release-age exemption/);
+  }, /Missing exact release-age exemption ajv@8\.20\.0/);
+});
+
+test("reject a mature age exemption with an expiry not derived from publication", async () => {
+  await fixture(async (root) => {
+    await matureAgeExemption(root);
+    const s = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+    const r = s.packages["ajv@8.20.0"];
+    const exemption = s.exemptions["ajv@8.20.0"];
+    assert.ok(r && exemption);
+    // A future expiry still cannot replace the exact publication-plus-24h date.
+    exemption.expires = new Date(Date.parse(r.published) + 259_200_000).toISOString();
+    await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(s));
+  }, /Expected values to be strictly equal/);
+});
+
+test("reject a mature age exemption with a different reviewed archive SRI", async () => {
+  await fixture(async (root) => {
+    await matureAgeExemption(root);
+    const s = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
+    const exemption = s.exemptions["ajv@8.20.0"];
+    assert.ok(exemption);
+    exemption.integrity = `sha512-${"A".repeat(86)}==`;
+    await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(s));
+  }, /Expected values to be strictly equal/);
 });
 
 test("reject removed protected integrity hook", async () => {
@@ -344,12 +519,14 @@ test("reject disallowed license before copying any archive", async () => {
   try {
     for (const path of [
       "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
       "tools/unstale/supply-chain.json",
       "tools/unstale/license-policy.json",
     ]) {
       await mkdir(dirname(resolve(root, path)), { recursive: true });
       await copyFile(resolve(repository, path), resolve(root, path));
     }
+    await copyReviewedPatchInputs(root, false);
     const state = await json<SupplyChain>(root, "tools/unstale/supply-chain.json");
     for (const r of Object.values(state.packages)) r.license = "GPL-3.0-only";
     await writeFile(resolve(root, "tools/unstale/supply-chain.json"), JSON.stringify(state));
@@ -358,4 +535,27 @@ test("reject disallowed license before copying any archive", async () => {
     await rm(root, { recursive: true, force: true });
   }
   await checkPins();
+});
+
+test("public Unstale coverage cannot inherit model setup, credentials or a re-enabled inference switch", () => {
+  const env = unstaleEnvironment({
+    PATH: "/public/bin",
+    HOME: "/synthetic-home",
+    TMPDIR: "/synthetic-tmp",
+    CI: "true",
+    UNSTALE_EDGE_INFERENCE: "1",
+    UNSTALE_CONFIG_DIR: "/foreign-config",
+    OPENAI_API_KEY: "synthetic-not-a-key",
+    GITHUB_TOKEN: "synthetic-not-a-token",
+    NODE_AUTH_TOKEN: "synthetic-not-a-token",
+    CODEX_HOME: "/foreign-codex",
+  });
+  assert.equal(env.HOME, "/synthetic-home", "Do not repurpose the caller's home");
+  assert.equal(env.PATH, "/public/bin");
+  assert.equal(env.TMPDIR, "/synthetic-tmp");
+  assert.equal(env.CI, "true");
+  assert.equal(env.UNSTALE_EDGE_INFERENCE, "0");
+  assert.equal(env.UNSTALE_CONFIG_DIR, resolve(repository, ".unstale/tool-config"));
+  for (const key of ["OPENAI_API_KEY", "GITHUB_TOKEN", "NODE_AUTH_TOKEN", "CODEX_HOME"])
+    assert.equal(env[key], undefined);
 });

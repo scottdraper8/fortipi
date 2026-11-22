@@ -1,0 +1,523 @@
+{
+  "schemaVersion": 1,
+  "scope": "Exact third-party Miniflare dependency member only; owned dist/Worker/worker-assets conveyance remains prohibited",
+  "container": {
+    "id": "miniflare@5.20261113.0-beta",
+    "archiveSha256": "4777f56bb9e822fd249b05929dec2a82e1c9b9fc4cf5a757f7ef15cb9bd34785",
+    "sourceCommit": "79b890ab89a62823198a0c551c44ff647c80de4d"
+  },
+  "component": {
+    "id": "mdream@2.0.3",
+    "archiveSha256": "b2b4f91ddd63d2d7ad0d345e182f673c8e36eb15c7cd6e8cde473c66a1d77ff6",
+    "integrity": "sha512-MQTuW2cHn/aHXH6zc23PmWys7vzw+yP8V8e6YUNkXK9tHA2dORNz0X8mkKqYOqHBDXWIyjYHtxVVFtpwactXoQ==",
+    "license": "MIT",
+    "sourceCommit": "a7a88026a221126b7e21c579ed41dd2ebb6cb809",
+    "member": {
+      "upstreamPath": "package/wasm/mdream_edge_bg.wasm",
+      "miniflarePath": "package/dist/src/mdream_edge_bg.wasm",
+      "size": 239214,
+      "sha256": "db48fb63ec419083fdcd2100171bb5f40c5086164a9fe939286927727c91256b",
+      "exactMatch": true
+    }
+  },
+  "notices": [
+    {
+      "path": "LICENSE.md",
+      "sha256": "b5a7e0557d37c8ccf1b1cbcda1842b8c4535d217f81f97c1cbad579042269cad"
+    },
+    {
+      "path": "CORE-LICENSE",
+      "sha256": "d06451530138de11ec5cee38b458f1aa4259ada5587dc5317c225196d26914d6"
+    },
+    {
+      "path": "RUST-NOTICES.md",
+      "sha256": "786b5b98e134b6d2c038e1156647096a502c2732b56184c88d4af021429c5846"
+    }
+  ],
+  "rustCandidateScope": "Checksum-verified Cargo.lock normal-root reachability upper bound including build/optional-feature candidates; not exact compiled-code inventory",
+  "crates": [
+    {
+      "name": "bumpalo",
+      "version": "3.20.3",
+      "checksum": "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "bumpalo-3.20.3/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "url": "https://static.crates.io/crates/bumpalo/bumpalo-3.20.3.crate#bumpalo-3.20.3/LICENSE-APACHE"
+        },
+        {
+          "path": "bumpalo-3.20.3/LICENSE-MIT",
+          "sha256": "65f94e99ddaf4f5d1782a6dae23f35d4293a9a01444a13135a6887017d353cee",
+          "url": "https://static.crates.io/crates/bumpalo/bumpalo-3.20.3.crate#bumpalo-3.20.3/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.5",
+      "checksum": "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "cfg-if-1.0.5/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "url": "https://static.crates.io/crates/cfg-if/cfg-if-1.0.5.crate#cfg-if-1.0.5/LICENSE-APACHE"
+        },
+        {
+          "path": "cfg-if-1.0.5/LICENSE-MIT",
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "url": "https://static.crates.io/crates/cfg-if/cfg-if-1.0.5.crate#cfg-if-1.0.5/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "futures-channel",
+      "version": "0.3.34",
+      "checksum": "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "futures-channel-0.3.34/LICENSE-APACHE",
+          "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427",
+          "url": "https://static.crates.io/crates/futures-channel/futures-channel-0.3.34.crate#futures-channel-0.3.34/LICENSE-APACHE"
+        },
+        {
+          "path": "futures-channel-0.3.34/LICENSE-MIT",
+          "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd",
+          "url": "https://static.crates.io/crates/futures-channel/futures-channel-0.3.34.crate#futures-channel-0.3.34/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "futures-core",
+        "futures-sink"
+      ]
+    },
+    {
+      "name": "futures-core",
+      "version": "0.3.34",
+      "checksum": "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "futures-core-0.3.34/LICENSE-APACHE",
+          "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427",
+          "url": "https://static.crates.io/crates/futures-core/futures-core-0.3.34.crate#futures-core-0.3.34/LICENSE-APACHE"
+        },
+        {
+          "path": "futures-core-0.3.34/LICENSE-MIT",
+          "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd",
+          "url": "https://static.crates.io/crates/futures-core/futures-core-0.3.34.crate#futures-core-0.3.34/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "futures-io",
+      "version": "0.3.34",
+      "checksum": "53c0fa8157de1303bfffdaa1cc2a673bfffb60102f76b0ef4441659124373fed",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "futures-io-0.3.34/LICENSE-APACHE",
+          "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427",
+          "url": "https://static.crates.io/crates/futures-io/futures-io-0.3.34.crate#futures-io-0.3.34/LICENSE-APACHE"
+        },
+        {
+          "path": "futures-io-0.3.34/LICENSE-MIT",
+          "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd",
+          "url": "https://static.crates.io/crates/futures-io/futures-io-0.3.34.crate#futures-io-0.3.34/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "futures-macro",
+      "version": "0.3.34",
+      "checksum": "9fb9654ba8355388abeb8dcb4fc62f511300867002afc858860463bdd9fe0c44",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "futures-macro-0.3.34/LICENSE-APACHE",
+          "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427",
+          "url": "https://static.crates.io/crates/futures-macro/futures-macro-0.3.34.crate#futures-macro-0.3.34/LICENSE-APACHE"
+        },
+        {
+          "path": "futures-macro-0.3.34/LICENSE-MIT",
+          "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd",
+          "url": "https://static.crates.io/crates/futures-macro/futures-macro-0.3.34.crate#futures-macro-0.3.34/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "proc-macro2",
+        "quote",
+        "syn"
+      ]
+    },
+    {
+      "name": "futures-sink",
+      "version": "0.3.34",
+      "checksum": "1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "futures-sink-0.3.34/LICENSE-APACHE",
+          "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427",
+          "url": "https://static.crates.io/crates/futures-sink/futures-sink-0.3.34.crate#futures-sink-0.3.34/LICENSE-APACHE"
+        },
+        {
+          "path": "futures-sink-0.3.34/LICENSE-MIT",
+          "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd",
+          "url": "https://static.crates.io/crates/futures-sink/futures-sink-0.3.34.crate#futures-sink-0.3.34/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "futures-task",
+      "version": "0.3.34",
+      "checksum": "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "futures-task-0.3.34/LICENSE-APACHE",
+          "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427",
+          "url": "https://static.crates.io/crates/futures-task/futures-task-0.3.34.crate#futures-task-0.3.34/LICENSE-APACHE"
+        },
+        {
+          "path": "futures-task-0.3.34/LICENSE-MIT",
+          "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd",
+          "url": "https://static.crates.io/crates/futures-task/futures-task-0.3.34.crate#futures-task-0.3.34/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "futures-util",
+      "version": "0.3.34",
+      "checksum": "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "futures-util-0.3.34/LICENSE-APACHE",
+          "sha256": "275c491d6d1160553c32fd6127061d7f9606c3ea25abfad6ca3f6ed088785427",
+          "url": "https://static.crates.io/crates/futures-util/futures-util-0.3.34.crate#futures-util-0.3.34/LICENSE-APACHE"
+        },
+        {
+          "path": "futures-util-0.3.34/LICENSE-MIT",
+          "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd",
+          "url": "https://static.crates.io/crates/futures-util/futures-util-0.3.34.crate#futures-util-0.3.34/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "futures-channel",
+        "futures-core",
+        "futures-io",
+        "futures-macro",
+        "futures-sink",
+        "futures-task",
+        "memchr",
+        "pin-project-lite",
+        "slab"
+      ]
+    },
+    {
+      "name": "js-sys",
+      "version": "0.3.106",
+      "checksum": "7883d941dae510fb2d978fc3fe018c71c9e2892fd38854de3e8b92c2e5ad9cc5",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "js-sys-0.3.106/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "url": "https://static.crates.io/crates/js-sys/js-sys-0.3.106.crate#js-sys-0.3.106/LICENSE-APACHE"
+        },
+        {
+          "path": "js-sys-0.3.106/LICENSE-MIT",
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "url": "https://static.crates.io/crates/js-sys/js-sys-0.3.106.crate#js-sys-0.3.106/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "cfg-if",
+        "futures-util",
+        "wasm-bindgen"
+      ]
+    },
+    {
+      "name": "memchr",
+      "version": "2.8.3",
+      "checksum": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+      "license": "Unlicense OR MIT",
+      "licenses": [
+        {
+          "path": "memchr-2.8.3/COPYING",
+          "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+          "url": "https://static.crates.io/crates/memchr/memchr-2.8.3.crate#memchr-2.8.3/COPYING"
+        },
+        {
+          "path": "memchr-2.8.3/LICENSE-MIT",
+          "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+          "url": "https://static.crates.io/crates/memchr/memchr-2.8.3.crate#memchr-2.8.3/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "once_cell",
+      "version": "1.21.4",
+      "checksum": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "once_cell-1.21.4/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "url": "https://static.crates.io/crates/once_cell/once_cell-1.21.4.crate#once_cell-1.21.4/LICENSE-APACHE"
+        },
+        {
+          "path": "once_cell-1.21.4/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "url": "https://static.crates.io/crates/once_cell/once_cell-1.21.4.crate#once_cell-1.21.4/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "pin-project-lite",
+      "version": "0.2.17",
+      "checksum": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd",
+      "license": "Apache-2.0 OR MIT",
+      "licenses": [
+        {
+          "path": "pin-project-lite-0.2.17/LICENSE-APACHE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "url": "https://static.crates.io/crates/pin-project-lite/pin-project-lite-0.2.17.crate#pin-project-lite-0.2.17/LICENSE-APACHE"
+        },
+        {
+          "path": "pin-project-lite-0.2.17/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "url": "https://static.crates.io/crates/pin-project-lite/pin-project-lite-0.2.17.crate#pin-project-lite-0.2.17/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.107",
+      "checksum": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "proc-macro2-1.0.107/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.107.crate#proc-macro2-1.0.107/LICENSE-APACHE"
+        },
+        {
+          "path": "proc-macro2-1.0.107/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "url": "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.107.crate#proc-macro2-1.0.107/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "unicode-ident"
+      ]
+    },
+    {
+      "name": "quote",
+      "version": "1.0.47",
+      "checksum": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "quote-1.0.47/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://static.crates.io/crates/quote/quote-1.0.47.crate#quote-1.0.47/LICENSE-APACHE"
+        },
+        {
+          "path": "quote-1.0.47/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "url": "https://static.crates.io/crates/quote/quote-1.0.47.crate#quote-1.0.47/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "proc-macro2"
+      ]
+    },
+    {
+      "name": "rustversion",
+      "version": "1.0.23",
+      "checksum": "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "rustversion-1.0.23/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://static.crates.io/crates/rustversion/rustversion-1.0.23.crate#rustversion-1.0.23/LICENSE-APACHE"
+        },
+        {
+          "path": "rustversion-1.0.23/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "url": "https://static.crates.io/crates/rustversion/rustversion-1.0.23.crate#rustversion-1.0.23/LICENSE-MIT"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "slab",
+      "version": "0.4.12",
+      "checksum": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5",
+      "license": "MIT",
+      "licenses": [
+        {
+          "path": "slab-0.4.12/LICENSE",
+          "sha256": "8ce0830173fdac609dfb4ea603fdc002c2f4af0dc9b1a005653f5da9cf534b18",
+          "url": "https://static.crates.io/crates/slab/slab-0.4.12.crate#slab-0.4.12/LICENSE"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "syn",
+      "version": "3.0.7",
+      "checksum": "d62a2e0561533f2ca2561d0cf27fd9fedb640a1bf2616ff5d5c80d99017faadc",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "syn-3.0.7/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://static.crates.io/crates/syn/syn-3.0.7.crate#syn-3.0.7/LICENSE-APACHE"
+        },
+        {
+          "path": "syn-3.0.7/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "url": "https://static.crates.io/crates/syn/syn-3.0.7.crate#syn-3.0.7/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "proc-macro2",
+        "quote",
+        "unicode-ident"
+      ]
+    },
+    {
+      "name": "unicode-ident",
+      "version": "1.0.26",
+      "checksum": "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954",
+      "license": "(MIT OR Apache-2.0) AND Unicode-3.0",
+      "licenses": [
+        {
+          "path": "unicode-ident-1.0.26/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "url": "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.26.crate#unicode-ident-1.0.26/LICENSE-APACHE"
+        },
+        {
+          "path": "unicode-ident-1.0.26/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "url": "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.26.crate#unicode-ident-1.0.26/LICENSE-MIT"
+        },
+        {
+          "path": "unicode-ident-1.0.26/LICENSE-UNICODE",
+          "sha256": "f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1",
+          "url": "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.26.crate#unicode-ident-1.0.26/LICENSE-UNICODE"
+        }
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "wasm-bindgen",
+      "version": "0.2.129",
+      "checksum": "9bb54f33acc68fd454578d9820b0bde1a1a3d17aa17bb7b6595806d02886d409",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "wasm-bindgen-0.2.129/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "url": "https://static.crates.io/crates/wasm-bindgen/wasm-bindgen-0.2.129.crate#wasm-bindgen-0.2.129/LICENSE-APACHE"
+        },
+        {
+          "path": "wasm-bindgen-0.2.129/LICENSE-MIT",
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "url": "https://static.crates.io/crates/wasm-bindgen/wasm-bindgen-0.2.129.crate#wasm-bindgen-0.2.129/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "cfg-if",
+        "once_cell",
+        "rustversion",
+        "wasm-bindgen-macro",
+        "wasm-bindgen-shared"
+      ]
+    },
+    {
+      "name": "wasm-bindgen-macro",
+      "version": "0.2.129",
+      "checksum": "2e29d0c35b16e224a7eeb5cd2d25e3e1968fbd65604117b44d3b789d00ee8535",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "wasm-bindgen-macro-0.2.129/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro/wasm-bindgen-macro-0.2.129.crate#wasm-bindgen-macro-0.2.129/LICENSE-APACHE"
+        },
+        {
+          "path": "wasm-bindgen-macro-0.2.129/LICENSE-MIT",
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro/wasm-bindgen-macro-0.2.129.crate#wasm-bindgen-macro-0.2.129/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "quote",
+        "wasm-bindgen-macro-support"
+      ]
+    },
+    {
+      "name": "wasm-bindgen-macro-support",
+      "version": "0.2.129",
+      "checksum": "6f501a8bc3719dba86ef8ae4728879c08001bea749eb1333ac5b91e040e2a6b7",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "wasm-bindgen-macro-support-0.2.129/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/wasm-bindgen-macro-support-0.2.129.crate#wasm-bindgen-macro-support-0.2.129/LICENSE-APACHE"
+        },
+        {
+          "path": "wasm-bindgen-macro-support-0.2.129/LICENSE-MIT",
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/wasm-bindgen-macro-support-0.2.129.crate#wasm-bindgen-macro-support-0.2.129/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "bumpalo",
+        "proc-macro2",
+        "quote",
+        "syn",
+        "wasm-bindgen-shared"
+      ]
+    },
+    {
+      "name": "wasm-bindgen-shared",
+      "version": "0.2.129",
+      "checksum": "23f0c9c52aa7cd7d77769a4cfe2a9adb1b331f489a41d912ce14513d5ab995c6",
+      "license": "MIT OR Apache-2.0",
+      "licenses": [
+        {
+          "path": "wasm-bindgen-shared-0.2.129/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+          "url": "https://static.crates.io/crates/wasm-bindgen-shared/wasm-bindgen-shared-0.2.129.crate#wasm-bindgen-shared-0.2.129/LICENSE-APACHE"
+        },
+        {
+          "path": "wasm-bindgen-shared-0.2.129/LICENSE-MIT",
+          "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397",
+          "url": "https://static.crates.io/crates/wasm-bindgen-shared/wasm-bindgen-shared-0.2.129.crate#wasm-bindgen-shared-0.2.129/LICENSE-MIT"
+        }
+      ],
+      "dependencies": [
+        "unicode-ident"
+      ]
+    }
+  ]
+}

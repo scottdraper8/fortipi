@@ -1,12 +1,52 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import { repository } from "../../scripts/build-workspaces.ts";
 import type { Manifest } from "../../scripts/check-pins.ts";
 import { json } from "../../scripts/check-pins.ts";
 import { hash } from "./review-supply-chain.ts";
+
+/** Revalidation cannot change pins or renew reviews outside this tool's scope. */
+export function preservePlatformMetadata(
+  existing: unknown,
+  reviewed: Record<string, unknown>,
+): Record<string, unknown> {
+  assert.ok(existing && typeof existing === "object" && !Array.isArray(existing));
+  const metadata = existing as Record<string, unknown>;
+  assert.equal(metadata.format, 1, "Unsupported platform metadata format; scoped review required");
+  assert.ok(
+    typeof metadata.reviewedAt === "string" && Number.isFinite(Date.parse(metadata.reviewedAt)),
+    "Missing original platform review timestamp; scoped review required",
+  );
+  assert.deepEqual(Object.keys(reviewed).sort(), ["actions", "docker", "format", "fuse", "images"]);
+
+  function unchanged(previous: unknown, observed: unknown, path: string): void {
+    const refusal = `${path}: platform facts changed; scoped review required`;
+    if (Array.isArray(observed)) {
+      assert.ok(Array.isArray(previous), refusal);
+      assert.equal(previous.length, observed.length, refusal);
+      observed.forEach((value, index) => {
+        unchanged(previous[index], value, `${path}/${index}`);
+      });
+    } else if (observed && typeof observed === "object") {
+      assert.ok(previous && typeof previous === "object" && !Array.isArray(previous), refusal);
+      const record = previous as Record<string, unknown>;
+      for (const [key, value] of Object.entries(observed)) {
+        assert.ok(Object.hasOwn(record, key), `${path}/${key}: missing reviewed platform fact`);
+        unchanged(record[key], value, `${path}/${key}`);
+      }
+    } else {
+      assert.deepEqual(previous, observed, refusal);
+    }
+  }
+
+  unchanged(metadata, reviewed, "platform-tools");
+  // Keep every independent source record, including nested fields unknown to this tool.
+  // The original global timestamp must not imply those records were reviewed again.
+  return metadata;
+}
 
 async function bytes(url: string): Promise<Buffer> {
   const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
@@ -57,8 +97,12 @@ async function image(host: string, repo: string, digest: string): Promise<unknow
 }
 
 async function main(): Promise<void> {
+  const metadataPath = resolve(repository, "tools/unstale/platform-tools.json");
+  const original = await readFile(metadataPath, "utf8");
+  const existing: unknown = JSON.parse(original);
   const manifest = await json<Manifest>(repository, "package.json");
   const actions: unknown[] = [];
+  const licenses = new Map<string, Buffer>();
   const pins = {
     ...manifest.fortipi?.actions,
     "pre-commit/pre-commit-hooks": {
@@ -100,8 +144,7 @@ async function main(): Promise<void> {
       `Review tool license ${repo}`,
     );
     const path = `tools/unstale/licenses/${repo}/${pin.sha}/LICENSE`;
-    await mkdir(dirname(resolve(repository, path)), { recursive: true });
-    await writeFile(resolve(repository, path), license);
+    licenses.set(path, license);
     actions.push({ repository: repo, ...pin, licenseSha256: hash(license), licensePath: path });
   }
   const images = [
@@ -118,11 +161,8 @@ async function main(): Promise<void> {
   ];
   const dockerURL = "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.3.tgz";
   const docker = await bytes(dockerURL);
-  await mkdir(resolve(repository, "dist/toolchain"), { recursive: true });
-  await writeFile(resolve(repository, "dist/toolchain/docker-29.9.3.tgz"), docker);
-  const output = {
+  preservePlatformMetadata(existing, {
     format: 1,
-    reviewedAt: new Date().toISOString(),
     actions,
     images,
     docker: {
@@ -142,13 +182,22 @@ async function main(): Promise<void> {
       observation:
         "Owner3 freezes dated Debian snapshot and transitive inventory; separate OS licensing gate",
     },
-  };
-  await writeFile(
-    resolve(repository, "tools/unstale/platform-tools.json"),
-    `${JSON.stringify(output, null, 2)}\n`,
+  });
+  assert.equal(
+    await readFile(metadataPath, "utf8"),
+    original,
+    "Platform metadata changed during review; rerun against the current scoped records",
   );
+  // Refuse drift before replacing any reviewed license or cached archive bytes.
+  for (const [path, license] of licenses) {
+    await mkdir(dirname(resolve(repository, path)), { recursive: true });
+    await writeFile(resolve(repository, path), license);
+  }
+  await mkdir(resolve(repository, "dist/toolchain"), { recursive: true });
+  await writeFile(resolve(repository, "dist/toolchain/docker-29.9.3.tgz"), docker);
+  // Matching facts need no catalog write: retain even the original serialized bytes.
   console.log(
-    "Reviewed Action/hook tag identities/licenses, public OCI manifests/configs and official Docker archive; no runtime/image claim",
+    "Revalidated Action/hook tag identities/licenses, public OCI manifests/configs and official Docker archive; retained independent metadata and original review timestamps; no runtime/image or fresh independent review claim",
   );
 }
 

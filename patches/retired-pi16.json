@@ -1,0 +1,105 @@
+{
+  "@earendil-works/pi-durable@1.6.0": {
+    "retired": "@earendil-works/pi-durable@1.5.2",
+    "previousReview": {
+      "path": "patches/@earendil-works__pi-durable@1.5.2.patch",
+      "sha256": "2e4a878a49ac70b158956b55e1131dd595b91a88fe86de2cacfae2f1c7abe536",
+      "source": "https://github.com/earendil-works/pi/blob/9b88b94e2c48086f38002d551dc8e0343923505e/packages/durable/src/harness/util.ts",
+      "reason": "observe waiter rejection before queued delivery while preserving cancellation",
+      "files": {
+        "dist/harness/util.js": {
+          "originalSha256": "5519388f097d51fbf8f5811edd11d04076523253a2a11ae8689082ae8e2df4d9",
+          "patchedSha256": "8f7cbbc462e18ec73a7fc8030b438626c7dc556a71de83003e4b3c477d166656"
+        },
+        "dist/harness/util.js.map": {
+          "originalSha256": "fba82e87b6ef5680e470ee7b5cda15f650f9b2255486403982c875395dc54461",
+          "patchedSha256": "9ed4d82141254dbfceab5757659e480979cb1a5a2dcd24cbbf0fb6a63f4a67d8"
+        }
+      }
+    },
+    "archiveSha256": "e76ddd7fdf50d53a9945de87adfd620f5734df6d57a075ef8168948ba6ddd855",
+    "upstreamFile": "package/dist/harness/util.js",
+    "upstreamFileSha256": "73e3b33448d83fb517ffdf70b4424f5d9dd98ae588c34ede6f6abed5a1665ab7",
+    "sourceCommit": "faac585884ae2c013a6b1400f3e9e77f10b34bac",
+    "sourceMatches": [
+      {
+        "sourceUrl": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/packages/durable/src/harness/util.ts",
+        "sourceSha256": "6c66e255b633030d527c2a6b0e8ef717954763e9b540b2c71dd20dc8e01c9556",
+        "map": "package/dist/harness/util.js.map",
+        "embeddedSourceMatches": true
+      }
+    ],
+    "reason": "Upstream observes each waiter rejection immediately before aborted-context handling, returns the original promise, removes cancelled waiters and detaches listeners on both settlements.",
+    "qualification": "Maintained real PiHarness queued-read cancellation check passed on the unpatched release, including committed storage and unhandled-rejection positive control. Application integration and release qualification remain pending."
+  },
+  "agents@0.34.0": {
+    "retired": "agents@0.33.0",
+    "previousReview": {
+      "path": "patches/agents@0.33.0.patch",
+      "sha256": "ec6855764c1e76c69c0fd42d170d7b23d438aeec38dca95ca75579956144f5a3",
+      "source": "https://github.com/cloudflare/agents/commit/5071d3cda939972fb532c93e9b46942b36d8f5d7",
+      "reason": "fence Lifecycle retries and outcomes after supersession; modified chunk source map disabled; neutral HTTP/WS fetch failures backported from https://github.com/cloudflare/agents/commit/81726f7d18206a0864d183c219fad9fa6e7e28e6",
+      "files": {
+        "dist/lifecycle-v1rKHV2C.js": {
+          "originalSha256": "0af41bb3bea705431fd67fc944e364433a8e8e64c27c4a4d4aa291840776ecd7",
+          "patchedSha256": "8404089520dd2665f92cb30c50ca8dbc18352fa5dfc8f2669d59fbb0d2c7488d"
+        }
+      }
+    },
+    "archiveSha256": "4093600913e5a0ccef3a6b2b6faf99dca61c46d4c4c95320a872cde4379fcbfa",
+    "upstreamFile": "package/dist/lifecycle-CB5Dmtrt.js",
+    "upstreamFileSha256": "e2b4e05ff9c6d71c47b4df95ab61d030052ae095e4307c3b7a6a36b0f97c3df4",
+    "sourceCommit": "8d8acd0dd2a3b30d226e9f24e96557ebfd948374",
+    "sourceMatches": [
+      {
+        "sourceUrl": "https://raw.githubusercontent.com/cloudflare/agents/8d8acd0dd2a3b30d226e9f24e96557ebfd948374/packages/agents/src/lifecycle/job-queue.ts",
+        "sourceSha256": "70da57ce2c4281d6af8bb3ee7ad7854073c080bf3fd21b35d3ffcc8d0769ec4f",
+        "map": "package/dist/lifecycle-CB5Dmtrt.js.map",
+        "embeddedSourceMatches": true
+      },
+      {
+        "sourceUrl": "https://raw.githubusercontent.com/cloudflare/agents/8d8acd0dd2a3b30d226e9f24e96557ebfd948374/packages/agents/src/lifecycle/job-driver.ts",
+        "sourceSha256": "86125f7807858eb91c4d4e025575ada70a701ce076be1c659e2b7aa3802a9429",
+        "map": "package/dist/lifecycle-CB5Dmtrt.js.map",
+        "embeddedSourceMatches": true
+      },
+      {
+        "sourceUrl": "https://raw.githubusercontent.com/cloudflare/agents/8d8acd0dd2a3b30d226e9f24e96557ebfd948374/packages/agents/src/lifecycle/transport-errors.ts",
+        "sourceSha256": "d8cd53f685149a5396767a612213eb3ade1701fe5d2bcfd86c87b36a18b41faa",
+        "map": "package/dist/lifecycle-CB5Dmtrt.js.map",
+        "embeddedSourceMatches": true
+      }
+    ],
+    "reason": "Upstream claim revisions fence cancellation/replacement/reschedule and stale outcomes, suppress superseded retries with SUPERSEDED, release dispatch claims, and default failed HTTP/WS responses carry no error message or stack.",
+    "qualification": "Maintained real Lifecycle cancellation/replacement supersession, generation and neutral HTTP/WS fetch-error checks passed on the unpatched release. Application integration and full release qualification remain pending."
+  },
+  "@earendil-works/pi-ai@1.6.0": {
+    "retired": "@earendil-works/pi-ai@1.5.2",
+    "previousReview": {
+      "path": "patches/@earendil-works__pi-ai@1.5.2.patch",
+      "sha256": "966118ea7d110bd1b0368f17cf3f8d144a2d9b260ed91ea043e53ffbbc1dec21",
+      "source": "https://github.com/earendil-works/pi/commit/aa47cedce0a5347232ac2ad04c67594f4b3ad5cc",
+      "reason": "preserve declared root additionalProperties in Anthropic tool schemas; modified-file source map disabled",
+      "files": {
+        "dist/api/anthropic-messages.js": {
+          "originalSha256": "47cce5fb2770f6ffde0268cfb6549c4839af04129f776149bd60e04555c584dc",
+          "patchedSha256": "a2d4ada91d88a35fd276649d25ed246208947d0dde80418f2bbc8e233154651b"
+        }
+      }
+    },
+    "archiveSha256": "d68312ec574bc959cb7fee26da4f4876d067aed9bbbe76e876359e60d2294747",
+    "upstreamFile": "package/dist/api/anthropic-messages.js",
+    "upstreamFileSha256": "bc6b1e17d10ced22baa974097580efab5f647f2a306a27890d207259199b974b",
+    "sourceCommit": "faac585884ae2c013a6b1400f3e9e77f10b34bac",
+    "sourceMatches": [
+      {
+        "sourceUrl": "https://raw.githubusercontent.com/earendil-works/pi/faac585884ae2c013a6b1400f3e9e77f10b34bac/packages/ai/src/api/anthropic-messages.ts",
+        "sourceSha256": "58c170051620e047c9cccdec056b4b401432ae689571b7e3e245e93e4e3e61ae",
+        "map": "package/dist/api/anthropic-messages.js.map",
+        "embeddedSourceMatches": true
+      }
+    ],
+    "reason": "Upstream preserves explicit root additionalProperties (false, true or schema) without inventing omitted keywords, retains definitions, filters other unsupported root keywords and keeps strict sampling unchanged.",
+    "qualification": "Maintained real provider request capture preserves production closed roots, false/true/schema/omission, definitions and strict sampling on the unpatched release; no external model request. Application integration and release qualification remain pending."
+  }
+}

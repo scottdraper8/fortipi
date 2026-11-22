@@ -44,6 +44,7 @@ export interface RequestOptions {
 export type OperationInput<K extends OperationId> = Omit<OperationRequest<K>, "operationId">;
 export interface CursorScope {
   origin: string;
+  agentId: string;
   conversationId: string;
   identity: TicketIdentity;
 }

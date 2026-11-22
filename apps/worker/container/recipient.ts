@@ -1,0 +1,920 @@
+// CI-only canonical-tar import into a second, independently provisioned private store.
+import assert from "node:assert/strict";
+import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { lstat, readFile, readlink, realpath, writeFile } from "node:fs/promises";
+import { delimiter, dirname, resolve } from "node:path";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { promisify } from "node:util";
+import { repository } from "../../../scripts/build-workspaces.ts";
+import {
+  assertPrivateContainerdApi,
+  type PrivateContainerd,
+  verifyPrivateContainerd,
+} from "../../../tools/unstale/provision-docker.ts";
+import { archiveEntries, hash } from "../../../tools/unstale/review-supply-chain.ts";
+import { inspectImageArchive, type SavedImage } from "./image-archive.ts";
+import { assertRuntimeConfig, type ImageConfig, type PrunePolicy } from "./image-prune.ts";
+
+const execute = promisify(execFile);
+const directory = resolve(repository, "apps/worker/dist/container");
+const receiptPath = resolve(directory, "recipient-proof.json");
+const imageTag = "fortipi-computerd:verified";
+const digestPattern = /^sha256:[a-f0-9]{64}$/;
+const reasons = [
+  "unknown",
+  "prerequisite",
+  "source-audit",
+  "docker-binding",
+  "builder-idle",
+  "receipt",
+  "receipt-phase",
+  "source-match",
+  "same-id",
+  "same-root",
+  "same-socket",
+  "same-process",
+  "same-namespace",
+  "backend-binding",
+  "same-backend-root",
+  "same-backend-state",
+  "same-backend-socket",
+  "same-backend-process",
+  "store-query",
+  "store-types",
+  "store-images",
+  "store-containers",
+  "store-volumes",
+  "store-build-cache",
+  "import",
+  "image-list",
+  "empty-ids",
+  "id-count",
+  "id-format",
+  "multiple-ids",
+  "image-inspect",
+  "graph-id",
+  "os",
+  "arch",
+  "rootfs",
+  "diffids",
+  "runtime-config",
+  "config-fields",
+  "config-equality",
+  "tag",
+  "postbinding",
+  "archive-stability",
+  "metadata-stability",
+  "receipt-stability",
+  "receipt-write",
+] as const;
+type Reason = (typeof reasons)[number];
+type Stage =
+  | "prerequisite"
+  | "source-audit"
+  | "docker-binding"
+  | "builder-idle"
+  | "recipient-empty"
+  | "import"
+  | "imported-identity";
+const fixtureStages = [
+  "receipt",
+  "source",
+  "source-match",
+  "binding",
+  "stability",
+  "distinct",
+  "fuse-flag",
+  "netns",
+  "userns",
+  "image-inspect",
+  "image-identity",
+  "image-match",
+] as const;
+const bindingSteps = [
+  "platform",
+  "socket-path",
+  "session-paths",
+  "session-permissions",
+  "daemon-pid",
+  "daemon-executable",
+  "tool-path",
+  "tool-permissions",
+  "tool-selection",
+  "publisher",
+  "tool-digests",
+  "daemon-arguments",
+  "daemon-config",
+  "socket-permissions",
+  "daemon-uid",
+  "daemon-start",
+  "daemon-info",
+  "data-root",
+  "network-namespace",
+  "private-backend",
+  "socket-identity",
+] as const;
+type FixtureStage = (typeof fixtureStages)[number];
+type BindingStep = (typeof bindingSteps)[number];
+const sourceSteps = [
+  "metadata-stat",
+  "metadata-read",
+  "git-revision",
+  "source-commit",
+  "archive-digest",
+  "kit-digest",
+  "pruning-policy",
+  "image-graph",
+  "selected-graph",
+  "runtime-config",
+] as const;
+type SourceStep = (typeof sourceSteps)[number];
+const commandFailures = [
+  "git-ownership",
+  "git-directory",
+  "timeout",
+  "permission",
+  "missing-command",
+  "nonzero",
+] as const;
+class RecipientCommandError extends Error {
+  readonly kind: (typeof commandFailures)[number];
+  constructor(kind: (typeof commandFailures)[number]) {
+    super("Recipient proof command failed");
+    this.kind = kind;
+  }
+}
+export function recipientCommandFailure(file: string, error: unknown): Error {
+  const value = error as { code?: unknown; killed?: unknown; stderr?: unknown } | null;
+  const kind =
+    file === "git" &&
+    typeof value?.stderr === "string" &&
+    value.stderr.includes("detected dubious ownership")
+      ? "git-ownership"
+      : file === "git" &&
+          typeof value?.stderr === "string" &&
+          (value.stderr.includes("not a git repository") ||
+            value.stderr.includes("Unable to read current working directory"))
+        ? "git-directory"
+        : value?.killed === true
+          ? "timeout"
+          : value?.code === "EACCES"
+            ? "permission"
+            : value?.code === "ENOENT"
+              ? "missing-command"
+              : "nonzero";
+  return new RecipientCommandError(kind);
+}
+
+// Public Config schema: Moby 29.9.3 api/types/container/config.go plus
+// DockerOCIImageConfig's embedded OCI fields. This is diagnostic-only.
+const configFields = [
+  "Hostname",
+  "Domainname",
+  "User",
+  "AttachStdin",
+  "AttachStdout",
+  "AttachStderr",
+  "ExposedPorts",
+  "Tty",
+  "OpenStdin",
+  "StdinOnce",
+  "Env",
+  "Cmd",
+  "Healthcheck",
+  "ArgsEscaped",
+  "Image",
+  "Volumes",
+  "WorkingDir",
+  "Entrypoint",
+  "NetworkDisabled",
+  "OnBuild",
+  "Labels",
+  "StopSignal",
+  "StopTimeout",
+  "Shell",
+  "unknown",
+] as const;
+const shapes = [
+  "null",
+  "emptystring",
+  "string",
+  "false",
+  "true",
+  "number",
+  "emptyarray",
+  "array",
+  "emptyobject",
+  "object",
+] as const;
+interface ConfigDiagnostic {
+  field: (typeof configFields)[number];
+  side: "actual" | "expected";
+  shape: (typeof shapes)[number];
+}
+function configDiagnostic(
+  key: string,
+  value: unknown,
+  side: ConfigDiagnostic["side"],
+): ConfigDiagnostic | undefined {
+  let shape: ConfigDiagnostic["shape"] | undefined;
+  if (value === null) shape = "null";
+  else if (typeof value === "string") shape = value === "" ? "emptystring" : "string";
+  else if (typeof value === "boolean") shape = value ? "true" : "false";
+  else if (typeof value === "number") shape = "number";
+  else if (Array.isArray(value)) shape = value.length === 0 ? "emptyarray" : "array";
+  else if (typeof value === "object")
+    shape = Object.keys(value).length === 0 ? "emptyobject" : "object";
+  if (shape === undefined) return undefined;
+  return { field: configFields.find((field) => field === key) ?? "unknown", side, shape };
+}
+
+class RecipientProofError extends Error {
+  readonly reason: Reason;
+  readonly config?: ConfigDiagnostic;
+  constructor(reason: Reason, config?: ConfigDiagnostic) {
+    super("Recipient proof rejected");
+    this.name = "RecipientProofError";
+    this.reason = reason;
+    if (config !== undefined) this.config = config;
+  }
+}
+// Discard assertion details here; never retain actual/expected, message or cause.
+function checked(reason: Reason, assertion: () => void, config?: ConfigDiagnostic): void {
+  try {
+    assertion();
+  } catch {
+    throw new RecipientProofError(reason, config);
+  }
+}
+export function recipientFailure(stage: Stage, error: unknown, fallback: Reason = "unknown") {
+  const reason = error instanceof RecipientProofError ? error.reason : fallback;
+  const config =
+    error instanceof RecipientProofError && reason === "config-fields" ? error.config : undefined;
+  return {
+    probe: "recipient-import",
+    stage,
+    reason: reasons.includes(reason) ? reason : "unknown",
+    ...(config &&
+    configFields.includes(config.field) &&
+    shapes.includes(config.shape) &&
+    ["actual", "expected"].includes(config.side)
+      ? { config: { field: config.field, side: config.side, shape: config.shape } }
+      : {}),
+    passed: false,
+  };
+}
+/** Only fixed labels cross the fixture's error boundary; never assertion payloads. */
+export function recipientFixtureFailure(
+  stage: string,
+  error: unknown,
+  bindingStep?: string,
+  sourceStep?: string,
+) {
+  return {
+    ...recipientFailure("docker-binding", error),
+    probe: "recipient-fixture",
+    stage: fixtureStages.find((known) => known === stage) ?? "unknown",
+    ...(stage === "binding"
+      ? { binding: bindingSteps.find((known) => known === bindingStep) ?? "unknown" }
+      : {}),
+    ...(stage === "source"
+      ? { source: sourceSteps.find((known) => known === sourceStep) ?? "unknown" }
+      : {}),
+    ...(error instanceof RecipientCommandError
+      ? { command: commandFailures.find((known) => known === error.kind) ?? "nonzero" }
+      : {}),
+  };
+}
+const env = {
+  HOME: process.env.HOME,
+  PATH: process.env.PATH,
+  DOCKER_HOST: process.env.DOCKER_HOST,
+  DOCKER_CONFIG: process.env.DOCKER_CONFIG,
+  BUILDX_CONFIG: process.env.BUILDX_CONFIG,
+  BUILDX_BUILDER: "default",
+};
+
+interface Daemon {
+  id: string;
+  root: string;
+  host: string;
+  pid: number;
+  start: string;
+  rootless: boolean;
+  networkNamespace: string;
+  backend?: PrivateContainerd;
+}
+interface Receipt {
+  version: 1;
+  phase: "builder" | "loaded";
+  sourceCommit: string;
+  metadataSha256: string;
+  archiveSha256: string;
+  builder: Daemon;
+  recipient?: Daemon;
+  imageId?: string;
+}
+interface Metadata {
+  sourceCommit: string;
+  archiveSha256: string;
+  sourceKitSha256: string;
+  runtimeImageConfigSha256: string;
+  imageId: string;
+  savedImage: SavedImage;
+}
+interface Inspection {
+  Id: string;
+  Os: string;
+  Architecture: string;
+  RootFS: { Type: string; Layers: string[] };
+  Config: ImageConfig;
+}
+
+async function digest(path: string): Promise<string> {
+  assert.ok((await lstat(path)).isFile(), "Proof input must be a regular file");
+  const h = createHash("sha256");
+  for await (const bytes of createReadStream(path)) h.update(bytes);
+  return h.digest("hex");
+}
+async function command(file: string, args: string[], timeout = 15000): Promise<string> {
+  try {
+    return (
+      await execute(file, args, { env, timeout, maxBuffer: 1024 * 1024, encoding: "utf8" })
+    ).stdout.trim();
+  } catch (error) {
+    throw recipientCommandFailure(file, error);
+  }
+}
+async function docker(args: string[], timeout?: number) {
+  return command("docker", args, timeout);
+}
+/** Namespace entry may change cwd; provenance always names this checkout. */
+export async function sourceRevision(): Promise<string> {
+  return command("git", ["-C", repository, "rev-parse", "HEAD"]);
+}
+async function sourceProof(observe?: (step: SourceStep) => void) {
+  observe?.("metadata-stat");
+  const metadataPath = resolve(directory, "image-metadata.json");
+  const stat = await lstat(metadataPath);
+  assert.ok(stat.isFile() && stat.size < 1024 * 1024);
+  observe?.("metadata-read");
+  const metadataBytes = await readFile(metadataPath);
+  const metadata = JSON.parse(metadataBytes.toString("utf8")) as Metadata;
+  observe?.("git-revision");
+  assert.equal(metadata.sourceCommit, await sourceRevision());
+  observe?.("source-commit");
+  assert.match(metadata.sourceCommit, /^[a-f0-9]{40}$/);
+  observe?.("archive-digest");
+  assert.equal(await digest(resolve(directory, "image.tar")), metadata.archiveSha256);
+  observe?.("kit-digest");
+  assert.equal(
+    await digest(resolve(directory, "sources-and-notices.tar")),
+    metadata.sourceKitSha256,
+  );
+  observe?.("pruning-policy");
+  const freeze = JSON.parse(
+    await readFile(resolve(import.meta.dirname, "debian-freeze.json"), "utf8"),
+  ) as { pruning: PrunePolicy };
+  observe?.("image-graph");
+  const graph = await inspectImageArchive(resolve(directory, "image.tar"), metadata.imageId, {
+    pruning: freeze.pruning,
+  });
+  observe?.("selected-graph");
+  assert.deepEqual(graph.saved, metadata.savedImage, "Recipient input selected graph changed");
+  observe?.("runtime-config");
+  assert.equal(
+    hash(Buffer.from(JSON.stringify(graph.configuration))),
+    metadata.runtimeImageConfigSha256,
+  );
+  return { metadata, graph, metadataSha256: hash(metadataBytes) };
+}
+
+/** Require every reported disk-use class to be empty, including builder cache. */
+export function assertEmptyStore(rows: { Type: string; TotalCount: string }[]): void {
+  checked("store-types", () =>
+    assert.deepEqual(rows.map((row) => row.Type).sort(), [
+      "Build Cache",
+      "Containers",
+      "Images",
+      "Local Volumes",
+    ]),
+  );
+  const classes: Record<string, Reason> = {
+    Images: "store-images",
+    Containers: "store-containers",
+    "Local Volumes": "store-volumes",
+    "Build Cache": "store-build-cache",
+  };
+  for (const row of rows)
+    checked(classes[row.Type] ?? "unknown", () =>
+      assert.equal(String(row.TotalCount), "0", "Recipient store is not empty"),
+    );
+}
+export function assertDistinctStores(builder: Daemon, recipient: Daemon): void {
+  checked("same-id", () =>
+    assert.notEqual(builder.id, recipient.id, "Recipient daemon is the builder"),
+  );
+  checked("same-root", () =>
+    assert.notEqual(builder.root, recipient.root, "Recipient store is the builder store"),
+  );
+  checked("same-socket", () =>
+    assert.notEqual(builder.host, recipient.host, "Recipient API is the builder API"),
+  );
+  checked("same-process", () =>
+    assert.ok(
+      builder.pid !== recipient.pid || builder.start !== recipient.start,
+      "Recipient process is the builder",
+    ),
+  );
+  if (recipient.rootless)
+    checked("same-namespace", () =>
+      assert.notEqual(
+        builder.networkNamespace,
+        recipient.networkNamespace,
+        "Rootless recipient namespace is the builder namespace",
+      ),
+    );
+  else {
+    checked("backend-binding", () => assert.ok(builder.backend && recipient.backend));
+    const a = builder.backend;
+    const b = recipient.backend;
+    assert.ok(a && b);
+    checked("same-backend-root", () =>
+      assert.ok(a.root !== b.root && a.rootIdentity !== b.rootIdentity),
+    );
+    checked("same-backend-state", () =>
+      assert.ok(a.state !== b.state && a.stateIdentity !== b.stateIdentity),
+    );
+    checked("same-backend-socket", () =>
+      assert.ok(a.socket !== b.socket && a.socketIdentity !== b.socketIdentity),
+    );
+    checked("same-backend-process", () => assert.ok(a.pid !== b.pid || a.start !== b.start));
+  }
+}
+
+/** Save-by-ID need not restore a tag; select only the sole image in the empty store. */
+export function singleImportedImage(ids: string[]): string {
+  checked(ids.length === 0 ? "empty-ids" : "id-count", () =>
+    assert.ok(ids.length > 0 && ids.length <= 8, "Missing or ambiguous imported images"),
+  );
+  for (const id of ids)
+    checked(ids.length === 1 && id === "" ? "empty-ids" : "id-format", () =>
+      assert.match(id, digestPattern),
+    );
+  const unique = [...new Set(ids)];
+  checked("multiple-ids", () => assert.equal(unique.length, 1, "Multiple imported images"));
+  const id = unique[0];
+  assert.ok(id);
+  return id;
+}
+
+// Docker inspect can expose inert API defaults absent from OCI Config.
+function configuration(config: ImageConfig, side: ConfigDiagnostic["side"]): unknown {
+  checked("runtime-config", () => assertRuntimeConfig(config));
+  // Called only after linux/amd64, selected identity and ordered DiffIDs pass.
+  // Moby 70efc0e: container.go:124-144 -> oci_linux.go:684. Preserve the canonical bool
+  // in equality rather than treating Windows command-line escaping as executable data.
+  let argsEscaped = false;
+  const keys = [
+    "Env",
+    "User",
+    "WorkingDir",
+    "Entrypoint",
+    "Cmd",
+    "StopSignal",
+    "ExposedPorts",
+    "Shell",
+    "Volumes",
+    "Labels",
+  ];
+  for (const [key, value] of Object.entries(config)) {
+    if (keys.includes(key)) continue;
+    if (key === "ArgsEscaped") {
+      checked(
+        "config-fields",
+        () => assert.equal(typeof value, "boolean"),
+        configDiagnostic(key, value, side),
+      );
+      argsEscaped = value as boolean;
+      continue;
+    }
+    checked(
+      "config-fields",
+      () =>
+        assert.ok(
+          (["Hostname", "Domainname", "Image"].includes(key) && value === "") ||
+            ([
+              "AttachStdin",
+              "AttachStdout",
+              "AttachStderr",
+              "Tty",
+              "OpenStdin",
+              "StdinOnce",
+              "NetworkDisabled",
+            ].includes(key) &&
+              value === false) ||
+            (["OnBuild", "Healthcheck"].includes(key) &&
+              (value === null ||
+                (key === "OnBuild" && Array.isArray(value) && value.length === 0))),
+          "Unexpected recipient configuration field",
+        ),
+      configDiagnostic(key, value, side),
+    );
+  }
+  return {
+    Env: config.Env,
+    User: config.User,
+    WorkingDir: config.WorkingDir,
+    Entrypoint: config.Entrypoint,
+    Cmd: config.Cmd ?? [],
+    StopSignal: config.StopSignal,
+    ExposedPorts: config.ExposedPorts,
+    Shell: config.Shell ?? ["/bin/sh", "-c"],
+    Volumes: config.Volumes ?? {},
+    Labels: config.Labels ?? {},
+    ArgsEscaped: argsEscaped,
+  };
+}
+export function assertImportedImage(
+  actual: Inspection,
+  expected: { saved: SavedImage; configuration: ImageConfig; diffIds: string[] },
+): string {
+  checked("id-format", () => assert.match(actual.Id, digestPattern));
+  checked("graph-id", () =>
+    assert.ok(
+      [expected.saved.manifest.digest, expected.saved.config.digest].includes(actual.Id),
+      "Imported identity is outside the selected graph",
+    ),
+  );
+  checked("os", () => assert.equal(actual.Os, "linux"));
+  checked("arch", () => assert.equal(actual.Architecture, "amd64"));
+  checked("rootfs", () => assert.equal(actual.RootFS.Type, "layers"));
+  checked("diffids", () =>
+    assert.deepEqual(actual.RootFS.Layers, expected.diffIds, "Imported DiffIDs changed"),
+  );
+  const actualConfig = configuration(actual.Config, "actual");
+  const expectedConfig = configuration(expected.configuration, "expected");
+  checked("config-equality", () =>
+    assert.deepEqual(actualConfig, expectedConfig, "Imported runtime config changed"),
+  );
+  return actual.Id;
+}
+
+export function assertRecipientTag(actualId: string, expectedId: string): void {
+  checked("tag", () => assert.equal(actualId, expectedId));
+}
+export function assertRecipientPostBinding(actual: Daemon, expected: Daemon): void {
+  checked("postbinding", () => assert.deepEqual(actual, expected));
+}
+
+async function binding(observe?: (step: BindingStep) => void): Promise<Daemon> {
+  observe?.("platform");
+  assert.equal(process.platform, "linux", "Recipient proof requires Linux");
+  observe?.("socket-path");
+  assert.match(
+    env.DOCKER_HOST ?? "",
+    /^unix:\/\/\/tmp\/fortipi-docker-[A-Za-z0-9_-]+\/docker.sock$/,
+  );
+  const socket = (env.DOCKER_HOST ?? "").slice("unix://".length);
+  const session = dirname(socket);
+  observe?.("session-paths");
+  assert.equal(await realpath(session), session);
+  assert.equal(env.DOCKER_CONFIG, resolve(session, "config"));
+  observe?.("session-permissions");
+  for (const path of [session, env.DOCKER_CONFIG]) {
+    const stat = await lstat(path);
+    assert.ok(
+      stat.isDirectory() && stat.uid === process.getuid?.() && (stat.mode & 0o777) === 0o700,
+    );
+  }
+  observe?.("daemon-pid");
+  const pidText = (await readFile(resolve(session, "daemon.pid"), "utf8")).trim();
+  assert.match(pidText, /^[1-9][0-9]*$/);
+  const pid = Number(pidText);
+  const args = (await readFile(`/proc/${pid}/cmdline`, "utf8")).split("\0").filter(Boolean);
+  const rootless = args.includes("--rootless");
+  observe?.("daemon-executable");
+  const executable = rootless
+    ? await realpath(`/proc/${pid}/exe`)
+    : await command("/usr/bin/sudo", ["-n", "/usr/bin/readlink", "-f", `/proc/${pid}/exe`]);
+  const tool = dirname(executable);
+  observe?.("tool-path");
+  assert.ok(
+    tool.startsWith(
+      resolve(repository, `dist/toolchain/docker-${rootless ? "rootless" : "rootful"}-`),
+    ),
+  );
+  assert.equal(executable, resolve(tool, "dockerd"));
+  assert.equal(await realpath(tool), tool);
+  observe?.("tool-permissions");
+  const tools = await lstat(tool);
+  assert.ok(
+    tools.isDirectory() && tools.uid === process.getuid?.() && (tools.mode & 0o777) === 0o700,
+  );
+  observe?.("tool-selection");
+  assert.equal(
+    (env.PATH ?? "")
+      .split(delimiter)
+      .find((path) => path.startsWith(resolve(repository, "dist/toolchain/docker-"))),
+    tool,
+  );
+  observe?.("publisher");
+  const policy = JSON.parse(
+    await readFile(resolve(repository, "tools/unstale/platform-tools.json"), "utf8"),
+  ) as { docker: { sha256: string; version: string } };
+  const raw = await readFile(resolve(repository, "dist/toolchain/docker-29.9.3.tgz"));
+  assert.equal(hash(raw), policy.docker.sha256);
+  const publisher = archiveEntries(raw);
+  observe?.("tool-digests");
+  for (const name of ["docker", "dockerd"]) {
+    const bytes = publisher.get(`docker/${name}`);
+    assert.ok(bytes);
+    assert.equal(await digest(resolve(tool, name)), hash(bytes));
+  }
+  const expected = [
+    executable,
+    ...(rootless
+      ? ["--rootless", "--storage-driver", "overlay2"]
+      : ["--dns", "172.17.0.1", "--containerd", resolve(session, "containerd.sock")]),
+    "--config-file",
+    resolve(session, "config/daemon.json"),
+    "--log-level",
+    "error",
+    "--metrics-addr=",
+    "--host",
+    env.DOCKER_HOST,
+    "--data-root",
+    resolve(session, "data"),
+    "--exec-root",
+    resolve(session, "exec"),
+    "--pidfile",
+    resolve(session, "daemon.pid"),
+  ];
+  observe?.("daemon-arguments");
+  assert.deepEqual(args, expected, "Recipient daemon private binding changed");
+  observe?.("daemon-config");
+  assert.equal(await readFile(resolve(session, "config/daemon.json"), "utf8"), "{}\n");
+  observe?.("socket-permissions");
+  const api = await lstat(socket);
+  assert.ok(
+    api.isSocket() && api.uid === (rootless ? process.getuid?.() : 0) && (api.mode & 7) === 0,
+  );
+  observe?.("daemon-uid");
+  const status = await readFile(`/proc/${pid}/status`, "utf8");
+  const uid = rootless ? process.getuid?.() : 0;
+  assert.ok(
+    /^Uid:\s+([0-9]+)\s+([0-9]+)\s+([0-9]+)\s+([0-9]+)$/m
+      .exec(status)
+      ?.slice(1)
+      .every((value) => Number(value) === uid),
+  );
+  observe?.("daemon-start");
+  const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+  const start = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+  assert.ok(start && /^[0-9]+$/.test(start));
+  observe?.("daemon-info");
+  const info = JSON.parse(
+    await docker([
+      "info",
+      "--format",
+      '{"id":{{json .ID}},"root":{{json .DockerRootDir}},"version":{{json .ServerVersion}}}',
+    ]),
+  ) as { id: string; root: string; version: string };
+  assert.match(info.id, /^[A-Za-z0-9:-]{1,128}$/);
+  assert.equal(info.version, policy.docker.version);
+  assert.equal(info.root, resolve(session, "data"));
+  observe?.("data-root");
+  // Root-owned stores require sudo only for the canonical-path query, never a listing.
+  const canonical = rootless
+    ? await realpath(info.root)
+    : await command("/usr/bin/sudo", ["-n", "/usr/bin/readlink", "-f", info.root]);
+  assert.equal(canonical, info.root);
+  observe?.("network-namespace");
+  const namespace = `/proc/${pid}/ns/net`;
+  const networkNamespace = rootless
+    ? await readlink(namespace)
+    : await command("/usr/bin/sudo", ["-n", "/usr/bin/readlink", namespace]);
+  assert.match(networkNamespace, /^net:\[[0-9]+\]$/);
+  let backend: PrivateContainerd | undefined;
+  if (!rootless) {
+    observe?.("private-backend");
+    backend = await verifyPrivateContainerd(tool, session, env, raw);
+    assertPrivateContainerdApi(
+      JSON.parse(await docker(["info", "--format", "{{json .Containerd}}"])),
+      backend,
+    );
+  }
+  observe?.("socket-identity");
+  return {
+    id: info.id,
+    root: canonical,
+    host: `unix://${await realpath(socket)}`,
+    pid,
+    start,
+    rootless,
+    networkNamespace,
+    ...(backend ? { backend } : {}),
+  };
+}
+async function readReceipt(): Promise<Receipt> {
+  const stat = await lstat(receiptPath);
+  assert.ok(
+    stat.isFile() &&
+      stat.uid === process.getuid?.() &&
+      (stat.mode & 0o777) === 0o600 &&
+      stat.size < 16384,
+  );
+  const value = JSON.parse(await readFile(receiptPath, "utf8")) as Receipt;
+  assert.equal(value.version, 1);
+  return value;
+}
+function matchSource(receipt: Receipt, source: Awaited<ReturnType<typeof sourceProof>>) {
+  assert.equal(receipt.sourceCommit, source.metadata.sourceCommit);
+  assert.equal(receipt.archiveSha256, source.metadata.archiveSha256);
+  assert.equal(receipt.metadataSha256, source.metadataSha256);
+}
+async function inspection(reference = imageTag): Promise<Inspection> {
+  return JSON.parse(
+    await docker([
+      "image",
+      "inspect",
+      reference,
+      "--format",
+      '{"Id":{{json .Id}},"Os":{{json .Os}},"Architecture":{{json .Architecture}},"RootFS":{{json .RootFS}},"Config":{{json .Config}}}',
+    ]),
+  ) as Inspection;
+}
+
+async function loadArchive(expectedSha256: string): Promise<void> {
+  const bytes = createHash("sha256");
+  const meter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      bytes.update(chunk);
+      callback(null, chunk);
+    },
+  });
+  const child = spawn("docker", ["image", "load", "--platform", "linux/amd64", "--quiet"], {
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  child.stdout.resume();
+  child.stderr.resume();
+  const deadline = setTimeout(() => child.kill("SIGKILL"), 120000);
+  const exit = new Promise<void>((accept, reject) => {
+    child.once("error", () => reject(new Error("Recipient import process failed")));
+    child.once("close", (code) =>
+      code === 0 ? accept() : reject(new Error("Recipient import failed")),
+    );
+  });
+  try {
+    await Promise.all([
+      pipeline(createReadStream(resolve(directory, "image.tar")), meter, child.stdin),
+      exit,
+    ]);
+    assert.equal(
+      bytes.digest("hex"),
+      expectedSha256,
+      "Imported stream differs from canonical archive",
+    );
+  } finally {
+    clearTimeout(deadline);
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  }
+}
+
+/** The fixture must stay on the recipient daemon and its imported selected image. */
+export async function verifyRecipientFixture(): Promise<string> {
+  let stage: FixtureStage = "receipt";
+  let bindingStep: BindingStep | undefined;
+  let sourceStep: SourceStep | undefined;
+  try {
+    const receipt = await readReceipt();
+    assert.equal(receipt.phase, "loaded", "Recipient import proof is required");
+    stage = "source";
+    const source = await sourceProof((step) => {
+      sourceStep = step;
+    });
+    stage = "source-match";
+    matchSource(receipt, source);
+    stage = "binding";
+    const current = await binding((step) => {
+      bindingStep = step;
+    });
+    stage = "stability";
+    assert.deepEqual(current, receipt.recipient, "Fixture daemon differs from imported recipient");
+    stage = "distinct";
+    assertDistinctStores(receipt.builder, current);
+    if (current.rootless) {
+      stage = "fuse-flag";
+      assert.ok(process.argv.includes("--require-fuse"), "Rootless recipient requires real FUSE");
+      stage = "netns";
+      assert.equal(await readlink("/proc/self/ns/net"), current.networkNamespace);
+      stage = "userns";
+      assert.equal(
+        await readlink("/proc/self/ns/user"),
+        await readlink(`/proc/${current.pid}/ns/user`),
+      );
+    }
+    stage = "image-inspect";
+    const actual = await inspection();
+    stage = "image-identity";
+    const imageId = assertImportedImage(actual, source.graph);
+    stage = "image-match";
+    assert.equal(imageId, receipt.imageId, "Recipient fixture image changed");
+    return imageId;
+  } catch (error) {
+    console.error(JSON.stringify(recipientFixtureFailure(stage, error, bindingStep, sourceStep)));
+    throw new Error("Recipient import fixture binding failed");
+  }
+}
+
+async function main(): Promise<void> {
+  let stage: Stage = "prerequisite";
+  let reason: Reason = "prerequisite";
+  try {
+    assert.equal(process.platform, "linux");
+    assert.equal(process.env.GITHUB_ACTIONS, "true");
+    assert.ok(process.argv.length === 3 && ["capture", "load"].includes(process.argv[2] ?? ""));
+    await command("/usr/bin/systemctl", ["is-active", "--quiet", "agent.service"]);
+    stage = "source-audit";
+    reason = "source-audit";
+    const source = await sourceProof();
+    stage = "docker-binding";
+    reason = "docker-binding";
+    const current = await binding();
+    if (process.argv[2] === "capture") {
+      stage = "builder-idle";
+      reason = "builder-idle";
+      assert.equal(
+        await docker(["container", "ls", "--all", "--quiet"]),
+        "",
+        "Builder has containers; no cleanup is authorized",
+      );
+      assert.equal((await inspection()).Id, source.metadata.imageId);
+      const receipt: Receipt = {
+        version: 1,
+        phase: "builder",
+        sourceCommit: source.metadata.sourceCommit,
+        metadataSha256: source.metadataSha256,
+        archiveSha256: source.metadata.archiveSha256,
+        builder: current,
+      };
+      await writeFile(receiptPath, `${JSON.stringify(receipt)}\n`, { flag: "wx", mode: 0o600 });
+    } else {
+      stage = "recipient-empty";
+      reason = "receipt";
+      const receipt = await readReceipt();
+      reason = "receipt-phase";
+      assert.equal(receipt.phase, "builder");
+      reason = "source-match";
+      matchSource(receipt, source);
+      assertDistinctStores(receipt.builder, current);
+      reason = "store-query";
+      const diskUsage = await docker(["system", "df", "--format", "{{json .}}"]);
+      reason = "store-types";
+      assertEmptyStore(diskUsage.split("\n").map((line) => JSON.parse(line)));
+      stage = "import";
+      reason = "import";
+      await loadArchive(source.metadata.archiveSha256);
+      stage = "imported-identity";
+      reason = "image-list";
+      const selected = singleImportedImage(
+        (await docker(["image", "ls", "--all", "--quiet", "--no-trunc"])).split("\n"),
+      );
+      reason = "image-inspect";
+      const imageId = assertImportedImage(await inspection(selected), source.graph);
+      reason = "tag";
+      await docker(["image", "tag", imageId, imageTag]);
+      assertRecipientTag((await inspection()).Id, imageId);
+      reason = "postbinding";
+      assertRecipientPostBinding(await binding(), current);
+      reason = "archive-stability";
+      assert.equal(await digest(resolve(directory, "image.tar")), source.metadata.archiveSha256);
+      reason = "metadata-stability";
+      assert.equal(await digest(resolve(directory, "image-metadata.json")), source.metadataSha256);
+      reason = "receipt-stability";
+      assert.deepEqual(await readReceipt(), receipt, "Recipient capture receipt changed");
+      reason = "receipt-write";
+      await writeFile(
+        receiptPath,
+        `${JSON.stringify({ ...receipt, phase: "loaded", recipient: current, imageId })}\n`,
+        { mode: 0o600 },
+      );
+    }
+    console.log(
+      JSON.stringify({
+        probe: "recipient-import",
+        phase: process.argv[2],
+        passed: true,
+        archiveSha256: source.metadata.archiveSha256,
+      }),
+    );
+  } catch (error) {
+    console.error(JSON.stringify(recipientFailure(stage, error, reason)));
+    process.exitCode = 1;
+  }
+}
+if (import.meta.main) await main();

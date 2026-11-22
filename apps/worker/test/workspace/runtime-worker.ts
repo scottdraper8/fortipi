@@ -2,16 +2,169 @@ import { DurableObject } from "cloudflare:workers";
 import { createHash } from "node:crypto";
 import type * as D from "../../src/boundary/dto.js";
 import type { Env } from "../../src/boundary/env.js";
+import type { RuntimeHostContext } from "../../src/boundary/infrastructure.js";
 import { outcome } from "../../src/workspace/errors.js";
+import { jobSnapshot } from "../../src/workspace/job-snapshot.js";
 import { admitLocalUpload } from "../../src/workspace/local-admission.js";
+import { WorkspaceStorage } from "../../src/workspace/storage.js";
 import { hashInventory } from "../../src/workspace/streams.js";
 import {
   internalHeader,
   WorkspaceObject as WorkspaceBase,
 } from "../../src/workspace/workspace-object.js";
 
+export { HostProbe } from "../backends/host-rpc-worker.js";
+
 /** Actual binding application plus a test-only post-transaction response barrier. */
 export class WorkspaceObject extends WorkspaceBase {
+  #releaseSnapshot: (() => void) | undefined;
+  override stub(name: string): ReturnType<WorkspaceBase["stub"]> {
+    if (name.startsWith("fortipi:child:") && this.state.get("test-storage-track"))
+      this.state.put(`test-storage-activation:${name}`, true);
+    return super.stub(name);
+  }
+  override async readStored(
+    ctx: D.AuthContext,
+    revision: Parameters<WorkspaceBase["readStored"]>[1],
+    entry: Parameters<WorkspaceBase["readStored"]>[2],
+  ): Promise<ReadableStream<Uint8Array>> {
+    const stream = await super.readStored(ctx, revision, entry);
+    if (ctx.requestId !== "snapshot-block") return stream;
+    const reader = stream.getReader();
+    let first = true;
+    return new ReadableStream(
+      {
+        pull: async (controller) => {
+          const next = await reader.read();
+          if (first && !next.done) {
+            first = false;
+            const gate = new Promise<void>((resolve) => {
+              this.#releaseSnapshot = resolve;
+            });
+            this.state.put("test-snapshot-blocked", true);
+            await gate;
+          }
+          if (next.done) {
+            reader.releaseLock();
+            controller.close();
+          } else controller.enqueue(next.value);
+        },
+        cancel: async () => {
+          this.state.put("test-snapshot-cancelled", true);
+          this.#releaseSnapshot?.();
+          await reader.cancel().catch(() => {});
+          try {
+            reader.releaseLock();
+          } catch {}
+        },
+      },
+      { highWaterMark: 0 },
+    );
+  }
+  override async exportData(
+    ctx: D.AuthContext,
+    input: D.ExportRequest,
+  ): Promise<D.Outcome<D.ExportDescriptor>> {
+    const result = await super.exportData(ctx, input);
+    if (
+      input.exportId === "lost-export-reply" &&
+      result.ok &&
+      !this.state.get("test-export-reply-lost")
+    ) {
+      this.state.put("test-export-reply-lost", true);
+      return {
+        ok: false,
+        code: "interrupted",
+        message: "Injected lost export reply",
+        requestId: ctx.requestId,
+        retryable: false,
+        details: { reason: "uncertain_effects" },
+      };
+    }
+    if (
+      input.exportId === "kill-export-reply" &&
+      result.ok &&
+      !this.state.get("test-export-kill")
+    ) {
+      this.state.put("test-export-kill", true);
+      this.state.put("test-barrier", true);
+      await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
+    }
+    return result;
+  }
+  override async childFetch(
+    ctx: D.AuthContext,
+    allocation: D.StoreAllocation,
+    path: string,
+    init: Parameters<WorkspaceBase["childFetch"]>[3] = {},
+  ): Promise<Response> {
+    const response = await super.childFetch(ctx, allocation, path, init);
+    if (
+      !init.exportId ||
+      !response.body ||
+      !["export-corrupt", "export-truncate", "export-revoke"].includes(ctx.requestId)
+    )
+      return response;
+    const reader = response.body.getReader();
+    let first = true;
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        pull: async (controller) => {
+          const next = await reader.read();
+          if (next.done) {
+            reader.releaseLock();
+            controller.close();
+            return;
+          }
+          if (first) {
+            first = false;
+            if (ctx.requestId === "export-revoke") {
+              const ack = await this.invalidateGeneration(
+                {
+                  kind: "control-recovery",
+                  deploymentId: ctx.deploymentId,
+                  revocationId: "export-reader-floor",
+                  recipient: { kind: "workspace", id: "workspace" },
+                  actions: ["invalidate"],
+                  deadline: ctx.deadline,
+                },
+                {
+                  revocationId: "export-reader-floor",
+                  subject: {
+                    kind: "credential",
+                    credentialId: ctx.credentialId,
+                    minimumGeneration: ctx.generation + 1,
+                  },
+                },
+              );
+              if (!ack.ok) throw new Error("Export reader revocation failed");
+            }
+            if (ctx.requestId === "export-corrupt") {
+              const bytes = next.value.slice();
+              bytes[0] = (bytes[0] ?? 0) ^ 1;
+              controller.enqueue(bytes);
+              return;
+            }
+            if (ctx.requestId === "export-truncate") {
+              controller.enqueue(next.value.subarray(0, next.value.length - 1));
+              await reader.cancel();
+              reader.releaseLock();
+              controller.close();
+              return;
+            }
+          }
+          controller.enqueue(next.value);
+        },
+        async cancel() {
+          await reader.cancel().catch(() => {});
+          try {
+            reader.releaseLock();
+          } catch {}
+        },
+      }),
+      { status: response.status },
+    );
+  }
   override async authority(ctx: D.AuthContext, workspaceId: string, action = "workspace.read") {
     const authority = await super.authority(ctx, workspaceId, action);
     if (ctx.requestId === "revoke-during-metadata")
@@ -65,11 +218,198 @@ export class WorkspaceObject extends WorkspaceBase {
   }
   override async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (path === "/__test/storage-facts")
+      return Response.json({
+        bytes: this.state.bytes,
+        charge: new WorkspaceStorage(this).charge(),
+        census: this.state.get("storage-census"),
+        report: this.state.get("storage-report"),
+      });
+    if (path === "/__test/storage-native-ack") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      const body = await request.json<{ allocation: D.StoreAllocation; observation: unknown }>();
+      return super.fetch(
+        new Request("https://workspace.internal/__fortipi/execution/observed", {
+          method: "POST",
+          headers: { [internalHeader]: JSON.stringify({ auth, allocation: body.allocation }) },
+          body: JSON.stringify(body.observation),
+        }),
+      );
+    }
+    if (path === "/__test/storage-host-register" || path === "/__test/storage-host-ack") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      const body = await request.json<{
+        allocation: D.StoreAllocation;
+        config: Extract<D.BackendConfig, { kind: "linux" }>;
+        context?: RuntimeHostContext;
+        runtimeId?: string;
+      }>();
+      await this.registry(auth, {
+        allocationId: body.allocation.allocationId,
+        childId: body.allocation.childId,
+        authorityId: body.allocation.authorityId,
+        workspaceId: body.allocation.workspaceId,
+      });
+      const pool = new WorkspaceStorage(this);
+      if (path.endsWith("register")) {
+        const initialized = await this.stub(body.allocation.childId).initializeStore(
+          auth,
+          body.allocation,
+        );
+        if (!initialized.ok) return Response.json(initialized, { status: 409 });
+        await pool.initialized(auth, body.allocation);
+      }
+      return Response.json(
+        await this.mutex.run(() =>
+          this.state.transaction(() => {
+            const context = pool.registerHost(auth, body.allocation, body.config);
+            if (body.runtimeId) pool.acknowledgeHost(context, body.runtimeId);
+            return context;
+          }),
+        ),
+      );
+    }
+    if (path === "/__test/storage-role")
+      return Response.json(
+        await outcome(() => {
+          new WorkspaceStorage(this).admitChild("scratch");
+          return true;
+        }),
+      );
+    if (path === "/__test/storage-change" || path === "/__test/storage-revoke") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      if (path.endsWith("change")) {
+        const lease = this.current().lease;
+        if (lease)
+          await this.releaseLease(auth, {
+            requestId: "release-during-census",
+            lease,
+            reason: "completed",
+          });
+      } else
+        await this.invalidateGeneration(
+          {
+            kind: "control-recovery",
+            deploymentId: auth.deploymentId,
+            revocationId: "sample-floor",
+            recipient: { kind: "workspace", id: "workspace" },
+            actions: ["invalidate"],
+            deadline: auth.deadline,
+          },
+          {
+            revocationId: "sample-floor",
+            subject: {
+              kind: "credential",
+              credentialId: auth.credentialId,
+              minimumGeneration: auth.generation + 1,
+            },
+          },
+        );
+      this.state.put("test-storage-midawait", path);
+      return new Response(null, { status: 204 });
+    }
+    if (path === "/__fortipi/storage-sample" && this.state.get("child")) {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      const response = await super.fetch(request);
+      if (response.ok && ["storage-change", "storage-revoke"].includes(auth.requestId)) {
+        const allocation = this.state.get<D.StoreState>("child")?.allocation;
+        if (!allocation) throw new Error("Known actual child required");
+        await this.stub(allocation.authorityId).fetch(
+          new Request("https://fixture.internal/__test/" + auth.requestId, {
+            headers: { [internalHeader]: JSON.stringify({ auth }) },
+          }),
+        );
+      }
+      return response;
+    }
+    if (path === "/__test/snapshot-cancelled")
+      return Response.json(this.state.get("test-snapshot-cancelled") ?? false);
+    if (path === "/__test/job-snapshot-stream") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      const plan = await jobSnapshot(this, auth, request, await request.json());
+      if (plan.kind !== "blob") throw new Error("Expected actual snapshot blob plan");
+      const reader = (await plan.open()).getReader();
+      let accepted = 0;
+      let rejected = false;
+      try {
+        const next = await reader.read();
+        if (!next.done) accepted = next.value.length;
+      } catch {
+        rejected = true;
+      }
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+      return Response.json({ accepted, rejected });
+    }
+    if (path === "/__test/snapshot-barrier")
+      return new Response(this.state.get("test-snapshot-blocked") ? "ready" : "waiting");
+    if (path === "/__test/snapshot-release") {
+      this.#releaseSnapshot?.();
+      return new Response(null, { status: 204 });
+    }
+    if (path === "/__test/export-physical") return Response.json({ bytes: this.state.bytes });
     if (path === "/__test/seed") {
       return new Response(null, { status: 404 });
     }
     if (path === "/__test/barrier")
       return new Response(this.state.get("test-barrier") ? "ready" : "waiting");
+    if (path === "/__test/metadata-queued" || path === "/__test/job-snapshot-queued") {
+      const { auth } = JSON.parse(request.headers.get(internalHeader) ?? "null") as {
+        auth: D.AuthContext;
+      };
+      let enter = () => {};
+      let release = () => {};
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const hold = this.mutex.run(async () => {
+        enter();
+        await gate;
+      });
+      await entered;
+      const invalidation = this.invalidateGeneration(
+        {
+          kind: "control-recovery",
+          deploymentId: auth.deploymentId,
+          revocationId: "queued-metadata-floor",
+          recipient: { kind: "workspace", id: "workspace" },
+          actions: ["invalidate"],
+          deadline: auth.deadline,
+        },
+        {
+          revocationId: "queued-metadata-floor",
+          subject: {
+            kind: "credential",
+            credentialId: auth.credentialId,
+            minimumGeneration: auth.generation + 1,
+          },
+        },
+      );
+      const target = new URL(request.url);
+      target.pathname =
+        path === "/__test/metadata-queued"
+          ? "/__fortipi/operational-metadata"
+          : "/__fortipi/job-snapshot";
+      const pending = super.fetch(new Request(target, request));
+      release();
+      await hold;
+      const ack = await invalidation;
+      if (!ack.ok) throw new Error("Queued metadata revocation failed");
+      return pending;
+    }
     return super.fetch(request);
   }
   override async commitUpload(
@@ -202,6 +542,7 @@ export class ControlFixture extends DurableObject {
   }
 }
 type Call =
+  | { kind: "export"; input: D.ExportRequest }
   | { kind: "acquire"; input: D.TargetRequest }
   | { kind: "reservation"; input: D.TargetRequest }
   | { kind: "binding"; input: D.WorkspaceBindingApplication }
@@ -217,6 +558,7 @@ type Call =
   | { kind: "validate"; input: D.OperationRequest<"validateUpload"> }
   | { kind: "commit"; input: D.OperationRequest<"commitUpload"> }
   | { kind: "receipt"; input: D.CommitLookup }
+  | { kind: "public-receipt"; input: D.OperationRequest<"getCommitReceipt"> }
   | { kind: "manifest"; input: D.OperationRequest<"getWorkspaceManifest"> }
   | { kind: "list"; input: D.OperationRequest<"listWorkspaceFiles"> }
   | { kind: "stat"; input: D.OperationRequest<"statWorkspaceFile"> }
@@ -296,7 +638,11 @@ export default {
               "workspaces.rebind",
               "artifacts.read",
             ],
-            tools: ["javascript"],
+            tools: [
+              "execution" in env.FORTIPI_CONFIG && env.FORTIPI_CONFIG.execution?.kind === "linux"
+                ? "shell"
+                : "javascript",
+            ],
             executorIds: ["executor"],
             backendIds: ["backend"],
           },
@@ -326,6 +672,24 @@ export default {
       for (const grant of ctx.grants) grant.resources.actions = ["artifacts.read"];
     if (request.headers.get("x-test-write-only") === "1")
       for (const grant of ctx.grants) grant.resources.actions = ["workspace.write"];
+    const exportAction = request.headers.get("x-test-export-action");
+    if (exportAction === "exports.create" || exportAction === "backups.create")
+      for (const grant of ctx.grants) grant.resources.actions = [exportAction];
+    if (request.headers.get("x-test-dispatch-write") === "1")
+      for (const grant of ctx.grants)
+        grant.resources.actions = ["jobs.dispatch", "workspace.write"];
+    if (request.headers.get("x-test-dispatch-only") === "1")
+      for (const grant of ctx.grants) grant.resources.actions = ["jobs.dispatch"];
+    if (request.headers.get("x-test-split-actions") === "1") {
+      const grant = ctx.grants[0];
+      if (!grant) throw new Error("Split action grant missing");
+      ctx.grants.push({
+        ...grant,
+        grantId: "dispatch-only",
+        resources: { ...grant.resources, actions: ["jobs.dispatch"] },
+      });
+      grant.resources = { ...grant.resources, actions: ["workspace.write"] };
+    }
     if (request.headers.get("x-test-read-only") === "1")
       for (const grant of ctx.grants) grant.resources.actions = ["workspace.read"];
     if (request.headers.get("x-test-recovery") === "1") {
@@ -333,9 +697,170 @@ export default {
       ctx.registrationId = "recovery-registration";
     }
     if (request.headers.get("x-test-unregistered") === "1") delete ctx.registrationId;
+    if (request.headers.get("x-test-expired") === "1") ctx.credentialExpiresAt = Date.now() - 1;
+    if (request.headers.get("x-test-short-deadline") === "1") ctx.deadline = Date.now() + 300;
+    if (request.headers.get("x-test-other-agent") === "1")
+      for (const grant of ctx.grants) grant.resources.agentIds = ["other"];
+    if (request.headers.get("x-test-other-tool") === "1")
+      for (const grant of ctx.grants) grant.resources.tools = ["other"];
+    if (request.headers.get("x-test-other-target") === "1")
+      for (const grant of ctx.grants) {
+        grant.resources.executorIds = ["other"];
+        grant.resources.backendIds = ["other"];
+      }
     if (request.headers.get("x-test-other-conversation") === "1")
       for (const grant of ctx.grants) grant.resources.conversationIds = ["other"];
+    if (request.headers.get("x-test-split-scope") === "1") {
+      const grant = ctx.grants[0];
+      if (!grant) throw new Error("Split grant missing");
+      ctx.grants.push({
+        ...grant,
+        grantId: "scope-only",
+        resources: { ...grant.resources, actions: [] },
+      });
+      grant.resources = { ...grant.resources, conversationIds: ["other"] };
+    }
+    if (request.headers.get("x-test-mixed-read") === "1") {
+      const grant = ctx.grants[0];
+      if (!grant) throw new Error("Mixed grant missing");
+      ctx.grants.push({
+        ...grant,
+        grantId: "unrelated-reader",
+        resources: {
+          ...grant.resources,
+          actions: ["workspace.read"],
+          conversationIds: ["other"],
+        },
+      });
+    }
     const authority = env.WORKSPACES.getByName("workspace");
+    if (url.pathname.startsWith("/storage-")) {
+      const childId = request.headers.get("x-test-storage-child");
+      const recipient = childId ? env.WORKSPACES.getByName(childId) : authority;
+      return recipient.fetch(
+        new Request(
+          `https://workspace.internal/${url.pathname === "/storage-sample" ? "__fortipi/storage-sample" : `__test/${url.pathname.slice(1)}`}${url.search}`,
+          {
+            method: request.method,
+            headers: { [internalHeader]: JSON.stringify({ auth: ctx }) },
+            ...(request.body ? { body: request.body } : {}),
+          },
+        ),
+      );
+    }
+    if (
+      url.pathname === "/snapshot-barrier" ||
+      url.pathname === "/snapshot-release" ||
+      url.pathname === "/snapshot-cancelled"
+    )
+      return authority.fetch(
+        new Request(`https://fixture.internal/__test/${url.pathname.slice(1)}`),
+      );
+    if (url.pathname === "/job-snapshot") {
+      const headers = new Headers();
+      if (request.headers.get("x-test-no-context") !== "1")
+        headers.set(internalHeader, JSON.stringify({ auth: ctx }));
+      if (request.headers.has("Range")) headers.set("Range", request.headers.get("Range") ?? "");
+      return authority.fetch(
+        new Request(
+          `https://workspace.internal/${request.headers.get("x-test-snapshot-direct") === "1" ? "__test/job-snapshot-stream" : request.headers.get("x-test-snapshot-queued") === "1" ? "__test/job-snapshot-queued" : "__fortipi/job-snapshot"}${url.search}`,
+          {
+            method: request.method,
+            headers,
+            ...(request.body ? { body: request.body } : {}),
+            signal: request.signal,
+          },
+        ),
+      );
+    }
+    if (url.pathname === "/private-rpc") {
+      const helpers = [
+        { name: "page", args: [{ principalId: "no-authority" }, ["synthetic-only"], undefined, 1] },
+        {
+          name: "closeUpload",
+          args: [{ request: { manifest: { version: 1, entries: [] }, mutations: [] } }],
+        },
+        { name: "exportRegistry", args: [{}] },
+      ];
+      const results = [];
+      for (const helper of helpers) {
+        try {
+          await Reflect.apply(Reflect.get(authority, helper.name), authority, helper.args);
+          results.push({ name: helper.name, rejected: false, message: "returned" });
+        } catch (error) {
+          results.push({
+            name: helper.name,
+            rejected: true,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      return Response.json(results);
+    }
+    if (url.pathname === "/export-physical")
+      return authority.fetch(new Request("https://fixture.internal/__test/export-physical"));
+    if (url.pathname === "/export-stream-control") {
+      const abort = new AbortController();
+      const response = await authority.fetch(
+        new Request(
+          `https://workspace.internal/v1/admin/artifacts/${url.searchParams.get("artifactId")}`,
+          { headers: { [internalHeader]: JSON.stringify({ auth: ctx }) }, signal: abort.signal },
+        ),
+      );
+      if (!response.ok || !response.body) return response;
+      const reader = response.body.getReader();
+      const first = await reader.read();
+      const mode = url.searchParams.get("mode");
+      if (mode === "cancel") {
+        await reader.cancel();
+        return Response.json({ first: first.value?.length, cancelled: true });
+      }
+      if (mode === "abort") abort.abort();
+      if (mode === "deadline") await new Promise<void>((resolve) => setTimeout(resolve, 350));
+      if (mode === "revoke") {
+        const ack = await authority.invalidateGeneration(
+          {
+            kind: "control-recovery",
+            deploymentId: ctx.deploymentId,
+            revocationId: "export-stream-floor",
+            recipient: { kind: "workspace", id: "workspace" },
+            actions: ["invalidate"],
+            deadline: ctx.deadline,
+          },
+          {
+            revocationId: "export-stream-floor",
+            subject: {
+              kind: "credential",
+              credentialId: ctx.credentialId,
+              minimumGeneration: ctx.generation + 1,
+            },
+          },
+        );
+        if (!ack.ok) throw new Error("Export stream floor failed");
+      }
+      let rejected = false;
+      try {
+        while (!(await reader.read()).done) {}
+      } catch {
+        rejected = true;
+      }
+      await reader.cancel().catch(() => {});
+      return Response.json({ first: first.value?.length, rejected });
+    }
+    if (url.pathname === "/operational-metadata") {
+      const headers = new Headers();
+      if (request.headers.get("x-test-no-context") !== "1")
+        headers.set(internalHeader, JSON.stringify({ auth: ctx }));
+      return authority.fetch(
+        new Request(
+          `https://workspace.internal/${request.headers.get("x-test-metadata-queued") === "1" ? "__test/metadata-queued" : "__fortipi/operational-metadata"}${url.search}`,
+          {
+            method: request.method,
+            headers,
+          },
+        ),
+      );
+    }
     if (url.pathname === "/artifact-stream-control") {
       const response = await authority.fetch(
         new Request(
@@ -434,13 +959,22 @@ export default {
       );
     if (url.pathname === "/barrier")
       return authority.fetch(new Request("https://fixture.internal/__test/barrier"));
-    if (url.pathname === "/read" || url.pathname.startsWith("/v1/workspaces/")) {
+    if (
+      url.pathname === "/read" ||
+      url.pathname.startsWith("/v1/workspaces/") ||
+      url.pathname.startsWith("/v1/admin/") ||
+      url.pathname === "/__fortipi/store/read"
+    ) {
       const headers = new Headers(request.headers);
-      headers.set(internalHeader, JSON.stringify({ auth: ctx }));
+      headers.delete(internalHeader);
+      if (request.headers.get("x-test-no-context") !== "1")
+        headers.set(internalHeader, JSON.stringify({ auth: ctx }));
       return authority.fetch(new Request(request, { headers }));
     }
     const call = (await request.json()) as Call;
     switch (call.kind) {
+      case "export":
+        return Response.json(await authority.exportData(ctx, call.input));
       case "binding":
         return Response.json(
           await authority.applyBinding({ ...ctx, registrationId: "registration" }, call.input),
@@ -487,6 +1021,8 @@ export default {
         return Response.json(await authority.commitUpload(ctx, call.input));
       case "receipt":
         return Response.json(await authority.getReceipt(ctx, call.input));
+      case "public-receipt":
+        return Response.json(await authority.getCommitReceipt(ctx, call.input));
       case "manifest":
         return Response.json(await authority.manifest(ctx, call.input));
       case "list":

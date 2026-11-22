@@ -23,7 +23,12 @@ test("a consumed executor identity cannot attach after concurrent credential rev
           audience: "executor-session",
           resources: scope(),
           originMode: { kind: "native" },
-          executor: { executorId: "executor", generation: 1 },
+          executor: {
+            executorId: "executor",
+            generation: 1,
+            ledgerId: "fixture_ledger",
+            ledgerInstanceId: "fixture_instance",
+          },
         }),
       ),
     );
@@ -67,7 +72,12 @@ test("registration cannot overwrite a concurrent durable executor revocation", a
           audience: "executor-session",
           resources: scope(),
           originMode: { kind: "native" },
-          executor: { executorId: "executor", generation: 1 },
+          executor: {
+            executorId: "executor",
+            generation: 1,
+            ledgerId: "fixture_ledger",
+            ledgerInstanceId: "fixture_instance",
+          },
         }),
       ),
     );
@@ -89,6 +99,8 @@ test("registration cannot overwrite a concurrent durable executor revocation", a
       payload: {
         executorId: "executor",
         generation: 1,
+        ledgerId: "fixture_ledger",
+        ledgerInstanceId: "fixture_instance",
         protocolVersion: "1.0",
         schemaVersion: "1.0.0",
         capabilities: ["shell"],

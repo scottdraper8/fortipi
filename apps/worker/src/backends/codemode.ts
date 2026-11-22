@@ -48,6 +48,8 @@ export function codemode(
     maxCapabilityCalls: 1024,
     maxCapabilityRequestBytes: 262144,
     maxCapabilityResponseBytes: 262144,
+    // Range reads bypass those aggregates; cap their combined traffic at the same allowance.
+    maxStreamBytes: 262144,
     maxDirectoryEntries: bounds.manifestEntries,
     maxExecutionSubscribers: 2,
     retentionMs: 3_600_000,

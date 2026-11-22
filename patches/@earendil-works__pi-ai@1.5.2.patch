@@ -1,0 +1,27 @@
+diff --git a/dist/api/anthropic-messages.js b/dist/api/anthropic-messages.js
+index 4f7052d2bb80b14c00ac3a1ef0684bbcac166a5b..5d586075323dabacb15c87f90c2a09a0667ff52a 100644
+--- a/dist/api/anthropic-messages.js
++++ b/dist/api/anthropic-messages.js
+@@ -1496,12 +1496,14 @@ function convertTools(tools, isOAuthToken, supportsEagerToolInputStreaming, supp
+             : resolveJsonSchemaStrictSampling(tool, supportsStrictTools, isAnthropicStrictUnsupportedKeyword);
+         const parameters = getJsonSchemaToolParameters(tool, strict);
+         const schema = parameters;
+-        // Keep shared definitions so property $refs still resolve. Other root keywords stay out:
++        // Keep shared definitions so property $refs still resolve, and additionalProperties so the
++        // model knows whether extra arguments are allowed. Other root keywords stay out:
+         // Anthropic rejects root anyOf/oneOf/allOf with a 400.
+         const legacyInputSchema = {
+             type: "object",
+             properties: schema.properties ?? {},
+             required: schema.required ?? [],
++            ...(schema.additionalProperties === undefined ? {} : { additionalProperties: schema.additionalProperties }),
+             ...(schema.$defs === undefined ? {} : { $defs: schema.$defs }),
+             ...(schema.definitions === undefined ? {} : { definitions: schema.definitions }),
+         };
+@@ -1545,4 +1547,4 @@ function mapStopReason(reason, stopDetails) {
+             throw new Error(`Unhandled stop reason: ${reason}`);
+     }
+ }
+-//# sourceMappingURL=anthropic-messages.js.map
+\ No newline at end of file
++// Source map disabled: FortiPi applies the declared aa47ced schema-preservation backport.

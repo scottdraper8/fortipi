@@ -1,10 +1,12 @@
 /** Reviewed inputs; these digests identify inputs, never the final FortiPi image. */
 export const imageInputs = {
-  source: "bb0a5db4b7e8c8a79625d63e0e272602f909640e",
-  sourceArchiveSha256: "b5ae608fd845af5762187793e0d823c414e37d5d98eb1e62ea406b1eabb326c6",
-  embeddedNodeVersion: "22.23.4",
+  source: "cd0146b2875b224b54fb56384f642c6416ad910a",
+  sourceArchiveSha256: "2df412cef0d8359ce190e34d5f0962209019667af393b7703c3f93aa7f4ce27a",
+  embeddedNodeVersion: "22.23.5",
   embeddedNodeLicenseSha256: "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
-  computerVersion: "0.10.0",
+  computerVersion: "0.11.4",
+  // This historical immutable image supplies ONLY the unchanged, source-checked addon.
+  // Its old SEA executable is never copied into the new runtime image.
   computerd:
     "ghcr.io/cloudflare/computer-computerd-linux-x64@sha256:6ec793fa80f109acf8b3cd4e295284cfed97f61c03030b780a612ec22c49b294",
   debian: "debian@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392",

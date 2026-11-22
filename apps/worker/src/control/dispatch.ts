@@ -4,7 +4,7 @@ import { contains, emptyScope, requireGrant } from "./authorization.js";
 import { type Directory, valid } from "./directory.js";
 import type { Executors } from "./executors.js";
 import type { Identities } from "./identity.js";
-import { check, id, ref, type Store, same } from "./store.js";
+import { ControlError, check, id, ref, type Store, same } from "./store.js";
 import type { ExecutorState, Tickets } from "./tickets.js";
 
 export interface DispatchRecord {
@@ -371,6 +371,15 @@ export class Dispatch {
         "Assignment lease expired",
       );
       this.executors.channel(target.executorId, target.generation);
+      const description = this.store.get<ExecutorState>("executor", target.executorId)?.description;
+      check(
+        description?.generation === target.generation &&
+          [input.tool, ...(input.approval?.capabilities ?? [])].every((capability) =>
+            description.capabilities.includes(capability),
+          ),
+        "unavailable_executor",
+        "Dispatch target no longer advertises the required capabilities",
+      );
       current.attempted = true;
       this.store.put("dispatch", identity.executionId, current);
       first = true;
@@ -392,28 +401,141 @@ export class Dispatch {
       disposition,
     };
   }
+  #recoveryRecord(
+    ctx: D.AuthContext,
+    identity: D.ExecutionIdentity,
+    requireAttempted = true,
+  ): DispatchRecord {
+    check(
+      valid("executor-messages", "ExecutorFrame", {
+        type: "job.query",
+        requestId: ctx.requestId,
+        payload: identity,
+      }),
+      "invalid_request",
+      "Invalid execution query",
+    );
+    const record = this.record(ctx, identity, "jobs.dispatch");
+    const reservation = record.intent.reservation;
+    const original = record.intent.assignment.identity;
+    const currentLease = this.store.get<{ lease: D.Lease }>("lease", original.lease.leaseId)?.lease;
+    const registration = this.store.get<D.AuthorityRegistration>(
+      "recipient",
+      ctx.registrationId ?? "",
+    );
+    const resources = {
+      ...emptyScope(),
+      agentIds: [reservation.agentId],
+      conversationIds: [reservation.conversationId],
+      workspaceIds: [reservation.workspaceId],
+      tools: [record.intent.assignment.tool],
+      executorIds: identity.target.kind === "executor" ? [identity.target.executorId] : [],
+      actions: [...new Set([...reservation.actions, "jobs.dispatch"])],
+    };
+    requireGrant(ctx, "jobs.dispatch", resources);
+    check(
+      (!requireAttempted || record.attempted) &&
+        identity.target.kind === "executor" &&
+        same(reservation.credential, ref(ctx)) &&
+        same(this.store.get("reservation_id", reservation.reservationId), reservation) &&
+        (same(original, identity) ||
+          (currentLease && same({ ...original, lease: currentLease }, identity))) &&
+        registration?.recipient.kind === "agent" &&
+        registration.recipient.id === reservation.agentId &&
+        registration.registrationId === ctx.registrationId &&
+        same(registration.credential, ref(ctx)) &&
+        contains(registration.resources, {
+          ...resources,
+          actions: ["jobs.dispatch"],
+          // Target reservation precedes the assignment, which supplies the retained tool.
+          ...(registration.registrationId === reservation.registrationIds.agent &&
+          registration.resources.tools.length === 0
+            ? { tools: [] }
+            : {}),
+        }) &&
+        ctx.grants.some(
+          (grant) =>
+            (grant.expiresAt === undefined || Date.now() < grant.expiresAt) &&
+            contains(grant.resources, resources) &&
+            contains(grant.resources, registration.resources),
+        ),
+      "unauthorized",
+      "Query requires its current registered execution owner",
+    );
+    // A command exists only after current Agent/Workspace durable terminal proof.
+    // Its retained receipt closes recovery eligibility even if transport ACK is lost.
+    const prefix = `${identity.executionId}:job.committed`;
+    check(
+      this.store.storage.sql
+        .exec<{ n: number }>(
+          "SELECT 1 n FROM cp_records WHERE kind='command' AND key>=? AND key<? LIMIT 1",
+          `${prefix}:`,
+          `${prefix};`,
+        )
+        .toArray().length === 0,
+      "conflict",
+      "Execution already has durable terminal proof",
+    );
+    return record;
+  }
+  completion(ctx: D.AuthContext, identity: D.ExecutionIdentity): boolean {
+    try {
+      this.#recoveryRecord(ctx, identity);
+      return true;
+    } catch (error) {
+      if (!(error instanceof ControlError)) throw error;
+      return false;
+    }
+  }
   async query(ctx: D.AuthContext, identity: D.ExecutionIdentity): Promise<D.ExecutionObservation> {
-    const record = this.record(ctx, identity);
+    const completion = this.completion(ctx, identity);
+    const current = () => {
+      if (completion) return this.#recoveryRecord(ctx, identity);
+      try {
+        // A retained, unsent intent permits its registered owner's query only.
+        // completion() still requires an attempt before granting repair capacity.
+        return this.#recoveryRecord(ctx, identity, false);
+      } catch (error) {
+        if (!(error instanceof ControlError)) throw error;
+        return this.record(ctx, identity);
+      }
+    };
+    const record = current();
+    // No assignment was sent through this authority. Do not ask the executor to
+    // attest to an assignment it never received or manufacture a closed ledger.
+    if (!record.attempted) return { identity, state: "unknown" };
     if (record.observation?.state === "terminal") return record.observation;
     const late = this.store.page<{ result: D.PreparedResult }>("late_result", 0, 1, {
       subject: identity.executionId,
     })[0]?.value;
     if (late) return { identity, state: "unknown", result: late.result };
     check(identity.target.kind === "executor", "unsupported", "Backend query belongs to workspace");
+    let frame: D.ExecutorFrame | undefined;
     try {
-      const frame = await this.executors.exchange(
+      frame = await this.executors.exchange(
         identity.target.executorId,
         identity.target.generation,
         { type: "job.query", requestId: id(), payload: identity },
         ctx.deadline,
       );
-      if (frame.type === "job.query_result" && same(frame.payload.identity, identity))
-        return frame.payload;
     } catch {}
+    current();
+    if (frame?.type === "job.query_result" && same(frame.payload.identity, identity))
+      return frame.payload;
     return { identity, state: "unknown" };
   }
   async cancel(ctx: D.AuthContext, input: D.CancelRequest): Promise<D.CancelDisposition> {
-    const record = this.record(ctx, input.identity, "jobs.cancel");
+    const current = () => {
+      try {
+        return this.record(ctx, input.identity, "jobs.cancel");
+      } catch (error) {
+        if (!(error instanceof ControlError) || error.code !== "unauthorized") throw error;
+        // Cancellation cleans up only this registered owner's
+        // already-attempted execution, under one current complete grant.
+        return this.#recoveryRecord(ctx, input.identity);
+      }
+    };
+    const record = current();
     if (record.cancel) {
       check(
         record.cancel.requestId === input.requestId && record.cancel.reason === input.reason,
@@ -431,8 +553,9 @@ export class Dispatch {
       "unsupported",
       "Backend cancellation belongs to workspace",
     );
+    let frame: D.ExecutorFrame | undefined;
     try {
-      const frame = await this.executors.exchange(
+      frame = await this.executors.exchange(
         input.identity.target.executorId,
         input.identity.target.generation,
         {
@@ -442,9 +565,10 @@ export class Dispatch {
         },
         ctx.deadline,
       );
-      if (frame.type === "job.cancel_ack" && same(frame.payload.identity, input.identity))
-        return frame.payload.disposition;
     } catch {}
+    current();
+    if (frame?.type === "job.cancel_ack" && same(frame.payload.identity, input.identity))
+      return frame.payload.disposition;
     return { state: "unknown", possibleExternalEffects: true };
   }
 }

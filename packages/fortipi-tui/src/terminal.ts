@@ -147,7 +147,7 @@ export async function runTerminal(controller: Controller, options: TerminalOptio
         focus = 0;
         break;
       case "/open":
-        await controller.open(args[0] ?? "");
+        await controller.open(args[0] ?? "", args[1] ?? controller.agentId);
         focus = 0;
         break;
       case "/steer":

@@ -21,7 +21,12 @@ export function ticketReceipt(
 ): TicketReceipt {
   return { ticket, audience: "client-stream", expiresAt, identity: authenticated };
 }
-export const cursorScope = { origin: "https://example.test", conversationId: "conv_1", identity };
+export const cursorScope = {
+  agentId: "agent_1",
+  origin: "https://example.test",
+  conversationId: "conv_1",
+  identity,
+};
 
 import { freeInfrastructurePolicy } from "fortipi-contract";
 
