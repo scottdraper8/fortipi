@@ -102,20 +102,20 @@
     "agents-lifecycle": {
       "catalogSha256": "6845cb5c33905cbac363710a051956451ab229dde00e4dbaf1cd5a9a7fbca352",
       "snapshot": {
-        "commit": "2ddd6f160eec9424df68a540620e024ddc6352aa",
+        "commit": "90a22d8d611233c435ad5b5aec7e9984bf0a969b",
         "version": "0.34.0",
         "paths": {
-          "packages/agents": "ba70fdbd2f14696f98658a191861f6cc7709331abf5007e71b8b755af84b7aad",
+          "packages/agents": "f71b38324079a1b654a4df4e463db818de86b12e610ff7b8778969d021a91e30",
           "packages/agents/package.json": "1bcc8ff9ad014b4a73c303e64c8e3a6e1a17562aa975864746e1209a420099ab",
           "docs/agents/harnesses/pi.md": "0f1bd86f6c404f053c250a33b1c98cb073b4cd4d47b5ec0faf5f62f2ba44e417"
         },
-        "sha256": "729b0e6ccca56e5f39be1f3627545e06c57a26a2f7d4fcfb51f29d6a8c6a48af"
+        "sha256": "47d4ad86750bb20b2e04f8eef76a325f8ad34750d5ba2a458b2654ed489a2e0e"
       },
       "pins": {
         "apps/worker/package.json#dependencies/agents": "0.34.0"
       },
-      "reviewedAt": "2026-11-22T11:07:17.522Z",
-      "reviewNote": "Reviewed56f5d5cc..2ddd6f16: complete2-commit/36-path comparison,10watched chat files and both exact blob versions. PiHarness/SQLite, Lifecycle, WebSockets, pi-ai, retries, manifest/peers and Pi docs match installed-source8d8acd0d and both watch refs. FortiPi uses unchanged DurableObject/Lifecycle/PiHarness integration. Repository package version is not a registry observation. Installed Agents0.34/Pi1.6 facts/pins remain frozen; no product or runtime/release approval. Evidence: /tmp/fortipi-agents-20261122-review.md and .json."
+      "reviewedAt": "2026-11-22T12:29:02.075Z",
+      "reviewNote": "Reviewed2ddd6f16..90a22d8d: complete10-commit/61-path comparison,24watched files with verified before/after blobs. Agent/Fibers delegation, facet migration, shared-chat return/representation and MCP initialize-read changes reviewed; substantive future-upgrade/replay risks remain. All9critical PiHarness/SQLite/Lifecycle/WebSockets/pi-ai/retries/manifest/Pi-doc identities unchanged. Installed four-entrypoint graph20chunks/52mappedSources has no changed-source intersections; four mapless chunks and computed/external limits explicit. No installed-impact blocker identified; no upgrade/runtime approval. Frozen pins/facts/cohort/image retained. Evidence /tmp/fortipi-agents-90a22-review.md/.json and parent identity/import receipts."
     },
     "pi-runtime": {
       "catalogSha256": "6a489505557b2af5ea2a80d92e2a3b8407550c57f6d42c74b760afed9129fa12",
