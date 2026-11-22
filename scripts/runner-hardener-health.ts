@@ -355,7 +355,8 @@ export async function nativeRunnerHealth(): Promise<void> {
     }
     let stdout: string;
     try {
-      const script = `$ErrorActionPreference = 'Stop'
+      const script = String.raw`$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false, $true)
 [Console]::Error.WriteLine('fortipi-windows-health:entry')
 $p = $null
 try {
@@ -369,7 +370,12 @@ try {
   $startedAt = $p.StartTime.ToUniversalTime().ToString('o')
   [Console]::Error.WriteLine('fortipi-windows-health:time-complete')
   [Console]::Error.WriteLine('fortipi-windows-health:serialization-start')
-  @{ pid = $p.Id; path = $path; startedAt = $startedAt } | ConvertTo-Json -Compress
+  $observedPid = $p.Id
+  if ($observedPid -isnot [int] -or $observedPid -le 0 -or $path -isnot [string] -or $startedAt -isnot [string]) { throw 'Invalid owned process observation' }
+  if ($path -match '[\x00-\x1f]') { throw 'Invalid owned process path' }
+  $escapedPath = $path.Replace('\', '\\').Replace('"', '\"')
+  $pidText = $observedPid.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+  [Console]::Out.WriteLine('{"pid":' + $pidText + ',"path":"' + $escapedPath + '","startedAt":"' + $startedAt + '"}')
   [Console]::Error.WriteLine('fortipi-windows-health:serialization-complete')
 } finally {
   if ($null -ne $p) {
