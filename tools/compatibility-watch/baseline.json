@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "295252a19bec2c84e8ceb99a5b95196e91ea8a00",
-        "version": "v1.20261122.1",
-        "sha256": "8798e5787c4c58d52e3f66e38a65cefb9e7c526c83aee19f6b9ae1975117bcce",
+        "commit": "e9a7b9c8dcaeffa711edea7cf8b1aa78888cc230",
+        "version": "v1.20261122.2",
+        "sha256": "156e2c2cce4a0263bba44fe0e5bbb4fbf70dde1098a0002dc4a1170907548a4b",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261121.1"
       },
-      "reviewedAt": "2026-11-22T01:53:20.134Z",
-      "reviewNote": "Reviewed official workerd21 d6841388..22 295252a1 (77 commits/239 paths): selected SQL cursor GC, WorkerLoader handoff/abandoned-load behavior, Rust alarms, network/TLS/WebCrypto and capnp. Experimental CONNECT/startTls lifetime fix requires connect_handler_starttls, absent from declared flags. No demonstrated configured-pin blocker; retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1, types5.20261121.1 and date2026-11-10 plus nodejs_compat/enable_request_signal/request_signal_passthrough. Watch pointer only; hosted rollout/autogates, deployed/Paid/native behavior remain unverified. Bounded source review, not a full native audit. Primary interval: https://github.com/cloudflare/workerd/compare/d68413886563e376605e732a75320eefd32b5128...295252a19bec2c84e8ceb99a5b95196e91ea8a00"
+      "reviewedAt": "2026-11-22T22:30:58.464Z",
+      "reviewNote": "Incrementally reviewed official workerd22.1 295252a1..22.2 e9a7b9c8 (11 commits/32 paths): Linux PGO/ThinLTO and profile inputs, native destructor/RTTI anchoring for dynamically linked tests, test GC/stack handling and obsolete CI removal. New Linux artifact optimization is material; runtime equivalence is unverified. No .2-specific installed-cohort patch requirement established. Earlier21..22.1 review retained; CONNECT/startTls fix requires connect_handler_starttls, absent from declared flags. Older arity/fail-open hardening is real; no demonstrated configured blocker, and transitive reachability was not exhaustively audited. Retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1, types5.20261121.1, date2026-11-10 and declared flags. Watch pointer only; hosted rollout/autogates, artifact authenticity, broad safety, native/deployed/Paid qualification remain separate. Primary interval: https://github.com/cloudflare/workerd/compare/295252a19bec2c84e8ceb99a5b95196e91ea8a00...e9a7b9c8dcaeffa711edea7cf8b1aa78888cc230"
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",

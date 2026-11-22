@@ -34,6 +34,34 @@ function ownErrorField(error: unknown, field: string): unknown {
   return undefined;
 }
 
+const windowsQueryStages = [
+  "entry",
+  "lookup-start",
+  "lookup-complete",
+  "path-start",
+  "path-complete",
+  "time-start",
+  "time-complete",
+  "serialization-start",
+  "serialization-complete",
+  "disposal-start",
+  "disposal-complete",
+] as const;
+type WindowsQueryProgress = (typeof windowsQueryStages)[number] | "unobserved";
+
+/** Read only bounded own stderr data; never return child output or unknown strings. */
+export function windowsHealthQueryProgress(error: unknown): WindowsQueryProgress {
+  const stderr = ownErrorField(error, "stderr");
+  if (typeof stderr !== "string" || Buffer.byteLength(stderr, "utf8") > 16384) return "unobserved";
+  let progress: WindowsQueryProgress = "unobserved";
+  for (const line of stderr.split(/\r?\n/)) {
+    for (const stage of windowsQueryStages) {
+      if (line === `fortipi-windows-health:${stage}`) progress = stage;
+    }
+  }
+  return progress;
+}
+
 /** Classification only: a stopped command is not proof of a timeout. */
 export function windowsHealthCommandFailure(error: unknown): WindowsCommandFailure {
   const code = ownErrorField(error, "code");
@@ -327,7 +355,29 @@ export async function nativeRunnerHealth(): Promise<void> {
     }
     let stdout: string;
     try {
-      const script = `$ErrorActionPreference = 'Stop'; $p = Get-Process -Id ${pid}; @{ pid = $p.Id; path = $p.Path; startedAt = $p.StartTime.ToUniversalTime().ToString('o') } | ConvertTo-Json -Compress`;
+      const script = `$ErrorActionPreference = 'Stop'
+[Console]::Error.WriteLine('fortipi-windows-health:entry')
+$p = $null
+try {
+  [Console]::Error.WriteLine('fortipi-windows-health:lookup-start')
+  $p = [System.Diagnostics.Process]::GetProcessById(${pid})
+  [Console]::Error.WriteLine('fortipi-windows-health:lookup-complete')
+  [Console]::Error.WriteLine('fortipi-windows-health:path-start')
+  $path = $p.MainModule.FileName
+  [Console]::Error.WriteLine('fortipi-windows-health:path-complete')
+  [Console]::Error.WriteLine('fortipi-windows-health:time-start')
+  $startedAt = $p.StartTime.ToUniversalTime().ToString('o')
+  [Console]::Error.WriteLine('fortipi-windows-health:time-complete')
+  [Console]::Error.WriteLine('fortipi-windows-health:serialization-start')
+  @{ pid = $p.Id; path = $path; startedAt = $startedAt } | ConvertTo-Json -Compress
+  [Console]::Error.WriteLine('fortipi-windows-health:serialization-complete')
+} finally {
+  if ($null -ne $p) {
+    [Console]::Error.WriteLine('fortipi-windows-health:disposal-start')
+    $p.Dispose()
+    [Console]::Error.WriteLine('fortipi-windows-health:disposal-complete')
+  }
+}`;
       const pending = execute(
         "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
         powershellArgs(script),
@@ -342,6 +392,10 @@ export async function nativeRunnerHealth(): Promise<void> {
       pending.child.stdin?.end(); // No input: deliver EOF as the existing Windows adapter does.
       ({ stdout } = await pending);
     } catch (error) {
+      if (process.env.GITHUB_ACTIONS === "true")
+        console.log(
+          `::notice::Windows hardener query reached: ${windowsHealthQueryProgress(error)}`,
+        );
       throw new Error(windowsProcessFailures[windowsHealthCommandFailure(error)]);
     }
     const observation = parseWindowsHealthProcess(stdout);

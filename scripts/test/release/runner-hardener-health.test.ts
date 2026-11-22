@@ -10,6 +10,7 @@ import {
   selectNativeJobWindow,
   windowsAgent,
   windowsHealthCommandFailure,
+  windowsHealthQueryProgress,
 } from "../../runner-hardener-health.ts";
 
 test("health failure annotations accept exact fixed messages and withhold private suffixes", () => {
@@ -129,6 +130,87 @@ test("Windows health command diagnostics separate output limits, stopping, launc
   );
   assert.equal(windowsHealthCommandFailure(error), "command-unavailable");
   assert.equal(accesses, 0);
+});
+
+test("Windows health query progress exposes only bounded exact markers without private error access", () => {
+  const canary = "private-stderr-path-token-canary";
+  const marker = "fortipi-windows-health:entry";
+  for (const stage of [
+    "entry",
+    "lookup-start",
+    "lookup-complete",
+    "path-start",
+    "path-complete",
+    "time-start",
+    "time-complete",
+    "serialization-start",
+    "serialization-complete",
+    "disposal-start",
+    "disposal-complete",
+  ])
+    assert.equal(windowsHealthQueryProgress({ stderr: `fortipi-windows-health:${stage}` }), stage);
+  assert.equal(
+    windowsHealthQueryProgress({
+      stderr: `${marker}\r\nfortipi-windows-health:lookup-start\r\n${canary}\r\n`,
+    }),
+    "lookup-start",
+  );
+  assert.equal(windowsHealthQueryProgress({ stderr: `${marker}\n::error::${canary}` }), "entry");
+  assert.equal(
+    windowsHealthQueryProgress({
+      stderr: "fortipi-windows-health:serialization-complete\nfortipi-windows-health:lookup-start",
+    }),
+    "lookup-start",
+  );
+  for (const stderr of [
+    "",
+    canary,
+    `${canary}${marker}`,
+    `${marker} ${canary}`,
+    `${marker}\r${canary}`,
+    ` ${marker}`,
+    `${marker}\r`,
+    "fortipi-windows-health:unknown",
+    "fortipi-windows-health:lookup-",
+    Buffer.from(marker),
+    null,
+    42,
+  ])
+    assert.equal(windowsHealthQueryProgress({ stderr }), "unobserved");
+  for (const error of [
+    null,
+    undefined,
+    canary,
+    Buffer.from(marker),
+    {},
+    Object.create({ stderr: marker }),
+  ])
+    assert.equal(windowsHealthQueryProgress(error), "unobserved");
+  let accesses = 0;
+  const failAccess = () => {
+    accesses++;
+    throw Error(canary);
+  };
+  assert.equal(
+    windowsHealthQueryProgress(Object.defineProperty({}, "stderr", { get: failAccess })),
+    "unobserved",
+  );
+  assert.equal(windowsHealthQueryProgress({ stderr: { toString: failAccess } }), "unobserved");
+  const error = Object.defineProperties(
+    { stderr: marker },
+    Object.fromEntries(
+      ["message", "stdout", "stack", "cause"].map((key) => [key, { get: failAccess }]),
+    ),
+  );
+  assert.equal(windowsHealthQueryProgress(error), "entry");
+  assert.equal(accesses, 0);
+  const bounded = `${marker}\n${"x".repeat(16384 - Buffer.byteLength(marker) - 1)}`;
+  assert.equal(windowsHealthQueryProgress({ stderr: bounded }), "entry");
+  assert.equal(windowsHealthQueryProgress({ stderr: `${bounded}x` }), "unobserved");
+  assert.equal(
+    windowsHealthQueryProgress({ stderr: `${marker}\n${"é".repeat(8192)}` }),
+    "unobserved",
+  );
 });
 
 test("Windows health process parsing reports fixed JSON syntax or shape failures without output", () => {
