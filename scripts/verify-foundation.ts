@@ -12,6 +12,9 @@ import { filesBelow, packagePaths, repository, run } from "./build-workspaces.ts
 import type { Manifest } from "./check-pins.ts";
 import { checkPins, json, rootArgument } from "./check-pins.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
+import { nativeRunnerHealth } from "./runner-hardener-health.ts";
+
+export { macosNetworkExtensionActive } from "./runner-hardener-health.ts";
 
 const exec = promisify(execFile);
 const { Terminal } = headless;
@@ -120,40 +123,9 @@ export async function nativeChecks(): Promise<void> {
   );
 }
 
-/** A stale installer status file does not establish that macOS enabled the network filter. */
-export function macosNetworkExtensionActive(output: string): boolean {
-  return output.split("\n").some((line) => {
-    const fields = line.trim().split(/\s+/);
-    return (
-      fields[0] === "*" &&
-      fields[1] === "*" &&
-      fields[2] === "D63S9HLM4L" &&
-      fields[3] === "io.stepsecurity.harden-runner.ext" &&
-      line.trimEnd().endsWith("[activated enabled]")
-    );
-  });
-}
-
 export async function egressChecks(): Promise<void> {
-  if (process.platform === "darwin") {
-    let status: string;
-    try {
-      status = (
-        await exec("/usr/bin/systemextensionsctl", ["list"], {
-          timeout: 5000,
-          maxBuffer: 65536,
-          env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" },
-        })
-      ).stdout;
-    } catch {
-      throw new Error("Unable to verify the macOS StepSecurity network extension");
-    }
-    assert.ok(
-      macosNetworkExtensionActive(status),
-      "macOS StepSecurity network extension is not activated and enabled",
-    );
-    console.log("macOS StepSecurity network extension: activated and enabled");
-  }
+  const mode = process.env.FORTIPI_RUNNER_HARDENING_MODE ?? "block";
+  assert.equal(mode, process.platform === "linux" ? "block" : "audit");
   const allowedRegistry = async () => {
     const response = await fetch("https://registry.npmjs.org/pnpm/12.22.0", {
       signal: AbortSignal.timeout(15_000),
@@ -164,6 +136,11 @@ export async function egressChecks(): Promise<void> {
       await response.body?.cancel();
     }
   };
+  if (mode === "audit") {
+    await nativeRunnerHealth();
+    await allowedRegistry();
+    return;
+  }
   await allowedRegistry();
   let blocked = false;
   let deniedResponseStatus: number | null = null;

@@ -4,7 +4,53 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { parse } from "yaml";
 import { repository } from "../../build-workspaces.ts";
+import { assertRunnerHardeningPolicy } from "../../runner-hardening-policy.ts";
 import { object } from "../../verify-release-gates.ts";
+
+test("native hardening keeps all platform oracles and final read-only health under the supported mode", async () => {
+  for (const [file, name, required] of [
+    [
+      "ci",
+      "native-executor",
+      [
+        "pnpm run test:executor",
+        "node --test scripts/test/release/artifact-payload-portability.test.ts",
+      ],
+    ],
+    [
+      "release",
+      "native",
+      ["node scripts/install-dependencies.ts", "node scripts/build-workspaces.ts build:evidence"],
+    ],
+  ] as const) {
+    const workflow = object(
+      parse(await readFile(resolve(repository, `.github/workflows/${file}.yml`), "utf8")),
+    );
+    for (const [jobName, job] of Object.entries(object(workflow.jobs)))
+      assertRunnerHardeningPolicy(
+        `.github/workflows/${file}.yml`,
+        workflow.permissions,
+        workflow.env,
+        jobName,
+        job,
+      );
+    const job = object(object(workflow.jobs)[name]);
+    assert.ok(Array.isArray(job.steps));
+    const steps = job.steps.map(object);
+    for (const command of required) {
+      const matching = steps.filter((step) => step.run === command);
+      assert.equal(matching.length, 1);
+      assert.equal(matching[0]?.if, undefined);
+    }
+    if (file === "release") {
+      const evidence = steps.filter((step) =>
+        String(step.run).startsWith("node scripts/prepare-release.ts evidence --mode native "),
+      );
+      assert.equal(evidence.length, 1);
+      assert.equal(evidence[0]?.if, undefined);
+    }
+  }
+});
 
 test("compatibility workflows keep PR scope explicit and installed release gates strict", async () => {
   const [watch, ci, release] = await Promise.all(
@@ -150,13 +196,12 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
   assert.deepEqual(object(jobs["final-readiness"]).needs, ["proofs", "publish"]);
   assert.deepEqual(object(jobs.finalize).needs, ["proofs", "publish", "final-readiness"]);
   assert.deepEqual(object(jobs["native-receipt"]).needs, ["candidate", "native"]);
-  const assertJobs = (workflow: Record<string, unknown>) => {
+  const assertJobs = (workflow: Record<string, unknown>, workflowPath: string) => {
     for (const [name, raw] of Object.entries(object(workflow.jobs))) {
       const job = object(raw);
       assert.ok(Array.isArray(job.steps));
       const steps = job.steps.map(object);
-      assert.match(String(steps[0]?.uses), /^step-security\/harden-runner@[a-f0-9]{40}$/);
-      assert.equal(object(steps[0]?.with)["egress-policy"], "block");
+      assertRunnerHardeningPolicy(workflowPath, workflow.permissions, workflow.env, name, job);
       const permissions = object(job.permissions ?? {});
       if (permissions["id-token"] === "write") assert.equal(name, "publish");
       if (permissions.contents === "write") assert.equal(name, "finalize");
@@ -243,8 +288,8 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
       }
     }
   };
-  assertJobs(release);
-  assertJobs(deploy);
+  assertJobs(release, ".github/workflows/release.yml");
+  assertJobs(deploy, ".github/workflows/deploy.yml");
   const assertDeviceDag = (workflow: Record<string, unknown>) => {
     const jobs = object(workflow.jobs);
     assert.equal(object(jobs["initial-installed-deployment"]).needs, "proofs");
@@ -277,7 +322,10 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
   const deviceJob = object(object(premature.jobs)["live-device-a"]);
   assert.ok(Array.isArray(deviceJob.steps));
   object(deviceJob.steps[0]).env = { FORTIPI_ADMIN_TOKEN: "synthetic-test-value" };
-  assert.throws(() => assertJobs(premature), /credential-free install/);
+  assert.throws(
+    () => assertJobs(premature, ".github/workflows/deploy.yml"),
+    /credential-free install/,
+  );
   const missingCleanup = structuredClone(deploy);
   object(object(missingCleanup.jobs).operate).needs = [
     "proofs",
@@ -288,7 +336,7 @@ test("workflow topology keeps target credentials in fixed slots, publication aft
   assert.throws(() => assertDeviceDag(missingCleanup));
   const fault = structuredClone(release);
   object(object(fault.jobs).readiness).environment = "$" + "{{ matrix.target.target.slot }}";
-  assert.throws(() => assertJobs(fault), /paid-validation/);
+  assert.throws(() => assertJobs(fault, ".github/workflows/release.yml"), /paid-validation/);
 });
 
 test("fresh deployment operate provisions pinned Chromium before credentials with reviewed egress", async () => {
