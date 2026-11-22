@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { appendFile, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath, URL } from "node:url";
-import { type Source, sources } from "./catalog.ts";
+import { installedReferenceIds, type Source, sources } from "./catalog.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const sha = /^[a-f0-9]{40}$/;
@@ -371,7 +371,7 @@ export async function check(
   return results.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export const exitCode = (results: Result[]): number =>
+export const exitCode = (results: readonly Pick<Result, "outcome">[]): number =>
   results.length === 0
     ? 2
     : results.every((r) => r.outcome === "unchanged")
@@ -379,6 +379,29 @@ export const exitCode = (results: Result[]): number =>
       : results.some((r) => r.outcome === "unknown" || r.outcome === "check-unavailable")
         ? 2
         : 1;
+
+/** Select current-reference policy from check()'s complete, available inventory. */
+export function requiredCurrentExitCode(
+  results: readonly Pick<Result, "id" | "outcome">[],
+): number {
+  const expected = new Set(sources.map((source) => source.id));
+  const seen = new Set<string>();
+  for (const result of results) {
+    if (
+      !result ||
+      typeof result.id !== "string" ||
+      !expected.has(result.id) ||
+      seen.has(result.id) ||
+      !["unchanged", "review-required", "unknown", "check-unavailable"].includes(result.outcome)
+    )
+      return 2;
+    seen.add(result.id);
+  }
+  if (expected.size !== sources.length || seen.size !== expected.size || exitCode(results) === 2)
+    return 2;
+  const installed = new Set<string>(installedReferenceIds);
+  return exitCode(results.filter((result) => !installed.has(result.id)));
+}
 export function summary(results: Result[]): string {
   return [
     "# Compatibility review",
@@ -399,9 +422,14 @@ export function summary(results: Result[]): string {
 }
 
 async function main(): Promise<void> {
+  const args = process.argv.slice(2);
   assert.ok(
-    process.argv.slice(2).every((arg) => arg === "--gh" || arg === "--release"),
-    "Only --gh (local reads) and --release (strict installed assessment) are supported; no acceptance command exists",
+    args.every((arg) => arg === "--gh" || arg === "--release" || arg === "--required-current"),
+    "Only --gh, --required-current and --release are supported; no acceptance command exists",
+  );
+  assert.ok(
+    !(args.includes("--required-current") && args.includes("--release")),
+    "Current-reference reporting and strict installed assessment are separate modes",
   );
   let baseline: unknown;
   try {
@@ -409,11 +437,22 @@ async function main(): Promise<void> {
   } catch {
     baseline = null;
   }
-  const results = await check(baseline, observer(githubRequest(process.argv.includes("--gh"))));
+  const results = await check(baseline, observer(githubRequest(args.includes("--gh"))));
   const checkedAt = new Date().toISOString();
   let report: unknown = { format: 1, checkedAt, results };
   let code = exitCode(results);
-  if (process.argv.includes("--release")) {
+  if (args.includes("--required-current")) {
+    code = requiredCurrentExitCode(results);
+    report = {
+      format: 1,
+      checkedAt,
+      mode: "required-current",
+      results,
+      lookaheadExitCode: exitCode(results),
+      requiredCurrentExitCode: code,
+    };
+  }
+  if (args.includes("--release")) {
     try {
       const { createReleaseReport } = await import("./release.ts");
       report = await createReleaseReport(root, results, checkedAt);
@@ -430,7 +469,12 @@ async function main(): Promise<void> {
   }
   console.log(JSON.stringify(report, null, 2));
   if (process.env.GITHUB_STEP_SUMMARY)
-    await appendFile(process.env.GITHUB_STEP_SUMMARY, summary(results));
+    await appendFile(
+      process.env.GITHUB_STEP_SUMMARY,
+      (args.includes("--required-current")
+        ? "Required-current reporting: all observations must be available; installed-library lookahead alerts remain unresolved. A successful result does not qualify installed runtime compatibility.\n\n"
+        : "") + summary(results),
+    );
   process.exitCode = code;
 }
 
