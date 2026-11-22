@@ -19,7 +19,6 @@ import {
 } from "../../application-recovery-existing.ts";
 import { repository } from "../../build-workspaces.ts";
 import { observeDeployment, type TargetDescriptor } from "../../deploy-smoke.ts";
-import { generateNotices } from "../../generate-notices.ts";
 import type { RecoveryInput, RecoveryPorts } from "../../platform-recovery.ts";
 import { childEnvironment, execute, generateSbom, stageAndPack } from "../../prepare-release.ts";
 import {
@@ -81,7 +80,7 @@ async function preparePackages() {
   await mkdir(directory);
   const c = candidate(); // API identity only is synthetic; all five package archives below are actual.
   const packed = await stageAndPack(repository, resolve(directory, "packs"), c.scope, c.version);
-  await generateSbom(repository, directory, c.scope, c.version, await generateNotices());
+  await generateSbom(repository, directory, c.scope, c.version, packed.runtimeNotices);
   await mkdir(resolve(directory, "image"));
   for (const name of ["image-metadata.json", "sources-and-notices.tar"])
     await copyFile(

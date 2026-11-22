@@ -360,15 +360,19 @@ test("current registered queries use only unchanged repair headroom; wrong claim
       if (!rejected.ok) assert.equal(rejected.code, "rate_limited");
     }
     const beforeRenewal = await h.cp.admissionWindow();
+    const renewal = await h.cp.deliverExecutorFrameWithAdmissions(h.actor, leaseUpdate);
     assert.equal(
-      (await h.cp.deliverExecutorFrame(h.actor, leaseUpdate)).ok,
+      renewal.result.ok,
       true,
       "retained lease delivery must survive new application pressure",
     );
+    assert.deepEqual({ ...renewal.admissions }, { application: 0, repair: 1 });
     const afterRenewal = await h.cp.admissionWindow();
     assert.equal(afterRenewal.minute, beforeRenewal.minute);
     assert.equal(afterRenewal.application, beforeRenewal.application);
-    assert.equal(afterRenewal.repair, beforeRenewal.repair + 1);
+    // Independent alarms may also spend repair headroom during the delivery RPC.
+    assert.ok(afterRenewal.repair - beforeRenewal.repair >= renewal.admissions.repair);
+    assert.ok(afterRenewal.repair <= 30);
     while ((await h.cp.admissionWindow()).repair < 29)
       assert.equal(
         (await h.cp.queryExecution(h.actor, h.job.identity)).ok,
