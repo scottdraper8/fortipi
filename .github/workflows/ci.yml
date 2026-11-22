@@ -312,6 +312,9 @@ jobs:
       - run: pnpm run build:executor
         if: runner.os != 'Windows'
       - run: pnpm run typecheck:executor
+      - name: Verify portable artifact payload permissions and bytes
+        timeout-minutes: 2
+        run: node --test scripts/test/release/artifact-payload-portability.test.ts
       - name: Probe Windows startup and state protection
         if: runner.os == 'Windows'
         timeout-minutes: 2
