@@ -25,6 +25,8 @@ test("native failure diagnostics retain fixed checkpoints and bounded error clas
     "candidate-metadata",
     "candidate-environment",
     "candidate-checkout",
+    "candidate-checkout-head",
+    "candidate-checkout-status",
     "candidate-workflow",
     "candidate-reference",
     "candidate-authentication",
