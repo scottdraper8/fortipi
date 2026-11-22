@@ -294,16 +294,23 @@ jobs:
         with:
           python-version: "3.15.2"
           check-latest: false
+      - name: Require clean Windows release evidence build
+        if: runner.os == 'Windows'
+        timeout-minutes: 20
+        run: node scripts/evidence-build-cleanliness.ts
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.4"
           check-latest: false
           cache: false
       - run: pnpm install --frozen-lockfile
+        if: runner.os != 'Windows'
       - run: pnpm --dir tools/unstale install --frozen-lockfile
       - run: node scripts/verify-foundation.ts --native
+        if: runner.os != 'Windows'
         timeout-minutes: 3
       - run: pnpm run build:executor
+        if: runner.os != 'Windows'
       - run: pnpm run typecheck:executor
       - name: Probe Windows startup and state protection
         if: runner.os == 'Windows'
@@ -312,6 +319,14 @@ jobs:
       - name: Probe native state denial across identities
         timeout-minutes: 2
         run: node packages/fortipi-executor/test/fixtures/cross-identity.ts
+      - name: Retain Windows evidence build checkpoints
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-evidence-cleanliness-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/evidence-build-cleanliness.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: pnpm run test:executor
       - name: Require runner egress enforcement
         if: always()
