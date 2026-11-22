@@ -70,6 +70,9 @@ export class TestControlPlane extends BaseControlPlane {
   async cancelExecutionWithAdmissions(ctx: D.AuthContext, input: D.CancelRequest) {
     return this.#observe(() => super.cancelExecution(ctx, input));
   }
+  async deliverExecutorFrameWithAdmissions(ctx: D.AuthContext, input: D.ExecutorDelivery) {
+    return this.#observe(() => super.deliverExecutorFrame(ctx, input));
+  }
 }
 export type CompletionControl = ArtifactControl &
   Pick<
@@ -79,4 +82,5 @@ export type CompletionControl = ArtifactControl &
     | "setTime"
     | "queryExecutionWithAdmissions"
     | "cancelExecutionWithAdmissions"
+    | "deliverExecutorFrameWithAdmissions"
   >;

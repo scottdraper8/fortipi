@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
@@ -249,7 +249,8 @@ test("actual post-exit collection stays pending_sync only in its owning runtime"
     reopened: Ledger | undefined,
     collecting = false;
   const marker = join(f.path, "one-collected-effect"),
-    a = await assignment(nodeCommand(fixtureChild, "append-wait", marker));
+    exitRelease = join(f.path, "release-collected-child"),
+    a = await assignment(nodeCommand(fixtureChild, "append-until-release", marker, exitRelease));
   try {
     f.profile.origin = peer.origin;
     runtime = nativeRuntime(f);
@@ -281,6 +282,7 @@ test("actual post-exit collection stays pending_sync only in its owning runtime"
       }
     }, "actual child effect missing");
     assert.equal((await query(peer, a)).state, "running");
+    await writeFile(exitRelease, "");
     await eventually(() => collecting, "actual post-exit collection did not enter its hold");
     assert.equal(runtime.children.get(a.identity.jobId)?.exitCode, 0);
     assert.equal(runtime.active.has(a.identity.jobId), true);
@@ -304,15 +306,19 @@ test("actual post-exit collection stays pending_sync only in its owning runtime"
     assert.equal((await query(peer, a)).state, "pending_sync");
     assert.equal(await readFile(marker, "utf8"), "effect\n");
   } finally {
-    release.resolve();
-    if (runtime && collecting)
-      await eventually(() => !!f.ledger.get(a.identity.jobId)?.result, "finalizer did not drain");
-    connection?.controller.abort();
-    await connection?.connected;
-    await runtime?.shutdown();
-    reopened?.close();
-    await peer.close();
-    await f.cleanup();
+    try {
+      await writeFile(exitRelease, "");
+    } finally {
+      release.resolve();
+      if (runtime && collecting)
+        await eventually(() => !!f.ledger.get(a.identity.jobId)?.result, "finalizer did not drain");
+      connection?.controller.abort();
+      await connection?.connected;
+      await runtime?.shutdown();
+      reopened?.close();
+      await peer.close();
+      await f.cleanup();
+    }
   }
 });
 

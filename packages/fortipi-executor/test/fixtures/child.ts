@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 
 const [mode, path, ...args] = process.argv.slice(2);
 if (mode === "append" && path) {
@@ -8,6 +8,12 @@ if (mode === "append" && path) {
 } else if (mode === "append-wait" && path) {
   appendFileSync(path, "effect\n");
   setTimeout(() => process.exit(0), 2000);
+} else if (mode === "append-until-release" && path && args[0]) {
+  appendFileSync(path, "effect\n");
+  const exitRelease = args[0];
+  const held = setInterval(() => {
+    if (existsSync(exitRelease)) clearInterval(held);
+  }, 20);
 } else if (mode === "environment" && path) {
   writeFileSync(
     path,
