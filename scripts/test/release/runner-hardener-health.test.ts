@@ -5,9 +5,168 @@ import {
   assertNoRunnerFailureAnnotations,
   assertWindowsAgent,
   macosNetworkExtensionActive,
+  parseWindowsHealthProcess,
+  runnerHardenerFailureMessage,
   selectNativeJobWindow,
   windowsAgent,
+  windowsHealthCommandFailure,
 } from "../../runner-hardener-health.ts";
+
+test("health failure annotations accept exact fixed messages and withhold private suffixes", () => {
+  const generic = "Runner hardener health failed; details withheld";
+  const canary = "private-token-path-url-child-output-canary";
+  for (const message of [
+    "Runner hardener observation is outside the current job window",
+    "Runner hardener PID changed",
+    "Runner hardener executable identity differs",
+    "Runner hardener bytes differ from the reviewed vendor archive",
+    "Runner annotations are incomplete",
+    "Runner reported a failure annotation",
+    "Current-job read token is required",
+    "Runner hardener verification unavailable (job-metadata)",
+    "Runner hardener verification unavailable (runner-annotations)",
+    "Runner hardener verification unavailable (reported-runner-failure-or-incomplete-annotations)",
+    "Unable to verify current-job hardener file metadata",
+    "Unable to verify the macOS StepSecurity network extension",
+    "macOS StepSecurity network extension is not activated and enabled",
+    "The reviewed Windows hardener supports x64 only",
+    "Unable to read the owned Windows hardener PID",
+    "Invalid owned hardener PID",
+    "Unable to verify reviewed Windows hardener bytes",
+    "Unable to verify the owned Windows hardener process",
+    "Unable to verify the owned Windows hardener process (command-stopped)",
+    "Unable to verify the owned Windows hardener process (command-launch)",
+    "Unable to verify the owned Windows hardener process (command-unavailable)",
+    "Unable to verify the owned Windows hardener process (command-exit)",
+    "Unable to verify the owned Windows hardener process (command-output-limit)",
+    "Unable to verify the owned Windows hardener process (json-parse)",
+    "Unable to verify the owned Windows hardener process (json-shape)",
+    "Runner reached deliberately unallowed destination; block enforcement is required",
+  ]) {
+    assert.equal(runnerHardenerFailureMessage(new Error(message)), message);
+    for (const unknown of [
+      `${message}: ${canary}`,
+      `${canary}: ${message}`,
+      `${message}\n::error::${canary}`,
+    ])
+      assert.equal(runnerHardenerFailureMessage(new Error(unknown)), generic);
+  }
+  for (const value of [
+    canary,
+    "",
+    undefined,
+    null,
+    42,
+    true,
+    Symbol(canary),
+    { message: { private: canary } },
+  ])
+    assert.equal(runnerHardenerFailureMessage(value), generic);
+  assert.equal(runnerHardenerFailureMessage(new Error(canary)), generic);
+});
+
+test("health annotation fallback never invokes message accessors or string coercion", () => {
+  let accesses = 0;
+  const error = Object.defineProperty({}, "message", {
+    get() {
+      accesses++;
+      throw Error("private");
+    },
+  });
+  assert.equal(
+    runnerHardenerFailureMessage(error),
+    "Runner hardener health failed; details withheld",
+  );
+  const message = {
+    toString() {
+      accesses++;
+      return "Runner hardener PID changed";
+    },
+  };
+  assert.equal(
+    runnerHardenerFailureMessage({ message }),
+    "Runner hardener health failed; details withheld",
+  );
+  assert.equal(accesses, 0);
+});
+
+test("Windows health command diagnostics separate output limits, stopping, launch and exit without raw errors", () => {
+  const canary = "private-stderr-path-token-canary";
+  for (const [error, expected] of [
+    [
+      { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER", killed: true, signal: "SIGTERM" },
+      "command-output-limit",
+    ],
+    [{ code: "ENOENT" }, "command-launch"],
+    [{ code: "EACCES" }, "command-launch"],
+    [{ code: "EPERM" }, "command-launch"],
+    [{ killed: true }, "command-stopped"],
+    [{ signal: "SIGTERM", code: 1 }, "command-stopped"],
+    [{ code: 1 }, "command-exit"],
+    [{ code: 4294967295 }, "command-exit"],
+    [{ code: 0 }, "command-unavailable"],
+    [{ code: canary, message: canary, stdout: canary, stderr: canary }, "command-unavailable"],
+    [{ cause: { code: "ENOENT" }, message: canary }, "command-unavailable"],
+    [Object.create({ code: "ENOENT", killed: true, signal: "SIGTERM" }), "command-unavailable"],
+    [canary, "command-unavailable"],
+    [null, "command-unavailable"],
+  ] as const)
+    assert.equal(windowsHealthCommandFailure(error), expected);
+  let accesses = 0;
+  const error = Object.defineProperties(
+    {},
+    Object.fromEntries(
+      ["code", "killed", "signal", "message", "cause", "stack", "stderr"].map((key) => [
+        key,
+        {
+          get() {
+            accesses++;
+            throw Error(canary);
+          },
+        },
+      ]),
+    ),
+  );
+  assert.equal(windowsHealthCommandFailure(error), "command-unavailable");
+  assert.equal(accesses, 0);
+});
+
+test("Windows health process parsing reports fixed JSON syntax or shape failures without output", () => {
+  const canary = "private-process-output-path-canary";
+  assert.throws(
+    () => parseWindowsHealthProcess(`{${canary}`),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(
+        error.message,
+        "Unable to verify the owned Windows hardener process (json-parse)",
+      );
+      assert.equal(runnerHardenerFailureMessage(error), error.message);
+      return true;
+    },
+  );
+  for (const value of [
+    null,
+    [],
+    true,
+    { private: canary },
+    { pid: "42", path: canary, startedAt: canary },
+  ])
+    assert.throws(
+      () => parseWindowsHealthProcess(JSON.stringify(value)),
+      (error) => {
+        assert.ok(error instanceof Error);
+        assert.equal(
+          error.message,
+          "Unable to verify the owned Windows hardener process (json-shape)",
+        );
+        assert.equal(runnerHardenerFailureMessage(error), error.message);
+        return true;
+      },
+    );
+  const observation = { pid: 42, path: "C:\\agent\\agent.exe", startedAt: "2026-11-22T19:00:00Z" };
+  assert.deepEqual(parseWindowsHealthProcess(JSON.stringify(observation)), observation);
+});
 
 test("current-job metadata must identify one unfinished job on the actual runner", () => {
   const expected = {

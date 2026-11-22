@@ -12,7 +12,7 @@ import { filesBelow, packagePaths, repository, run } from "./build-workspaces.ts
 import type { Manifest } from "./check-pins.ts";
 import { checkPins, json, rootArgument } from "./check-pins.ts";
 import { pnpmExecutable, verifyPnpmExecutable } from "./pnpm-executable.ts";
-import { nativeRunnerHealth } from "./runner-hardener-health.ts";
+import { nativeRunnerHealth, runnerHardenerFailureMessage } from "./runner-hardener-health.ts";
 
 export { macosNetworkExtensionActive } from "./runner-hardener-health.ts";
 
@@ -290,8 +290,22 @@ async function metadata(root: string): Promise<void> {
 }
 
 if (import.meta.main) {
-  if (process.argv.includes("--egress")) await egressChecks();
-  else if (process.argv.includes("--native")) await nativeChecks();
+  if (process.argv.includes("--egress")) {
+    try {
+      await egressChecks();
+    } catch (error) {
+      if (process.env.GITHUB_ACTIONS === "true") {
+        try {
+          console.error(
+            `::error title=Runner hardener health::${runnerHardenerFailureMessage(error)}`,
+          );
+        } catch {
+          /* Annotation failure must not replace the original health failure. */
+        }
+      }
+      throw error;
+    }
+  } else if (process.argv.includes("--native")) await nativeChecks();
   else {
     const root = rootArgument();
     await metadata(root);

@@ -4,8 +4,109 @@ import { createHash } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { win32 } from "node:path";
 import { promisify } from "node:util";
+import {
+  powershellArgs,
+  windowsUtilityEnvironment,
+} from "../packages/fortipi-executor/src/platform/windows.ts";
 
 const execute = promisify(execFile);
+const windowsProcessFailures = {
+  "command-stopped": "Unable to verify the owned Windows hardener process (command-stopped)",
+  "command-launch": "Unable to verify the owned Windows hardener process (command-launch)",
+  "command-unavailable":
+    "Unable to verify the owned Windows hardener process (command-unavailable)",
+  "command-exit": "Unable to verify the owned Windows hardener process (command-exit)",
+  "command-output-limit":
+    "Unable to verify the owned Windows hardener process (command-output-limit)",
+  "json-parse": "Unable to verify the owned Windows hardener process (json-parse)",
+  "json-shape": "Unable to verify the owned Windows hardener process (json-shape)",
+} as const;
+type WindowsCommandFailure = Exclude<
+  keyof typeof windowsProcessFailures,
+  "json-parse" | "json-shape"
+>;
+
+function ownErrorField(error: unknown, field: string): unknown {
+  try {
+    if (error && typeof error === "object")
+      return Object.getOwnPropertyDescriptor(error, field)?.value;
+  } catch {}
+  return undefined;
+}
+
+/** Classification only: a stopped command is not proof of a timeout. */
+export function windowsHealthCommandFailure(error: unknown): WindowsCommandFailure {
+  const code = ownErrorField(error, "code");
+  // maxBuffer can also kill the child; it must win over the stopped classification.
+  if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return "command-output-limit";
+  if (code === "ENOENT" || code === "EACCES" || code === "EPERM") return "command-launch";
+  const signal = ownErrorField(error, "signal");
+  if (
+    ownErrorField(error, "killed") === true ||
+    (typeof signal === "string" && ["SIGTERM", "SIGKILL", "SIGINT", "SIGBREAK"].includes(signal))
+  )
+    return "command-stopped";
+  if (typeof code === "number" && Number.isSafeInteger(code) && code !== 0) return "command-exit";
+  return "command-unavailable";
+}
+
+interface WindowsProcessObservation {
+  pid: number;
+  path: string;
+  startedAt: string;
+}
+
+/** Output stays private; errors select fixed labels without exposing parsed values. */
+export function parseWindowsHealthProcess(output: string): WindowsProcessObservation {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    throw new Error(windowsProcessFailures["json-parse"]);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error(windowsProcessFailures["json-shape"]);
+  const fields = parsed as Record<string, unknown>;
+  if (
+    typeof fields.pid !== "number" ||
+    typeof fields.path !== "string" ||
+    typeof fields.startedAt !== "string"
+  )
+    throw new Error(windowsProcessFailures["json-shape"]);
+  return parsed as WindowsProcessObservation;
+}
+
+const fixedHealthFailures = new Set([
+  ...Object.values(windowsProcessFailures),
+  "Runner hardener observation is outside the current job window",
+  "Runner hardener PID changed",
+  "Runner hardener executable identity differs",
+  "Runner hardener bytes differ from the reviewed vendor archive",
+  "Runner annotations are incomplete",
+  "Runner reported a failure annotation",
+  "Current-job read token is required",
+  "Runner hardener verification unavailable (job-metadata)",
+  "Runner hardener verification unavailable (runner-annotations)",
+  "Runner hardener verification unavailable (reported-runner-failure-or-incomplete-annotations)",
+  "Unable to verify current-job hardener file metadata",
+  "Unable to verify the macOS StepSecurity network extension",
+  "macOS StepSecurity network extension is not activated and enabled",
+  "The reviewed Windows hardener supports x64 only",
+  "Unable to read the owned Windows hardener PID",
+  "Invalid owned hardener PID",
+  "Unable to verify reviewed Windows hardener bytes",
+  "Unable to verify the owned Windows hardener process",
+  "Runner reached deliberately unallowed destination; block enforcement is required",
+]);
+
+/** Exact source-owned messages only; never coerce errors or inspect causes/diagnostic output. */
+export function runnerHardenerFailureMessage(error: unknown): string {
+  const message = ownErrorField(error, "message");
+  return typeof message === "string" && fixedHealthFailures.has(message)
+    ? message
+    : "Runner hardener health failed; details withheld";
+}
+
 // v2.23.0 checksum.ts pins the v1.0.10-win archive to 1fada923…b4071.
 // Independently hash-checked archive member; these bytes are never redistributed.
 export const windowsAgent = {
@@ -224,37 +325,26 @@ export async function nativeRunnerHealth(): Promise<void> {
     } catch {
       throw new Error("Unable to verify reviewed Windows hardener bytes");
     }
-    let observation: { pid: number; path: string; startedAt: string };
+    let stdout: string;
     try {
       const script = `$ErrorActionPreference = 'Stop'; $p = Get-Process -Id ${pid}; @{ pid = $p.Id; path = $p.Path; startedAt = $p.StartTime.ToUniversalTime().ToString('o') } | ConvertTo-Json -Compress`;
-      const { stdout } = await execute(
+      const pending = execute(
         "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-        ["-NoProfile", "-NonInteractive", "-Command", script],
+        powershellArgs(script),
         {
-          timeout: 5000,
+          windowsHide: true,
+          timeout: 10_000,
           maxBuffer: 16384,
-          env: {
-            SystemRoot: "C:\\Windows",
-            WINDIR: "C:\\Windows",
-            PATH: "C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0",
-            PSModulePath: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules",
-            TEMP: process.env.RUNNER_TEMP,
-            TMP: process.env.RUNNER_TEMP,
-          },
+          env: windowsUtilityEnvironment(),
         },
       );
-      const parsed: unknown = JSON.parse(stdout);
-      assert.ok(parsed && typeof parsed === "object" && !Array.isArray(parsed));
-      const fields = parsed as Record<string, unknown>;
-      assert.ok(
-        typeof fields.pid === "number" &&
-          typeof fields.path === "string" &&
-          typeof fields.startedAt === "string",
-      );
-      observation = parsed as typeof observation;
-    } catch {
-      throw new Error("Unable to verify the owned Windows hardener process");
+      pending.child.stdin?.on("error", () => {});
+      pending.child.stdin?.end(); // No input: deliver EOF as the existing Windows adapter does.
+      ({ stdout } = await pending);
+    } catch (error) {
+      throw new Error(windowsProcessFailures[windowsHealthCommandFailure(error)]);
     }
+    const observation = parseWindowsHealthProcess(stdout);
     assertWindowsAgent(
       {
         ...observation,
