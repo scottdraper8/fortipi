@@ -7,7 +7,8 @@
       "version": "v2.23.0",
       "sha": "aebdcf6156ab6691adf63218240e476564a1ed4c",
       "licenseSha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-      "licensePath": "tools/unstale/licenses/step-security/harden-runner/aebdcf6156ab6691adf63218240e476564a1ed4c/LICENSE"
+      "licensePath": "tools/unstale/licenses/step-security/harden-runner/aebdcf6156ab6691adf63218240e476564a1ed4c/LICENSE",
+      "reviewedAt": "2026-11-22T20:20:01.891Z"
     },
     {
       "repository": "actions/checkout",

@@ -68,6 +68,8 @@ The exact packaging sources are [sharp-libvips ebb95f8](https://github.com/lovel
 
 `check-licenses --foundation` verifies actual archive bytes and produces deterministic ignored `dist/supply-chain/inventory.json` plus original texts for release tooling. Missing archive licenses use explicit exact attribution records and hash-checked upstream source texts. Three AWS internal packages omit their license; full Apache text comes from the reviewed AWS companion, with source correspondence expressly unclaimed. Data-uri's complete MIT text is in its archived README. Future bundles/packs/images require actual file/module inventories and notices, even if metadata passed. External unstale remains separate AGPL tooling and is never a product dependency.
 
+In `tools/unstale/platform-tools.json`, the global `reviewedAt` preserves the original catalog review. A later per-record `reviewedAt` dates only that record’s scoped source, pin and license review; it does not renew other records or establish runtime qualification.
+
 ## Build and runtime interfaces
 
 `build`, `typecheck`, `lint`, `schema:check`, `check:pins`, `check:licenses`, `unstale:check`, `test`, `test:executor`, `test:browser` and `test:pty` are unconditional integration commands. Missing generators, sources, tests or assets fail. Foundation acceptance checks existing tools/configuration without fabricating product implementations.
