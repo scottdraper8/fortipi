@@ -2,6 +2,8 @@ const phases = new Set([
   "candidate-metadata",
   "candidate-environment",
   "candidate-checkout",
+  "candidate-checkout-head",
+  "candidate-checkout-status",
   "candidate-workflow",
   "candidate-reference",
   "candidate-authentication",

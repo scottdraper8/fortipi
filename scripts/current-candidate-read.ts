@@ -74,8 +74,9 @@ async function frame(
     assert.equal(integer(Number(env.GITHUB_RUN_ID)), candidate.producer.runId);
     assert.equal(integer(Number(env.GITHUB_RUN_ATTEMPT)), candidate.producer.runAttempt);
     assert.equal(candidate.producer.workflowPath, workflowPath);
-    phase = "candidate-checkout";
+    phase = "candidate-checkout-head";
     assert.equal(await git("rev-parse", "HEAD"), candidate.sourceCommit);
+    phase = "candidate-checkout-status";
     assert.equal(await git("status", "--porcelain"), "", "Current candidate source must be clean");
     // Git object bytes avoid platform checkout CRLF conversion and git()'s trim.
     phase = "candidate-workflow";

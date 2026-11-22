@@ -319,6 +319,10 @@ export async function runNativeDaemon(
     assert.equal((await status()).nativeEnabled, true);
     phase = "daemon-start";
     startDaemon();
+    await until(async () => {
+      assert.equal(daemon?.exitCode, null, "Installed daemon exited before registration");
+      return service.online();
+    }, Boolean);
     const marker = resolve(directory, "starts"),
       nonce = randomUUID();
     const input = nodeCommand(
