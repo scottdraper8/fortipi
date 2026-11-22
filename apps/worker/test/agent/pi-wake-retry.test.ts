@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import test from "node:test";
+import type { TestHarness } from "wrangler";
 import { eventually } from "./harness.ts";
 import type { WakeRetryProbe } from "./pi-wake-retry-worker.js";
 
@@ -22,48 +23,69 @@ interface TaskState {
 test("actual PiHarness retry rereads replacement delayed work after a failed reopen", {
   timeout: 20000,
 }, async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), "fortipi-pi-wake-retry-"));
-  const configPath = join(directory, "wrangler.json");
-  await writeFile(
-    configPath,
-    JSON.stringify({
-      name: "fortipi-pi-wake-retry",
-      main: resolve("apps/worker/test/agent/pi-wake-retry-worker.ts"),
-      compatibility_date: "2026-11-10",
-      compatibility_flags: ["nodejs_compat", "enable_request_signal", "request_signal_passthrough"],
-      durable_objects: { bindings: [{ name: "PROBE", class_name: "WakeRetryProbe" }] },
-      migrations: [{ tag: "v1", new_sqlite_classes: ["WakeRetryProbe"] }],
-    }),
-  );
-  process.env.WRANGLER_SEND_METRICS = "false";
-  process.env.XDG_CONFIG_HOME = join(directory, "xdg");
-  process.env.XDG_CACHE_HOME = join(directory, "cache");
-  const { createTestHarness } = await import("wrangler");
-  const server = createTestHarness({ root: directory, workers: [{ configPath }] });
-  await server.listen();
-  const env = await server.getWorker<{ PROBE: DurableObjectNamespace<WakeRetryProbe> }>().getEnv();
-  const probe = env.PROBE.getByName("actual-pi-wake-retry");
-  const state = async () => JSON.parse(await probe.stateJson()) as RetryState;
-  const task = async () => JSON.parse(await probe.taskJson()) as TaskState;
+  let phase = "setup";
+  const mark = (next: string) => {
+    phase = next;
+    // Fixed phase names only; write before awaiting so TAP ordering cannot hide
+    // the last entered boundary if startup or teardown does not settle.
+    process.stderr.write(`# ${JSON.stringify({ diagnostic: "source-pi-wake-phase", phase })}\n`);
+  };
+  let directory: string | undefined;
+  let server: TestHarness | undefined;
+  let cleanupProbe: DurableObjectStub<WakeRetryProbe> | undefined;
   let drive: Promise<void> | undefined;
-  let phase = "prepare";
   try {
+    mark("setup");
+    directory = await mkdtemp(join(tmpdir(), "fortipi-pi-wake-retry-"));
+    const configPath = join(directory, "wrangler.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        name: "fortipi-pi-wake-retry",
+        main: resolve("apps/worker/test/agent/pi-wake-retry-worker.ts"),
+        compatibility_date: "2026-11-10",
+        compatibility_flags: [
+          "nodejs_compat",
+          "enable_request_signal",
+          "request_signal_passthrough",
+        ],
+        durable_objects: { bindings: [{ name: "PROBE", class_name: "WakeRetryProbe" }] },
+        migrations: [{ tag: "v1", new_sqlite_classes: ["WakeRetryProbe"] }],
+      }),
+    );
+    process.env.WRANGLER_SEND_METRICS = "false";
+    process.env.XDG_CONFIG_HOME = join(directory, "xdg");
+    process.env.XDG_CACHE_HOME = join(directory, "cache");
+    const { createTestHarness } = await import("wrangler");
+    server = createTestHarness({ root: directory, workers: [{ configPath }] });
+    mark("listen");
+    await server.listen();
+    mark("bind");
+    const env = await server
+      .getWorker<{ PROBE: DurableObjectNamespace<WakeRetryProbe> }>()
+      .getEnv();
+    const probe = env.PROBE.getByName("actual-pi-wake-retry");
+    cleanupProbe = probe;
+    const state = async () => JSON.parse(await probe.stateJson()) as RetryState;
+    const task = async () => JSON.parse(await probe.taskJson()) as TaskState;
+    mark("prepare");
     const prepared = await probe.prepare();
+    mark("drive");
     drive = probe.drive();
     void drive.catch(() => {});
-    phase = "observe-failure";
+    mark("observe-failure");
     await eventually(state, (state) => state.failed);
-    phase = "recover";
+    mark("recover");
     await probe.recover();
-    phase = "observe-replacement";
+    mark("replacement");
     const replacement = await eventually(state, (state) => state.row?.time === prepared.until);
-    phase = "check-replacement";
     assert.equal(replacement.row?.retry, undefined, "Use the real inherited retry policy");
     assert.equal((await task()).status, "sleeping");
-    phase = "settle-old";
+    mark("release");
     await probe.releaseFailure();
+    mark("wait-drive");
     await drive;
-    phase = "check-old";
+    mark("interim");
     const interim = await state();
     assert.equal(
       interim.row?.time,
@@ -72,9 +94,8 @@ test("actual PiHarness retry rereads replacement delayed work after a failed reo
     );
     assert.equal((await task()).status, "sleeping", "No early task execution");
     assert.ok((await probe.alarmTime()) !== null, "Delayed work retains an actual physical alarm");
-    phase = "observe-terminal";
+    mark("terminal");
     const terminal = await eventually(task, (state) => state?.status === "terminal");
-    phase = "check-terminal";
     assert.equal(terminal?.status, "terminal");
     if (terminal?.status !== "terminal") assert.fail("Actual Pi task did not finish");
     assert.equal(terminal.outcome?.status, "completed");
@@ -86,6 +107,7 @@ test("actual PiHarness retry rereads replacement delayed work after a failed reo
       "The natural wake obeys the stored deadline",
     );
     const after = await state();
+    mark("attempts");
     assert.equal(typeof replacement.failedCapturedTime, "number");
     const attempts = after.calls.filter(
       (call) => call.capturedTime === replacement.failedCapturedTime,
@@ -105,10 +127,22 @@ test("actual PiHarness retry rereads replacement delayed work after a failed reo
     }
     throw error;
   } finally {
-    await probe.releaseFailure();
-    await drive?.catch(() => {});
-    await probe.close();
-    await server.close();
-    await rm(directory, { recursive: true, force: true });
+    mark("cleanup");
+    try {
+      if (cleanupProbe) {
+        try {
+          await cleanupProbe.releaseFailure();
+          await drive?.catch(() => {});
+        } finally {
+          await cleanupProbe.close();
+        }
+      }
+    } finally {
+      try {
+        await server?.close();
+      } finally {
+        if (directory) await rm(directory, { recursive: true, force: true });
+      }
+    }
   }
 });

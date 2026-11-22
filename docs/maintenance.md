@@ -1,9 +1,10 @@
 # Compatibility maintenance
 
 The standalone **Compatibility review** workflow runs a weekly public, read-only
-check plus `workflow_dispatch` and checks on pull requests changing this guard. Integration into the default branch activates the
-schedule. It uses Node builtins and `contents: read`; no Cloudflare account, npm or
-model credentials are needed. It writes an Actions summary and a small JSON report
+full watch plus `workflow_dispatch`. Pull requests changing this guard use the
+separate `--required-current` policy below. Integration into the default branch
+activates the schedule. It uses Node builtins and `contents: read`; no Cloudflare
+account, npm or model credentials are needed. It writes an Actions summary and a small JSON report
 to the job log (normal repository log retention); it creates no issues, comments,
 messages, update PRs or artifacts. There is no product startup polling.
 
@@ -11,6 +12,8 @@ Run from the repository root with the pinned Node toolchain:
 
 ```sh
 node tools/compatibility-watch/watch.ts
+# PR policy, retaining all sixteen observations and the original full-watch exit code:
+node tools/compatibility-watch/watch.ts --required-current
 # Optional local public reads using existing gh authentication, without exposing tokens:
 node tools/compatibility-watch/watch.ts --gh
 node --test tools/compatibility-watch/watch.test.ts
@@ -49,11 +52,33 @@ only security updates can create PRs. Proposed changes still require the matchin
 lock, archive and license review. Installation uses the TypeScript bootstrap and
 its verified private environment; the discovery file is not a second installer.
 
+Default full-watch outcomes:
+
 | Outcome                                           | Meaning and action                                                                                                                                         |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `unchanged` (exit 0 only if every source matches) | Matches a deliberately reviewed reference and its local pins. No full compatibility claim.                                                                 |
 | `review-required` (exit 1)                        | Upstream content/release identity or a local pin changed. Inspect source, commit/diff and release-note links. Classification stays unknown until reviewed. |
 | `check-unavailable` / `unknown` (exit 2)          | Access/timeout/HTTP failure, unfamiliar response, incomplete baseline or unreviewed catalog. Restore observation/review; never report an all-clear.        |
+
+On PRs, `--required-current` preserves all sixteen results and the original
+aggregate exit code separately from its selected process exit code. Any
+`unknown`/`check-unavailable`, malformed observation or incomplete catalog across
+all sixteen still fails with exit 2. Available `review-required` drift in any of
+the twelve current policy/latest-release references still fails with exit 1.
+Only available `review-required` changes confined to the four installed-reference
+watch entries (Pi, Agents, Computer, Wrangler) may leave this PR command at exit 0.
+Their installed pins, locks, facts and security remain independently enforced by
+required CI and candidate preparation using `--release`.
+This PR command does not validate installed pins: valid local-pin drift in those
+four entries also remains an unresolved `review-required` result. It cannot
+replace the strict installed assessment or supply-chain checks.
+
+This corrects maintenance coupling: source or Worker-cohort metadata changes do
+not require acknowledging unrelated future-main changes to validate the guard.
+A successful PR-mode check does not approve or acknowledge those upstream
+snapshots, imply an upgrade, or establish full compatibility. Scheduled and
+manual full-watch runs retain their nonzero alerts; baseline updates still require
+individual review. Python metadata/advisory and mechanism checks remain fatal.
 
 For each changed entry:
 
@@ -101,10 +126,11 @@ original evidence and timestamps. Security-only Dependabot remains separate.
 
 Release candidate and required CI assessment use `node tools/compatibility-watch/watch.ts --release`.
 This separate predicate keeps all sixteen lookahead results and their original
-exit code in a format2 report. The scheduled/PR full-watch command above keeps
-its honest nonzero alerts. Four source-committed installed references (Pi, Agents,
-Computer, Wrangler) bind exact archives, declared patches, both locks, current
-product trees and the retained image identity. The other twelve references—five
+exit code in a format2 report. The scheduled/manual full-watch command above keeps
+its honest nonzero alerts; PR mode supplies no installed-release authority.
+Four source-committed installed references (Pi, Agents, Computer, Wrangler) bind
+exact pins and archives, declared patches, both locks, current product trees and
+the retained image identity. The other twelve references—five
 Cloudflare policy/flag sources and seven latest-release sources—must be freshly
 unchanged. Future main is neither installed code nor a blanket safety claim.
 

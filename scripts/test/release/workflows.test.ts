@@ -6,6 +6,53 @@ import { parse } from "yaml";
 import { repository } from "../../build-workspaces.ts";
 import { object } from "../../verify-release-gates.ts";
 
+test("compatibility workflows keep PR scope explicit and installed release gates strict", async () => {
+  const [watch, ci, release] = await Promise.all(
+    ["compatibility-watch", "ci", "release"].map(async (name) =>
+      object(parse(await readFile(resolve(repository, `.github/workflows/${name}.yml`), "utf8"))),
+    ),
+  );
+  assert.ok(watch && ci && release);
+  const events = object(watch.on);
+  for (const event of ["pull_request", "schedule", "workflow_dispatch"])
+    assert.ok(Object.hasOwn(events, event));
+  assert.deepEqual(watch.permissions, { contents: "read" });
+  const command = "node tools/compatibility-watch/watch.ts";
+  const steps = (job: Record<string, unknown>) => {
+    assert.equal(job["continue-on-error"] ?? false, false);
+    assert.ok(Array.isArray(job.steps));
+    return job.steps.map(object);
+  };
+  const observations = (values: Record<string, unknown>[]) =>
+    values.filter((step) => String(step.run ?? "").includes("tools/compatibility-watch/watch.ts"));
+  const review = object(object(watch.jobs).review);
+  assert.equal(review.if, undefined);
+  const reviewSteps = steps(review);
+  for (const step of reviewSteps) assert.equal(step["continue-on-error"] ?? false, false);
+  const watchSteps = observations(reviewSteps);
+  assert.deepEqual(
+    watchSteps.map((step) => ({ run: step.run, if: step.if })),
+    [
+      { run: `${command} --required-current`, if: "github.event_name == 'pull_request'" },
+      { run: command, if: "github.event_name != 'pull_request'" },
+    ],
+  );
+  for (const step of watchSteps)
+    assert.deepEqual(step.env, { GITHUB_TOKEN: "$" + "{{ github.token }}" });
+  for (const [workflow, name, condition] of [
+    [ci, "policy-and-integration", "github.event_name != 'workflow_dispatch'"],
+    [release, "candidate", undefined],
+  ] as const) {
+    const gates = observations(steps(object(object(workflow.jobs)[name])));
+    assert.equal(gates.length, 1);
+    const gate = gates[0];
+    assert.ok(gate);
+    assert.equal(gate.run, `${command} --release`);
+    assert.equal(gate.if, condition);
+    assert.equal(gate["continue-on-error"] ?? false, false);
+  }
+});
+
 test("access dispatch preserves informational bootstrap and authenticates recorded candidates before scoped keys", async () => {
   const access = object(
     parse(await readFile(resolve(repository, ".github/workflows/access-preflight.yml"), "utf8")),

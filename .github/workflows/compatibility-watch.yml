@@ -55,7 +55,13 @@ jobs:
         run: node tools/unstale/review-precommit.ts
       - name: Verify review outcomes
         run: node --test tools/compatibility-watch/watch.test.ts
-      - name: Review upstream identities
+      - name: Review required current identities for PR
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/compatibility-watch/watch.ts --required-current
+      - name: Review full upstream identities
+        if: github.event_name != 'pull_request'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/compatibility-watch/watch.ts

@@ -1,0 +1,5 @@
+# Match the canonical bytes written by the contract generator on every platform.
+packages/fortipi-contract/openapi.yaml text eol=lf
+packages/fortipi-contract/src/generated/operations.ts text eol=lf
+packages/fortipi-contract/src/generated/schemas.ts text eol=lf
+packages/fortipi-contract/src/generated/types.ts text eol=lf

@@ -88,6 +88,7 @@ const admissionFailureName =
 const failureNames = new Set<string>([
   "an RPC callback can reenter its pending initialization more than once",
   "actual PiHarness fixed wake preserves sleeping work across an older idle outcome",
+  "actual PiHarness retry rereads replacement delayed work after a failed reopen",
   "production Recovery supersession preserves distinct successor and bounded rows",
   "production Recovery hung takeover preserves distinct successor and bounded rows",
   "SAFE attempted boundary survives real service SIGKILL with retained execution identity",
@@ -137,6 +138,8 @@ const failurePaths = new Set<string>([
   "apps/worker/test/agent/reentry-worker.ts",
   "apps/worker/test/agent/pi-fixed-wake.test.ts",
   "apps/worker/test/agent/pi-fixed-wake-worker.ts",
+  "apps/worker/test/agent/pi-wake-retry.test.ts",
+  "apps/worker/test/agent/pi-wake-retry-worker.ts",
   "apps/worker/test/agent/recovery-generation.test.ts",
   "scripts/test/release/live-recovery-evidence.test.ts",
   "scripts/test/release/gates.test.ts",
@@ -421,9 +424,7 @@ export function sourceTestDiagnostic(line: string): boolean {
     /^# \{"diagnostic":"source-fixed-wake-failure","lastPhase":"(?:prepare|listen|environment|begin|hold-idle|sleep-successor|observe-successor|release-old|settle-old|check-wake)"\}$/.test(
       line,
     ) ||
-    /^# \{"diagnostic":"source-pi-wake-failure","phase":"(?:prepare|observe-failure|recover|observe-replacement|check-replacement|settle-old|check-old|observe-terminal|check-terminal)"\}$/.test(
-      line,
-    ) ||
+    piWakeDiagnostic(line) ||
     recoveryDiagnostic(line) ||
     roleDiagnostic(line) ||
     kernelDiagnostic(line) ||
@@ -542,6 +543,41 @@ function closedObservation(
   } catch {
     return null;
   }
+}
+const piWakePhases = new Set([
+  "setup",
+  "listen",
+  "bind",
+  "prepare",
+  "drive",
+  "observe-failure",
+  "recover",
+  "replacement",
+  "release",
+  "wait-drive",
+  "interim",
+  "terminal",
+  "attempts",
+  "cleanup",
+]);
+const legacyPiWakeFailurePhases = new Set([
+  "observe-replacement",
+  "check-replacement",
+  "settle-old",
+  "check-old",
+  "observe-terminal",
+  "check-terminal",
+]);
+function piWakeDiagnostic(line: string): boolean {
+  const r =
+    closedObservation(line, "source-pi-wake-phase", "phase") ??
+    closedObservation(line, "source-pi-wake-failure", "phase");
+  return !!(
+    r &&
+    typeof r.phase === "string" &&
+    (piWakePhases.has(r.phase) ||
+      (r.diagnostic === "source-pi-wake-failure" && legacyPiWakeFailurePhases.has(r.phase)))
+  );
 }
 function recoveryStartFailureDiagnostic(line: string): boolean {
   const r = closedObservation(

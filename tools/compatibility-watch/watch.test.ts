@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { mock, test } from "node:test";
 import type { Source } from "./catalog.ts";
-import { sources } from "./catalog.ts";
+import { installedReferenceIds, sources } from "./catalog.ts";
 import {
   type Baseline,
   check,
@@ -11,6 +11,8 @@ import {
   hash,
   localPins,
   observer,
+  type Result,
+  requiredCurrentExitCode,
   summary,
 } from "./watch.ts";
 
@@ -54,6 +56,67 @@ const baseline: Baseline = {
     },
   },
 };
+
+const installedWatchIds = ["pi-runtime", "agents-lifecycle", "computer-fuse", "wrangler"];
+const outcomeInventory = (): Pick<Result, "id" | "outcome">[] =>
+  sources.map(({ id }) => ({ id, outcome: "unchanged" }));
+
+test("required-current preserves unresolved installed lookahead and the full-watch failure", () => {
+  assert.deepEqual([...installedReferenceIds], installedWatchIds);
+  assert.equal(requiredCurrentExitCode(outcomeInventory()), 0);
+  for (const id of installedWatchIds) {
+    const rows = outcomeInventory();
+    const row = rows.find((item) => item.id === id);
+    assert.ok(row);
+    row.outcome = "review-required";
+    const before = structuredClone(rows);
+    assert.equal(exitCode(rows), 1, "Full scheduled/manual watch still requires review");
+    assert.equal(requiredCurrentExitCode(rows), 0);
+    assert.deepEqual(rows, before, "Selecting the predicate cannot acknowledge or remove drift");
+  }
+  const all = outcomeInventory();
+  for (const row of all) if (installedWatchIds.includes(row.id)) row.outcome = "review-required";
+  assert.equal(exitCode(all), 1);
+  assert.equal(requiredCurrentExitCode(all), 0);
+});
+
+test("required-current refuses every current policy or release-reference drift", () => {
+  const current = sources.filter((source) => !installedWatchIds.includes(source.id));
+  assert.equal(current.length, 12);
+  for (const source of current) {
+    const rows = outcomeInventory();
+    const row = rows.find((item) => item.id === source.id);
+    assert.ok(row);
+    row.outcome = "review-required";
+    assert.equal(requiredCurrentExitCode(rows), 1, source.id);
+  }
+});
+
+test("required-current refuses unavailable and malformed inventories across both groups", () => {
+  for (const source of sources)
+    for (const outcome of ["unknown", "check-unavailable"] as const) {
+      const rows = outcomeInventory();
+      const row = rows.find((item) => item.id === source.id);
+      assert.ok(row);
+      row.outcome = outcome;
+      assert.equal(requiredCurrentExitCode(rows), 2, `${source.id}:${outcome}`);
+    }
+  const rows = outcomeInventory();
+  assert.ok(rows[0]);
+  for (const malformed of [
+    [],
+    rows.slice(1),
+    [...rows.slice(1), rows[1]],
+    [{ id: "foreign", outcome: "unchanged" }, ...rows.slice(1)],
+    [null, ...rows.slice(1)],
+    [{ id: rows[0].id, outcome: "unrecognized" }, ...rows.slice(1)],
+    [{ id: 123, outcome: "unchanged" }, ...rows.slice(1)],
+  ])
+    assert.equal(
+      requiredCurrentExitCode(malformed as unknown as Pick<Result, "id" | "outcome">[]),
+      2,
+    );
+});
 
 test("matching reference succeeds; recursive code drift at the same version requires review and an exact diff", async () => {
   const same = await check(baseline, observer(request), pins, [source]);

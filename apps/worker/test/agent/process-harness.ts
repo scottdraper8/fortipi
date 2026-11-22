@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { type ChildProcess, execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -56,15 +56,49 @@ const requestFailures = new WeakMap<object, RequestFailure>();
 export function processRequestFailure(error: unknown): RequestFailure | undefined {
   return error !== null && typeof error === "object" ? requestFailures.get(error) : undefined;
 }
-async function freePort() {
-  const server = createServer();
-  await new Promise<void>((accept) => server.listen(0, "127.0.0.1", accept));
-  const address = server.address();
-  assert.ok(address && typeof address !== "string");
-  await new Promise<void>((accept, reject) =>
-    server.close((error) => (error ? reject(error) : accept())),
+async function runtimePorts(): Promise<readonly [number, number]> {
+  const http = createServer(),
+    inspector = createServer();
+  const listen = (server: Server) =>
+    new Promise<void>((accept, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        server.off("error", reject);
+        accept();
+      });
+    });
+  let ports: readonly [number, number] | undefined;
+  let allocationError: unknown;
+  try {
+    // Hold the first reservation while allocating the second. Releasing it
+    // first permits the OS to return the same number for both listeners.
+    await listen(http);
+    await listen(inspector);
+    const first = http.address(),
+      second = inspector.address();
+    assert.ok(first && typeof first !== "string");
+    assert.ok(second && typeof second !== "string");
+    assert.notEqual(first.port, second.port);
+    ports = [first.port, second.port];
+  } catch (error) {
+    allocationError = error;
+  }
+  const closed = await Promise.allSettled(
+    [http, inspector].map((server) =>
+      server.listening
+        ? new Promise<void>((accept, reject) =>
+            server.close((error) => (error ? reject(error) : accept())),
+          )
+        : Promise.resolve(),
+    ),
   );
-  return address.port;
+  // Join both closes. An allocation failure remains the primary error;
+  // successful allocation cannot return ports after a failed close.
+  if (!ports) throw allocationError;
+  for (const result of closed) if (result.status === "rejected") throw result.reason;
+  // Wrangler still binds these fixed ports after this handoff; another
+  // process can acquire them in that interval. This is not an atomic handoff.
+  return ports;
 }
 /** A real standalone Wrangler/workerd process. createTestHarness cannot persist. */
 export async function processHarness(
@@ -75,8 +109,7 @@ export async function processHarness(
   const currentHarness = ++harnessOrdinal;
   const runId = randomUUID();
   const directory = await mkdtemp(join(tmpdir(), "fortipi-process-"));
-  const port = await freePort(),
-    inspector = await freePort();
+  const [port, inspector] = await runtimePorts();
   const configPath = join(directory, "wrangler.json");
   const policy = structuredClone(freeInfrastructurePolicy);
   // This isolates storage/recovery semantics. The separate Free tests retain30.
