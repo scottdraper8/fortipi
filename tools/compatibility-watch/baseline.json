@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "d68413886563e376605e732a75320eefd32b5128",
-        "version": "v1.20261121.1",
-        "sha256": "02441e8a4913843b9b5c4e008a074db574205be97d1d6a59748dcca7f73035e2",
+        "commit": "295252a19bec2c84e8ceb99a5b95196e91ea8a00",
+        "version": "v1.20261122.1",
+        "sha256": "8798e5787c4c58d52e3f66e38a65cefb9e7c526c83aee19f6b9ae1975117bcce",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261121.1"
       },
-      "reviewedAt": "2026-11-21T05:36:33.085Z",
-      "reviewNote": "Watched releasev1.20261121.1 resolves d68413886563e376605e732a75320eefd32b5128; current Workers types5.20261121.1 published provenance matches that source. The installed local Wrangler4.166/Miniflare5beta19 simulator still uses workerd1.20261119.1; no override or runtime21 adoption is implied. Reviewed release20..21 primary diff/tree inventory and selected Fetch/body-error, structuredClone, streaming decoder and EventSource autogate changes; broad native/runtime changes are not fully audited. Keep2026-11-10 plus nodejs_compat/enable_request_signal/request_signal_passthrough. Types do not select a hosted runtime build. No deployed/new-image/Paid/ABI equivalence or automatic date/flag migration. Evidence: current-lookahead-review/report.md."
+      "reviewedAt": "2026-11-22T01:53:20.134Z",
+      "reviewNote": "Reviewed official workerd21 d6841388..22 295252a1 (77 commits/239 paths): selected SQL cursor GC, WorkerLoader handoff/abandoned-load behavior, Rust alarms, network/TLS/WebCrypto and capnp. Experimental CONNECT/startTls lifetime fix requires connect_handler_starttls, absent from declared flags. No demonstrated configured-pin blocker; retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1, types5.20261121.1 and date2026-11-10 plus nodejs_compat/enable_request_signal/request_signal_passthrough. Watch pointer only; hosted rollout/autogates, deployed/Paid/native behavior remain unverified. Bounded source review, not a full native audit. Primary interval: https://github.com/cloudflare/workerd/compare/d68413886563e376605e732a75320eefd32b5128...295252a19bec2c84e8ceb99a5b95196e91ea8a00"
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
