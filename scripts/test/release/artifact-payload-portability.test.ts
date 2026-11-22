@@ -4,8 +4,21 @@ import { chmod, link, lstat, mkdir, readFile, rm, writeFile } from "node:fs/prom
 import { resolve } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
+import { repository } from "../../build-workspaces.ts";
 import { type FileRecord, sha256, verifyPayload } from "../../verify-release-gates.ts";
 import { temporary } from "./fixtures.ts";
+
+test("Release workflow checkout preserves authoritative Git-object bytes", async () => {
+  const path = ".github/workflows/release.yml";
+  const { stdout: committed } = await promisify(execFile)("git", ["show", `HEAD:${path}`], {
+    cwd: repository,
+    encoding: "buffer",
+    timeout: 15000,
+    maxBuffer: 4_000_000,
+  });
+  const working = await readFile(resolve(repository, path));
+  assert.ok(working.equals(committed), "Release workflow differs from committed bytes");
+});
 
 test("protected artifact bytes survive native permission representation and reject tampering", async () => {
   const root = await temporary("fortipi-payload-portability-");
