@@ -107,6 +107,7 @@ spawn(process.execPath, [${JSON.stringify(descendant)}], { stdio: "ignore" }).un
 test("startup markers expose only explicit code categories", () => {
   for (const [output, marker] of [
     ["Error: listen EADDRINUSE: private-address", "address-in-use"],
+    ["MiniflareCoreError [ERR_ADDRESS_IN_USE]: private-address", "address-in-use"],
     ["Error [ERR_MODULE_NOT_FOUND]: private-module", "module-unavailable"],
     ["code: 'ENOMEM', private-detail", "memory"],
     ["code: 'EACCES', private-path", "permission"],
@@ -118,6 +119,7 @@ test("startup markers expose only explicit code categories", () => {
     "private-canary: address already in use; module unavailable; out of memory; permission denied",
     "The service was stopped; runtime failed; no such file",
     "prefixEADDRINUSE EADDRINUSE_suffix ERR_MODULE_NOT_FOUND_suffix",
+    "prefixERR_ADDRESS_IN_USE ERR_ADDRESS_IN_USE_suffix",
     "Ready on http://127.0.0.1:1234/ private-canary",
     "",
   ])

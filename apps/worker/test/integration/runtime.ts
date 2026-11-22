@@ -76,8 +76,7 @@ export async function start(options: RuntimeOptions = {}) {
   const directory =
     options.directory ?? (await mkdtemp(join(tmpdir(), "fortipi-evidence-runtime-")));
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const number = await port(),
-    inspector = await port();
+  const number = await port();
   const endpoint = `${options.tls ? "https" : "http"}://127.0.0.1:${number}`;
   const admin = `local-${randomUUID()}-${randomUUID()}`;
   const configPath = join(directory, "wrangler.json");
@@ -153,6 +152,9 @@ export async function start(options: RuntimeOptions = {}) {
         wrangler,
         "dev",
         "--local",
+        // Consumed by the bounded private startup classifier below, not emitted as raw logs.
+        "--log-level",
+        "debug",
         "--config",
         configPath,
         "--persist-to",
@@ -160,7 +162,8 @@ export async function start(options: RuntimeOptions = {}) {
         "--port",
         String(number),
         "--inspector-port",
-        String(inspector),
+        // Let workerd select its ephemeral inspector socket when it binds.
+        "0",
         ...(options.tls
           ? [
               "--local-protocol",

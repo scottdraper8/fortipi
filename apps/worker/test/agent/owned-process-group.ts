@@ -35,7 +35,7 @@ export function startupMarker(output: string): StartupMarker {
   const codes = new Set(
     output.match(/(?<![A-Za-z0-9_])(?:ERR_[A-Z_]+|E[A-Z0-9_]+|MODULE_NOT_FOUND)(?![A-Za-z0-9_])/g),
   );
-  if (codes.has("EADDRINUSE")) return "address-in-use";
+  if (codes.has("EADDRINUSE") || codes.has("ERR_ADDRESS_IN_USE")) return "address-in-use";
   if (codes.has("ERR_MODULE_NOT_FOUND") || codes.has("MODULE_NOT_FOUND"))
     return "module-unavailable";
   if (
