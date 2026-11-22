@@ -257,9 +257,20 @@ test("approval abort and native completion diagnostics exclude arbitrary payload
 
 test("Pi wake failure forwarding admits only fixed phases without error details", () => {
   for (const phase of [
+    "setup",
+    "listen",
+    "bind",
     "prepare",
+    "drive",
     "observe-failure",
     "recover",
+    "replacement",
+    "release",
+    "wait-drive",
+    "interim",
+    "terminal",
+    "attempts",
+    "cleanup",
     "observe-replacement",
     "check-replacement",
     "settle-old",
@@ -277,6 +288,85 @@ test("Pi wake failure forwarding admits only fixed phases without error details"
     ),
     false,
   );
+});
+
+test("Pi wake phase forwarding requires canonical prefixed closed records", () => {
+  for (const phase of [
+    "setup",
+    "listen",
+    "bind",
+    "prepare",
+    "drive",
+    "observe-failure",
+    "recover",
+    "replacement",
+    "release",
+    "wait-drive",
+    "interim",
+    "terminal",
+    "attempts",
+    "cleanup",
+  ]) {
+    const line = `# ${JSON.stringify({ diagnostic: "source-pi-wake-phase", phase })}`;
+    assert.equal(sourceTestDiagnostic(line), true);
+    assert.ok(Buffer.byteLength(line) <= 128);
+  }
+  for (const diagnostic of ["source-pi-wake-phase", "source-pi-wake-failure"]) {
+    const record = { diagnostic, phase: "setup" };
+    const line = `# ${JSON.stringify(record)}`;
+    for (const bad of [
+      JSON.stringify(record),
+      `# ${JSON.stringify({ phase: "setup", diagnostic })}`,
+      `${line} `,
+      `${line}\n`,
+      line.replace('"phase":"setup"', `"phase":"${canary}","phase":"setup"`),
+      `# ${JSON.stringify({ ...record, phase: canary })}`,
+      `# ${JSON.stringify({ ...record, phase: null })}`,
+      `# ${JSON.stringify({ ...record, error: canary })}`,
+      `# ${JSON.stringify({ ...record, message: canary })}`,
+      `# ${JSON.stringify({ ...record, stack: canary })}`,
+      `# ${JSON.stringify({ ...record, code: "ERR_ASSERTION" })}`,
+    ])
+      assert.equal(sourceTestDiagnostic(bad), false);
+  }
+  assert.equal(
+    sourceTestDiagnostic('# {"diagnostic":"source-pi-wake-phase","phase":"observe-replacement"}'),
+    false,
+  );
+});
+
+test("Pi wake retry failure identification retains its literal name without private TAP fields", () => {
+  const name = "actual PiHarness retry rereads replacement delayed work after a failed reopen";
+  for (const [input, expected] of [
+    [name, name],
+    [`${name} ${canary}`, null],
+  ]) {
+    const output: string[] = [];
+    const consume = sourceFailureLines((line) => output.push(line));
+    for (const line of [
+      `not ok 1 - ${input}`,
+      "  ---",
+      "  failureType: 'testCodeFailure'",
+      `  error: '${canary}'`,
+      "  code: 'ERR_ASSERTION'",
+      `  actual: '${canary}'`,
+      `  expected: '${canary}'`,
+      "  stack: |-",
+      `    ${canary}`,
+      "  ...",
+    ])
+      consume(line);
+    assert.equal(output.length, 1);
+    assert.deepEqual(JSON.parse(output[0] ?? ""), {
+      diagnostic: "source-test-failure",
+      name: expected,
+      location: null,
+      category: "testCodeFailure",
+      code: "ERR_ASSERTION",
+    });
+    assert.equal(output.join("").includes(canary), false);
+    assert.equal(sourceTestDiagnostic((output[0] ?? "").trimEnd()), true);
+  }
 });
 
 test("an actual admission polling failure retains its reviewed inner location without its error text", {
