@@ -22,6 +22,7 @@ import { basename, dirname, resolve, sep } from "node:path";
 import { t as listTar } from "tar";
 import { parse as parseYaml } from "yaml";
 import type { DeviceEvidenceData } from "../tests/clients/device-observer.ts";
+import { observeNativeEvidenceFailure } from "../tests/clients/native-evidence-observation.ts";
 import { validateReleaseReport } from "../tools/compatibility-watch/release.ts";
 import {
   attachApplicationRecoveryChannel,
@@ -2203,22 +2204,36 @@ export async function runEvidence(
   devices?: DeviceEvidenceData,
   selection?: import("./live-selection-evidence.ts").SelectionAcceptanceData,
 ): Promise<void> {
+  const observed = async <T>(phase: string, action: () => Promise<T>): Promise<T> => {
+    try {
+      return await action();
+    } catch (error) {
+      if (mode === "native") observeNativeEvidenceFailure(phase, error);
+      throw error;
+    }
+  };
   assert.ok(mode === "live" || devices === undefined, "Device history is live-only");
   assert.ok(mode === "live" || selection === undefined, "Selection history is live-only");
   if (recovery) {
     assert.equal(mode, "live");
     assert.equal(recovery.checkpointDirectory, resolve(out, "application-recovery"));
   }
-  const context = await resolveCandidateReadContext(candidate);
-  const loaded = await loadCandidate(candidate, context);
-  const expectedProducer = await evidenceProducer(repository, loaded.candidate, mode);
+  const context = await observed("candidate-reference", () =>
+    resolveCandidateReadContext(candidate),
+  );
+  const loaded = await observed("candidate-authentication", () =>
+    loadCandidate(candidate, context),
+  );
+  const expectedProducer = await observed("evidence-producer", () =>
+    evidenceProducer(repository, loaded.candidate, mode),
+  );
   await regularBytes(resolve(repository, "tests/clients/run-evidence.ts"));
   assert.ok(
     resolve(fixture).startsWith(`${resolve(repository, "tests/clients/fixtures")}${sep}`) &&
       fixture.endsWith(".json"),
     "Evidence fixture must be a trusted source descriptor",
   );
-  await regularBytes(resolve(fixture));
+  await observed("evidence-fixture", () => regularBytes(resolve(fixture)));
   const env = evidenceEnvironment(expectedProducer, mode, context);
   const devicesPath = devices ? resolve(dirname(out), `${basename(out)}.devices.json`) : undefined;
   if (devicesPath) await saveJson(devicesPath, devices);
@@ -2261,6 +2276,7 @@ export async function runEvidence(
         : undefined,
     );
   } catch (error) {
+    if (mode === "native") observeNativeEvidenceFailure("evidence-coordinator", error);
     childError = error;
   }
   try {
@@ -2269,9 +2285,11 @@ export async function runEvidence(
   } finally {
     channel?.close();
   }
-  const receipt = await readJson(resolve(out, "gate.json"));
-  assertEvidenceReceipt(receipt, loaded, expectedProducer, mode);
-  await verifyPayload(out, receipt.files, ["gate.json"]);
+  await observed("evidence-receipt", async () => {
+    const receipt = await readJson(resolve(out, "gate.json"));
+    assertEvidenceReceipt(receipt, loaded, expectedProducer, mode);
+    await verifyPayload(out, receipt.files, ["gate.json"]);
+  });
 }
 /** Registry-resolved verification runs before any release finalization; exact bytes and the reviewed graph both matter. */
 async function verifyRegistryConsumer(

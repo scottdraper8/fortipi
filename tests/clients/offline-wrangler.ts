@@ -19,6 +19,7 @@ export function offlineWranglerEnvironment(directory: string): NodeJS.ProcessEnv
     CLOUDFLARE_AUTH_USE_KEYRING: "false",
     CLOUDFLARE_API_BASE_URL: "http://127.0.0.1:1/client/v4",
     CLOUDFLARE_BASE_URL: "http://127.0.0.1:1/client/v4",
+    CLOUDFLARE_CF_FETCH_ENABLED: "false",
     WRANGLER_SEND_METRICS: "false",
     WRANGLER_HIDE_BANNER: "true",
     WRANGLER_LOG_PATH: resolve(directory, "wrangler.log"),
