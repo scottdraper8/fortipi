@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { observeNativeEvidenceFailure } from "../tests/clients/native-evidence-observation.ts";
 import { repository } from "./build-workspaces.ts";
 import {
   type ArtifactReference,
@@ -39,55 +40,64 @@ async function frame(
   hash: string,
   context?: CurrentCandidateReadContext,
 ): Promise<Buffer> {
-  assertCandidate(candidate);
-  assertProducer(candidate.producer);
-  const bytes = Buffer.from(`${canonicalJson(candidate)}\n`);
-  assert.ok(bytes.length <= 8_000_000);
-  assert.equal(sha256(bytes), digest(hash), "Current candidate metadata hash differs");
-  const env = process.env;
-  assert.equal(env.GITHUB_ACTIONS, "true");
-  assert.equal(env.GITHUB_SERVER_URL, "https://github.com");
-  assert.equal(env.GITHUB_REPOSITORY, REPOSITORY);
-  assert.equal(env.GITHUB_REPOSITORY_ID, String(REPOSITORY_ID));
-  assert.equal(env.GITHUB_EVENT_NAME, "workflow_dispatch");
-  assert.equal(env.GITHUB_REF, "refs/heads/main");
-  assert.equal(env.GITHUB_WORKFLOW_REF, `${REPOSITORY}/${workflowPath}@refs/heads/main`);
-  assert.ok(
-    env.GITHUB_JOB === "native" || env.GITHUB_JOB === "native-receipt",
-    "Current candidate reader job denied",
-  );
-  if (context) assert.equal(context.job, env.GITHUB_JOB);
-  assert.equal(env.OPERATION, "candidate");
-  assert.equal(env.GITHUB_SHA, candidate.sourceCommit);
-  assert.equal(env.SOURCE_SHA, candidate.sourceCommit);
-  assert.equal(env.RELEASE_VERSION, candidate.version);
-  assert.equal(env.RELEASE_SCOPE, candidate.scope);
-  assert.equal(env.EXPECTED_TAG, candidate.tag);
-  assert.equal(
-    env.CONFIRM,
-    `candidate v${candidate.version} ${candidate.sourceCommit} ${candidate.scope}`,
-  );
-  assert.equal(integer(Number(env.GITHUB_RUN_ID)), candidate.producer.runId);
-  assert.equal(integer(Number(env.GITHUB_RUN_ATTEMPT)), candidate.producer.runAttempt);
-  assert.equal(candidate.producer.workflowPath, workflowPath);
-  assert.equal(await git("rev-parse", "HEAD"), candidate.sourceCommit);
-  assert.equal(await git("status", "--porcelain"), "", "Current candidate source must be clean");
-  // Git object bytes avoid platform checkout CRLF conversion and git()'s trim.
-  const workflow = (
-    await promisify(execFile)("git", ["show", `${candidate.sourceCommit}:${workflowPath}`], {
-      cwd: repository,
-      encoding: "buffer",
-      timeout: 20_000,
-      maxBuffer: 4_000_000,
-      env: { PATH: env.PATH, Path: env.Path, SystemRoot: env.SystemRoot, LANG: "C" },
-    })
-  ).stdout;
-  assert.equal(
-    sha256(workflow),
-    candidate.producer.workflowSha256,
-    "Current candidate source workflow differs",
-  );
-  return bytes;
+  let phase = "candidate-metadata";
+  try {
+    assertCandidate(candidate);
+    assertProducer(candidate.producer);
+    const bytes = Buffer.from(`${canonicalJson(candidate)}\n`);
+    assert.ok(bytes.length <= 8_000_000);
+    assert.equal(sha256(bytes), digest(hash), "Current candidate metadata hash differs");
+    phase = "candidate-environment";
+    const env = process.env;
+    assert.equal(env.GITHUB_ACTIONS, "true");
+    assert.equal(env.GITHUB_SERVER_URL, "https://github.com");
+    assert.equal(env.GITHUB_REPOSITORY, REPOSITORY);
+    assert.equal(env.GITHUB_REPOSITORY_ID, String(REPOSITORY_ID));
+    assert.equal(env.GITHUB_EVENT_NAME, "workflow_dispatch");
+    assert.equal(env.GITHUB_REF, "refs/heads/main");
+    assert.equal(env.GITHUB_WORKFLOW_REF, `${REPOSITORY}/${workflowPath}@refs/heads/main`);
+    assert.ok(
+      env.GITHUB_JOB === "native" || env.GITHUB_JOB === "native-receipt",
+      "Current candidate reader job denied",
+    );
+    if (context) assert.equal(context.job, env.GITHUB_JOB);
+    assert.equal(env.OPERATION, "candidate");
+    assert.equal(env.GITHUB_SHA, candidate.sourceCommit);
+    assert.equal(env.SOURCE_SHA, candidate.sourceCommit);
+    assert.equal(env.RELEASE_VERSION, candidate.version);
+    assert.equal(env.RELEASE_SCOPE, candidate.scope);
+    assert.equal(env.EXPECTED_TAG, candidate.tag);
+    assert.equal(
+      env.CONFIRM,
+      `candidate v${candidate.version} ${candidate.sourceCommit} ${candidate.scope}`,
+    );
+    assert.equal(integer(Number(env.GITHUB_RUN_ID)), candidate.producer.runId);
+    assert.equal(integer(Number(env.GITHUB_RUN_ATTEMPT)), candidate.producer.runAttempt);
+    assert.equal(candidate.producer.workflowPath, workflowPath);
+    phase = "candidate-checkout";
+    assert.equal(await git("rev-parse", "HEAD"), candidate.sourceCommit);
+    assert.equal(await git("status", "--porcelain"), "", "Current candidate source must be clean");
+    // Git object bytes avoid platform checkout CRLF conversion and git()'s trim.
+    phase = "candidate-workflow";
+    const workflow = (
+      await promisify(execFile)("git", ["show", `${candidate.sourceCommit}:${workflowPath}`], {
+        cwd: repository,
+        encoding: "buffer",
+        timeout: 20_000,
+        maxBuffer: 4_000_000,
+        env: { PATH: env.PATH, Path: env.Path, SystemRoot: env.SystemRoot, LANG: "C" },
+      })
+    ).stdout;
+    assert.equal(
+      sha256(workflow),
+      candidate.producer.workflowSha256,
+      "Current candidate source workflow differs",
+    );
+    return bytes;
+  } catch (error) {
+    observeNativeEvidenceFailure(phase, error);
+    throw error;
+  }
 }
 
 async function source(candidate: CandidateManifest, request: GitHubRequest): Promise<void> {

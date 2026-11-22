@@ -14,6 +14,16 @@ import { type CandidateReadContext, execute } from "../../scripts/prepare-releas
 import { object, REPOSITORY, REPOSITORY_ID, sha256 } from "../../scripts/verify-release-gates.ts";
 import type { Installed } from "../distribution/install.ts";
 import type { ScenarioEvidence } from "./evidence.ts";
+import { observeNativeEvidenceFailure } from "./native-evidence-observation.ts";
+
+async function observed<T>(phase: string, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    observeNativeEvidenceFailure(phase, error);
+    throw error;
+  }
+}
 
 interface DaemonService {
   endpoint: string;
@@ -191,20 +201,36 @@ export async function runNativeDaemon(
   context?: CandidateReadContext,
 ): Promise<ScenarioEvidence> {
   const isolation =
-    process.platform === "darwin" ? await freshDarwinRunner(installed, context) : undefined;
-  const module = (await import(
-    pathToFileURL(installed.resolveExport(`@${installed.candidate.scope}/fortipi-executor`)).href
+    process.platform === "darwin"
+      ? await observed("daemon-isolation", () => freshDarwinRunner(installed, context))
+      : undefined;
+  const module = (await observed(
+    "daemon-installed-module",
+    () =>
+      import(
+        pathToFileURL(installed.resolveExport(`@${installed.candidate.scope}/fortipi-executor`))
+          .href
+      ),
   )) as typeof import("../../packages/fortipi-executor/dist/index.js");
-  const source = (await import(
-    pathToFileURL(
-      resolve(import.meta.dirname, "../../apps/worker/test/integration/native-daemon-service.ts"),
-    ).href
+  const source = (await observed(
+    "daemon-service-module",
+    () =>
+      import(
+        pathToFileURL(
+          resolve(
+            import.meta.dirname,
+            "../../apps/worker/test/integration/native-daemon-service.ts",
+          ),
+        ).href
+      ),
   )) as {
     nativeDaemonService(): Promise<DaemonService>;
   };
-  const service = await source.nativeDaemonService(),
+  const service = await observed("daemon-service-setup", () => source.nativeDaemonService()),
     platform = module.adapter();
-  const directory = await realpath(await mkdtemp(resolve(tmpdir(), "fortipi-evidence-daemon-")));
+  const directory = await observed("daemon-directory", async () =>
+    realpath(await mkdtemp(resolve(tmpdir(), "fortipi-evidence-daemon-"))),
+  );
   let daemon: ChildProcess | undefined, ended: Promise<number | null> | undefined;
   const home = resolve(directory, "home"),
     root = resolve(directory, "root"),
@@ -266,12 +292,14 @@ export async function runNativeDaemon(
     ]);
     daemon = undefined;
   };
+  let phase = "daemon-protection";
   try {
     await platform.protect(directory, true);
     for (const path of [home, root, state]) {
       await mkdir(path, { mode: 0o700 });
       await platform.protect(path, true);
     }
+    phase = "daemon-profile";
     const profile: Profile = {
       ...service.profile,
       ledgerId: `evidence_${randomUUID().replaceAll("-", "")}`,
@@ -280,13 +308,16 @@ export async function runNativeDaemon(
       limits: { outputBytesPerJob: 4096, inlineTailBytes: 128, artifactBytes: 1024 },
     };
     await module.privateWrite(profilePath, JSON.stringify(profile));
+    phase = "daemon-init";
     await command(["init"]);
     assert.equal((await status()).nativeEnabled, false);
+    phase = "daemon-disclosure";
     // Actual CLI refuses to record host consent without its full disclosure.
     await command(["policy", "--trusted-host"], 1);
     assert.equal((await status()).nativeEnabled, false);
     await command(["policy", "--trusted-host", "--accept-daemon-user-files-and-network"]);
     assert.equal((await status()).nativeEnabled, true);
+    phase = "daemon-start";
     startDaemon();
     const marker = resolve(directory, "starts"),
       nonce = randomUUID();
@@ -296,8 +327,11 @@ export async function runNativeDaemon(
       nonce,
       "output",
     );
+    phase = "daemon-confinement-dispatch";
     const pending = await service.dispatch(input);
+    phase = "daemon-confinement-remote-approval";
     await service.approve(pending.approvalId);
+    phase = "daemon-confinement-local-approval";
     type Approval = { jobId: string; digest: string };
     const local = await until(
       async () => JSON.parse(await command(["approvals", "list"])) as Approval[],
@@ -306,6 +340,7 @@ export async function runNativeDaemon(
     const approval = local.find((row) => row.jobId === pending.jobId)!;
     assert.equal(await readFile(marker, "utf8").catch(() => ""), "");
     // Require confinement on the same real current assignment before approving.
+    phase = "daemon-confinement-policy";
     const consent = await module.loadProfile(profilePath, platform, true);
     const assignmentBefore = await status();
     consent.policy = {
@@ -315,6 +350,7 @@ export async function runNativeDaemon(
     };
     await module.privateWrite(profilePath, JSON.stringify(consent));
     await command(["approve", pending.jobId, "--digest", approval.digest]);
+    phase = "daemon-confinement-refusal";
     await until(
       async () => {
         const ledger = await module.Ledger.open(
@@ -337,6 +373,7 @@ export async function runNativeDaemon(
       "",
       "Required confinement cannot launch a native host process",
     );
+    phase = "daemon-confinement-settlement";
     const rejected = await until(
       () => service.job(pending.jobId),
       (job) =>
@@ -345,14 +382,18 @@ export async function runNativeDaemon(
     if (rejected.state === "requires_reconciliation")
       await service.acknowledgeUnknown(pending.jobId);
     await service.settled(pending.taskId);
+    phase = "daemon-execution-policy";
     consent.policy = {
       ...consent.policy,
       version: consent.policy.version + 1,
       requireConfinement: false,
     };
     await module.privateWrite(profilePath, JSON.stringify(consent));
+    phase = "daemon-execution-dispatch";
     const run = await service.dispatch(input);
+    phase = "daemon-execution-remote-approval";
     await service.approve(run.approvalId);
+    phase = "daemon-execution-local-approval";
     const waiting = await until(
       async () => JSON.parse(await command(["approvals", "list"])) as Approval[],
       (rows) => rows.some((row) => row.jobId === run.jobId),
@@ -363,10 +404,12 @@ export async function runNativeDaemon(
       "--digest",
       waiting.find((row) => row.jobId === run.jobId)!.digest,
     ]);
+    phase = "daemon-execution-marker";
     await until(
       async () => readFile(marker, "utf8").catch(() => ""),
       (value) => value === `${nonce}\n`,
     );
+    phase = "daemon-execution-completion";
     const completed = await until(
       () => service.job(run.jobId),
       (job) => ["completed", "failed", "requires_reconciliation"].includes(job.state),
@@ -374,6 +417,7 @@ export async function runNativeDaemon(
     );
     assert.equal(completed.state, "completed");
     if (completed.state !== "completed") assert.fail("Actual installed daemon completion required");
+    phase = "daemon-output";
     assert.equal(completed.preparedResult?.output.truncated, true);
     assert.ok(Buffer.byteLength(completed.preparedResult.output.tail) <= 128);
     const artifact = completed.preparedResult.output.artifacts.find(
@@ -381,6 +425,7 @@ export async function runNativeDaemon(
     );
     assert.ok(artifact);
     assert.equal(artifact.size, 1024);
+    phase = "daemon-artifact";
     const response = await fetch(`${service.endpoint}${artifact.endpoint}`, {
       headers: { Authorization: `Bearer ${service.clientToken}` },
       redirect: "error",
@@ -394,6 +439,7 @@ export async function runNativeDaemon(
       createHash("sha256").update(actual).digest("hex"),
       createHash("sha256").update(expected).digest("hex"),
     );
+    phase = "daemon-duplicate";
     const duplicate = await execute(
       process.execPath,
       [bin, "start", "--profile", profilePath, "--local-test"],
@@ -407,6 +453,7 @@ export async function runNativeDaemon(
       1,
       "Second installed daemon must reject its occupied protected ledger/root",
     );
+    phase = "daemon-retained-ledger";
     const identity = completed.execution;
     assert.ok(identity);
     const retained = async () => {
@@ -429,14 +476,18 @@ export async function runNativeDaemon(
     };
     await until(retained, (row) => row.committed && row.executionId === identity.executionId);
     const retainedInstanceId = (await retained()).ledgerInstanceId;
+    phase = "daemon-abrupt-stop";
     await stopDaemon(true);
+    phase = "daemon-offline";
     await until(
       () => service.online(),
       (value) => !value,
     );
+    phase = "daemon-reopen";
     startDaemon();
     await until(() => service.online(), Boolean);
     assert.equal(daemon?.exitCode, null);
+    phase = "daemon-reopen-retention";
     assert.deepEqual(await retained(), {
       executionId: identity.executionId,
       committed: true,
@@ -450,6 +501,7 @@ export async function runNativeDaemon(
       `${nonce}\n`,
       "Abrupt daemon reopen cannot repeat a committed native effect",
     );
+    phase = "daemon-installed-integrity";
     await installed.verifyUnchanged();
     return {
       observation: {
@@ -485,9 +537,14 @@ export async function runNativeDaemon(
           : []),
       ],
     };
+  } catch (error) {
+    observeNativeEvidenceFailure(phase, error);
+    throw error;
   } finally {
-    await stopDaemon();
-    await service.close();
-    await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    await observed("daemon-cleanup-stop", () => stopDaemon());
+    await observed("daemon-cleanup-service", () => service.close());
+    await observed("daemon-cleanup-directory", () =>
+      rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }),
+    );
   }
 }
