@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { Validation } from "../../packages/fortipi-client/dist/validation.js";
 import type {
   CredentialMint,
   CredentialReceipt,
@@ -10,6 +11,8 @@ import type {
 } from "../../packages/fortipi-contract/dist/index.js";
 import { routeCatalog } from "../../packages/fortipi-contract/dist/index.js";
 
+const receiptValidation = new Validation();
+
 export type IssuedRole = Extract<CredentialReceipt, { state: "issued" }>;
 export interface CleanupObservation {
   credentialId: string;
@@ -19,9 +22,13 @@ export interface CleanupObservation {
 }
 /** Trusted coordinator only. Never pass this object/admin to a client child. */
 export class RoleContext {
-  readonly endpoint: string;
+  readonly #endpoint: string;
   readonly #admin: string;
-  readonly #roles: { receipt: IssuedRole; revokeRequestId: string }[] = [];
+  readonly #roles: {
+    readonly receipt: IssuedRole;
+    readonly revokeRequestId: string;
+    completed?: Extract<RevocationReceipt, { state: "complete" }>;
+  }[] = [];
   constructor(endpoint: string, admin: string) {
     const url = new URL(endpoint);
     assert.ok(
@@ -32,7 +39,10 @@ export class RoleContext {
     assert.ok(!url.username && !url.password);
     assert.ok(admin.length >= 32);
     this.#admin = admin;
-    this.endpoint = endpoint;
+    this.#endpoint = endpoint;
+  }
+  get endpoint(): string {
+    return this.#endpoint;
   }
   async call<K extends OperationId>(input: OperationRequest<K>): Promise<OperationValue<K>> {
     const route = routeCatalog.find((r) => r.operationId === input.operationId);
@@ -45,7 +55,7 @@ export class RoleContext {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(input.query))
       if (value !== undefined) query.set(key, String(value));
-    const response = await fetch(`${this.endpoint}${path}${query.size ? `?${query}` : ""}`, {
+    const response = await fetch(`${this.#endpoint}${path}${query.size ? `?${query}` : ""}`, {
       method: route.method,
       redirect: "error",
       signal: AbortSignal.timeout(30000),
@@ -56,7 +66,15 @@ export class RoleContext {
       response.ok,
       `Trusted public coordinator operation failed: ${input.operationId} (${response.status})`,
     );
-    return (await response.json()) as OperationValue<K>;
+    const value = await response.json();
+    if (input.operationId === "revokeCredential") {
+      assert.ok(response.status === 200 || response.status === 202);
+      receiptValidation.assert(
+        response.status === 200 ? "RevocationComplete" : "RevocationPending",
+        value,
+      );
+    }
+    return value as OperationValue<K>;
   }
   async issue(input: CredentialMint): Promise<IssuedRole> {
     const result = await this.call({
@@ -67,7 +85,7 @@ export class RoleContext {
     });
     assert.equal(result.state, "issued");
     if (result.state !== "issued") throw new Error("Ephemeral role token was not issued");
-    this.#roles.push({ receipt: result, revokeRequestId: randomUUID() });
+    this.#roles.push({ receipt: structuredClone(result), revokeRequestId: randomUUID() });
     return result;
   }
   async issueBrowserRevocation(agentId: string, conversationId: string): Promise<IssuedRole> {
@@ -113,10 +131,12 @@ export class RoleContext {
         "Credential appeared in evidence",
       );
   }
-  revoke(credentialId: string): Promise<RevocationReceipt> {
+  async revoke(credentialId: string): Promise<RevocationReceipt> {
     const role = this.#roles.find((r) => r.receipt.credential.credentialId === credentialId);
     assert.ok(role, "Only coordinator-issued ephemeral roles may be revoked here");
-    return this.call({
+    // Reuse this tuple's terminal receipt; this is not a fresh server observation.
+    if (role.completed) return structuredClone(role.completed);
+    const receipt = await this.call({
       operationId: "revokeCredential",
       path: { id: credentialId },
       query: {},
@@ -125,6 +145,8 @@ export class RoleContext {
         expectedGeneration: role.receipt.credential.generation,
       },
     });
+    if (receipt.state === "complete") role.completed = structuredClone(receipt);
+    return receipt;
   }
   async revokeAndWait(credentialId: string): Promise<RevocationReceipt> {
     const deadline = Date.now() + 15000;
