@@ -30,18 +30,46 @@ export async function browserChild(argv: string[]) {
           diagnostic?: BrowserDiagnostic;
         }
       | undefined;
-  let closing: Promise<Awaited<ReturnType<RoleContext["cleanup"]>> | undefined> | undefined;
+  let closing: Promise<Awaited<ReturnType<RoleContext["cleanup"]>> | undefined> =
+    Promise.resolve(undefined);
+  let cleanupComplete = true;
   let cleanupStage = "public-role-cleanup";
+  const cleanupFailure = (at: string, errorClass = "CleanupFailure") => {
+    cleanupComplete = false;
+    failure ??= { stage: at, errorClass };
+  };
   const close = () => {
-    closing ??= (async () => {
-      cleanupStage = "public-role-cleanup";
-      const cleanup = await roles?.cleanup();
-      cleanupStage = "browser-cleanup";
-      await web?.close();
-      cleanupStage = "browser-runtime-cleanup";
-      await runtime?.dispose();
-      return cleanup;
-    })();
+    closing = closing
+      .catch(() => cleanupFailure(cleanupStage))
+      .then(async () => {
+        cleanupStage = "public-role-cleanup";
+        let cleanup: Awaited<ReturnType<RoleContext["cleanup"]>> | undefined;
+        // Retain roles: setup may register another receipt after an earlier signal pass.
+        try {
+          cleanup = await roles?.cleanup();
+          if (cleanup?.some((role) => role.state !== "complete"))
+            cleanupFailure("public-role-cleanup", "IncompleteRevocation");
+        } catch {
+          cleanupFailure("public-role-cleanup");
+        }
+        cleanupStage = "browser-cleanup";
+        const browser = web;
+        web = undefined;
+        try {
+          await browser?.close();
+        } catch {
+          cleanupFailure("browser-cleanup");
+        }
+        cleanupStage = "browser-runtime-cleanup";
+        const server = runtime;
+        runtime = undefined;
+        try {
+          await server?.dispose();
+        } catch {
+          cleanupFailure("browser-runtime-cleanup");
+        }
+        return cleanup;
+      });
     return closing;
   };
   const stop = () => {
@@ -73,6 +101,14 @@ export async function browserChild(argv: string[]) {
     roles = new RoleContext(runtime.endpoint, runtime.admin);
     stage = "public-provision";
     const state = await provision(runtime, (input) => roles!.issue(input));
+    const witness = await roles.issueBrowserRevocation(
+      state.agent.agentId,
+      state.conversations[0]!.conversationId,
+    );
+    assert.ok(
+      witness.credential.credentialId !== state.client.credential.credentialId,
+      "Revocation witness must be an independently issued principal",
+    );
     stage = "chromium-public-flow-cors-revoke";
     observation = await web.run(
       {
@@ -82,9 +118,18 @@ export async function browserChild(argv: string[]) {
         conversationId: state.conversations[0]!.conversationId,
         seed: 1010,
       },
-      async () => {
-        const receipt = await roles!.revokeAndWait(state.client.credential.credentialId);
-        assert.equal(receipt.state, "complete");
+      {
+        input: {
+          endpoint: roles.endpoint,
+          token: witness.token,
+          agentId: state.agent.agentId,
+          conversationId: state.conversations[0]!.conversationId,
+          seed: 1010,
+        },
+        revoke: async () => {
+          const receipt = await roles!.revokeAndWait(witness.credential.credentialId);
+          assert.equal(receipt.state, "complete");
+        },
       },
       (value, diagnostic) => {
         stage = value;
@@ -116,18 +161,18 @@ export async function browserChild(argv: string[]) {
       ...(browserDiagnostic ? { diagnostic: browserDiagnostic } : {}),
     };
   } finally {
+    // Seal signal admissions before joining the final serialized cleanup pass.
+    process.off("SIGTERM", stop);
     try {
       const cleanup = await close();
-      if (cleanup?.some((role) => role.state !== "complete")) {
-        failure ??= { stage: "public-role-cleanup", errorClass: "IncompleteRevocation" };
+      if (!cleanupComplete) {
+        failure ??= { stage: cleanupStage, errorClass: "CleanupFailure" };
         failure.cleanupComplete = false;
       }
       if (observation) observation.cleanup = cleanup;
     } catch {
       failure ??= { stage: cleanupStage, errorClass: "CleanupFailure" };
       failure.cleanupComplete = false;
-    } finally {
-      process.off("SIGTERM", stop);
     }
   }
   return failure

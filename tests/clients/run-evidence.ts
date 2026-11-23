@@ -1200,6 +1200,11 @@ export async function runEvidence(
             const web = await browser(installed!, { port: liveBrowserPort });
             try {
               const role = await context.publicRole(1, "browser");
+              const witness = await roles.issueBrowserRevocation(role.agentId, role.conversationId);
+              assert.ok(
+                witness.credential.credentialId !== role.credential.credentialId,
+                "Revocation witness must be an independently issued principal",
+              );
               return await web.run(
                 {
                   endpoint: role.endpoint,
@@ -1208,13 +1213,22 @@ export async function runEvidence(
                   conversationId: role.conversationId,
                   seed: 1010,
                 },
-                async () => {
-                  const receipt = await roles.revokeAndWait(role.credential.credentialId);
-                  assert.equal(
-                    receipt.state,
-                    "complete",
-                    "Live browser revocation remains pending; repeat in a fresh evidence run",
-                  );
+                {
+                  input: {
+                    endpoint: roles.endpoint,
+                    token: witness.token,
+                    agentId: role.agentId,
+                    conversationId: role.conversationId,
+                    seed: 1010,
+                  },
+                  revoke: async () => {
+                    const receipt = await roles.revokeAndWait(witness.credential.credentialId);
+                    assert.equal(
+                      receipt.state,
+                      "complete",
+                      "Live browser revocation remains pending; repeat in a fresh evidence run",
+                    );
+                  },
                 },
               );
             } finally {

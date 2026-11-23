@@ -144,9 +144,22 @@ async function browserGraph(
     tls,
     async run(
       input: BrowserInput,
-      revoke?: () => Promise<void>,
+      revocationCase?: { input: BrowserInput; revoke: () => Promise<void> },
       observe: (stage: string, diagnostic?: BrowserDiagnostic) => void = () => {},
     ) {
+      if (revocationCase) {
+        assert.ok(
+          revocationCase.input.endpoint === input.endpoint &&
+            revocationCase.input.agentId === input.agentId &&
+            revocationCase.input.conversationId === input.conversationId &&
+            revocationCase.input.seed === input.seed,
+          "Revocation observer must target the same public conversation",
+        );
+        assert.ok(
+          revocationCase.input.token !== input.token,
+          "Revocation observer must use its independently issued credential",
+        );
+      }
       observe("chromium-launch");
       const home = await mkdtemp(resolve(tmpdir(), "fortipi-evidence-chromium-"));
       const env: Record<string, string> = {
@@ -331,7 +344,7 @@ async function browserGraph(
         await diagnostic.detach();
         await otherPage.close();
         let revocation: Record<string, unknown> | undefined;
-        if (revoke) {
+        if (revocationCase) {
           observe("acknowledged-browser-revocation");
           note("browser-revocation-arm");
           try {
@@ -340,14 +353,14 @@ async function browserGraph(
                 (globalThis as unknown as { fortipiEvidence: BrowserPort }).fortipiEvidence.arm(
                   value,
                 ),
-              input,
+              revocationCase.input,
             );
           } catch (error) {
             await recoverDiagnostic(page, "browser-revocation-arm");
             throw error;
           }
           note("browser-revocation-revoke");
-          await revoke();
+          await revocationCase.revoke();
           note("browser-revocation-check");
           try {
             revocation = await page.evaluate(() =>

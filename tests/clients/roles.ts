@@ -70,6 +70,37 @@ export class RoleContext {
     this.#roles.push({ receipt: result, revokeRequestId: randomUUID() });
     return result;
   }
+  async issueBrowserRevocation(agentId: string, conversationId: string): Promise<IssuedRole> {
+    assert.ok(
+      typeof agentId === "string" &&
+        agentId.length > 0 &&
+        agentId !== "*" &&
+        typeof conversationId === "string" &&
+        conversationId.length > 0 &&
+        conversationId !== "*",
+      "Browser revocation requires one concrete agent and conversation",
+    );
+    return this.issue({
+      requestId: randomUUID(),
+      role: "client",
+      expiresAt: Date.now() + 900000,
+      grants: [
+        {
+          grantId: randomUUID(),
+          version: 1,
+          resources: {
+            agentIds: [agentId],
+            conversationIds: [conversationId],
+            workspaceIds: [],
+            executorIds: [],
+            backendIds: [],
+            tools: [],
+            actions: ["conversations.read", "events.read", "tickets.mint"],
+          },
+        },
+      ],
+    });
+  }
   assertSanitized(value: unknown, suppliedTokens: readonly string[] = []) {
     const bytes = JSON.stringify(value);
     for (const token of [
