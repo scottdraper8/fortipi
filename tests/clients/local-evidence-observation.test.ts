@@ -81,8 +81,36 @@ test("local evidence observations retain only closed phases and bounded facts", 
     ),
     JSON.parse(line),
   );
-  for (const code of browserDiagnosticCodes)
-    assert.equal(projectBrowserDiagnostic({ code, payload: canary }).code, code);
+  for (const code of ["subscribe_timeout", "handshake_timeout", "invalid_wire", "invalid_replay"])
+    assert.equal(projectBrowserDiagnostic({ code }).code, code);
+  for (const code of browserDiagnosticCodes) {
+    const diagnostic = projectBrowserDiagnostic({
+      phase: "revocation-arm",
+      code,
+      status: 429,
+      payload: canary,
+    });
+    assert.deepEqual(diagnostic, {
+      phase: "revocation-arm",
+      code,
+      status: 429,
+      completionDeadline: null,
+    });
+    assert.equal(Object.keys(diagnostic).length, 4);
+    const serialized = localBrowserLine(
+      "report",
+      { code: 1, timedOut: false },
+      { stage: "browser-revocation-arm", diagnostic },
+    );
+    const projected = JSON.parse(serialized);
+    assert.deepEqual(Object.keys(projected), Object.keys(JSON.parse(line)));
+    assert.equal(projected.publicPhase, "revocation-arm");
+    assert.equal(projected.publicCode, code);
+    assert.equal(projected.publicStatus, 429);
+    assert.equal(projected.completionDeadline, null);
+    assert.equal(serialized.includes(canary), false);
+    assert.ok(Buffer.byteLength(serialized) <= 512);
+  }
   for (const status of [100, 200, 401, 403, 429, 599])
     assert.equal(projectBrowserDiagnostic({ status }).status, status);
   for (const status of [99, 600, 100.1, NaN, Infinity, "401", null, {}, canary])
@@ -100,6 +128,24 @@ test("local evidence observations retain only closed phases and bounded facts", 
     withheld,
   );
   assert.deepEqual(projectBrowserDiagnostic(Object.create(observed.diagnostic)), withheld);
+  for (const value of [
+    { phase: canary, code: canary, status: "401", completionDeadline: "true", payload: canary },
+    { phase: {}, code: { value: "invalid_wire" }, status: {}, completionDeadline: {} },
+    Object.create(observed.diagnostic),
+  ]) {
+    const diagnostic = projectBrowserDiagnostic(value);
+    assert.deepEqual(diagnostic, withheld);
+    const serialized = localBrowserLine(
+      "report",
+      { code: 1, timedOut: false },
+      { stage: "browser-revocation-arm", diagnostic: value },
+    );
+    const projected = JSON.parse(serialized);
+    assert.deepEqual(Object.keys(projected), Object.keys(JSON.parse(line)));
+    for (const key of ["publicPhase", "publicCode", "publicStatus", "completionDeadline"])
+      assert.equal(projected[key], null);
+    assert.equal(serialized.includes(canary), false);
+  }
   const forged = JSON.parse(
     localBrowserLine(
       canary,
@@ -180,6 +226,16 @@ test("local observation projection ignores accessors and contains sink failures"
   assert.deepEqual(browserFailure(opaqueError), { errorClass: "Error" });
   const withheld = { phase: null, code: null, status: null, completionDeadline: null };
   assert.deepEqual(projectBrowserDiagnostic(opaque), withheld);
+  const serialized = localBrowserLine(
+    "report",
+    { code: 1, timedOut: false },
+    { stage: "browser-revocation-arm", diagnostic: opaque },
+  );
+  const projected = JSON.parse(serialized);
+  assert.equal(Object.keys(projected).length, 12);
+  for (const key of ["publicPhase", "publicCode", "publicStatus", "completionDeadline"])
+    assert.equal(projected[key], null);
+  assert.equal(serialized.includes(canary), false);
   const trapped = new Proxy(
     {},
     {

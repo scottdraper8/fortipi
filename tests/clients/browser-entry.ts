@@ -92,35 +92,57 @@ const port: BrowserPort = {
   },
   diagnostic: () => diagnostic,
   async arm(input) {
-    diagnostic = { phase: "revocation-arm" };
-    if (active) throw new Error("Previous browser access observer remains active");
-    const connection = client(input);
-    const subscription = connection.conversations.subscribe(input.conversationId, {
-      agentId: input.agentId,
-      maxReconnects: 0,
-      onSnapshot() {},
-      onEvent() {},
-    });
-    const state = {
-      client: connection,
-      input,
-      subscription,
-      settled: false,
-      authorityRefused: false,
-    };
-    active = state;
-    void subscription.done.then(
-      () => {
-        state.settled = true;
-      },
-      (error) => {
-        state.authorityRefused = authorityRefusal(error);
-        state.settled = true;
-      },
-    );
-    await subscription.ready;
-    diagnostic = { phase: "revocation-ready" };
-    if (state.settled) throw new Error("Acknowledged browser subscription already settled");
+    try {
+      diagnostic = { phase: "revocation-arm" };
+      if (active) throw new Error("Previous browser access observer remains active");
+      const connection = client(input);
+      const subscription = connection.conversations.subscribe(input.conversationId, {
+        agentId: input.agentId,
+        maxReconnects: 0,
+        onSnapshot() {},
+        onEvent() {},
+      });
+      const state = {
+        client: connection,
+        input,
+        subscription,
+        settled: false,
+        authorityRefused: false,
+      };
+      active = state;
+      void subscription.done.then(
+        () => {
+          state.settled = true;
+        },
+        (error) => {
+          state.authorityRefused = authorityRefusal(error);
+          state.settled = true;
+        },
+      );
+      await subscription.ready;
+      diagnostic = { phase: "revocation-ready" };
+      if (state.settled) throw new Error("Acknowledged browser subscription already settled");
+    } catch (error) {
+      try {
+        if (error instanceof FortiPiError) {
+          const phase = Object.getOwnPropertyDescriptor(diagnostic ?? {}, "phase")?.value;
+          const code = Object.getOwnPropertyDescriptor(error, "code")?.value;
+          const status = Object.getOwnPropertyDescriptor(error, "status")?.value;
+          diagnostic = {
+            phase,
+            code: typeof code === "string" ? code : null,
+            status:
+              typeof status === "number" &&
+              Number.isInteger(status) &&
+              status >= 100 &&
+              status <= 599
+                ? status
+                : null,
+          };
+        }
+      } catch {}
+      throw error;
+    }
   },
   async revoked() {
     diagnostic = { phase: "revocation-close-wait" };
