@@ -93,7 +93,7 @@ jobs:
           package-manager-cache: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
         with:
-          version: 12.22.0
+          version: 12.23.0
           run_install: false
           cache: false
       - run: node scripts/install-dependencies.ts
@@ -161,7 +161,7 @@ jobs:
           package-manager-cache: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
         with:
-          version: 12.22.0
+          version: 12.23.0
           run_install: false
           cache: false
       - run: node scripts/install-dependencies.ts
@@ -303,7 +303,7 @@ jobs:
           package-manager-cache: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
         with:
-          version: 12.22.0
+          version: 12.23.0
           run_install: false
           cache: false
       - run: node scripts/install-dependencies.ts
@@ -384,7 +384,7 @@ jobs:
           package-manager-cache: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
         with:
-          version: 12.22.0
+          version: 12.23.0
           run_install: false
           cache: false
       - run: node scripts/install-dependencies.ts
@@ -468,7 +468,7 @@ jobs:
           package-manager-cache: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
         with:
-          version: 12.22.0
+          version: 12.23.0
           run_install: false
           cache: false
       - run: node scripts/install-dependencies.ts
@@ -575,7 +575,7 @@ jobs:
           package-manager-cache: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
         with:
-          version: 12.22.0
+          version: 12.23.0
           run_install: false
           cache: false
       - run: node scripts/install-dependencies.ts

@@ -311,7 +311,7 @@ export function observeHarnessFetch(
   const connection = observePolicyConnection(policyEndpoint);
   const original = globalThis.fetch;
   const roles: FetchRole[] = ["allowed-before", "denied-example", "allowed-after"];
-  const registry = "https://registry.npmjs.org/pnpm/12.22.0";
+  const registry = "https://registry.npmjs.org/pnpm/12.23.0";
   const example = "https://example.com/";
   const events: FetchEvent[] = [];
   let calls = 0;
@@ -609,7 +609,7 @@ async function head(
         {
           hostname,
           port: 443,
-          path: hostname === "registry.npmjs.org" ? "/pnpm/12.22.0" : "/",
+          path: hostname === "registry.npmjs.org" ? "/pnpm/12.23.0" : "/",
           method: "HEAD",
           family: 4,
           agent: false,

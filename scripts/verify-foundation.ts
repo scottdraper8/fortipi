@@ -127,7 +127,7 @@ export async function egressChecks(): Promise<void> {
   const mode = process.env.FORTIPI_RUNNER_HARDENING_MODE ?? "block";
   assert.equal(mode, process.platform === "linux" ? "block" : "audit");
   const allowedRegistry = async () => {
-    const response = await fetch("https://registry.npmjs.org/pnpm/12.22.0", {
+    const response = await fetch("https://registry.npmjs.org/pnpm/12.23.0", {
       signal: AbortSignal.timeout(15_000),
     });
     try {

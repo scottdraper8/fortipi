@@ -220,7 +220,8 @@ async function noticeInputs(root: string) {
     const attribution = policy.attributions[id];
     if (
       Object.keys(review.licenses).length === 0 ||
-      fact.distribution.includes("native conveyance prohibited")
+      fact.distribution.includes("native conveyance prohibited") ||
+      attribution !== undefined
     ) {
       assert.ok(
         attribution?.source && attribution.evidence,

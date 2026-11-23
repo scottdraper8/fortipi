@@ -883,6 +883,37 @@ export async function materializeSourceKitInventory(
   await writeFile(destination, inventoryBytes, { flag: "wx", mode: 0o644 });
 }
 
+/** Pin consistency only; the caller authenticates these source bytes before this check. */
+export function verifySourceKitToolchain(
+  revision: { node: unknown; pnpm: unknown; tar: unknown },
+  manifestBytes: Uint8Array | undefined,
+): void {
+  assert.ok(manifestBytes, "Authenticated source package.json bytes missing");
+  const manifest = json<{
+    packageManager?: unknown;
+    engines?: { pnpm?: unknown };
+    fortipi?: { toolchain?: { pnpm?: unknown } };
+  }>(manifestBytes);
+  assert.ok(
+    manifest && typeof manifest === "object" && !Array.isArray(manifest),
+    "Archived source manifest must be an object",
+  );
+  const pnpm = manifest.fortipi?.toolchain?.pnpm;
+  assert.ok(
+    typeof pnpm === "string" &&
+      /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/.test(pnpm) &&
+      pnpm.trim() === pnpm,
+    "Archived source pnpm must be exact stable semver",
+  );
+  assert.equal(manifest.packageManager, `pnpm@${pnpm}`, "Archived packageManager differs");
+  assert.equal(manifest.engines?.pnpm, pnpm, "Archived pnpm engine differs");
+  assert.deepEqual(
+    [revision.node, revision.pnpm, revision.tar],
+    ["26.13.1", pnpm, "7.5.23"],
+    "Source kit toolchain differs from authenticated source",
+  );
+}
+
 /** Caller owns directory cleanup. No artifact-carried program is executed. */
 export async function verifySourceKit(
   options: KitOptions,
@@ -937,7 +968,7 @@ export async function verifySourceKit(
     assert.ok(path && digest);
     assert.equal(file(ownSource, path).sha256, digest, "Source revision metadata differs");
   }
-  assert.deepEqual([revision.node, revision.pnpm, revision.tar], ["26.13.1", "12.22.0", "7.5.23"]);
+  verifySourceKitToolchain(revision, file(ownSource, "package.json").data);
   for (const name of ["computerd-build.ts", "security-update.ts", "trixie-security.InRelease"])
     file(entries, `source-kit-recipe/${name}`);
   assert.equal(

@@ -199,16 +199,16 @@
     "pnpm": {
       "catalogSha256": "e58410592c8f99f5a020cb7c675a8fb1adcab60b7954df4ee66f045f48f14708",
       "snapshot": {
-        "commit": "b8d388835f9a40ee1ac53fbc2d4b58c3ebfa5600",
-        "version": "v12.21.0",
-        "sha256": "e81e013dae06379ed704786c7b81bb2f31ab6089fb66a3ffd64c1ff387ea5086",
+        "commit": "2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e",
+        "version": "v12.23.0",
+        "sha256": "50a9d5faabf979c684a9e8c79cf0feda06ec1cba1681381bc8d02a6341a4279a",
         "paths": {}
       },
       "pins": {
-        "package.json#packageManager": "pnpm@12.22.0"
+        "package.json#packageManager": "pnpm@12.23.0"
       },
-      "reviewedAt": "2026-11-21T05:36:33.085Z",
-      "reviewNote": "Fresh maintained GitHub releases/latest still selects v12.21.0/b8d38883 with unchanged source fingerprint. Current exact local manager is12.22.0, not a downgrade to the API-selected older channel. Separate official v12.22.0 release449108884 was published2026-11-17; tag7a89d701 resolves eb0fda4ee3891f9c10e8bad83d1c3c5af343591f. Selected exact-tag code covers registry routes/options in age/trust verification identity and dlx build/policy cache identity; retain strict age/trust/script/skills controls and both manager documents. This updates only the local-pin watch acknowledgment, not a new install or whole environment certification. No newer-version chasing beyond the fixed cutoff. Evidence: current-lookahead-review/report.md."
+      "reviewedAt": "2026-11-23T15:16:12.154Z",
+      "reviewNote": "Nov23 targeted immutable pnpm12.22→12.23 code review: OTP config exclusion, HTTPS/redirect credential scope, warm/frozen-lock policy and pack/variant changes. Adopt exact12.23.0. All17 manager/native archives have SRI, registry signature, publish/SLSA subject and exact source/workflow/certificate verification;34 transparency proofs match2939f382. Retain original MIT/Yarn BSD/two BlueOak variants and accurate six-component credits; preserve companion executable modes. Both application lock documents remain identical; fresh425-identity OSV reports no listed matches. Host12.23 identity, maintained license inventory and21 exact supplemental copies passed. Cold three-platform/product/old-new-kit gates remain required; no reproducible-build or whole-source audit claim."
     },
     "typescript": {
       "catalogSha256": "281424da318292a0ed0449e4fe3cc2b3be9e207251b80380700eb539925f768c",

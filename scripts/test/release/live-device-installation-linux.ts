@@ -562,7 +562,7 @@ async function controller(directory: string) {
     const pnpmRoot = process.env.FORTIPI_CLI_PROOF_PNPM,
       pnpmBin = process.env.FORTIPI_CLI_PROOF_PNPM_BIN;
     assert.ok(pnpmRoot && pnpmBin && isAbsolute(pnpmRoot) && pnpmBin.startsWith(`${pnpmRoot}/`));
-    assert.equal((await run(join(pnpmBin, "pnpm"), ["--version"])).stdout.trim(), "12.22.0");
+    assert.equal((await run(join(pnpmBin, "pnpm"), ["--version"])).stdout.trim(), "12.23.0");
     await sudo(await host("/usr/bin/cp"), [
       "-a",
       join(pnpmRoot, "node_modules"),

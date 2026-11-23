@@ -38,6 +38,7 @@ import {
   verifySecurityRuntime,
   verifySourceClosure,
   verifySourceKit,
+  verifySourceKitToolchain,
 } from "./image-source-distribution.ts";
 
 function entry(bytes: string | Uint8Array): FsEntry {
@@ -187,6 +188,63 @@ test("kit membership, payload and notices are independently bound, including neg
   const linked = new Map(entries);
   linked.set("context/notices/LICENSE", { ...notice, type: "SymbolicLink", link: "/etc/passwd" });
   assert.throws(() => verifyKitInventory(linked, inventory));
+
+  const revision = { node: "26.13.1", pnpm: "12.22.0", tar: "7.5.23" };
+  const manifest = (pnpm: string) => ({
+    packageManager: `pnpm@${pnpm}`,
+    engines: { pnpm },
+    fortipi: { toolchain: { pnpm } },
+  });
+  const bytes = (value: unknown) => Buffer.from(JSON.stringify(value));
+  for (const pnpm of ["12.22.0", "12.23.0"]) {
+    verifySourceKitToolchain({ ...revision, pnpm }, bytes(manifest(pnpm)));
+    const other = pnpm === "12.22.0" ? "12.23.0" : "12.22.0";
+    assert.throws(
+      () => verifySourceKitToolchain({ ...revision, pnpm: other }, bytes(manifest(pnpm))),
+      /toolchain differs/,
+    );
+  }
+  for (const pnpm of [
+    "^12.23.0",
+    "12.23",
+    "12.23.0-beta.0",
+    "12.23.0+build",
+    "012.23.0",
+    "12.023.0",
+    "12.23.00",
+    "12.23.0\n",
+    "12.23.0\r\n",
+    " 12.23.0",
+    "12.23.0 ",
+  ])
+    assert.throws(
+      () => verifySourceKitToolchain({ ...revision, pnpm }, bytes(manifest(pnpm))),
+      /exact stable semver/,
+    );
+  assert.throws(() => verifySourceKitToolchain(revision, undefined), /bytes missing/);
+  for (const value of [null, {}, { ...manifest("12.22.0"), fortipi: {} }])
+    assert.throws(() => verifySourceKitToolchain(revision, bytes(value)));
+  assert.throws(
+    () =>
+      verifySourceKitToolchain(
+        revision,
+        bytes({ ...manifest("12.22.0"), packageManager: "pnpm@12.23.0" }),
+      ),
+    /packageManager differs/,
+  );
+  assert.throws(
+    () =>
+      verifySourceKitToolchain(
+        revision,
+        bytes({ ...manifest("12.22.0"), engines: { pnpm: ">=12.22.0" } }),
+      ),
+    /engine differs/,
+  );
+  for (const field of ["node", "tar"] as const)
+    assert.throws(
+      () => verifySourceKitToolchain({ ...revision, [field]: "0.0.0" }, bytes(manifest("12.22.0"))),
+      /toolchain differs/,
+    );
 });
 test("source closure uses final conveyance plus actual static dependencies; old inputs do not confer obligations on absent bytes", () => {
   const main = { name: "fuse3", version: "3.18.3-1" };

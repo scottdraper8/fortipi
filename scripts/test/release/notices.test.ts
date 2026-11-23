@@ -8,6 +8,7 @@ import test, { after, before } from "node:test";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { parseAllDocuments, stringify } from "yaml";
+import type { LicensePolicy } from "../../../tools/unstale/review-attributions.ts";
 import { archiveEntries, hash } from "../../../tools/unstale/review-supply-chain.ts";
 import { packagePaths, repository } from "../../build-workspaces.ts";
 import type { Lock, Manifest, SupplyChain } from "../../check-pins.ts";
@@ -233,6 +234,76 @@ test("missing original and inherited license facts fail closed instead of using 
     } finally {
       await writeFile(absolute, original);
     }
+  }
+
+  // An explicit supplement is required even when the archive has its own LICENSE.
+  // Reuse genuine checked archive bytes; this fixture invents no upstream grant.
+  const id = "ajv@8.20.0";
+  const policyPath = resolve(root, "tools/unstale/license-policy.json");
+  const inventoryPath = resolve(root, "dist/supply-chain/inventory.json");
+  const policyBytes = await readFile(policyPath);
+  const inventoryBytes = await readFile(inventoryPath);
+  const original = await readFile(
+    resolve(root, `dist/supply-chain/licenses/${id}/package/LICENSE`),
+  );
+  const supplement = "tools/unstale/licenses/ajv-supplement/LICENSE";
+  const sourcePath = resolve(root, supplement);
+  const checkedPath = resolve(root, `dist/supply-chain/licenses/${id}/${supplement}`);
+  try {
+    const policy = JSON.parse(policyBytes.toString()) as LicensePolicy;
+    const inventory = JSON.parse(inventoryBytes.toString()) as {
+      packages: { id: string; attribution: LicensePolicy["attributions"][string] | null }[];
+    };
+    const fact = inventory.packages.find((item) => item.id === id);
+    assert.ok(fact);
+    policy.attributions[id] = {
+      source: `${id}/package/LICENSE`,
+      evidence:
+        "Test-only explicit supplement retaining the authenticated original archive MIT text",
+      files: [{ path: supplement, sha256: hash(original), url: `${id}/package/LICENSE` }],
+    };
+    fact.attribution = policy.attributions[id];
+    for (const path of [sourcePath, checkedPath]) {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, original, { flag: "wx" });
+    }
+    await writeFile(policyPath, JSON.stringify(policy));
+    await writeFile(inventoryPath, JSON.stringify(inventory));
+    await generateNotices(root);
+    const directory = resolve(root, "packages/fortipi-client/licenses", encodeURIComponent(id));
+    assert.deepEqual(await readFile(resolve(directory, "archive/package/LICENSE")), original);
+    assert.deepEqual(await readFile(resolve(directory, `attribution/${supplement}`)), original);
+    const notices = await readFile(
+      resolve(root, "packages/fortipi-client/THIRD_PARTY_NOTICES.md"),
+      "utf8",
+    );
+    assert.ok(notices.includes(`licenses/${encodeURIComponent(id)}/attribution/${supplement}`));
+    const supplemented = await outputs();
+    for (const path of [sourcePath, checkedPath])
+      for (const missing of [false, true]) {
+        try {
+          if (missing) await rm(path);
+          else await writeFile(path, Buffer.concat([original, Buffer.from("tampered")]));
+          await assert.rejects(
+            generateNotices(root),
+            missing
+              ? { code: "ENOENT" }
+              : path === sourcePath
+                ? /Source attribution text changed/
+                : /Checked attribution text differs/,
+          );
+          assert.deepEqual(await outputs(), supplemented);
+        } finally {
+          await writeFile(path, original);
+        }
+      }
+  } finally {
+    await writeFile(policyPath, policyBytes);
+    await writeFile(inventoryPath, inventoryBytes);
+    await rm(sourcePath, { force: true });
+    await rm(checkedPath, { force: true });
+    assert.deepEqual(await generateNotices(root), baseline);
+    assert.deepEqual(await outputs(), before);
   }
 });
 

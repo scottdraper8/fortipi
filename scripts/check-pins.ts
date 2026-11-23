@@ -82,9 +82,9 @@ export async function yaml<T>(root: string, path: string): Promise<T> {
   );
   assert.equal(
     documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.specifier,
-    "12.22.0",
+    "12.23.0",
   );
-  assert.equal(documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.version, "12.22.0");
+  assert.equal(documents[0]?.importers["."]?.packageManagerDependencies?.pnpm?.version, "12.23.0");
   assert.deepEqual(Object.keys(documents[0]?.importers ?? {}), ["."]);
   assert.deepEqual(Object.keys(documents[0]?.importers["."] ?? {}), [
     "configDependencies",
@@ -230,7 +230,7 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
       }
   }
   const top = manifests.get("package.json");
-  assert.equal(top?.packageManager, "pnpm@12.22.0");
+  assert.equal(top?.packageManager, "pnpm@12.23.0");
   assert.equal(manifests.get("tools/unstale/package.json")?.packageManager, top?.packageManager);
   assert.equal(top?.fortipi?.toolchain.node, "26.13.1");
   const reviewedIdentities = new Set<string>();
