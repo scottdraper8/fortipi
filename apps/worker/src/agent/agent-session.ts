@@ -913,8 +913,7 @@ export class AgentSession extends DurableObject<Env> implements AgentSessionRpc 
   }
   #closeSocket(connection: Connection<SocketState>, code: number, reason: string): void {
     const state = connection.state;
-    if (state?.closed) return;
-    if (state) connection.setState({ ...state, closed: true });
+    if (state && !state.closed) connection.setState({ ...state, closed: true });
     connection.close(code, reason);
   }
   async #socketOpen(connection: Connection<SocketState>): Promise<void> {
