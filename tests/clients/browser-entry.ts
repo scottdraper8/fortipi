@@ -32,6 +32,22 @@ function authorityRefusal(error: unknown): boolean {
     return false;
   }
 }
+function sdkFailureFacts(error: unknown): { code: string | null; status: number | null } {
+  try {
+    if (error instanceof FortiPiError) {
+      const code = Object.getOwnPropertyDescriptor(error, "code")?.value;
+      const status = Object.getOwnPropertyDescriptor(error, "status")?.value;
+      return {
+        code: typeof code === "string" ? code : null,
+        status:
+          typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599
+            ? status
+            : null,
+      };
+    }
+  } catch {}
+  return { code: null, status: null };
+}
 let active:
   | {
       client: FortiPiClient;
@@ -39,6 +55,7 @@ let active:
       subscription: Subscription;
       settled: boolean;
       authorityRefused: boolean;
+      settlement: ReturnType<typeof sdkFailureFacts>;
     }
   | undefined;
 const port: BrowserPort = {
@@ -108,6 +125,7 @@ const port: BrowserPort = {
         subscription,
         settled: false,
         authorityRefused: false,
+        settlement: sdkFailureFacts(undefined),
       };
       active = state;
       void subscription.done.then(
@@ -117,6 +135,7 @@ const port: BrowserPort = {
         (error) => {
           state.authorityRefused = authorityRefusal(error);
           state.settled = true;
+          state.settlement = sdkFailureFacts(error);
         },
       );
       await subscription.ready;
@@ -124,22 +143,8 @@ const port: BrowserPort = {
       if (state.settled) throw new Error("Acknowledged browser subscription already settled");
     } catch (error) {
       try {
-        if (error instanceof FortiPiError) {
-          const phase = Object.getOwnPropertyDescriptor(diagnostic ?? {}, "phase")?.value;
-          const code = Object.getOwnPropertyDescriptor(error, "code")?.value;
-          const status = Object.getOwnPropertyDescriptor(error, "status")?.value;
-          diagnostic = {
-            phase,
-            code: typeof code === "string" ? code : null,
-            status:
-              typeof status === "number" &&
-              Number.isInteger(status) &&
-              status >= 100 &&
-              status <= 599
-                ? status
-                : null,
-          };
-        }
+        const phase = Object.getOwnPropertyDescriptor(diagnostic ?? {}, "phase")?.value;
+        diagnostic = { phase, ...sdkFailureFacts(error) };
       } catch {}
       throw error;
     }
@@ -165,7 +170,7 @@ const port: BrowserPort = {
       while (!state.settled && Date.now() < end)
         await new Promise<void>((accept) => setTimeout(accept, 25));
       if (!state.settled) throw new Error("Actual browser access did not close on revocation");
-      diagnostic = { phase: "revocation-authority-refusal" };
+      diagnostic = { phase: "revocation-authority-refusal", ...state.settlement };
       if (!state.authorityRefused)
         throw new Error("Browser subscription did not settle with authority refusal");
       diagnostic = { phase: "revocation-read" };
