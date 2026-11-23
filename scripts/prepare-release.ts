@@ -166,7 +166,7 @@ export async function execute(
   timeout = 300_000,
   progress = false,
   onSpawn?: (child: ChildProcess) => void,
-): Promise<ProcessResult> {
+): Promise<ProcessResult & { firstLimit: "deadline" | "stdout" | null }> {
   if (onSpawn)
     assert.equal(command, process.execPath, "Private IPC requires the trusted Node executable");
   return new Promise((accept, reject) => {
@@ -190,13 +190,16 @@ export async function execute(
     let stdout = "";
     let size = 0;
     let timedOut = false;
+    let firstLimit: "deadline" | "stdout" | null = null;
     const timer = setTimeout(() => {
+      firstLimit ??= "deadline";
       timedOut = true;
       child.kill("SIGKILL");
     }, timeout);
     child.stdout.on("data", (data: Buffer) => {
       size += data.length;
       if (size > 16_000_000) {
+        firstLimit ??= "stdout";
         timedOut = true;
         child.kill("SIGKILL");
       } else stdout += data.toString("utf8");
@@ -211,7 +214,7 @@ export async function execute(
     });
     child.once("close", (code) => {
       clearTimeout(timer);
-      accept({ stdout, code, timedOut });
+      accept({ stdout, code, timedOut, firstLimit });
     });
     try {
       onSpawn?.(child);
@@ -240,6 +243,25 @@ async function checked(
         limitHit: result.timedOut,
       }),
     );
+  if (result.timedOut && (result.firstLimit === "deadline" || result.firstLimit === "stdout")) {
+    try {
+      console.error(
+        JSON.stringify({
+          diagnostic: "required-command-limit",
+          command:
+            (command === "pnpm" || basename(command) === "pnpm.exe") &&
+            args.length === 2 &&
+            args[0] === "run" &&
+            args[1] === "test"
+              ? "source-tests"
+              : "other",
+          firstLimit: result.firstLimit,
+        }),
+      );
+    } catch {
+      /* Best-effort diagnostics must not preempt the original failure assertion. */
+    }
+  }
   assert.ok(
     result.code === 0 && !result.timedOut,
     `Required command failed: ${basename(command)} ${args[0] ?? ""}`,
