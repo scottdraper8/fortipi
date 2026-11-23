@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "e9a7b9c8dcaeffa711edea7cf8b1aa78888cc230",
-        "version": "v1.20261122.2",
-        "sha256": "156e2c2cce4a0263bba44fe0e5bbb4fbf70dde1098a0002dc4a1170907548a4b",
+        "commit": "4756b99d9697dab382c60cafe52447135d6cef98",
+        "version": "v1.20261123.1",
+        "sha256": "ccba6d406f7153f9b84b0102df1c7a21777dd42dd0fb2635a134b178fad31764",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261121.1"
       },
-      "reviewedAt": "2026-11-22T22:30:58.464Z",
-      "reviewNote": "Reviewed workerd22.1 295252a1..22.2 e9a7b9c8 (11 commits/32 paths): Linux PGO/ThinLTO/profile inputs, destructor/RTTI anchoring, tests and CI removal. Linux artifact/runtime equivalence unverified. No .2-specific installed patch requirement established. Earlier21..22.1 review retained; CONNECT/startTls fix needs undeclared connect_handler_starttls. Older arity/fail-open fixes are real; configured blocker not demonstrated and transitive reachability not fully audited. Retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1, types5.20261121.1, date2026-11-10 and declared flags. Watch only; hosted rollout/autogates, artifact authenticity, broad safety and native/deployed/Paid qualification remain separate. https://github.com/cloudflare/workerd/compare/295252a19bec2c84e8ceb99a5b95196e91ea8a00...e9a7b9c8dcaeffa711edea7cf8b1aa78888cc230"
+      "reviewedAt": "2026-11-23T01:15:39.247Z",
+      "reviewNote": "Reviewed e9a7b9c8..4756b99d (1 commit/2 paths): maximum compatibility date2026-11-29->30 and release-version2026-11-22->23. Ceiling affects CODE_VERSION validation; release date feeds version/npm compatibilityDate. Other implementation/schema/build/dependency/license files unchanged; no new implementation/security patch identified in this interval. Official release/tag match; commit unsigned, assets unverified. Retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1, types5.20261121.1, explicit date2026-11-10 and flags. Earlier bounded reviews/limits retained. Watch only; no broad safety/hosted/native/deployed/Paid qualification. https://github.com/cloudflare/workerd/compare/e9a7b9c8dcaeffa711edea7cf8b1aa78888cc230...4756b99d9697dab382c60cafe52447135d6cef98"
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
