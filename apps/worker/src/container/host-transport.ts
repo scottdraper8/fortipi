@@ -389,7 +389,7 @@ export class ContainerHostTransport {
       return this.serialize(async (): Promise<D.RuntimeQuiescence> => {
         const prior = await this.storage.get<Stop>(stopKey);
         requireThat(
-          !prior || JSON.stringify(prior.request) === JSON.stringify(intent),
+          !prior || canonicalJson(prior.request ?? null) === canonicalJson(intent),
           "conflict",
           "Immutable runtime stop intent changed",
         );
@@ -400,7 +400,7 @@ export class ContainerHostTransport {
             current.runtimeId === intent.runtimeId &&
             current.image.endsWith(`@${intent.imageDigest}`) &&
             current.ownershipDigest &&
-            (!prior || JSON.stringify(prior.allocation) === JSON.stringify(current)) &&
+            (!prior || canonicalJson(prior.allocation ?? null) === canonicalJson(current)) &&
             !(await this.storage.get(pendingKey)),
           "interrupted",
           "Exact acknowledged runtime/image ownership is unavailable",
@@ -419,7 +419,7 @@ export class ContainerHostTransport {
           "Actual native image/ownership is unknown or replaced",
         );
         requireThat(
-          JSON.stringify(await this.storage.get(allocationKey)) === JSON.stringify(current),
+          canonicalJson((await this.storage.get(allocationKey)) ?? null) === canonicalJson(current),
           "interrupted",
           "Runtime ownership changed before stop intent",
         );
@@ -435,7 +435,7 @@ export class ContainerHostTransport {
           "Native destruction has not been observed stopped",
         );
         requireThat(
-          JSON.stringify(await this.storage.get(allocationKey)) === JSON.stringify(current),
+          canonicalJson((await this.storage.get(allocationKey)) ?? null) === canonicalJson(current),
           "interrupted",
           "Runtime ownership changed during stop",
         );

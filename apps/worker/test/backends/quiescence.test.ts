@@ -37,6 +37,13 @@ test("host stopped receipt survives actual managed Wrangler SIGKILL before succe
     };
     assert.equal(before.stats.stopBeforeDestroy, true);
     assert.equal(before.stats.destroys, 1);
+    const storedReceipt = before.stop?.receipt;
+    assert.ok(storedReceipt, "Missing original stopped receipt before crash");
+    assert.deepEqual(
+      { ...storedReceipt, observedAt: 0 },
+      { ...intent, stopped: true, observedAt: 0 },
+    );
+    assert.ok(Number.isSafeInteger(storedReceipt.observedAt) && storedReceipt.observedAt > 0);
     await runtime.kill();
     await runtime.start();
     const recovered = await fetch(`${runtime.url}/quiescence-recovery/retry`, {
@@ -155,6 +162,11 @@ test("production private host quiescence persists before effect and recovers imm
       await host.setFault(fault);
       const first = await stop(host, intent);
       if (fault !== "none") assert.notEqual(first.status, 200);
+      if (fault === "lost-destroy-reply")
+        assert.deepEqual(await host.permuteStopRecord(), {
+          sameValues: true,
+          requestOrderDiffers: true,
+        });
       const receipt = (await (await stop(host, intent)).json()) as D.RuntimeQuiescence;
       assert.deepEqual({ ...receipt, observedAt: 0 }, { ...intent, stopped: true, observedAt: 0 });
       assert.ok(receipt.observedAt > 0);
@@ -165,14 +177,23 @@ test("production private host quiescence persists before effect and recovers imm
       assert.equal(before.privateEnvLeaked, false, "Private assertion reached native SDK delegate");
       assert.equal(await host.reacquisitionAllowed(), false);
       assert.equal(await host.writerAllowed(runtime.runtimeId), false);
+      assert.deepEqual(await host.permuteStopRecord(), {
+        sameValues: true,
+        requestOrderDiffers: true,
+      });
       await host.setConfiguration(false, "changed-deployment-image");
       assert.deepEqual(
         await (await stop(host, intent)).json(),
         receipt,
         "Retry inferred image/context from a new deployment",
       );
+      assert.deepEqual(await host.lifecycleStats(), before);
       await host.evict().catch(() => {});
       host = await fixtureHost(env.HOST, fault);
+      assert.deepEqual(await host.permuteStopRecord(), {
+        sameValues: true,
+        requestOrderDiffers: true,
+      });
       assert.deepEqual(
         await (await stop(host, intent)).json(),
         receipt,
@@ -180,6 +201,7 @@ test("production private host quiescence persists before effect and recovers imm
       );
       assert.equal((await host.lifecycleStats()).starts, 1);
       assert.equal((await host.lifecycleStats()).destroys, 1);
+      assert.deepEqual(await host.lifecycleStats(), before);
       assert.notEqual((await stop(host, { ...intent, requestId: "changed-intent" })).status, 200);
     }
   } finally {

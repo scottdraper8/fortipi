@@ -5,6 +5,7 @@ import type {
   IWorkspaceContainerAPI,
   WorkspaceRef,
 } from "@cloudflare/computer/backends/container";
+import { canonicalJson } from "fortipi-contract";
 import {
   type RuntimeHostContext,
   runtimeHostContextEnv,
@@ -276,6 +277,40 @@ export class HostProbe extends DurableObject<ProbeEnv> {
     return {
       stop: await this.ctx.storage.get("fortipi-container-stop"),
       stats: await this.lifecycleStats(),
+    };
+  }
+  async permuteStopRecord() {
+    const stop = await this.ctx.storage.get<{
+      request: { requestId: string; runtimeId: string; imageDigest: string };
+      allocation: Record<string, unknown>;
+      receipt?: unknown;
+    }>("fortipi-container-stop");
+    requireThat(stop, "conflict", "Fixture stop record missing");
+    const allocation = Object.fromEntries(Object.entries(stop.allocation).reverse());
+    if (allocation.context !== undefined)
+      allocation.context = Object.fromEntries(
+        Object.entries(hostContext(allocation.context)).reverse(),
+      );
+    await this.ctx.storage.put("fortipi-container-stop", {
+      ...stop,
+      request: {
+        imageDigest: stop.request.imageDigest,
+        runtimeId: stop.request.runtimeId,
+        requestId: stop.request.requestId,
+      },
+      allocation,
+    });
+    const restored = await this.ctx.storage.get<typeof stop>("fortipi-container-stop");
+    requireThat(restored, "conflict", "Fixture stop record missing after permutation");
+    return {
+      sameValues: canonicalJson(restored) === canonicalJson(stop),
+      requestOrderDiffers:
+        JSON.stringify(restored.request) !==
+        JSON.stringify({
+          requestId: stop.request.requestId,
+          runtimeId: stop.request.runtimeId,
+          imageDigest: stop.request.imageDigest,
+        }),
     };
   }
   async physicalBytes() {
