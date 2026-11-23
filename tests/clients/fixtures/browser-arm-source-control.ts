@@ -8,12 +8,13 @@ import type { start } from "../../../apps/worker/test/integration/runtime.ts";
 import type { sourceBrowser } from "../browser.ts";
 import type { FixtureTLS } from "../fixture-tls.ts";
 import type { BrowserDiagnostic } from "../local-evidence-observation.ts";
-import type { RoleContext } from "../roles.ts";
+import type { CleanupDiagnostic, RoleContext } from "../roles.ts";
 
 const root = resolve(import.meta.dirname, "../../..");
 const output = resolve(root, "dist/source-browser-control.json");
 const childMode = process.argv[2] === "--source-child";
 let projection: typeof import("../local-evidence-observation.ts");
+let roleProjection: typeof import("../roles.ts");
 interface Result {
   sourceCommit: string | null;
   outcome: "pass" | "fail";
@@ -24,6 +25,7 @@ interface Result {
   errorClass: string | null;
   errorCode: string | null;
   diagnostic: BrowserDiagnostic;
+  cleanupDiagnostic: CleanupDiagnostic | null;
 }
 function sourceCommit(): string | null {
   const value = process.env.GITHUB_SHA;
@@ -40,6 +42,7 @@ function outerFailure(): Result {
     errorClass: "Error",
     errorCode: null,
     diagnostic: { phase: null, code: null, status: null, completionDeadline: null },
+    cleanupDiagnostic: null,
   };
 }
 /** Reuse the maintained closed stage/error/code catalogs; never forward raw objects. */
@@ -84,6 +87,7 @@ function project(input: Record<string, unknown>): Result {
       status: record.publicStatus,
       completionDeadline: record.completionDeadline,
     }),
+    cleanupDiagnostic: roleProjection.projectCleanupDiagnostic(input.cleanupDiagnostic),
   };
 }
 function encode(result: Result): string {
@@ -98,6 +102,10 @@ async function child(args: string[]): Promise<Result> {
   let runtime: Awaited<ReturnType<typeof start>> | undefined;
   let web: Awaited<ReturnType<typeof sourceBrowser>> | undefined;
   let roles: RoleContext | undefined;
+  let cleanupDiagnostic: CleanupDiagnostic | null = null;
+  const observeCleanup = (value: CleanupDiagnostic) => {
+    cleanupDiagnostic ??= roleProjection.projectCleanupDiagnostic(value);
+  };
   let failure: { stage: string; errorClass: string; errorCode?: string } | undefined;
   let stopping = false,
     cleanupComplete = true,
@@ -112,9 +120,13 @@ async function child(args: string[]): Promise<Result> {
       const authority = roles;
       // cleanup() is uncached; retain ownership so the final pass sees late issue() receipts.
       try {
-        if (authority && (await authority.cleanup()).some((row) => row.state !== "complete"))
+        if (
+          authority &&
+          (await authority.cleanup(observeCleanup)).some((row) => row.state !== "complete")
+        )
           cleanupFailure("public-role-cleanup");
       } catch {
+        cleanupDiagnostic ??= { category: "unknown", status: null, pendingRecipients: null };
         cleanupFailure("public-role-cleanup");
       }
       const browser = web;
@@ -237,6 +249,7 @@ async function child(args: string[]): Promise<Result> {
     errorClass: failure?.errorClass,
     errorCode: failure?.errorCode,
     diagnostic,
+    cleanupDiagnostic,
   });
 }
 
@@ -311,6 +324,7 @@ async function main() {
   let result = outerFailure();
   try {
     projection = await import("../local-evidence-observation.ts");
+    roleProjection = await import("../roles.ts");
     result = childMode ? await child(process.argv.slice(3)) : await parent(process.argv.slice(2));
   } catch {
     /* Fixed outer failure only; no raw error forwarding. */

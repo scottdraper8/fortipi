@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { test } from "node:test";
-import { RoleContext } from "./roles.ts";
+import { type CleanupDiagnostic, projectCleanupDiagnostic, RoleContext } from "./roles.ts";
 
 test("role evidence rejects JSON-escaped synthetic credentials while allowing public references", async () => {
   const admin = "synthetic-coordinator-canary-1010".repeat(2);
@@ -56,6 +56,7 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
   let issued = 0,
     status = 200,
     responseBody: unknown = complete(2),
+    unreadableJson = false,
     serverFailure: unknown;
   const server = createServer(async (request, response) => {
     try {
@@ -93,7 +94,11 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
       response.writeHead(id === "synthetic-role-1" ? 200 : status, {
         "Content-Type": "application/json",
       });
-      response.end(JSON.stringify(id === "synthetic-role-1" ? complete(1) : responseBody));
+      response.end(
+        id === "synthetic-role-2" && unreadableJson
+          ? "{"
+          : JSON.stringify(id === "synthetic-role-1" ? complete(1) : responseBody),
+      );
     } catch (error) {
       serverFailure ??= error;
       response.writeHead(500);
@@ -145,11 +150,18 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
     assert.equal((await roles.revoke(laterId)).state, "pending");
     assert.equal(requests.get(laterId)?.length, 2, "Pending receipts cannot suppress a call");
     let calls = 2;
-    const incomplete = async () => {
-      assert.deepEqual(await roles.cleanup(), [
+    const diagnostics: CleanupDiagnostic[] = [];
+    const observe = (diagnostic: CleanupDiagnostic) => {
+      diagnostics.push(diagnostic);
+      throw new Error("synthetic-observer-canary");
+    };
+    const incomplete = async (category: CleanupDiagnostic["category"]) => {
+      diagnostics.length = 0;
+      assert.deepEqual(await roles.cleanup(observe), [
         { credentialId: firstId, generation: 1, state: "complete", pendingRecipients: 0 },
         { credentialId: laterId, generation: 1, state: "unknown", pendingRecipients: null },
       ]);
+      assert.deepEqual(diagnostics, [{ category, status, pendingRecipients: null }]);
       assert.equal(requests.get(laterId)?.length, ++calls);
     };
     status = 200;
@@ -161,16 +173,63 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
       { ...complete(2), state: "pending" },
     ]) {
       responseBody = malformed;
-      await incomplete();
+      await incomplete("invalid-receipt");
     }
     status = 202;
     responseBody = complete(2);
-    await incomplete();
+    await incomplete("invalid-receipt");
     status = 503;
-    await incomplete();
+    await incomplete("http-non-ok");
     status = 200;
+    unreadableJson = true;
+    await incomplete("json-read-failure");
+    unreadableJson = false;
+
+    // Instance-only seam: unresolved polling/transport are modeled, not timed or exercised.
+    const wait = roles.revokeAndWait;
+    let getterInvoked = false;
+    try {
+      const pending = {
+        ...complete(2),
+        state: "pending" as const,
+        pendingRecipients: [{ kind: "agent" as const, id: "synthetic-recipient" }],
+      };
+      roles.revokeAndWait = async (id) => (id === laterId ? pending : wait.call(roles, id));
+      diagnostics.length = 0;
+      assert.deepEqual(await roles.cleanup(observe), [
+        { credentialId: firstId, generation: 1, state: "complete", pendingRecipients: 0 },
+        { credentialId: laterId, generation: 1, state: "pending", pendingRecipients: 1 },
+      ]);
+      assert.deepEqual(diagnostics, [{ category: "pending", status: null, pendingRecipients: 1 }]);
+      const unknown = Object.defineProperty(new Error("synthetic-error-canary"), "category", {
+        get() {
+          getterInvoked = true;
+          return "http-non-ok";
+        },
+      });
+      roles.revokeAndWait = async (id) => {
+        if (id === firstId) throw unknown;
+        return pending;
+      };
+      diagnostics.length = 0;
+      assert.deepEqual(await roles.cleanup(observe), [
+        { credentialId: firstId, generation: 1, state: "unknown", pendingRecipients: null },
+        { credentialId: laterId, generation: 1, state: "pending", pendingRecipients: 1 },
+      ]);
+      assert.deepEqual(diagnostics, [
+        { category: "unknown", status: null, pendingRecipients: null },
+        { category: "pending", status: null, pendingRecipients: 1 },
+      ]);
+      assert.equal(getterInvoked, false);
+      assert.equal(requests.get(laterId)?.length, calls);
+    } finally {
+      roles.revokeAndWait = wait;
+    }
+
     responseBody = complete(2);
-    const finished = await roles.cleanup();
+    diagnostics.length = 0;
+    const finished = await roles.cleanup(observe);
+    assert.deepEqual(diagnostics, []);
     assert.equal(requests.get(laterId)?.length, ++calls);
     assert.deepEqual(finished, [
       { credentialId: firstId, generation: 1, state: "complete", pendingRecipients: 0 },
@@ -179,11 +238,43 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
     const laterObservation = finished[1];
     assert.ok(laterObservation);
     laterObservation.state = "unknown";
-    assert.equal((await roles.cleanup())[1]?.state, "complete");
+    assert.equal((await roles.cleanup(observe))[1]?.state, "complete");
+    assert.deepEqual(diagnostics, []);
     assert.equal(requests.get(laterId)?.length, calls);
     assert.equal(requests.get(firstId)?.length, 1);
     assert.equal(new Set(requests.get(laterId)?.map((r) => r.requestId)).size, 1);
     assert.equal(serverFailure, undefined);
+    const valid = { category: "http-non-ok", status: 503, pendingRecipients: null };
+    assert.deepEqual(projectCleanupDiagnostic(valid), valid);
+    assert.deepEqual(
+      projectCleanupDiagnostic({ category: "pending", status: null, pendingRecipients: 100 }),
+      { category: "pending", status: null, pendingRecipients: 100 },
+    );
+    const accessor = Object.defineProperty({ ...valid }, "status", {
+      get() {
+        getterInvoked = true;
+        return 503;
+      },
+    });
+    for (const unsafe of [
+      null,
+      "synthetic-diagnostic-canary",
+      { ...valid, category: "synthetic-category-canary" },
+      { ...valid, extra: "synthetic-extra-canary" },
+      Object.create(valid),
+      accessor,
+      { ...valid, status: "503" },
+      { ...valid, status: 99 },
+      { ...valid, status: 600 },
+      { ...valid, status: NaN },
+      { ...valid, pendingRecipients: -1 },
+      { ...valid, pendingRecipients: 101 },
+      { ...valid, pendingRecipients: 0.5 },
+      { ...valid, pendingRecipients: {} },
+      { ...valid, pendingRecipients: "1" },
+    ])
+      assert.equal(projectCleanupDiagnostic(unsafe), null);
+    assert.equal(getterInvoked, false);
   } finally {
     await new Promise<void>((accept, reject) =>
       server.close((error) => (error ? reject(error) : accept())),
