@@ -191,17 +191,25 @@ test("a real command queued across authorization cannot enter the API after the 
       },
     };
     await probe.failNextSocketClose(retryCredential.body.credential.credentialId);
-    const failed = await probe.invalidateGeneration(recovery, invalidation);
+    const failed: D.Outcome<D.InvalidationAck> = JSON.parse(
+      await probe.invalidateGenerationJson(recovery, invalidation),
+    );
     assert.equal(failed.ok, false, "Failed close cannot earn an invalidation acknowledgement");
-    assert.deepEqual(await probe.socketCloseFailureReport(), {
-      attempts: 1,
-      delegated: 0,
-      logicalClosed: true,
-      floor: minimumGeneration,
-      nativeOpen: true,
-    });
+    assert.deepEqual(
+      JSON.parse(await probe.socketCloseFailureReportJson()),
+      {
+        attempts: 1,
+        delegated: 0,
+        logicalClosed: true,
+        floor: minimumGeneration,
+        nativeOpen: true,
+      },
+      "First failed-close report must match every observed field",
+    );
     assert.equal(await probe.socketBudgetJson(), retryBudget);
-    const retried = await probe.invalidateGeneration(recovery, invalidation);
+    const retried: D.Outcome<D.InvalidationAck> = JSON.parse(
+      await probe.invalidateGenerationJson(recovery, invalidation),
+    );
     assert.equal(retried.ok, true);
     if (!retried.ok) assert.fail("Matching invalidation retry must close before acknowledging");
     assert.deepEqual(retried.value, {
@@ -210,13 +218,17 @@ test("a real command queued across authorization cannot enter the API after the 
       subject: invalidation.subject,
       persistedFloor: minimumGeneration,
     });
-    assert.deepEqual(await probe.socketCloseFailureReport(), {
-      attempts: 2,
-      delegated: 1,
-      logicalClosed: true,
-      floor: minimumGeneration,
-      nativeOpen: false,
-    });
+    assert.deepEqual(
+      JSON.parse(await probe.socketCloseFailureReportJson()),
+      {
+        attempts: 2,
+        delegated: 1,
+        logicalClosed: true,
+        floor: minimumGeneration,
+        nativeOpen: false,
+      },
+      "Matching retry close report must match every observed field",
+    );
     assert.equal((await retryClient.closed())?.code, 1008, "Native close must precede cleanup");
     assert.equal((await probe.socketCommandReport()).submissionCalls, 0);
     assert.equal(await probe.socketBudgetJson(), retryBudget);

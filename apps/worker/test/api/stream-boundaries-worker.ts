@@ -223,19 +223,22 @@ export class TestAgentSession extends RuntimeAgent {
       },
     });
   }
-  async socketCloseFailureReport() {
+  async invalidateGenerationJson(ctx: D.RecoveryContext, input: D.Invalidation) {
+    return JSON.stringify(await super.invalidateGeneration(ctx, input));
+  }
+  async socketCloseFailureReportJson() {
     const fault = this.#closeFault;
     if (!fault) throw new Error("Socket close fault is not armed");
     const attachment = fault.socket.deserializeAttachment() as {
       __user?: { closed?: boolean };
     } | null;
-    return {
+    return JSON.stringify({
       attempts: fault.attempts,
       delegated: fault.delegated,
       logicalClosed: attachment?.__user?.closed === true,
       floor: (await this.store.get<number>("credential-floor", fault.credentialId)) ?? null,
       nativeOpen: fault.socket.readyState === WebSocket.OPEN,
-    };
+    });
   }
 
   // Substitute only the event producer: real application append transactions,
