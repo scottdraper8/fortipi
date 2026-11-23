@@ -318,7 +318,7 @@ export class LocalWorkspace {
     if (
       row.closed ||
       Date.now() >= row.prepared.expiresAt ||
-      next.expiresAt <= old.expiresAt ||
+      next.expiresAt < old.expiresAt ||
       next.expiresAt > row.request.deadline
     )
       throw new Error("workspace.conflict: expired_lease");

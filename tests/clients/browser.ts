@@ -6,10 +6,16 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { resolve, sep } from "node:path";
 import { build } from "esbuild";
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import type { Installed } from "../distribution/install.ts";
 import type { BrowserInput, BrowserPort } from "./browser-entry.ts";
 import { type FixtureTLS, fixtureTLS, verifyFixtureTLS } from "./fixture-tls.ts";
+import {
+  type BrowserDiagnostic,
+  browserDiagnosticCodes,
+  browserDiagnosticPhases,
+  projectBrowserDiagnostic,
+} from "./local-evidence-observation.ts";
 
 export const liveBrowserPort = 10110;
 
@@ -139,7 +145,7 @@ async function browserGraph(
     async run(
       input: BrowserInput,
       revoke?: () => Promise<void>,
-      observe: (stage: string) => void = () => {},
+      observe: (stage: string, diagnostic?: BrowserDiagnostic) => void = () => {},
     ) {
       observe("chromium-launch");
       const home = await mkdtemp(resolve(tmpdir(), "fortipi-evidence-chromium-"));
@@ -164,10 +170,74 @@ async function browserGraph(
         });
         engines.add(engine);
       } catch (error) {
-        await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        try {
+          await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        } catch {
+          // Preserve the launch failure; cleanup uncertainty cannot turn it into success.
+        }
         throw error;
       }
       let sockets = 0;
+      let failed = false;
+      const note = (stage: string) => {
+        try {
+          observe(stage);
+        } catch {}
+      };
+      const recoverDiagnostic = async (page: Page, stage: string) => {
+        try {
+          const diagnostic = await page.evaluate(
+            (allowed: { phases: string[]; codes: string[] }) => {
+              const own = (value: unknown, key: string): unknown => {
+                try {
+                  return value && typeof value === "object"
+                    ? Object.getOwnPropertyDescriptor(value, key)?.value
+                    : undefined;
+                } catch {
+                  return undefined;
+                }
+              };
+              let value: unknown;
+              try {
+                value = (
+                  globalThis as unknown as { fortipiEvidence: BrowserPort }
+                ).fortipiEvidence.diagnostic();
+              } catch {}
+              const phase = own(value, "phase"),
+                code = own(value, "code"),
+                status = own(value, "status"),
+                completionDeadline = own(value, "completionDeadline");
+              return {
+                phase: typeof phase === "string" && allowed.phases.includes(phase) ? phase : null,
+                code: typeof code === "string" && allowed.codes.includes(code) ? code : null,
+                status:
+                  typeof status === "number" &&
+                  Number.isInteger(status) &&
+                  status >= 100 &&
+                  status <= 599
+                    ? status
+                    : null,
+                completionDeadline:
+                  typeof completionDeadline === "boolean" ? completionDeadline : null,
+              };
+            },
+            { phases: [...browserDiagnosticPhases], codes: [...browserDiagnosticCodes] },
+          );
+          observe(stage, projectBrowserDiagnostic(diagnostic));
+        } catch {
+          // Diagnostic readback must not replace the original page failure.
+        }
+      };
+      const cleanup = async () => {
+        engines.delete(engine);
+        if (!failed) note("browser-cleanup");
+        try {
+          await engine.close();
+          await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        } catch (error) {
+          if (!failed) throw error;
+        }
+      };
       try {
         const page = await engine.newPage();
         const network = await engine.newCDPSession(page);
@@ -216,15 +286,8 @@ async function browserGraph(
             return runner.run(value);
           }, input);
         } catch (error) {
-          const diagnostic = await page.evaluate(() =>
-            (
-              globalThis as unknown as { fortipiEvidence: BrowserPort }
-            ).fortipiEvidence.diagnostic(),
-          );
-          throw Object.assign(new Error("Browser public flow failed"), {
-            name: error instanceof Error ? error.name : "UnknownFailure",
-            diagnostic,
-          });
+          await recoverDiagnostic(page, "public-flow");
+          throw error;
         }
         observe("actual-preflight");
         assert.ok(
@@ -270,18 +333,32 @@ async function browserGraph(
         let revocation: Record<string, unknown> | undefined;
         if (revoke) {
           observe("acknowledged-browser-revocation");
-          await page.evaluate(
-            (value) =>
-              (globalThis as unknown as { fortipiEvidence: BrowserPort }).fortipiEvidence.arm(
-                value,
-              ),
-            input,
-          );
+          note("browser-revocation-arm");
+          try {
+            await page.evaluate(
+              (value) =>
+                (globalThis as unknown as { fortipiEvidence: BrowserPort }).fortipiEvidence.arm(
+                  value,
+                ),
+              input,
+            );
+          } catch (error) {
+            await recoverDiagnostic(page, "browser-revocation-arm");
+            throw error;
+          }
+          note("browser-revocation-revoke");
           await revoke();
-          revocation = await page.evaluate(() =>
-            (globalThis as unknown as { fortipiEvidence: BrowserPort }).fortipiEvidence.revoked(),
-          );
+          note("browser-revocation-check");
+          try {
+            revocation = await page.evaluate(() =>
+              (globalThis as unknown as { fortipiEvidence: BrowserPort }).fortipiEvidence.revoked(),
+            );
+          } catch (error) {
+            await recoverDiagnostic(page, "browser-revocation-check");
+            throw error;
+          }
         }
+        note("browser-finalization");
         await network.detach();
         return {
           ...observation,
@@ -308,10 +385,11 @@ async function browserGraph(
           crossOrigin: new URL(input.endpoint).origin !== origin,
           noHeaderWorkaround: true,
         };
+      } catch (error) {
+        failed = true;
+        throw error;
       } finally {
-        engines.delete(engine);
-        await engine.close();
-        await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        await cleanup();
       }
     },
     close() {

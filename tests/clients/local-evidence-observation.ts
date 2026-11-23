@@ -45,11 +45,18 @@ const browserStages = new Set([
   "unallowlisted-https-navigation",
   "browser-cors-denial",
   "acknowledged-browser-revocation",
+  "browser-revocation-arm",
+  "browser-revocation-revoke",
+  "browser-revocation-check",
+  "browser-finalization",
+  "browser-cleanup",
+  "browser-postchecks",
+  "browser-runtime-cleanup",
   "public-role-cleanup",
   "cleanup",
   "complete",
 ]);
-const publicPhases = new Set([
+export const browserDiagnosticPhases = [
   "negotiate",
   "original-snapshot",
   "first-subscribe",
@@ -63,7 +70,22 @@ const publicPhases = new Set([
   "offline-stored-replay",
   "original-client-resume",
   "final-snapshot",
-]);
+  "revocation-arm",
+  "revocation-ready",
+  "revocation-close-wait",
+  "revocation-authority-refusal",
+  "revocation-read",
+  "revocation-read-status",
+  "revocation-subscription-cleanup",
+  "revocation-complete",
+] as const;
+export type BrowserDiagnosticPhase = (typeof browserDiagnosticPhases)[number];
+const publicPhases = new Set<string>(browserDiagnosticPhases);
+export function browserDiagnosticPhase(value: unknown): BrowserDiagnosticPhase | undefined {
+  return typeof value === "string" && publicPhases.has(value)
+    ? (value as BrowserDiagnosticPhase)
+    : undefined;
+}
 const errorClasses = new Set([
   "Error",
   "AssertionError",
@@ -73,7 +95,7 @@ const errorClasses = new Set([
   "CleanupFailure",
   "IncompleteRevocation",
 ]);
-const codes = new Set([
+export const browserDiagnosticCodes = [
   "quota_exceeded",
   "quota_paused",
   "rate_limited",
@@ -81,7 +103,15 @@ const codes = new Set([
   "unauthenticated",
   "handshake_failed",
   "smoke_deadline",
-]);
+] as const;
+export type BrowserDiagnosticCode = (typeof browserDiagnosticCodes)[number];
+export interface BrowserDiagnostic {
+  phase: BrowserDiagnosticPhase | null;
+  code: BrowserDiagnosticCode | null;
+  status: number | null;
+  completionDeadline: boolean | null;
+}
+const codes = new Set<string>(browserDiagnosticCodes);
 const outcomes = new Set(["pass", "fail", "timeout", "unavailable"]);
 function own(value: unknown, key: string): unknown {
   try {
@@ -94,11 +124,37 @@ function own(value: unknown, key: string): unknown {
 }
 const member = (value: unknown, set: Set<string>) =>
   typeof value === "string" && set.has(value) ? value : null;
+export function browserFailure(error: unknown): { errorClass: string; errorCode?: string } {
+  let errorClass = "UnknownFailure";
+  let errorCode: string | undefined;
+  try {
+    if (error instanceof Error) {
+      errorClass = member(own(error, "name"), errorClasses) ?? "Error";
+      const message = own(error, "message");
+      errorCode =
+        typeof message === "string"
+          ? message.match(
+              /\b(?:quota_exceeded|quota_paused|rate_limited|unauthorized|unauthenticated|handshake_failed|smoke_deadline)\b/,
+            )?.[0]
+          : undefined;
+    }
+  } catch {}
+  return { errorClass, ...(errorCode ? { errorCode } : {}) };
+}
 const boolean = (value: unknown) => (typeof value === "boolean" ? value : null);
 const integer = (value: unknown, min: number, max: number) =>
   typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
     ? value
     : null;
+export function projectBrowserDiagnostic(value: unknown): BrowserDiagnostic {
+  const code = own(value, "code");
+  return {
+    phase: browserDiagnosticPhase(own(value, "phase")) ?? null,
+    code: typeof code === "string" && codes.has(code) ? (code as BrowserDiagnosticCode) : null,
+    status: integer(own(value, "status"), 100, 599),
+    completionDeadline: boolean(own(value, "completionDeadline")),
+  };
+}
 export function localEvidenceLine(
   stage: unknown,
   event: unknown,

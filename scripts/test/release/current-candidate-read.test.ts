@@ -21,7 +21,12 @@ import {
 } from "../../verify-release-gates.ts";
 import { candidate, httpFixture, jsonArchive, metadataArchive } from "./fixtures.ts";
 
-async function fixture(scope = "release-fixture", job = "native") {
+type ActiveRunStatus = "queued" | "in_progress";
+async function fixture(
+  scope = "release-fixture",
+  job = "native",
+  runStatuses: readonly [ActiveRunStatus, ActiveRunStatus] = ["in_progress", "in_progress"],
+) {
   const c = candidate();
   c.sourceCommit = await git("rev-parse", "HEAD");
   assert.equal(
@@ -60,6 +65,7 @@ async function fixture(scope = "release-fixture", job = "native") {
   let downloaded = false;
   let downloads = 0;
   const urls: string[] = [];
+  const runObservations: ["latest" | "attempt", boolean, string, string | null][] = [];
   const env = {
     GITHUB_ACTIONS: "true",
     GITHUB_SERVER_URL: "https://github.com",
@@ -181,7 +187,27 @@ async function fixture(scope = "release-fixture", job = "native") {
           fault === "duplicate-artifact" ? [artifact, { ...artifact, id: 41 }] : [artifact],
       };
     else if (route.endsWith("/actions/artifacts/40")) value = artifact;
-    else if (route.includes("/actions/runs/80"))
+    else if (route.includes("/actions/runs/80")) {
+      const terminal =
+        fault === "failed-run" || (fault === "failed-run-after-zip" && downloaded)
+          ? "failure"
+          : fault === "cancelled-run" || (fault === "cancelled-run-after-zip" && downloaded)
+            ? "cancelled"
+            : null;
+      const queuedConclusion =
+        fault === "queued-conclusion" || (fault === "queued-conclusion-after-zip" && downloaded);
+      const status = terminal
+        ? "completed"
+        : queuedConclusion
+          ? "queued"
+          : runStatuses[downloaded ? 1 : 0];
+      const conclusion = terminal ?? (queuedConclusion ? "success" : null);
+      runObservations.push([
+        route.endsWith("/attempts/1") ? "attempt" : "latest",
+        downloaded,
+        status,
+        conclusion,
+      ]);
       value = {
         id: 80,
         run_attempt:
@@ -193,10 +219,10 @@ async function fixture(scope = "release-fixture", job = "native") {
         path: ".github/workflows/release.yml",
         repository: { id: REPOSITORY_ID },
         head_repository: { id: fault === "foreign-run" ? 1 : REPOSITORY_ID },
-        status: "in_progress",
-        conclusion: null,
+        status,
+        conclusion,
       };
-    else {
+    } else {
       res.statusCode = 404;
       res.end();
       return;
@@ -212,12 +238,14 @@ async function fixture(scope = "release-fixture", job = "native") {
       return githubRequest(undefined, server.transport);
     },
     urls,
+    runObservations,
     downloads: () => downloads,
     fault(value: string) {
       fault = value;
       downloaded = false;
       downloads = 0;
       urls.length = 0;
+      runObservations.length = 0;
       zip =
         value === "foreign-member"
           ? foreignZip
@@ -244,21 +272,34 @@ test("completed candidate job authenticates actual ZIP metadata while parent is 
     ["release-fixture", "native"],
     [SYNTHETIC_SCOPE, "native-receipt"],
   ]) {
-    const f = await fixture(scope, job);
-    try {
-      const reference = await resolveCurrentCandidateReference(f.c, f.hash, f.request);
-      assert.deepEqual(reference, f.ref);
-      await verifyCurrentCandidateRead(f.c, f.hash, reference, f.request);
-      assert.equal(f.downloads(), 1);
-      assert.ok(f.urls.some((url) => url.includes("/attempts/1/jobs?")));
-      await assert.rejects(
-        verifyProducer(f.c, "candidate", f.c.producer, f.ref, f.request),
-        /completed/,
-      );
-      assert.equal(f.c.publishable, scope !== SYNTHETIC_SCOPE);
-      if (!f.c.publishable) await assert.rejects(trustedMain(f.c, f.request), /Synthetic/);
-    } finally {
-      await f.close();
+    for (const runStatuses of [
+      ["queued", "queued"],
+      ["in_progress", "in_progress"],
+      ["queued", "in_progress"],
+      ["in_progress", "queued"],
+    ] as const) {
+      const f = await fixture(scope, job, runStatuses);
+      try {
+        const reference = await resolveCurrentCandidateReference(f.c, f.hash, f.request);
+        assert.deepEqual(reference, f.ref);
+        await verifyCurrentCandidateRead(f.c, f.hash, reference, f.request);
+        assert.equal(f.downloads(), 1);
+        assert.ok(f.urls.some((url) => url.includes("/attempts/1/jobs?")));
+        assert.deepEqual(f.runObservations, [
+          ["latest", false, runStatuses[0], null],
+          ["attempt", false, runStatuses[0], null],
+          ["latest", true, runStatuses[1], null],
+          ["attempt", true, runStatuses[1], null],
+        ]);
+        await assert.rejects(
+          verifyProducer(f.c, "candidate", f.c.producer, f.ref, f.request),
+          /completed/,
+        );
+        assert.equal(f.c.publishable, scope !== SYNTHETIC_SCOPE);
+        if (!f.c.publishable) await assert.rejects(trustedMain(f.c, f.request), /Synthetic/);
+      } finally {
+        await f.close();
+      }
     }
   }
 });
@@ -280,6 +321,9 @@ test("wrong caller, incomplete candidate and mismatched producer facts fail befo
       "main",
       "tag",
       "workflow-bytes",
+      "failed-run",
+      "cancelled-run",
+      "queued-conclusion",
     ]) {
       f.fault(fault);
       await assert.rejects(verifyCurrentCandidateRead(f.c, f.hash, f.ref, f.request), Error, fault);
@@ -346,6 +390,9 @@ test("actual ZIP/member replacement and post-await attempt/main/expiry changes n
     "superseded-after-zip",
     "main-after-zip",
     "expires-after-zip",
+    "failed-run-after-zip",
+    "cancelled-run-after-zip",
+    "queued-conclusion-after-zip",
   ]) {
     const f = await fixture();
     try {

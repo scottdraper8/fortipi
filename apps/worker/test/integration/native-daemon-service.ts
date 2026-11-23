@@ -104,6 +104,14 @@ export async function nativeDaemonService() {
     const job = async (id: string) => {
       const result = await n.h.api<D.Job>(`/v1/jobs/${id}`, undefined, "GET", client.token);
       assert.equal(result.status, 200);
+      assert.equal(result.body.jobId, id);
+      return result.body;
+    };
+    const task = async (id: string) => {
+      const result = await n.h.api<D.Task>(`/v1/tasks/${id}`, undefined, "GET", client.token);
+      assert.equal(result.status, 200);
+      assert.equal(result.body.taskId, id);
+      assert.equal(result.body.conversationId, n.conversation.conversationId);
       return result.body;
     };
     return {
@@ -213,10 +221,27 @@ export async function nativeDaemonService() {
         assert.equal(result.status, 202);
         assert.equal(result.body.disposition, "unknown-acknowledged");
       },
+      async cancelTask(taskId: string, requestId: string) {
+        await task(taskId);
+        const input: D.TaskControl = {
+          requestId,
+          reason: "Settle the refused confinement case without retrying its original job",
+        };
+        const result = await n.h.api<D.ControlReceipt>(
+          `/v1/tasks/${taskId}/cancel`,
+          input,
+          "POST",
+          client.token,
+        );
+        assert.equal(result.status, 202);
+        assert.match(result.body.operationId, /^[A-Za-z0-9_-]{1,128}$/);
+        assert.equal(result.body.durableIntent, true);
+        assert.ok(["unknown", "already-terminal"].includes(result.body.disposition.state));
+        assert.equal(result.body.disposition.possibleExternalEffects, true);
+      },
       async settled(taskId: string) {
         return poll(
-          async () =>
-            (await n.h.api<D.Task>(`/v1/tasks/${taskId}`, undefined, "GET", client.token)).body,
+          () => task(taskId),
           (task) => ["completed", "failed", "cancelled", "interrupted"].includes(task.status.state),
         );
       },

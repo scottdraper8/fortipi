@@ -68,7 +68,7 @@ export class Jobs implements JobStore {
           sameLeaseIdentity(original, lease) &&
           Number.isSafeInteger(lease.leaseVersion) &&
           lease.leaseVersion > original.leaseVersion &&
-          lease.expiresAt > original.expiresAt &&
+          lease.expiresAt >= original.expiresAt &&
           lease.expiresAt <= state.deadline,
         "conflict",
         "Renewal changed immutable execution authority",
@@ -92,6 +92,11 @@ export class Jobs implements JobStore {
         prior = await this.store.get<D.Lease>("lease-history", key, tx),
         latest = await this.store.get<D.Lease>("lease-observation", jobId, tx);
       check(!prior || same(prior, lease), "conflict", "Renewal version changed");
+      check(
+        !latest || lease.leaseVersion <= latest.leaseVersion || lease.expiresAt >= latest.expiresAt,
+        "conflict",
+        "Renewal expiry regressed",
+      );
       await this.store.put("lease-history", key, lease, tx);
       if (!latest || latest.leaseVersion < lease.leaseVersion)
         await this.store.put("lease-observation", jobId, lease, tx);

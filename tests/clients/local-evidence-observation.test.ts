@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  browserDiagnosticCodes,
+  browserDiagnosticPhase,
+  browserDiagnosticPhases,
+  browserFailure,
   localBrowserLine,
   localEvidenceLine,
   observeLocalBrowser,
   observeLocalEvidence,
+  projectBrowserDiagnostic,
 } from "./local-evidence-observation.ts";
 
 const canary = "private-role-ticket-payload-path-canary";
@@ -55,6 +60,46 @@ test("local evidence observations retain only closed phases and bounded facts", 
     completionDeadline: true,
   });
   assert.equal(line.includes(canary), false);
+  const selected = projectBrowserDiagnostic(observed.diagnostic);
+  assert.deepEqual(selected, {
+    phase: "first-task-observe",
+    code: "rate_limited",
+    status: 429,
+    completionDeadline: true,
+  });
+  assert.notEqual(selected, observed.diagnostic);
+  assert.deepEqual(
+    JSON.parse(
+      localBrowserLine(
+        "report",
+        { code: 1, timedOut: false },
+        {
+          ...observed,
+          diagnostic: selected,
+        },
+      ),
+    ),
+    JSON.parse(line),
+  );
+  for (const code of browserDiagnosticCodes)
+    assert.equal(projectBrowserDiagnostic({ code, payload: canary }).code, code);
+  for (const status of [100, 200, 401, 403, 429, 599])
+    assert.equal(projectBrowserDiagnostic({ status }).status, status);
+  for (const status of [99, 600, 100.1, NaN, Infinity, "401", null, {}, canary])
+    assert.equal(projectBrowserDiagnostic({ status }).status, null);
+  for (const completionDeadline of [true, false])
+    assert.equal(
+      projectBrowserDiagnostic({ completionDeadline }).completionDeadline,
+      completionDeadline,
+    );
+  for (const completionDeadline of ["true", 0, 1, {}, canary])
+    assert.equal(projectBrowserDiagnostic({ completionDeadline }).completionDeadline, null);
+  const withheld = { phase: null, code: null, status: null, completionDeadline: null };
+  assert.deepEqual(
+    projectBrowserDiagnostic({ phase: canary, code: canary, payload: canary }),
+    withheld,
+  );
+  assert.deepEqual(projectBrowserDiagnostic(Object.create(observed.diagnostic)), withheld);
   const forged = JSON.parse(
     localBrowserLine(
       canary,
@@ -71,6 +116,27 @@ test("local evidence observations retain only closed phases and bounded facts", 
   for (const [key, value] of Object.entries(forged))
     if (key !== "diagnostic") assert.equal(value, null);
   assert.ok(Buffer.byteLength(line) <= 512);
+  for (const phase of browserDiagnosticPhases) {
+    assert.equal(browserDiagnosticPhase(phase), phase);
+    const projected = localBrowserLine(
+      "report",
+      { code: 1, timedOut: false },
+      {
+        stage: "browser-revocation-check",
+        diagnostic: { phase, payload: canary },
+      },
+    );
+    assert.equal(JSON.parse(projected).publicPhase, phase);
+    assert.equal(Object.keys(JSON.parse(projected)).length, 12);
+    assert.ok(Buffer.byteLength(projected) <= 512);
+    assert.equal(projected.includes(canary), false);
+  }
+  assert.equal(browserDiagnosticPhase(canary), undefined);
+  assert.deepEqual(browserFailure(new Error(`unauthenticated ${canary}`)), {
+    errorClass: "Error",
+    errorCode: "unauthenticated",
+  });
+  assert.equal(JSON.stringify(browserFailure(new Error(canary))).includes(canary), false);
 });
 
 test("local observation projection ignores accessors and contains sink failures", () => {
@@ -86,6 +152,11 @@ test("local observation projection ignores accessors and contains sink failures"
         "errorCode",
         "diagnostic",
         "cleanupComplete",
+        "name",
+        "message",
+        "phase",
+        "status",
+        "completionDeadline",
         "toString",
       ].map((key) => [
         key,
@@ -100,6 +171,24 @@ test("local observation projection ignores accessors and contains sink failures"
   );
   assert.doesNotThrow(() => localBrowserLine(opaque, opaque, opaque));
   assert.doesNotThrow(() => localEvidenceLine(opaque, opaque, opaque, opaque));
+  assert.equal(browserDiagnosticPhase(opaque), undefined);
+  assert.deepEqual(browserFailure(opaque), { errorClass: "UnknownFailure" });
+  const name = Object.getOwnPropertyDescriptor(opaque, "name"),
+    message = Object.getOwnPropertyDescriptor(opaque, "message");
+  assert.ok(name && message);
+  const opaqueError = Object.defineProperties(new Error(), { name, message });
+  assert.deepEqual(browserFailure(opaqueError), { errorClass: "Error" });
+  const withheld = { phase: null, code: null, status: null, completionDeadline: null };
+  assert.deepEqual(projectBrowserDiagnostic(opaque), withheld);
+  const trapped = new Proxy(
+    {},
+    {
+      getOwnPropertyDescriptor() {
+        throw Error(canary);
+      },
+    },
+  );
+  assert.deepEqual(projectBrowserDiagnostic(trapped), withheld);
   assert.equal(accesses, 0);
   const broken = () => {
     throw Error(canary);
