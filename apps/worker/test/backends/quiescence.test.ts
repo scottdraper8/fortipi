@@ -163,7 +163,7 @@ test("production private host quiescence persists before effect and recovers imm
       const first = await stop(host, intent);
       if (fault !== "none") assert.notEqual(first.status, 200);
       if (fault === "lost-destroy-reply")
-        assert.deepEqual(await host.permuteStopRecord(), {
+        assert.deepEqual(JSON.parse(await host.permuteStopRecord()), {
           sameValues: true,
           requestOrderDiffers: true,
         });
@@ -177,7 +177,7 @@ test("production private host quiescence persists before effect and recovers imm
       assert.equal(before.privateEnvLeaked, false, "Private assertion reached native SDK delegate");
       assert.equal(await host.reacquisitionAllowed(), false);
       assert.equal(await host.writerAllowed(runtime.runtimeId), false);
-      assert.deepEqual(await host.permuteStopRecord(), {
+      assert.deepEqual(JSON.parse(await host.permuteStopRecord()), {
         sameValues: true,
         requestOrderDiffers: true,
       });
@@ -190,7 +190,7 @@ test("production private host quiescence persists before effect and recovers imm
       assert.deepEqual(await host.lifecycleStats(), before);
       await host.evict().catch(() => {});
       host = await fixtureHost(env.HOST, fault);
-      assert.deepEqual(await host.permuteStopRecord(), {
+      assert.deepEqual(JSON.parse(await host.permuteStopRecord()), {
         sameValues: true,
         requestOrderDiffers: true,
       });

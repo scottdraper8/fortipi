@@ -322,7 +322,7 @@ export class HostProbe extends DurableObject<ProbeEnv> {
       stats: await this.lifecycleStats(),
     };
   }
-  async permuteStopRecord() {
+  async permuteStopRecord(): Promise<string> {
     const stop = await this.ctx.storage.get<{
       request: { requestId: string; runtimeId: string; imageDigest: string };
       allocation: Record<string, unknown>;
@@ -346,7 +346,7 @@ export class HostProbe extends DurableObject<ProbeEnv> {
     this.#permuteStopReads = true;
     const restored = await this.#hostStorage().get<typeof stop>("fortipi-container-stop");
     requireThat(restored, "conflict", "Fixture stop record missing after permutation");
-    return {
+    return JSON.stringify({
       sameValues: canonicalJson(restored) === canonicalJson(stop),
       requestOrderDiffers:
         JSON.stringify(restored.request) !==
@@ -355,7 +355,7 @@ export class HostProbe extends DurableObject<ProbeEnv> {
           runtimeId: stop.request.runtimeId,
           imageDigest: stop.request.imageDigest,
         }),
-    };
+    });
   }
   async physicalBytes() {
     return this.ctx.storage.sql.databaseSize;
