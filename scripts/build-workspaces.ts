@@ -96,10 +96,12 @@ export async function tests(
     directory = repository,
     execute = run,
     now = () => performance.now(),
+    windowsMetrics = false,
   }: {
     directory?: string;
     execute?: typeof run;
     now?: () => number;
+    windowsMetrics?: boolean;
   } = {},
 ): Promise<void> {
   const deadline = totalTimeout === undefined ? undefined : now() + totalTimeout;
@@ -128,7 +130,9 @@ export async function tests(
   const parallel = [...paths].filter((path) => path !== gates && path !== provenance);
   const diagnostics = observeProcesses
     ? ["--require", join(directory, "scripts/source-test-processes.ts")]
-    : [];
+    : windowsMetrics
+      ? ["--require", join(directory, "scripts/windows-executor-metrics.ts")]
+      : [];
   // Emit each assertion immediately, even if another file outlives the aggregate runner.
   // Keep the complete native aggregation file separate; shared-context mutation stays last.
   for (const selected of [
@@ -327,7 +331,9 @@ export async function main(command: string | undefined): Promise<void> {
       );
       return;
     case "test:executor":
-      await tests(["packages/fortipi-executor/test"]);
+      await tests(["packages/fortipi-executor/test"], false, undefined, {
+        windowsMetrics: process.platform === "win32" && process.env.GITHUB_ACTIONS === "true",
+      });
       return;
     case "test:browser":
     case "test:pty":

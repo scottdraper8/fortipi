@@ -3,3 +3,6 @@ packages/fortipi-contract/openapi.yaml text eol=lf
 packages/fortipi-contract/src/generated/operations.ts text eol=lf
 packages/fortipi-contract/src/generated/schemas.ts text eol=lf
 packages/fortipi-contract/src/generated/types.ts text eol=lf
+
+# Release producer identities hash the committed workflow bytes.
+.github/workflows/release.yml text eol=lf

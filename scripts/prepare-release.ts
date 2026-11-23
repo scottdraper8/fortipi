@@ -18,7 +18,7 @@ import {
 } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { basename, dirname, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 import { t as listTar } from "tar";
 import { parse as parseYaml } from "yaml";
 import type { DeviceEvidenceData } from "../tests/clients/device-observer.ts";
@@ -1406,9 +1406,19 @@ export async function loadCandidate(
 ): Promise<{ candidate: CandidateManifest; hash: string; directory: string }> {
   const loaded = await candidateMetadata(path);
   const { candidate, hash, directory } = loaded;
+  const observed = async <T>(phase: string, action: () => Promise<T>): Promise<T> => {
+    try {
+      return await action();
+    } catch (error) {
+      if (context?.kind === "current") observeNativeEvidenceFailure(phase, error);
+      throw error;
+    }
+  };
   // Authenticate metadata through the actual producer archive before touching payloads.
   // A candidate's inventory is data, never its own source of producer authority.
-  await authenticateCandidateRead(loaded, context);
+  await observed("candidate-producer-authentication", () =>
+    authenticateCandidateRead(loaded, context),
+  );
   const needsSource =
     !context &&
     candidate.packages.some(
@@ -1419,65 +1429,71 @@ export async function loadCandidate(
     );
   const source = needsSource ? await sourceCandidatePlans(candidate) : undefined;
   const authorities = new Map<string, object>();
-  for (const pkg of candidate.packages) {
-    const independentlyProduced = source?.find((entry) => entry.name === pkg.name);
-    if (independentlyProduced)
+  await observed("candidate-package-archive", async () => {
+    for (const pkg of candidate.packages) {
+      const independentlyProduced = source?.find((entry) => entry.name === pkg.name);
+      if (independentlyProduced)
+        assert.deepEqual(
+          pkg.entries,
+          independentlyProduced.entries,
+          "Retained files differ from trusted source production",
+        );
+      const authority = context
+        ? archiveAuthority(pkg)
+        : independentlyProduced
+          ? producedPackages.get(independentlyProduced)
+          : producedArchives.get(pkg.sha256);
+      if (!authority) continue;
+      const plan = archivePlans.get(authority);
+      assert.ok(plan);
+      assert.equal(plan.name, pkg.name);
+      assert.equal(plan.sourceName, pkg.sourceName);
       assert.deepEqual(
         pkg.entries,
-        independentlyProduced.entries,
-        "Retained files differ from trusted source production",
+        [...plan.files.values()].sort((a, b) => a.path.localeCompare(b.path, "en")),
+        "Candidate differs from independently produced files",
       );
-    const authority = context
-      ? archiveAuthority(pkg)
-      : independentlyProduced
-        ? producedPackages.get(independentlyProduced)
-        : producedArchives.get(pkg.sha256);
-    if (!authority) continue;
-    const plan = archivePlans.get(authority);
-    assert.ok(plan);
-    assert.equal(plan.name, pkg.name);
-    assert.equal(plan.sourceName, pkg.sourceName);
-    assert.deepEqual(
-      pkg.entries,
-      [...plan.files.values()].sort((a, b) => a.path.localeCompare(b.path, "en")),
-      "Candidate differs from independently produced files",
-    );
-    authorities.set(pkg.name, authority);
-    producedPackages.set(pkg, authority);
-    // Check compressed input size before verifyPayload hashes/allocates it.
-    await boundedArchive(resolve(directory, pkg.tarball), authority);
-  }
-  await verifyPayload(directory, candidate.files, ["candidate.json"]);
-  for (const p of candidate.packages) {
-    const authority = authorities.get(p.name);
-    const bytes = await regularBytes(
-      resolve(directory, p.tarball),
-      authority ? archivePlans.get(authority)?.compressedLimit : undefined,
-    );
-    assert.equal(sha256(bytes), p.sha256);
-    assert.equal(sha512(bytes), p.integrity);
-    const packed = await archiveInventory(
-      resolve(directory, p.tarball),
-      p,
-      authorities.get(p.name),
-    );
-    assert.deepEqual(packed.entries, p.entries);
-    assert.equal(packed.manifest.name, p.name);
-    assert.equal(packed.manifest.version, p.version);
-    assert.equal(packed.manifest.scripts, undefined);
-    for (const field of ["dependencies", "optionalDependencies", "peerDependencies"])
-      for (const [name, spec] of Object.entries(object(packed.manifest[field] ?? {}))) {
-        assert.ok(!name.startsWith("fortipi-"));
-        assert.match(string(spec), versionPattern);
-        if (candidate.packages.some((pkg) => pkg.name === name))
-          assert.equal(spec, candidate.version);
-      }
-    if (p.sourceName === "fortipi-cli")
-      assert.equal(
-        p.entries.find((f) => f.path === "worker-assets/asset-manifest.json")?.sha256,
-        candidate.assetManifestSha256,
+      authorities.set(pkg.name, authority);
+      producedPackages.set(pkg, authority);
+      // Check compressed input size before verifyPayload hashes/allocates it.
+      await boundedArchive(resolve(directory, pkg.tarball), authority);
+    }
+  });
+  await verifyPayload(directory, candidate.files, ["candidate.json"], (phase, error) => {
+    if (context?.kind === "current") observeNativeEvidenceFailure(phase, error);
+  });
+  await observed("candidate-package-archive", async () => {
+    for (const p of candidate.packages) {
+      const authority = authorities.get(p.name);
+      const bytes = await regularBytes(
+        resolve(directory, p.tarball),
+        authority ? archivePlans.get(authority)?.compressedLimit : undefined,
       );
-  }
+      assert.equal(sha256(bytes), p.sha256);
+      assert.equal(sha512(bytes), p.integrity);
+      const packed = await archiveInventory(
+        resolve(directory, p.tarball),
+        p,
+        authorities.get(p.name),
+      );
+      assert.deepEqual(packed.entries, p.entries);
+      assert.equal(packed.manifest.name, p.name);
+      assert.equal(packed.manifest.version, p.version);
+      assert.equal(packed.manifest.scripts, undefined);
+      for (const field of ["dependencies", "optionalDependencies", "peerDependencies"])
+        for (const [name, spec] of Object.entries(object(packed.manifest[field] ?? {}))) {
+          assert.ok(!name.startsWith("fortipi-"));
+          assert.match(string(spec), versionPattern);
+          if (candidate.packages.some((pkg) => pkg.name === name))
+            assert.equal(spec, candidate.version);
+        }
+      if (p.sourceName === "fortipi-cli")
+        assert.equal(
+          p.entries.find((f) => f.path === "worker-assets/asset-manifest.json")?.sha256,
+          candidate.assetManifestSha256,
+        );
+    }
+  });
   return { candidate, hash, directory };
 }
 export type PublicationState =
@@ -2221,6 +2237,23 @@ export async function runEvidence(
   const context = await observed("candidate-reference", () =>
     resolveCandidateReadContext(candidate),
   );
+  if (mode === "native" && process.platform === "win32")
+    await observed("candidate-staging-protection", async () => {
+      // This workflow-created download destination is the only imported tree we prepare.
+      assert.equal(context?.kind, "current");
+      const temporary = string(process.env.RUNNER_TEMP);
+      assert.ok(isAbsolute(temporary));
+      const root = resolve(temporary, "candidate");
+      assert.ok(
+        root.toLowerCase() !== resolve(repository).toLowerCase() &&
+          !root.toLowerCase().startsWith(`${resolve(repository).toLowerCase()}${sep}`),
+      );
+      assert.equal(resolve(candidate), resolve(root, "candidate.json"));
+      const { protectWindowsPayloadTree } = await import(
+        "../packages/fortipi-executor/src/platform/windows.ts"
+      );
+      await protectWindowsPayloadTree(root);
+    });
   const loaded = await observed("candidate-authentication", () =>
     loadCandidate(candidate, context),
   );
@@ -2288,6 +2321,14 @@ export async function runEvidence(
   await observed("evidence-receipt", async () => {
     const receipt = await readJson(resolve(out, "gate.json"));
     assertEvidenceReceipt(receipt, loaded, expectedProducer, mode);
+    if (mode === "native" && process.platform === "win32")
+      await observed("native-output-protection", async () => {
+        // The successful child exclusively created this output root; saveJson stays generic.
+        const { protectWindowsPayloadTree } = await import(
+          "../packages/fortipi-executor/src/platform/windows.ts"
+        );
+        await protectWindowsPayloadTree(resolve(out));
+      });
     await verifyPayload(out, receipt.files, ["gate.json"]);
   });
 }

@@ -5,6 +5,7 @@ import { relative, resolve } from "node:path";
 import { parse, parseAllDocuments } from "yaml";
 import { filesBelow, projects, repository } from "./build-workspaces.ts";
 import { dependencyPatches } from "./dependency-patches.ts";
+import { assertRunnerHardeningPolicy } from "./runner-hardening-policy.ts";
 
 export interface Manifest {
   name: string;
@@ -414,6 +415,8 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
     }
   for (const path of await filesBelow(resolve(root, ".github/workflows"))) {
     const workflow = await yaml<{
+      permissions?: unknown;
+      env?: unknown;
       jobs: Record<
         string,
         {
@@ -429,26 +432,12 @@ export async function checkPins(root = repository, retainedReview?: unknown): Pr
       >;
     }>(root, relative(root, path));
     for (const [job, config] of Object.entries(workflow.jobs)) {
-      const hardening = config.steps[0];
-      assert.ok(hardening, `${job}: missing hardened job steps`);
-      assert.ok(
-        hardening?.uses?.startsWith("step-security/harden-runner@"),
-        `${job}: harden-runner must be first`,
-      );
-      assert.equal(hardening.with?.["egress-policy"], "block", `${job}: block egress is required`);
-      const health = config.steps[1];
-      assert.ok(
-        health?.run === "/usr/bin/systemctl is-active --quiet agent.service" &&
-          health.if === "runner.os == 'Linux'" &&
-          health.shell === "bash" &&
-          health["timeout-minutes"] === 1,
-        `${job}: Linux hardener health gate must precede checkout and network steps`,
-      );
-      const endpoints = hardening.with?.["allowed-endpoints"];
-      assert.equal(typeof endpoints, "string", `${job}: explicit endpoints are required`);
-      assert.ok(
-        !(endpoints as string).trim().match(/[\r\n]/),
-        `${job}: harden-runner allowed-endpoints contains an internal newline; use a folded YAML scalar`,
+      assertRunnerHardeningPolicy(
+        relative(root, path),
+        workflow.permissions,
+        workflow.env,
+        job,
+        config,
       );
     }
     const text = await readFile(path, "utf8");

@@ -74,7 +74,7 @@ jobs:
     outputs:
       artifact: ${{ steps.output.outputs.artifact }}
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c
         with:
           egress-policy: block
           allowed-endpoints:
@@ -198,9 +198,9 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c
         with:
-          egress-policy: block
+          egress-policy: ${{ runner.os == 'Linux' && 'block' || 'audit' }}
           allowed-endpoints:
             api.github.com:443 github.com:443 release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443 *.actions.githubusercontent.com:443 *.blob.core.windows.net:443
@@ -232,7 +232,6 @@ jobs:
       - run: node node_modules/typescript/bin/tsc -p packages/fortipi-contract/tsconfig.json
       - run: node scripts/verify-foundation.ts --native
       - run: node scripts/build-workspaces.ts build:evidence
-      - run: node scripts/verify-foundation.ts --egress
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: ${{ needs.candidate.outputs.artifact }}
@@ -250,12 +249,19 @@ jobs:
           path: dist/evidence/native
           if-no-files-found: error
           retention-days: 30
+      - name: Require runner hardener health
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FORTIPI_RUNNER_HARDENING_MODE: ${{ runner.os == 'Linux' && 'block' || 'audit' }}
+        run: node scripts/verify-foundation.ts --egress
     env:
       npm_config_node_gyp: ${{ github.workspace }}/node_modules/node-gyp/bin/node-gyp.js
       npm_config_build_from_source: "true"
     permissions:
       contents: read
       actions: read
+      checks: read
   proofs:
     if: inputs.operation == 'publish' && github.ref == 'refs/heads/main' && github.repository == 'scottdraper8/fortipi'
     strategy:
@@ -268,7 +274,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c
         with:
           egress-policy: block
           allowed-endpoints:
@@ -337,7 +343,7 @@ jobs:
       actions: read
       id-token: write
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c
         with:
           egress-policy: block
           allowed-endpoints:
@@ -422,7 +428,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c
         with:
           egress-policy: block
           allowed-endpoints:
@@ -486,7 +492,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c
         with:
           egress-policy: block
           allowed-endpoints:
@@ -574,7 +580,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c
         with:
           egress-policy: block
           allowed-endpoints:
@@ -657,7 +663,7 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c
         with:
           egress-policy: block
           allowed-endpoints:

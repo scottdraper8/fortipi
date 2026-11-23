@@ -681,21 +681,44 @@ export async function verifyPayload(
   root: string,
   expected: FileRecord[],
   exclude: string[] = [],
+  observeFailure?: (phase: "payload-protection" | "payload-bytes", error: unknown) => void,
 ): Promise<void> {
-  const bounds = new Map(expected.map((file) => [file.path, file.size]));
-  for (const path of exclude) bounds.set(path, 8_000_000);
-  const actual = (await inventory(root, "", bounds)).filter((file) => !exclude.includes(file.path));
-  assert.ok(
-    actual.every((file) => (file.mode & 0o022) === 0),
-    "Writable artifact payload",
-  );
-  // GitHub ZIP transport normalizes filesystem modes. Tar-entry modes remain independently exact.
-  const bytes = (file: FileRecord) => ({ path: file.path, size: file.size, sha256: file.sha256 });
-  assert.deepEqual(
-    actual.map(bytes),
-    [...expected].sort((a, b) => a.path.localeCompare(b.path, "en")).map(bytes),
-    "Artifact payload differs from retained inventory",
-  );
+  let phase: "payload-protection" | "payload-bytes" = "payload-protection";
+  try {
+    if (process.platform === "win32") {
+      const { verifyWindowsPayloadTree } = await import(
+        "../packages/fortipi-executor/src/platform/windows.ts"
+      );
+      await verifyWindowsPayloadTree(root);
+    }
+    phase = "payload-bytes";
+    const bounds = new Map(expected.map((file) => [file.path, file.size]));
+    for (const path of exclude) bounds.set(path, 8_000_000);
+    const actual = (await inventory(root, "", bounds)).filter(
+      (file) => !exclude.includes(file.path),
+    );
+    phase = "payload-protection";
+    if (process.platform !== "win32")
+      assert.ok(
+        actual.every((file) => (file.mode & 0o022) === 0),
+        "Writable artifact payload",
+      );
+    phase = "payload-bytes";
+    // ZIP transport normalizes outer modes. Tar-entry modes remain independently exact.
+    const bytes = (file: FileRecord) => ({ path: file.path, size: file.size, sha256: file.sha256 });
+    assert.deepEqual(
+      actual.map(bytes),
+      [...expected].sort((a, b) => a.path.localeCompare(b.path, "en")).map(bytes),
+      "Artifact payload differs from retained inventory",
+    );
+  } catch (error) {
+    try {
+      observeFailure?.(phase, error);
+    } catch {
+      /* Observation cannot change verification's result. */
+    }
+    throw error;
+  }
 }
 export type GitHubRequest = ((
   path: string,

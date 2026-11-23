@@ -369,6 +369,92 @@ test("Pi wake retry failure identification retains its literal name without priv
   }
 });
 
+test("current candidate read failure diagnostics preserve literal names and bounded source locations", async () => {
+  const names = [
+    "completed candidate job authenticates actual ZIP metadata while parent is running, without promoting source bootstrap",
+    "wrong caller, incomplete candidate and mismatched producer facts fail before ZIP download or payload permission",
+    "actual ZIP/member replacement and post-await attempt/main/expiry changes never confer candidate read permission",
+  ];
+  const sources = await Promise.all(
+    [
+      [
+        "scripts/test/release/current-candidate-read.test.ts",
+        "await verifyCurrentCandidateRead(f.c, f.hash, reference, f.request);",
+      ],
+      ["scripts/current-candidate-read.ts", 'assert.equal(env.GITHUB_ACTIONS, "true");'],
+    ].map(async ([path, needle]) => {
+      assert.ok(path && needle);
+      const text = await readFile(new URL(`../../../${path}`, import.meta.url), "utf8");
+      const lines = text.split("\n");
+      const matches = lines.flatMap((line, index) => (line.trim() === needle ? [index] : []));
+      assert.equal(matches.length, 1);
+      const index = matches[0];
+      assert.ok(index !== undefined);
+      return { path, text, lines, line: index + 1, endColumn: (lines[index]?.length ?? 0) + 1 };
+    }),
+  );
+  for (const name of names) assert.ok(sources[0]?.text.includes(`test("${name}"`));
+  const classify = (
+    name: string,
+    location: string,
+    expectedName: string | null,
+    expectedLocation: string | null,
+  ) => {
+    const output: string[] = [];
+    const consume = sourceFailureLines((line) => output.push(line));
+    for (const line of [
+      `not ok 1 - ${name}`,
+      "  ---",
+      "  failureType: 'testCodeFailure'",
+      `  location: '${location}'`,
+      `  error: '${canary}'`,
+      "  code: 'ERR_ASSERTION'",
+      `  actual: '${canary}'`,
+      `  expected: '${canary}'`,
+      "  stack: |-",
+      `    private (/${canary}/private.ts:1:1)`,
+      `    private (${location})`,
+      "  ...",
+    ])
+      consume(line);
+    assert.equal(output.length, 1);
+    const record = {
+      diagnostic: "source-test-failure",
+      name: expectedName,
+      location: expectedLocation,
+      category: "testCodeFailure",
+      code: "ERR_ASSERTION",
+    };
+    assert.deepEqual(JSON.parse(output[0] ?? ""), record);
+    assert.equal(output.join("").includes(canary), false);
+    assert.equal(sourceTestDiagnostic((output[0] ?? "").trimEnd()), true);
+    assert.equal(sourceTestDiagnostic(JSON.stringify({ ...record, error: canary })), false);
+    assert.equal(sourceTestDiagnostic(JSON.stringify({ ...record, name: canary })), false);
+  };
+  for (const name of names)
+    for (const source of sources)
+      for (const column of [1, source.endColumn]) {
+        const location = `${source.path}:${source.line}:${column}`;
+        classify(name, location, name, location);
+      }
+  const name = names[0];
+  assert.ok(name);
+  for (const source of sources) {
+    const location = `${source.path}:${source.line}:1`;
+    for (const unknown of [canary, `${name} ${canary}`])
+      classify(unknown, location, null, location);
+    for (const invalid of [
+      `${source.path}:0:1`,
+      `${source.path}:${source.line}:0`,
+      `${source.path}:${source.lines.length + 1}:1`,
+      `${source.path}:${source.line}:${source.endColumn + 1}`,
+      `scripts/../../${source.path}:${source.line}:1`,
+      `scripts/${canary}.ts:1:1`,
+    ])
+      classify(name, invalid, name, null);
+  }
+});
+
 test("an actual admission polling failure retains its reviewed inner location without its error text", {
   timeout: 10000,
 }, async () => {

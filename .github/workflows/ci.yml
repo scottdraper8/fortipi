@@ -31,7 +31,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           allowed-endpoints: >-
@@ -226,6 +226,10 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
   native-executor:
     if: github.event_name != 'workflow_dispatch'
+    permissions:
+      contents: read
+      actions: read
+      checks: read
     strategy:
       fail-fast: false
       matrix:
@@ -233,9 +237,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     steps:
-      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
-          egress-policy: block
+          egress-policy: ${{ runner.os == 'Linux' && 'block' || 'audit' }}
           allowed-endpoints: >-
             api.github.com:443
             github.com:443
@@ -312,6 +316,9 @@ jobs:
       - run: pnpm run build:executor
         if: runner.os != 'Windows'
       - run: pnpm run typecheck:executor
+      - name: Verify portable artifact payload permissions and bytes
+        timeout-minutes: 2
+        run: node --test scripts/test/release/artifact-payload-portability.test.ts
       - name: Probe Windows startup and state protection
         if: runner.os == 'Windows'
         timeout-minutes: 2
@@ -328,6 +335,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - run: pnpm run test:executor
-      - name: Require runner egress enforcement
+      - name: Require runner hardener health
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FORTIPI_RUNNER_HARDENING_MODE: ${{ runner.os == 'Linux' && 'block' || 'audit' }}
         run: node scripts/verify-foundation.ts --egress
