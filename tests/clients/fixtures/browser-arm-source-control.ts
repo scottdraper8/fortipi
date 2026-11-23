@@ -172,6 +172,15 @@ async function child(args: string[]): Promise<Result> {
     stage = "public-provision";
     const state = await provision(server, (input) => authority.issue(input));
     running();
+    const witness = await authority.issueBrowserRevocation(
+      state.agent.agentId,
+      state.conversations[0]!.conversationId,
+    );
+    running();
+    assert.ok(
+      witness.credential.credentialId !== state.client.credential.credentialId,
+      "Revocation witness must be an independently issued principal",
+    );
     stage = "chromium-public-flow-cors-revoke";
     const observation = await browser.run(
       {
@@ -181,9 +190,18 @@ async function child(args: string[]): Promise<Result> {
         conversationId: state.conversations[0]!.conversationId,
         seed: 1010,
       },
-      async () => {
-        const receipt = await authority.revokeAndWait(state.client.credential.credentialId);
-        assert.equal(receipt.state, "complete");
+      {
+        input: {
+          endpoint: authority.endpoint,
+          token: witness.token,
+          agentId: state.agent.agentId,
+          conversationId: state.conversations[0]!.conversationId,
+          seed: 1010,
+        },
+        revoke: async () => {
+          const receipt = await authority.revokeAndWait(witness.credential.credentialId);
+          assert.equal(receipt.state, "complete");
+        },
       },
       (value, observed) => {
         stage = value;
@@ -207,8 +225,8 @@ async function child(args: string[]): Promise<Result> {
   } catch (error) {
     failure ??= { stage, ...projection.browserFailure(error) };
   } finally {
-    await close();
     process.off("SIGTERM", stop);
+    await close();
   }
   return project({
     outcome: failure ? "fail" : "pass",
