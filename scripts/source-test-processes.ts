@@ -403,6 +403,10 @@ export function sourceFailureLines(emit: (line: string) => void): (line: string)
 export function sourceTestDiagnostic(line: string): boolean {
   if (line.length > 512) return false;
   return (
+    (/^\{"diagnostic":"required-command-limit","command":"(?:source-tests|other)","firstLimit":"(?:deadline|stdout)"\}$/.test(
+      line,
+    ) &&
+      line.endsWith("}")) ||
     /^\{"diagnostic":"source-test-host","node":"\d{1,3}\.\d{1,3}\.\d{1,3}","availableParallelism":\d{1,4},"files":\d{1,3}\}$/.test(
       line,
     ) ||
