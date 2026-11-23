@@ -129,13 +129,56 @@ export class HostProbe extends DurableObject<ProbeEnv> {
   #sampleWaiting = false;
   #native: PortAPI | undefined;
   #transport: ContainerHostTransport | undefined;
+  #storageView: DurableObjectStorage | undefined;
+  #permuteStopReads = false;
   #image = `registry.invalid/controlled-abi@sha256:${"a".repeat(64)}`;
   #selected = true;
+  #hostStorage(): DurableObjectStorage {
+    const storage = this.ctx.storage;
+    this.#storageView ??= new Proxy({} as DurableObjectStorage, {
+      get: (_target, key) => {
+        const value = Reflect.get(storage, key, storage);
+        if (key === "get" && this.#permuteStopReads)
+          return async (...args: unknown[]) => {
+            const result: unknown = await Reflect.apply(value, storage, args);
+            if (
+              args[0] !== "fortipi-container-stop" ||
+              !result ||
+              typeof result !== "object" ||
+              Array.isArray(result)
+            )
+              return result;
+            const stop = result as Record<string, unknown>,
+              request = stop.request;
+            if (!request || typeof request !== "object" || Array.isArray(request)) return result;
+            const row = request as Record<string, unknown>;
+            if (
+              Object.keys(row).sort().join(",") !== "imageDigest,requestId,runtimeId" ||
+              typeof row.imageDigest !== "string" ||
+              typeof row.runtimeId !== "string" ||
+              typeof row.requestId !== "string"
+            )
+              return result;
+            // Change only enumeration after the actual read, never storage values.
+            return {
+              ...stop,
+              request: {
+                imageDigest: row.imageDigest,
+                runtimeId: row.runtimeId,
+                requestId: row.requestId,
+              },
+            };
+          };
+        return typeof value === "function" ? value.bind(storage) : value;
+      },
+    });
+    return this.#storageView;
+  }
   #host(): ContainerHostTransport {
     this.#native ??= new PortAPI(this.env.PORT, this.ctx.storage, () => this.#image);
     const native = this.#native;
     this.#transport ??= new ContainerHostTransport(
-      this.ctx.storage,
+      this.#hostStorage(),
       native,
       () => {
         requireThat(this.#selected, "unsupported", "Fixture Linux selection disabled");
@@ -300,7 +343,8 @@ export class HostProbe extends DurableObject<ProbeEnv> {
       },
       allocation,
     });
-    const restored = await this.ctx.storage.get<typeof stop>("fortipi-container-stop");
+    this.#permuteStopReads = true;
+    const restored = await this.#hostStorage().get<typeof stop>("fortipi-container-stop");
     requireThat(restored, "conflict", "Fixture stop record missing after permutation");
     return {
       sameValues: canonicalJson(restored) === canonicalJson(stop),
