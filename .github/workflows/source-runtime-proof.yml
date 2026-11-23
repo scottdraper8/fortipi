@@ -32,6 +32,9 @@ jobs:
             *.blob.core.windows.net:443 registry.npmjs.org:443 nodejs.org:443
             api.osv.dev:443 go.dev:443 dl.google.com:443 proxy.golang.org:443
             sum.golang.org:443 storage.googleapis.com:443 *.stepsecurity.io:443
+            cdn.playwright.dev:443 playwright.download.prss.microsoft.com:443
+            archive.ubuntu.com:80 security.ubuntu.com:80 azure.archive.ubuntu.com:80
+            *.ec2.archive.ubuntu.com:80 packages.microsoft.com:443
       - name: Require Linux hardener service active
         if: runner.os == 'Linux'
         shell: bash
@@ -70,7 +73,14 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-native-role-')
         run: node --test --test-reporter=tap scripts/native-owned-role-control.ts
         timeout-minutes: 2
+      - name: Install Chromium for source browser control
+        if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-browser-arm-')
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Observe source browser arm and revocation
+        if: startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-browser-arm-')
+        run: node tests/clients/fixtures/browser-arm-source-control.ts
       - name: Observe three actual source test processes directly
+        if: ${{ !startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-browser-arm-') }}
         run: >-
           node --require ./scripts/source-test-processes.ts --test --test-reporter=tap
           apps/worker/test/agent/admin-file-bearing.test.ts
@@ -81,3 +91,11 @@ jobs:
         shell: bash
         run: /usr/bin/systemctl is-active --quiet agent.service
         timeout-minutes: 1
+      - name: Retain finite source browser control
+        if: always() && startsWith(github.ref, 'refs/heads/ci/fortipi-source-runtime-proof-browser-arm-')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: source-browser-control-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/source-browser-control.json
+          if-no-files-found: warn
+          retention-days: 7

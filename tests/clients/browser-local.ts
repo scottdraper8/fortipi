@@ -37,7 +37,7 @@ async function stopTree(child: ChildProcess) {
     }
   }
 }
-async function browserProcess(args: string[], cwd: string, env: NodeJS.ProcessEnv) {
+export async function browserProcess(args: string[], cwd: string, env: NodeJS.ProcessEnv) {
   const child = spawn(process.execPath, args, {
     cwd,
     env,

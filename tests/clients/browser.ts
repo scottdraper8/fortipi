@@ -36,7 +36,7 @@ export async function browser(
   );
 }
 /** Source-only engineering port, never an installed/candidate substitute. */
-export async function sourceBrowser() {
+export async function sourceBrowser(options: { port?: number; tls?: FixtureTLS } = {}) {
   const root = resolve(import.meta.dirname, "../..");
   return browserGraph(
     {
@@ -48,7 +48,7 @@ export async function sourceBrowser() {
       ],
       installed: false,
     },
-    {},
+    options,
   );
 }
 async function browserGraph(
