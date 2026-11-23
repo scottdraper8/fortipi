@@ -20,6 +20,65 @@ export interface CleanupObservation {
   state: "complete" | "pending" | "unknown";
   pendingRecipients: number | null;
 }
+const cleanupCategories = [
+  "http-non-ok",
+  "json-read-failure",
+  "invalid-receipt",
+  "pending",
+  "unknown",
+] as const;
+export interface CleanupDiagnostic {
+  category: (typeof cleanupCategories)[number];
+  status: number | null;
+  pendingRecipients: number | null;
+}
+export function projectCleanupDiagnostic(value: unknown): CleanupDiagnostic | null {
+  try {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const fields = Object.getOwnPropertyDescriptors(value);
+    const keys = Reflect.ownKeys(fields);
+    if (
+      keys.length !== 3 ||
+      !["category", "status", "pendingRecipients"].every(
+        (key) => Object.hasOwn(fields, key) && Object.hasOwn(fields[key] ?? {}, "value"),
+      )
+    )
+      return null;
+    const category: unknown = fields.category?.value;
+    const status: unknown = fields.status?.value;
+    const pendingRecipients: unknown = fields.pendingRecipients?.value;
+    if (
+      !cleanupCategories.some((known) => known === category) ||
+      (status !== null &&
+        !(
+          typeof status === "number" &&
+          Number.isSafeInteger(status) &&
+          status >= 100 &&
+          status <= 599
+        )) ||
+      (pendingRecipients !== null &&
+        !(
+          typeof pendingRecipients === "number" &&
+          Number.isSafeInteger(pendingRecipients) &&
+          pendingRecipients >= 0 &&
+          pendingRecipients <= 100
+        ))
+    )
+      return null;
+    return { category, status, pendingRecipients } as CleanupDiagnostic;
+  } catch {
+    return null;
+  }
+}
+class CleanupFailure extends Error {
+  readonly category: "http-non-ok" | "json-read-failure" | "invalid-receipt";
+  readonly status: number;
+  constructor(category: "http-non-ok" | "json-read-failure" | "invalid-receipt", status: number) {
+    super("Trusted coordinator cleanup response failed");
+    this.category = category;
+    this.status = status;
+  }
+}
 /** Trusted coordinator only. Never pass this object/admin to a client child. */
 export class RoleContext {
   readonly #endpoint: string;
@@ -62,17 +121,30 @@ export class RoleContext {
       headers: { Authorization: `Bearer ${this.#admin}`, "Content-Type": "application/json" },
       ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
     });
+    if (!response.ok && input.operationId === "revokeCredential")
+      throw new CleanupFailure("http-non-ok", response.status);
     assert.ok(
       response.ok,
       `Trusted public coordinator operation failed: ${input.operationId} (${response.status})`,
     );
-    const value = await response.json();
+    let value: unknown;
+    try {
+      value = await response.json();
+    } catch (error) {
+      if (input.operationId === "revokeCredential")
+        throw new CleanupFailure("json-read-failure", response.status);
+      throw error;
+    }
     if (input.operationId === "revokeCredential") {
-      assert.ok(response.status === 200 || response.status === 202);
-      receiptValidation.assert(
-        response.status === 200 ? "RevocationComplete" : "RevocationPending",
-        value,
-      );
+      try {
+        assert.ok(response.status === 200 || response.status === 202);
+        receiptValidation.assert(
+          response.status === 200 ? "RevocationComplete" : "RevocationPending",
+          value,
+        );
+      } catch {
+        throw new CleanupFailure("invalid-receipt", response.status);
+      }
     }
     return value as OperationValue<K>;
   }
@@ -157,15 +229,45 @@ export class RoleContext {
     }
     return receipt;
   }
-  async cleanup(): Promise<CleanupObservation[]> {
+  async cleanup(observer?: (diagnostic: CleanupDiagnostic) => void): Promise<CleanupObservation[]> {
     const observations: CleanupObservation[] = [];
+    const observe = (diagnostic: CleanupDiagnostic) => {
+      try {
+        observer?.(diagnostic);
+      } catch {
+        /* Diagnostics cannot interrupt cleanup. */
+      }
+    };
     for (const { receipt } of this.#roles) {
       let result: RevocationReceipt | undefined;
       try {
         result = await this.revokeAndWait(receipt.credential.credentialId);
-      } catch {
+      } catch (error) {
         /* Preserve uncertainty in the cleanup row; it blocks acceptance. */
+        let diagnostic: CleanupDiagnostic = {
+          category: "unknown",
+          status: null,
+          pendingRecipients: null,
+        };
+        try {
+          if (error instanceof CleanupFailure)
+            diagnostic =
+              projectCleanupDiagnostic({
+                category: Object.getOwnPropertyDescriptor(error, "category")?.value,
+                status: Object.getOwnPropertyDescriptor(error, "status")?.value,
+                pendingRecipients: null,
+              }) ?? diagnostic;
+        } catch {
+          /* Unknown exceptions remain unclassified. */
+        }
+        observe(diagnostic);
       }
+      if (result?.state === "pending")
+        observe({
+          category: "pending",
+          status: null,
+          pendingRecipients: result.pendingRecipients.length,
+        });
       observations.push({
         credentialId: receipt.credential.credentialId,
         generation: receipt.credential.generation,
