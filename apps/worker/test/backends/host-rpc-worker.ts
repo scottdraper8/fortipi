@@ -316,6 +316,9 @@ export class HostProbe extends DurableObject<ProbeEnv> {
       privateEnvLeaked: (await this.ctx.storage.get<boolean>("private-env-leaked")) ?? false,
     };
   }
+  async lifecycleStatsJson(): Promise<string> {
+    return JSON.stringify(await this.lifecycleStats());
+  }
   async quiescenceAudit() {
     return {
       stop: await this.ctx.storage.get("fortipi-container-stop"),
