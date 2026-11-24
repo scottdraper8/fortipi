@@ -62,13 +62,13 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
       patchedSha256: "ce5b7f4f89e823e83ed16057f691ec757b17571c278cc3b7bbe66ea108c32a6a",
     },
   });
-  const patchAsset = "licenses/wrangler_4.167.0/patches/wrangler@4.167.0.patch";
+  // Wrangler is a deployment tool; only Worker dependencies contribute these notices.
   assert.deepEqual(
-    first.manifest.files.filter((file) => file.path.includes("/patches/")).map((file) => file.path),
-    [patchAsset],
+    first.manifest.files
+      .filter((file) => file.kind === "license" && file.path.includes("/patches/"))
+      .map((file) => file.path),
+    [],
   );
-  assert.equal(hash(await readFile(join(assets, patchAsset))), patchSha256);
-  assert.equal(hash(await readFile(join(reproduction, patchAsset))), patchSha256);
   const originalLicense = "licenses/agents_0.34.0/package/LICENSE";
   const upstreamLicense = await readFile(
     join(root, "dist/supply-chain/licenses/agents@0.34.0/package/LICENSE"),
