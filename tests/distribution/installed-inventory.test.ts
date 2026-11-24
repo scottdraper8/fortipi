@@ -41,6 +41,15 @@ test("installed inventory accepts authenticated bundled dependencies while rejec
         .sort((a, b) => a.path.localeCompare(b.path, "en"))
         .map(({ path, size, sha256 }) => ({ path, size, sha256 })),
     );
+    if (process.platform !== "win32") {
+      const executable = resolve(root, "bin.js");
+      await chmod(executable, 0o444);
+      await assert.rejects(
+        installedPackageInventory(root, expected),
+        /Installed executable mode differs from archive intent/,
+      );
+      await chmod(executable, 0o555);
+    }
     const unknown = resolve(root, "hidden.js");
     await chmod(root, 0o700);
     await writeFile(unknown, "hidden", { mode: 0o444 });

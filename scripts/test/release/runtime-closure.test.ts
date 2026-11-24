@@ -74,7 +74,7 @@ test("real frozen archives/patches and supported deploy preserve all owners and 
     "22f22b41516f08077500b3472fc1c4ee55f9686cbb90cef361b71f0bee94a440",
   );
   assert.ok(sharpWasm.nativeFiles.includes(sharpBinary.path));
-  const miniflare = closure.archives.find((value) => value.id === "miniflare@5.20261119.0-beta");
+  const miniflare = closure.archives.find((value) => value.id === "miniflare@5.20261123.1-beta");
   assert.ok(
     miniflare && !miniflare.externalNative,
     "Reviewed MIT WASM remains independently conveyable",
@@ -258,7 +258,7 @@ test("supported ordinary packs authenticate final dependency paths and preserve 
           ),
         );
         const miniflare = closure.archives.find(
-          (value) => value.id === "miniflare@5.20261119.0-beta",
+          (value) => value.id === "miniflare@5.20261123.1-beta",
         );
         assert.ok(miniflare);
         const allowedWasm = miniflare.files.filter((file) => file.path.endsWith(".wasm"));

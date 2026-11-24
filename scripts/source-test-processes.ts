@@ -139,6 +139,8 @@ const failureNames = new Set<string>([
   "candidate SAFE assign-ack recovery with executor reconnected before Agent activation",
   "candidate SAFE result recovery with executor reconnected before Agent activation",
   "candidate SAFE receipt recovery with executor reconnected before Agent activation",
+  "a current publisher retains historical-generation result evidence without exposing old artifact bytes",
+  "native artifact index is atomic and immutable; a different reader streams real retained bytes and bounded ranges after job authority expires",
 ]);
 const failurePaths = new Set<string>([
   "apps/worker/test/agent/runtime-reentry.test.ts",
@@ -177,6 +179,7 @@ const failurePaths = new Set<string>([
   "apps/worker/test/agent/harness.ts",
   "apps/worker/test/execution/native-process.ts",
   "apps/worker/test/execution/native-service.ts",
+  "apps/worker/test/control/native-artifacts.test.ts",
 ]);
 const failureCategories = new Set([
   "testCodeFailure",

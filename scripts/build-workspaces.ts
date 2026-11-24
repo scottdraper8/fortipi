@@ -330,11 +330,14 @@ export async function main(command: string | undefined): Promise<void> {
         FULL_SOURCE_TEST_TIMEOUT_MS,
       );
       return;
-    case "test:executor":
-      await tests(["packages/fortipi-executor/test"], false, undefined, {
-        windowsMetrics: process.platform === "win32" && process.env.GITHUB_ACTIONS === "true",
+    case "test:executor": {
+      const windowsCi = process.platform === "win32" && process.env.GITHUB_ACTIONS === "true";
+      // Allow CI host variation across the complete suite; case deadlines stay local.
+      await tests(["packages/fortipi-executor/test"], false, windowsCi ? 25 * 60_000 : undefined, {
+        windowsMetrics: windowsCi,
       });
       return;
+    }
     case "test:browser":
     case "test:pty":
       {

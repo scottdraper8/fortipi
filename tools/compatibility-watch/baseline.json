@@ -162,25 +162,25 @@
         "sha256": "7426becf650f2bcd8a457614ad3f3fae94f72f8096485cbc3891088cee3193d2"
       },
       "pins": {
-        "apps/worker/package.json#devDependencies/wrangler": "4.166.0",
-        "packages/fortipi-cli/package.json#dependencies/wrangler": "4.166.0"
+        "apps/worker/package.json#devDependencies/wrangler": "4.168.0",
+        "packages/fortipi-cli/package.json#dependencies/wrangler": "4.168.0"
       },
-      "reviewedAt": "2026-11-21T05:36:33.085Z",
-      "reviewNote": "Current exact4.166.0 pins resolve to published source27b3f7150991e1208e5b3dd139953d9f7be389b5. Watchedb0079916 keeps version4.166.0 but adds two post-release commits: remove dispatch-namespace rename and recover missing scripts after interrupted deploy. Do not attribute these to installed4.166.0. Baselinef3f7bbc1..b0079916 is12commits/146paths; release retry/config changes are separate from later main. Maintained deploy uses legacy deploy --config/no_bundle and no dispatch rename/new Images setting. Retain fixed Wrangler/Miniflare/workerd closure and explicit date/flags; no future-main port or image/provider equivalence inferred. Evidence: current-lookahead-review/report.md."
+      "reviewedAt": "2026-11-24T21:42:17.643Z",
+      "reviewNote": "Prior exact4.166.0 pins resolve to published source27b3f7150991e1208e5b3dd139953d9f7be389b5. Watchedb0079916 keeps version4.166.0 but adds two post-release commits: remove dispatch-namespace rename and recover missing scripts after interrupted deploy. Do not attribute these to installed4.166.0. Baselinef3f7bbc1..b0079916 is12commits/146paths; release retry/config changes are separate from later main. Maintained deploy uses legacy deploy --config/no_bundle and no dispatch rename/new Images setting. Retain fixed Wrangler/Miniflare/workerd closure and explicit date/flags; no future-main port or image/provider equivalence inferred. Evidence: current-lookahead-review/report.md. Local4.168.0 pins are now separately reviewed against cohortc17249ee; watchedb007 snapshot remains unchanged and future-main lookahead unresolved."
     },
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "21437517db09ae641bd9a72861a12dc4538e0e68",
-        "version": "v1.20261124.1",
-        "sha256": "a5c7c041c3be57037fb7de2e7453b5aee5fd83fa4afd5402ed8835e98d2a2af7",
+        "commit": "010066b86bbedc043cca01a298bbb19eb9cf36cf",
+        "version": "v1.20261124.2",
+        "sha256": "7c549ca34f1cbffe65601138ef4fe2e6d138f341c58d2f148343a3763b38d9b1",
         "paths": {}
       },
       "pins": {
-        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261121.1"
+        "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261124.2"
       },
-      "reviewedAt": "2026-11-24T02:55:29.506Z",
-      "reviewNote": "Reviewed4756b99d..21437517 (36commits/129paths) against official release/tag/full comparison and locked graph. DO IO-channel and Rust failure-worker autogates have unknown hosted state; SQL cursor close is additive. Lazy Node globals use the new registry, inactive at explicit2026-11-10; unflagged warning/deriveBits/Blob/fs-copy behavior changes and release ISA changes remain relevant to future adoption. No existing FortiPi binding/config removal identified. Retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1/types5.20261121.1 and flags. Watch metadata acknowledgment only; assets/signatures/hosted rollout/runtime/native/Paid/deployed compatibility not qualified. Four installed-library lookahead alerts remain unresolved. https://github.com/cloudflare/workerd/compare/4756b99d9697dab382c60cafe52447135d6cef98...21437517db09ae641bd9a72861a12dc4538e0e68"
+      "reviewedAt": "2026-11-24T21:42:17.643Z",
+      "reviewNote": "Reviewed21437517..010066b8: officialv1.20261124.2/tag and complete79-commit/292-path inventory, with targeted shutdown/serialization/ALS/trace/startup/performance/body-memory source review. Configurable shutdown defaults0; hosted autogates remain unknown. Explicit fixed date/flags do not prove hosted activation. No current product migration identified; installed workerd stays1.20261123.1, with types5.20261124.2 separately reviewed. Pointer acknowledgment only, not binary adoption, reproducibility or native/hosted/deployed qualification. Five Cloudflare policy snapshots and four unresolved installed lookahead alerts remain. Evidence: /tmp/fortipi-workerd-20261124-2-current-review-enforcer.md."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
@@ -274,18 +274,18 @@
   "releaseReference": {
     "format": 1,
     "cohort": {
-      "rootManifest": "4779a1bb0e5eb0d77dbbf8d69701c7b8e152c38fffe9a733c34813cc11517bb6",
-      "rootLock": "8acf25f037c9ccf2b7dbd95679192792fa76a38ad2ee13dba628e32953c07a02",
-      "workspaceInputs": "e39f69a41e8999d96ca477519b2573c74bfe7f017a72727c0adeb0a6fd873fb7",
+      "rootManifest": "064b822f85b03aeb66f014e54c346104f9f2b9b08f84affd0596e9c75039bd9d",
+      "rootLock": "184be358afc1aee9c5318a5629f200a395414b39f1fcc4f986fd51e1ab9af1a4",
+      "workspaceInputs": "3dedf79f02c1752b2c1acf2d4c4dbd1e35b407a77b59553c9400e0466e78a8df",
       "toolingLock": "1ef9a93f0d970ffc6e4196ed52e039f74e9cb6d7a1548c1f9c0d0e587a8ed812",
-      "sourcePolicyInputs": "4cc19bac3460a064d7573a515618f65d60eb42c8506f6a402515ac72812abc06",
-      "patchReview": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
-      "patchTree": "e5504a1e4293d5e3d0d5ad6fbc65db673aa44b53",
+      "sourcePolicyInputs": "8bc41ea62e3a77ae41819d8e8627bc834a2ae8b44ce1c96950deaf52748b41c8",
+      "patchReview": "104a43724cee5616a39ad2417104197c10c3aaa3e6d7423be5cd7bddc854bbee",
+      "patchTree": "cfec8038802723b4b6b67320841c77bce827cac6",
       "platformTools": "40c328395103bc442275a69d0090b0fe7031cab01e1ceea693505f459fb3da3a",
       "imageInputs": "595086ec03356174f22237b2eca51068431d234869bd6034f1b0c1c6de14c512",
       "productTrees": {
-        "worker": "c0594bc87632efd25563c12c5b900e29dddf8ce7",
-        "packages": "726e6dae512cb7688d85a00c4e63233514478380"
+        "worker": "a16b5248863e57e0ca2e49a4db898f353924c525",
+        "packages": "d0683e61f234784b1828c71e7cce4faffb56c245"
       },
       "image": {
         "sourceCommit": "121dda16792a81d4756e597b395a9f287b8e10d3",
@@ -294,12 +294,12 @@
         "sourceKitSha256": "4312309f85325c23c422b081c2c81b78e36493d2567deb7c66670284b2eabc40"
       }
     },
-    "cohortSha256": "803339efa78ee98b0d33a9c4e16b16d7ecb6338e887ce63bf04229bd1322ec7c",
+    "cohortSha256": "c17249eedddda63ea704e0abd811abb89b00568b06a29b662b7fff13460f0abc",
     "references": {
       "pi-runtime": {
         "sourceFactsSha256": "1900eefcab459e01c041e7f163fe05444c746212768be1804abcc09cf4362f44",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-21T05:46:58.197Z",
+        "basisReviewedAt": "2026-11-24T21:42:17.643Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@earendil-works/chord/-/chord-1.6.0.tgz",
@@ -330,24 +330,24 @@
             "sha256": "8e27e6a876eb0b1cc13dcabdd614ba23fafaea6ced81aa695d6d3397e57f0fa5"
           }
         ],
-        "limitation": "Published Pi1.6.0 source faac5858 and exact archive/legal/provenance bindings reviewed; hookTask migration, actual queued progress/retries, committed workspace recovery and completed1.5-to1.6 conversation reopen pass locally. Later watched main is distinct; no unpublished admission/tag rewrite, downgrade, in-flight migration, external provider or deployed-recovery claim."
+        "limitation": "Reviewed unchanged Pi1.6.0 archive facts against this actual changed cohort. The real PiHarness durable loop remains authoritative; Wrangler/Miniflare/workerd host scheduling, RPC and recovery exposure is reopened. No direct use of changed Miniflare listDurableObjectIds was found. Root Biome/Node-types changes are build tooling; strict types, clean build and focused asset reproduction passed. These observations do not qualify durable wake/recovery or hosted behavior. Prior B02 startup failure remains unattributed; genuine native/installed/deployed acceptance is required."
       },
       "agents-lifecycle": {
         "sourceFactsSha256": "e4dfc243cbb0f2d3947635ebe9ed224116bd4e4c41ab63c6cd89192142c0bb42",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-21T05:46:58.197Z",
+        "basisReviewedAt": "2026-11-24T21:42:17.643Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/agents/-/agents-0.34.0.tgz",
             "sha256": "4093600913e5a0ccef3a6b2b6faf99dca61c46d4c4c95320a872cde4379fcbfa"
           }
         ],
-        "limitation": "Exact Agents0.34.0 source8d8acd0d and archive/legal/provenance bindings reviewed. Published supersession/generation fencing and neutral HTTP/WS handling replace the retired local patch, with actual focused controls and PiHarness checks. This does not establish arbitrary future main, every transport/provider, three-OS client or deployed behavior."
+        "limitation": "Reviewed unchanged Agents0.34.0 facts against the actual new Worker/CLI host and build cohort. PiHarness/Lifecycle/SQLite contracts have no identified current migration from this delta, while workerd/Miniflare DO scheduling, eviction and RPC behavior still require real-runtime qualification. Miniflare now lists exported classes in their owning worker; Wrangler resolves bindings and FortiPi has no direct caller. Existing2026-11-10 date/flags remain; hosted autogates are unknown. Normal strict types/build are bounded evidence, not lifecycle/recovery or deployed acceptance."
       },
       "computer-fuse": {
         "sourceFactsSha256": "2f5d8d1267c10139a4172a2d8d1226620b3d64eacdd86bbbcf26e8411e12375c",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-21T05:46:58.197Z",
+        "basisReviewedAt": "2026-11-24T21:42:17.643Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@cloudflare/computer/-/computer-0.11.4.tgz",
@@ -358,39 +358,43 @@
             "sha256": "2df412cef0d8359ce190e34d5f0962209019667af393b7703c3f93aa7f4ce27a"
           }
         ],
-        "limitation": "Computer0.11.4 sourcecd0146b2 and archive/source/legal bindings reviewed. Actual completed0.11.1 workspace forward reopen, rooted bounded ranges, stream overwrite/failure, physical accounting and reconnect pass locally. The exact selected rootless image/source kit08cb73f9 has real FUSE, recipient and library/helper replacement CI evidence plus maintained import and independent source-kit verification. Its rootful counterpart has a distinct identity and separate evidence. Durable public source delivery, registry publication and deployed/Paid/whole-release acceptance remain separate gates."
+        "limitation": "Reviewed unchanged Computer0.11.4 client/source facts against the changed Worker/workspace/deployment hosts and root tooling. Selected image121 metadata/source-kit identities remain exact, with runtimeVerified=false and licenseReviewRequired=true; original08 evidence remains separately bound. No source/config/FUSE migration identified from this delta. Changed Wrangler consent and helper paths introduce no observed current configuration billing operation. Local installed bytes/build/licenses do not qualify daemon/FUSE ABI, replacement/relink, device synchronization, cloud Linux/Paid or deployed workspace continuity; those acceptance steps remain required."
       },
       "wrangler": {
-        "sourceFactsSha256": "023221a375346e2174e82d770ca2f426847dd6df3c25ae56e681332de7939f35",
+        "sourceFactsSha256": "2fd03b9b07ae5f87bf638e2d30ea98e69e2868ff920cdd49429f9db9871a6904",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-21T05:46:58.197Z",
+        "basisReviewedAt": "2026-11-24T21:42:17.643Z",
         "primaryReferences": [
           {
-            "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261121.1.tgz",
-            "sha256": "f8953f475b36058c0fe290330521b8513e091f7b5f88ad5a277b10de40345eb6"
+            "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261124.2.tgz",
+            "sha256": "29ecec5de260896bbca37b228c68a6a55f6acbdad02edad9cc49ded38c63e8f6"
           },
           {
-            "uri": "https://registry.npmjs.org/@cloudflare/workers-utils/-/workers-utils-0.56.0.tgz",
-            "sha256": "4cc50fe385788f1c09d07d7e8fee10dc72a8b947cb28b579e9fe45e318cf665c"
+            "uri": "https://registry.npmjs.org/@cloudflare/workers-utils/-/workers-utils-0.57.0.tgz",
+            "sha256": "593aafd54e05158e0b9a17e4f66365d32d236f8164fa7384e8ab4f7951cf38d4"
           },
           {
-            "uri": "https://registry.npmjs.org/miniflare/-/miniflare-5.20261119.0-beta.tgz",
-            "sha256": "f00a9d505c79f9c9a8dde45fcdbf0567f0092bcd4646b856202c607f3d6fc281"
+            "uri": "https://registry.npmjs.org/miniflare/-/miniflare-5.20261123.1-beta.tgz",
+            "sha256": "a4876f994f0ea743179b95013473316fe558ef57904594c1315d6fd6e0f10754"
           },
           {
             "uri": "https://registry.npmjs.org/undici/-/undici-7.30.2.tgz",
             "sha256": "2bf5b1c41724614729cb383f22c64506b6665869d385de862752c33763fcce1b"
           },
           {
-            "uri": "https://registry.npmjs.org/workerd/-/workerd-1.20261119.1.tgz",
-            "sha256": "641cc9ff16806ba8c5fc02825a3b99bbc1417fc8a544b3fc48bc01700a612b5c"
+            "uri": "https://registry.npmjs.org/workerd/-/workerd-1.20261123.1.tgz",
+            "sha256": "8ea319506bcda4af614a39a2fe5b36e0e76f837d4dd2ee5da45d3bea11b14250"
           },
           {
-            "uri": "https://registry.npmjs.org/wrangler/-/wrangler-4.166.0.tgz",
-            "sha256": "3333bd0b9491c76c2717582f69cb0d1ab2dab1c014e86aa859bc3ce04fa91d40"
+            "uri": "https://registry.npmjs.org/wrangler/-/wrangler-4.168.0.tgz",
+            "sha256": "ce779983638627326c9e6981eab0795d004eb435dfdaed96dcd9368d1be87335"
+          },
+          {
+            "uri": "https://raw.githubusercontent.com/scottdraper8/fortipi/88164cca107efd426ab655b0a42cae20851d461d/patches/wrangler@4.168.0.patch",
+            "sha256": "e27e97d72c74ef56fda9220df64f0edabd88f5816dda35095d9625a01aaeda76"
           }
         ],
-        "limitation": "Published Wrangler4.166.0 and its selected Miniflare beta19/workerd19/Undici7.30.2 chain are reviewed without overrides; types21 and separate CLI Undici8.13.1 retain distinct identities. Actual current Worker dry bundle and full build pass. Watched future main and hosted Cloudflare runtime are distinct; installed consumers, native3OS, candidate and deployed verification remain separate."
+        "limitation": "Reviewed installed4.168.0/Miniflare5.20261123.1-beta/types5.20261124.2 with unchanged workerd1.20261123.1/utils0.57.0/Undici7.30.2. Patch e27 binds original301c to effective241c and is conveyed in generated outer CLI notices; final npm consumer proof remains required. Standard login requests upstream billing:write consent; current config does not reach the new Images settings PUT. Wrangler adapts Miniflare class/owner listing; no direct product caller. Preserve XML/Minimatch/Smithy patch scope, method-specific UUID limits and source/component provenance limits. Root tooling/normal hooks/build/licenses and selected asset case passed; no native/runtime/hosted/Paid/deployed qualification follows."
       }
     }
   }

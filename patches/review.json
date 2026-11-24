@@ -1,1 +1,14 @@
-{}
+{
+  "wrangler@4.168.0": {
+    "path": "patches/wrangler@4.168.0.patch",
+    "sha256": "e27e97d72c74ef56fda9220df64f0edabd88f5816dda35095d9625a01aaeda76",
+    "source": "https://github.com/NaturalIntelligence/fast-xml-parser/commit/0c3659348364959da62954b73728fb3bd05ebcb4",
+    "reason": "Backport bundled XML scan/comment/CDATA and minimatch bounds plus informational Smithy host-label validation. Additional immutable origins: fast-xml-parser e561c2188607a108a9a8d9b6428902a28aad8fb0; fast-xml-builder d7d1d7b7e1ed90474b026d564f3ec7057a35fdec; minimatch 77a0f5c4b80bdc641c3c930a1d9edf5ad2db57f8; smithy-typescript 8af2d330260513d3e51c98f1f137793b5330ceb4. Preserve authenticated upstream archive identity; transformed bytes separately reviewed.",
+    "files": {
+      "wrangler-dist/cli.js": {
+        "originalSha256": "301c57cd42ffc2e85b554c4170d481922dfd63d7c38e48896396b065b846723b",
+        "patchedSha256": "241cd18f015da539aa12b86a82b909bcafff9477db1a8f581311d1d0fa57ffba"
+      }
+    }
+  }
+}

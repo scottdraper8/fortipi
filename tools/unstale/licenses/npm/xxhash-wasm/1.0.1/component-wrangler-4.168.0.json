@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "scope": "Exact xxhash-wasm1.0.1 numeric WASM literal inside authenticated third-party Wrangler4.168 CLI only; no owned-output/native-conveyance exception",
+  "container": {
+    "identity": "wrangler@4.168.0",
+    "member": "package/wrangler-dist/cli.js",
+    "memberSha256": "301c57cd42ffc2e85b554c4170d481922dfd63d7c38e48896396b065b846723b",
+    "archiveSha256": "ce779983638627326c9e6981eab0795d004eb435dfdaed96dcd9368d1be87335",
+    "effectiveMemberSha256": "241cd18f015da539aa12b86a82b909bcafff9477db1a8f581311d1d0fa57ffba"
+  },
+  "component": {
+    "identity": "xxhash-wasm@1.0.1",
+    "npmMember": "package/esm/xxhash-wasm.js",
+    "npmMemberSha256": "b618f3b7bb3f680097fe193cb350444e50ca9f6a29c9084f49bf4bb38fc32786",
+    "bundleRegionSha256": "d31346ec9a61008345c17a222a3a23a4714be672722199e1b51944ff528f8cbd",
+    "wasmSha256": "e612e463967cb148d68102b07944c724ad1127bbcc13054eee5078d0a30251d8",
+    "wasmBytes": 3193,
+    "publishedToBundledByteEqual": true,
+    "licenseSha256": "6f6b3afa109ea0d073b8e3cf0feea0aba07d357fcdebeef54dd34b3c0b3f9ac5",
+    "license": "MIT",
+    "copyright": "Copyright \u00a9 2017 Michael Jungo",
+    "archiveSha256": "461fd18d66d908ee283d913111febc31a007f24746f1dc2690aefd86be8db302",
+    "integrity": "sha512-Lc9CTvDrH2vRoiaUzz25q7lRaviMhz90pkx6YxR9EPYtF99yOJnv2cB+CQ0hp/TLoqrUsk8z/W2EN31T568Azw==",
+    "registrySignatureVerified": true,
+    "sourceCommit": "2db97885d8fe9828e9451bd8a0b41da0d2d3161a",
+    "sourceLicenseUrl": "https://raw.githubusercontent.com/jungomi/xxhash-wasm/2db97885d8fe9828e9451bd8a0b41da0d2d3161a/LICENSE.md"
+  },
+  "source": {
+    "commit": "2db97885d8fe9828e9451bd8a0b41da0d2d3161a",
+    "sourceWasmPath": "xxhash-wasm-2db97885d8fe9828e9451bd8a0b41da0d2d3161a/src/xxhash.wasm",
+    "wasmSha256": "70c5a91a447af44fa45f11a7d707d1850ecc44f20d5deea58cdd3bfb33213c2a",
+    "wasmBytes": 3105,
+    "equalToPublished": false,
+    "paths": [
+      ".editorconfig",
+      ".eslintignore",
+      ".eslintrc.cjs",
+      ".github/workflows/nodejs.yml",
+      ".github/workflows/publish.yml",
+      ".gitignore",
+      ".yarn/build-state.yml",
+      ".yarn/plugins/@yarnpkg/plugin-interactive-tools.cjs",
+      ".yarn/releases/yarn-berry.cjs",
+      ".yarnrc.yml",
+      "CHANGELOG.md",
+      "Dockerfile",
+      "LICENSE.md",
+      "README.md",
+      "babel.config.cjs",
+      "bench/index.js",
+      "bench/package.json",
+      "bench/yarn.lock",
+      "jest.config.js",
+      "package.json",
+      "rollup.config.js",
+      "src/index.js",
+      "src/xxhash.wasm",
+      "src/xxhash.wat",
+      "test/index.test.js",
+      "test/setup.js",
+      "types.d.ts",
+      "yarn.lock"
+    ]
+  },
+  "sourceCensus": {
+    "archiveSha256": "45d6b59ad4182f422632436de91820c180ed10662c1ade42ebae5fcee85a6db1",
+    "members": 28,
+    "CSourceOrThirdPartyLicenseObserved": false,
+    "scope": "Only this retained28-file source cut; absence is not compiled-source or provenance proof."
+  },
+  "priorComparison": {
+    "expectedThreeWayEquality": false,
+    "failedAtSourceVsPublishedComparison": true,
+    "priorResultWritten": false
+  },
+  "reviewReceiptSha256": {
+    "archive": "327ace897a03d95ff7537b564d14d7601aa8c0c3b2f50355868dc51a44e77275",
+    "source": "2a664c27b4ae43b2a2838c66b8cb8e7d6e9eeaa3b540c500f5dd41520fb88a64",
+    "component": "2c2fb8a3af32d79a1c3fc26a1e34dd3142485da8c1a4b783ff3f4f7e18ed8210"
+  },
+  "independentDataChecks": {
+    "publishedLiteralEqualsBundled": true,
+    "publishedAndBundledWasmBytes": 3193,
+    "sourceWasmBytes": 3105,
+    "sourceDiffers": true
+  },
+  "claims": {
+    "threeWayEquality": false,
+    "reproducibleBuild": false,
+    "completeCompiledInventory": false,
+    "fullSigstoreVerification": false,
+    "packageCodeExecuted": false,
+    "wasmCompiledOrInstantiated": false
+  },
+  "limits": "Published signed-SRI module literal equals actual bundled WASM exactly. Immutable source WASM differs; no three-way match, reproducible-build or full-wrapper provenance claim. Exact source/archive license texts match. No compilation, instantiation or downloaded package code execution. Michael Jungo xxhash-wasm is a distinct project from hash-wasm; no retained hash-wasm evidence is relabeled.",
+  "newContainerEvidence": {
+    "priorContainerComponentSha256": "7d4386a29e78bfef3dc0c00d365434a47e835595648ae31489affc1e85343d92",
+    "newArchiveReviewSha256": "7e578338be9c7ec36f0343aaf8aee44da740eeea0ab974444ac33d6340e84b5f",
+    "originalToProposedEffectiveRegionEqual": true,
+    "measuredWasmBytes": 3193,
+    "measuredWasmSha256": "e612e463967cb148d68102b07944c724ad1127bbcc13054eee5078d0a30251d8",
+    "limit": "Fresh 4.168 container binding; retained published/component/source evidence and source-mismatch limits unchanged. Data-only proposed effective member, not installed or final pack."
+  }
+}

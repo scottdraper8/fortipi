@@ -52,10 +52,22 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
     });
   await reproduce();
   assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
-  assert.deepEqual(await dependencyPatches(root, true), {});
-  assert.equal(
-    first.manifest.files.some((file) => file.path.includes("/patches/")),
-    false,
+  const patches = await dependencyPatches(root, true);
+  assert.deepEqual(Object.keys(patches), ["wrangler@4.168.0"]);
+  const patchSha256 = "e27e97d72c74ef56fda9220df64f0edabd88f5816dda35095d9625a01aaeda76";
+  assert.equal(patches["wrangler@4.168.0"]?.sha256, patchSha256);
+  assert.deepEqual(patches["wrangler@4.168.0"]?.files, {
+    "wrangler-dist/cli.js": {
+      originalSha256: "301c57cd42ffc2e85b554c4170d481922dfd63d7c38e48896396b065b846723b",
+      patchedSha256: "241cd18f015da539aa12b86a82b909bcafff9477db1a8f581311d1d0fa57ffba",
+    },
+  });
+  // Wrangler is a deployment tool; only Worker dependencies contribute these notices.
+  assert.deepEqual(
+    first.manifest.files
+      .filter((file) => file.kind === "license" && file.path.includes("/patches/"))
+      .map((file) => file.path),
+    [],
   );
   const originalLicense = "licenses/agents_0.34.0/package/LICENSE";
   const upstreamLicense = await readFile(

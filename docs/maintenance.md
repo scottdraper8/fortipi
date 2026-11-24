@@ -150,12 +150,14 @@ still run.
 A lock, archive, patch, image or coarse Worker/packages tree change invalidates
 the source reference. It needs normal review, never a copied timestamp.
 
-The reviewed release cohort pins Wrangler4.166.0, Miniflare5.20261119.0-beta,
-`workerd@1.20261119.1` and Workers types5.20261121.1. No dependency override is
-configured. Earlier runtime regression controls distinguish old and repaired
-binaries; they do not identify the earlier Pi recovery stall. The runtime bundle
-and installed candidate must preserve the reviewed resolution, with separate
-native-platform qualification. Both workspaces retain `minimumReleaseAge: 1440`
+Runtime pins belong to the Worker/CLI manifests and frozen lock; coordinate their
+runtime guards and review a new release cohort when those inputs change. Active
+transformations in `patches/review.json` preserve the original signed archive
+identity and record effective file hashes. The ordinary runtime bundle and
+installed candidate must carry those effective bytes and modification notices.
+Native-platform and deployed qualification remain separate requirements.
+
+Both workspaces retain `minimumReleaseAge: 1440`
 and `minimumReleaseAgeStrict: true`. An archive younger than 24h still needs an
 exact locked identity, review reason, matching SRI and expiry derived from its
 reviewed publication time plus 24h. A valid exact record may remain after natural

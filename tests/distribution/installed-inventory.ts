@@ -103,7 +103,12 @@ export async function installedPackageInventory(
       assert.ok(plan, "Linked installed package entry");
       assert.equal(stat.nlink, 1);
       assert.equal(stat.uid, owner);
-      assert.equal(await readlink(absolute), plan.relativeTarget, "Installed bin target changed");
+      const linkTarget = await readlink(absolute);
+      assert.equal(
+        process.platform === "win32" ? linkTarget.replaceAll("\\", "/") : linkTarget,
+        plan.relativeTarget,
+        "Installed bin target changed",
+      );
       assert.equal(await realpath(absolute), resolve(root, plan.target));
       binLinks.push(plan);
       return;
@@ -118,7 +123,13 @@ export async function installedPackageInventory(
       const saved = files.get(path);
       assert.ok(saved && stat.isFile() && stat.nlink === 1, "Unexpected installed package member");
       assert.equal(stat.size, saved.size);
-      assert.equal(Boolean(stat.mode & 0o111), Boolean(saved.mode & 0o111));
+      // Windows stat has no Unix execute bits; installed public bins are exercised separately.
+      if (process.platform !== "win32")
+        assert.equal(
+          Boolean(stat.mode & 0o111),
+          Boolean(saved.mode & 0o111),
+          "Installed executable mode differs from archive intent",
+        );
       const hash = sha256(await regularBytes(absolute, saved.size));
       assert.equal(hash, saved.sha256, "Installed package bytes changed");
       actual.push({ path, mode: stat.mode & 0o777, size: stat.size, sha256: hash });

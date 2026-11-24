@@ -37,7 +37,7 @@
     "@earendil-works/pi-ai": "1.6.0",
     "fortipi-contract": "workspace:*",
     "undici": "8.13.1",
-    "wrangler": "4.166.0",
+    "wrangler": "4.168.0",
     "ajv": "8.20.0"
   }
 }
