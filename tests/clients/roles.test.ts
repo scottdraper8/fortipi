@@ -53,9 +53,14 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
     pendingRecipients: [],
   });
   const requests = new Map<string, { requestId: string; expectedGeneration: number }[]>();
+  const requestTimes = new Map<string, number[]>();
+  const replies: { status: number; body: unknown; retryAfter?: string | string[] }[] = [];
   let issued = 0,
     status = 200,
     responseBody: unknown = complete(2),
+    retryAfter: string | string[] | undefined,
+    responseDelayMs = 0,
+    dropResponse = false,
     unreadableJson = false,
     serverFailure: unknown;
   const server = createServer(async (request, response) => {
@@ -82,22 +87,34 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
         );
         return;
       }
-      const match = /^\/v1\/admin\/credentials\/(synthetic-role-[12])\/revoke$/.exec(
+      const match = /^\/v1\/admin\/credentials\/(synthetic-role-\d+)\/revoke$/.exec(
         request.url ?? "",
       );
       assert.ok(match);
       const id = match[1];
       assert.ok(id);
       requests.set(id, [...(requests.get(id) ?? []), body]);
+      requestTimes.set(id, [...(requestTimes.get(id) ?? []), performance.now()]);
       assert.equal(body.expectedGeneration, 1);
       assert.equal(typeof body.requestId, "string");
-      response.writeHead(id === "synthetic-role-1" ? 200 : status, {
+      if (dropResponse) {
+        response.destroy();
+        return;
+      }
+      const reply = replies.shift();
+      const header = reply ? reply.retryAfter : retryAfter;
+      response.writeHead(id === "synthetic-role-1" ? 200 : (reply?.status ?? status), {
         "Content-Type": "application/json",
+        ...(header === undefined ? {} : { "Retry-After": header }),
       });
+      if (responseDelayMs) {
+        response.flushHeaders();
+        await new Promise<void>((accept) => setTimeout(accept, responseDelayMs));
+      }
       response.end(
-        id === "synthetic-role-2" && unreadableJson
+        unreadableJson
           ? "{"
-          : JSON.stringify(id === "synthetic-role-1" ? complete(1) : responseBody),
+          : JSON.stringify(id === "synthetic-role-1" ? complete(1) : (reply?.body ?? responseBody)),
       );
     } catch (error) {
       serverFailure ??= error;
@@ -129,6 +146,8 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
     assert.deepEqual(reused, complete(1));
     reused.revocationId = "synthetic-other-mutation";
     assert.deepEqual(await roles.revoke(firstId), complete(1));
+    assert.deepEqual(await roles.revoke(firstId, 0), complete(1));
+    assert.deepEqual(await roles.revokeAndWait(firstId, 0), complete(1));
     assert.equal(requests.get(firstId)?.length, 1);
     assert.equal(Reflect.set(roles, "endpoint", "http://localhost:1"), false);
     await assert.rejects(new RoleContext(endpoint, admin).revoke(firstId));
@@ -185,10 +204,23 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
     await incomplete("json-read-failure");
     unreadableJson = false;
 
-    // Instance-only seam: unresolved polling/transport are modeled, not timed or exercised.
+    // Instance-only seams inspect default/shared deadlines without advancing a global clock.
     const wait = roles.revokeAndWait;
+    const revoke = roles.revoke;
     let getterInvoked = false;
     try {
+      const before = Date.now();
+      let publicDeadline: number | undefined;
+      roles.revoke = async (id, deadline) => {
+        publicDeadline = deadline;
+        return revoke.call(roles, id, deadline);
+      };
+      assert.deepEqual(await roles.revokeAndWait(firstId), complete(1));
+      assert.ok(publicDeadline && publicDeadline >= before + 15000);
+      assert.ok(publicDeadline <= Date.now() + 15000);
+      roles.revoke = revoke;
+      await assert.rejects(roles.revoke(laterId, Date.now() - 1));
+      assert.equal(requests.get(laterId)?.length, calls, "Expired budgets cannot send");
       const pending = {
         ...complete(2),
         state: "pending" as const,
@@ -207,7 +239,10 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
           return "http-non-ok";
         },
       });
-      roles.revokeAndWait = async (id) => {
+      const sharedDeadlines: (number | undefined)[] = [];
+      const cleanupStarted = Date.now();
+      roles.revokeAndWait = async (id, deadline) => {
+        sharedDeadlines.push(deadline);
         if (id === firstId) throw unknown;
         return pending;
       };
@@ -222,10 +257,208 @@ test("role cleanup reuses only complete receipts while rescanning owned roles", 
       ]);
       assert.equal(getterInvoked, false);
       assert.equal(requests.get(laterId)?.length, calls);
+      assert.equal(sharedDeadlines.length, 2);
+      assert.equal(new Set(sharedDeadlines).size, 1);
+      assert.ok(sharedDeadlines[0] && sharedDeadlines[0] >= cleanupStarted + 90000);
+      assert.ok(sharedDeadlines[0] <= Date.now() + 90000);
     } finally {
       roles.revokeAndWait = wait;
+      roles.revoke = revoke;
     }
 
+    // Short, actual local HTTP waits model the wire contract; no real quota window is slept.
+    const rateLimited = (retryAfterMs: unknown = 20) => ({
+      error: {
+        code: "rate_limited",
+        message: `synthetic-refusal ${admin} synthetic-role-token-2`,
+        requestId: "synthetic-server-request",
+        retryable: true,
+        details: { retryAfterMs },
+      },
+    });
+    const newRole = async (context: RoleContext) =>
+      (await context.issue({ requestId: "synthetic-wait-case", role: "client", grants: [] }))
+        .credential.credentialId;
+    for (const header of [undefined, "1"]) {
+      const context = new RoleContext(endpoint, admin);
+      const id = await newRole(context);
+      replies.push(
+        { status: 429, body: rateLimited(), ...(header ? { retryAfter: header } : {}) },
+        { status: 200, body: complete(issued) },
+      );
+      const expected = complete(issued);
+      assert.deepEqual(await context.revokeAndWait(id, Date.now() + 3000), expected);
+      const received = requestTimes.get(id);
+      assert.ok(received?.[0] !== undefined && received[1] !== undefined);
+      assert.ok(received[1] - received[0] >= (header ? 1000 : 20) - 1);
+      assert.equal(requests.get(id)?.length, 2);
+      assert.deepEqual(requests.get(id)?.[0], requests.get(id)?.[1]);
+      assert.deepEqual(await context.revokeAndWait(id, 0), expected);
+      assert.equal(requests.get(id)?.length, 2, "Complete cache survives deadline expiry");
+      assert.equal(replies.length, 0);
+    }
+    const invalidRefusals = [
+      {},
+      { ...rateLimited(), extra: true },
+      { error: { ...rateLimited().error, requestId: undefined } },
+      { error: { ...rateLimited().error, retryable: false } },
+      { error: { ...rateLimited().error, retryable: "true" } },
+      { error: { ...rateLimited().error, code: "unavailable" } },
+      { error: { ...rateLimited().error, code: "invalid_request" } },
+      { error: { ...rateLimited().error, details: undefined } },
+      ...[0, -1, 0.5, "20", 86400001, null].map(rateLimited),
+      {
+        error: {
+          ...rateLimited().error,
+          details: { retryAfterMs: 20, requiredCapability: "loader" },
+        },
+      },
+      {
+        error: { ...rateLimited().error, details: { retryAfterMs: 20, setup: "synthetic-setup" } },
+      },
+    ];
+    status = 429;
+    for (const refusal of invalidRefusals) {
+      const context = new RoleContext(endpoint, admin);
+      const id = await newRole(context);
+      const nativeWait = context.revokeAndWait;
+      const deadline = Date.now() + 200;
+      context.revokeAndWait = (ownedId) => nativeWait.call(context, ownedId, deadline);
+      responseBody = refusal;
+      diagnostics.length = 0;
+      assert.deepEqual(await context.cleanup(observe), [
+        { credentialId: id, generation: 1, state: "unknown", pendingRecipients: null },
+      ]);
+      assert.deepEqual(diagnostics, [
+        { category: "http-non-ok", status: 429, pendingRecipients: null },
+      ]);
+      assert.equal(requests.get(id)?.length, 1, "Invalid instructions cannot authorize a retry");
+      context.assertSanitized(diagnostics, ["synthetic-role-token-2"]);
+    }
+    responseBody = rateLimited();
+    for (const header of [
+      "nonsense",
+      "-1",
+      "0.02",
+      "1, 2",
+      ["1", "2"],
+      "Wed, 21 Oct 2037 07:28:00 GMT",
+      "86401",
+      "99999999999999999999999999",
+    ]) {
+      const context = new RoleContext(endpoint, admin);
+      const id = await newRole(context);
+      retryAfter = header;
+      await assert.rejects(context.revokeAndWait(id, Date.now() + 200));
+      assert.equal(requests.get(id)?.length, 1, "Unsupported Retry-After cannot be ignored");
+    }
+    retryAfter = undefined;
+    for (const otherStatus of [400, 401, 403, 408, 500, 503]) {
+      const context = new RoleContext(endpoint, admin);
+      const id = await newRole(context);
+      status = otherStatus;
+      await assert.rejects(context.revokeAndWait(id, Date.now() + 200));
+      assert.equal(requests.get(id)?.length, 1, "A retryable body cannot override HTTP status");
+    }
+    status = 429;
+    for (const [delayMs, header] of [
+      [60000, undefined],
+      [20, "60"],
+      [86400000, undefined],
+    ] as const) {
+      const context = new RoleContext(endpoint, admin);
+      const id = await newRole(context);
+      responseBody = rateLimited(delayMs);
+      retryAfter = header;
+      const began = performance.now();
+      await assert.rejects(context.revokeAndWait(id, Date.now() + 100));
+      assert.ok(performance.now() - began < 1000, "Over-budget waits must fail without sleeping");
+      assert.equal(requests.get(id)?.length, 1);
+    }
+    retryAfter = undefined;
+    responseBody = rateLimited();
+    {
+      const context = new RoleContext(endpoint, admin);
+      const id = await newRole(context);
+      unreadableJson = true;
+      await assert.rejects(context.revokeAndWait(id, Date.now() + 200));
+      unreadableJson = false;
+      assert.equal(requests.get(id)?.length, 1, "Malformed JSON cannot authorize a retry");
+      dropResponse = true;
+      await assert.rejects(context.revokeAndWait(id, Date.now() + 200));
+      dropResponse = false;
+      assert.equal(requests.get(id)?.length, 2, "Uncertain transport cannot authorize a retry");
+      await assert.rejects(
+        context.call({
+          operationId: "revokeCredential",
+          path: { id },
+          query: {},
+          body: { requestId: "synthetic-unowned-call", expectedGeneration: 1 },
+        }),
+      );
+      assert.equal(requests.get(id)?.length, 3, "The generic call path cannot retry");
+    }
+    {
+      const context = new RoleContext(endpoint, admin);
+      const id = await newRole(context);
+      const pending = {
+        ...complete(issued),
+        state: "pending",
+        pendingRecipients: [{ kind: "agent", id: "synthetic-recipient" }],
+      };
+      replies.push({ status: 202, body: pending }, { status: 200, body: complete(issued) });
+      assert.deepEqual(await context.revokeAndWait(id, Date.now() + 1000), complete(issued));
+      const received = requestTimes.get(id);
+      assert.ok(received?.[0] !== undefined && received[1] !== undefined);
+      assert.ok(received[1] - received[0] >= 99, "Pending polling retains its 100 ms interval");
+      assert.equal(requests.get(id)?.length, 2);
+      const unresolved = new RoleContext(endpoint, admin);
+      const unresolvedId = await newRole(unresolved);
+      status = 202;
+      responseBody = pending;
+      assert.deepEqual(await unresolved.revokeAndWait(unresolvedId, Date.now() + 80), pending);
+      assert.equal(requests.get(unresolvedId)?.length, 1, "No poll/sleep fits after this receipt");
+      assert.deepEqual(await unresolved.revoke(unresolvedId), pending);
+      assert.equal(requests.get(unresolvedId)?.length, 2, "Pending is never cached as complete");
+    }
+    {
+      const context = new RoleContext(endpoint, admin);
+      const slowId = await newRole(context);
+      const untouchedId = await newRole(context);
+      const cachedId = await newRole(context);
+      status = 200;
+      responseBody = complete(issued);
+      await context.revoke(cachedId);
+      const nativeWait = context.revokeAndWait;
+      const sharedDeadlines: (number | undefined)[] = [];
+      const shortDeadline = Date.now() + 200;
+      context.revokeAndWait = (id, deadline) => {
+        sharedDeadlines.push(deadline);
+        // Shorten the one budget at this instance seam; retain real HTTP and timers.
+        return nativeWait.call(context, id, shortDeadline);
+      };
+      responseDelayMs = 400;
+      diagnostics.length = 0;
+      const began = performance.now();
+      assert.deepEqual(await context.cleanup(observe), [
+        { credentialId: slowId, generation: 1, state: "unknown", pendingRecipients: null },
+        { credentialId: untouchedId, generation: 1, state: "unknown", pendingRecipients: null },
+        { credentialId: cachedId, generation: 1, state: "complete", pendingRecipients: 0 },
+      ]);
+      assert.ok(performance.now() - began < 1500, "Body reads share the remaining request budget");
+      responseDelayMs = 0;
+      assert.equal(sharedDeadlines.length, 3, "Cleanup accounts for every owned role after expiry");
+      assert.equal(new Set(sharedDeadlines).size, 1, "Roles must not receive fresh budgets");
+      assert.equal(requests.get(slowId)?.length, 1);
+      assert.equal(requests.has(untouchedId), false);
+      assert.equal(requests.get(cachedId)?.length, 1);
+      assert.deepEqual(diagnostics, [
+        { category: "json-read-failure", status: 200, pendingRecipients: null },
+        { category: "unknown", status: null, pendingRecipients: null },
+      ]);
+    }
+
+    status = 200;
     responseBody = complete(2);
     diagnostics.length = 0;
     const finished = await roles.cleanup(observe);

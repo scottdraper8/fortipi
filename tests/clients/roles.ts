@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readBounded } from "../../packages/fortipi-client/dist/http.js";
 import { Validation } from "../../packages/fortipi-client/dist/validation.js";
 import type {
   CredentialMint,
   CredentialReceipt,
+  ErrorBody,
   OperationId,
   OperationRequest,
   OperationValue,
   RevocationReceipt,
 } from "../../packages/fortipi-contract/dist/index.js";
-import { routeCatalog } from "../../packages/fortipi-contract/dist/index.js";
+import { routeCatalog, wireLimits } from "../../packages/fortipi-contract/dist/index.js";
 
 const receiptValidation = new Validation();
 
@@ -73,11 +75,40 @@ export function projectCleanupDiagnostic(value: unknown): CleanupDiagnostic | nu
 class CleanupFailure extends Error {
   readonly category: "http-non-ok" | "json-read-failure" | "invalid-receipt";
   readonly status: number;
-  constructor(category: "http-non-ok" | "json-read-failure" | "invalid-receipt", status: number) {
+  readonly retryAfterMs: number | undefined;
+  constructor(
+    category: "http-non-ok" | "json-read-failure" | "invalid-receipt",
+    status: number,
+    retryAfterMs?: number,
+  ) {
     super("Trusted coordinator cleanup response failed");
     this.category = category;
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+function rateLimitWait(response: Response, value: unknown): number | undefined {
+  receiptValidation.assert("ErrorBody", value);
+  const { error } = value as ErrorBody;
+  const delay = error.details?.retryAfterMs;
+  if (
+    error.code !== "rate_limited" ||
+    error.retryable !== true ||
+    !Number.isSafeInteger(delay) ||
+    delay === undefined ||
+    delay <= 0 ||
+    delay > 86400000 ||
+    // Other action/capability/continuation instructions are not supported here.
+    Object.keys(error.details ?? {}).length !== 1
+  )
+    return undefined;
+  const header = response.headers.get("retry-after");
+  if (header === null) return delay;
+  // Support delta-seconds only. Dates and combined/duplicate values are ambiguous.
+  if (!/^\d+$/.test(header)) return undefined;
+  const headerMs = Number(header) * 1000;
+  if (!Number.isSafeInteger(headerMs) || headerMs > 86400000) return undefined;
+  return Math.max(delay, headerMs);
 }
 /** Trusted coordinator only. Never pass this object/admin to a client child. */
 export class RoleContext {
@@ -103,7 +134,10 @@ export class RoleContext {
   get endpoint(): string {
     return this.#endpoint;
   }
-  async call<K extends OperationId>(input: OperationRequest<K>): Promise<OperationValue<K>> {
+  async call<K extends OperationId>(
+    input: OperationRequest<K>,
+    deadline = Date.now() + 30000,
+  ): Promise<OperationValue<K>> {
     const route = routeCatalog.find((r) => r.operationId === input.operationId);
     assert.ok(route);
     const path = route.path.replace(/\{([^}]+)\}/g, (_, key: string) => {
@@ -114,27 +148,53 @@ export class RoleContext {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(input.query))
       if (value !== undefined) query.set(key, String(value));
+    const body = input.body === undefined ? undefined : JSON.stringify(input.body);
+    const remaining = deadline - Date.now();
+    assert.ok(Number.isSafeInteger(deadline) && remaining > 0, "Coordinator deadline expired");
+    const signal = AbortSignal.timeout(Math.min(30000, remaining));
     const response = await fetch(`${this.#endpoint}${path}${query.size ? `?${query}` : ""}`, {
       method: route.method,
       redirect: "error",
-      signal: AbortSignal.timeout(30000),
+      signal,
       headers: { Authorization: `Bearer ${this.#admin}`, "Content-Type": "application/json" },
-      ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
+      ...(body === undefined ? {} : { body }),
     });
-    if (!response.ok && input.operationId === "revokeCredential")
-      throw new CleanupFailure("http-non-ok", response.status);
+    if (!response.ok && input.operationId === "revokeCredential") {
+      let retryAfterMs: number | undefined;
+      if (response.status === 429) {
+        try {
+          const bytes = await readBounded(response, wireLimits.jsonBytes, signal);
+          retryAfterMs = rateLimitWait(
+            response,
+            JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes)),
+          );
+        } catch {
+          /* An unreadable or invalid refusal never authorizes another send. */
+        }
+      } else void response.body?.cancel().catch(() => {});
+      throw new CleanupFailure("http-non-ok", response.status, retryAfterMs);
+    }
     assert.ok(
       response.ok,
       `Trusted public coordinator operation failed: ${input.operationId} (${response.status})`,
     );
     let value: unknown;
     try {
-      value = await response.json();
+      value =
+        input.operationId === "revokeCredential"
+          ? JSON.parse(
+              new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(
+                await readBounded(response, wireLimits.jsonBytes, signal),
+              ),
+            )
+          : await response.json();
     } catch (error) {
       if (input.operationId === "revokeCredential")
         throw new CleanupFailure("json-read-failure", response.status);
       throw error;
     }
+    signal.throwIfAborted();
+    assert.ok(Date.now() < deadline, "Coordinator deadline expired");
     if (input.operationId === "revokeCredential") {
       try {
         assert.ok(response.status === 200 || response.status === 202);
@@ -203,12 +263,12 @@ export class RoleContext {
         "Credential appeared in evidence",
       );
   }
-  async revoke(credentialId: string): Promise<RevocationReceipt> {
+  async revoke(credentialId: string, deadline = Date.now() + 30000): Promise<RevocationReceipt> {
     const role = this.#roles.find((r) => r.receipt.credential.credentialId === credentialId);
     assert.ok(role, "Only coordinator-issued ephemeral roles may be revoked here");
     // Reuse this tuple's terminal receipt; this is not a fresh server observation.
     if (role.completed) return structuredClone(role.completed);
-    const receipt = await this.call({
+    const input = {
       operationId: "revokeCredential",
       path: { id: credentialId },
       query: {},
@@ -216,20 +276,39 @@ export class RoleContext {
         requestId: role.revokeRequestId,
         expectedGeneration: role.receipt.credential.generation,
       },
-    });
-    if (receipt.state === "complete") role.completed = structuredClone(receipt);
-    return receipt;
+    } as const;
+    while (true) {
+      try {
+        const receipt = await this.call(input, deadline);
+        if (receipt.state === "complete") role.completed = structuredClone(receipt);
+        return receipt;
+      } catch (error) {
+        if (
+          !(error instanceof CleanupFailure) ||
+          error.status !== 429 ||
+          error.retryAfterMs === undefined ||
+          error.retryAfterMs >= deadline - Date.now()
+        )
+          throw error;
+        await new Promise<void>((accept) => setTimeout(accept, error.retryAfterMs));
+        if (Date.now() >= deadline) throw error;
+      }
+    }
   }
-  async revokeAndWait(credentialId: string): Promise<RevocationReceipt> {
-    const deadline = Date.now() + 15000;
-    let receipt = await this.revoke(credentialId);
-    while (receipt.state !== "complete" && Date.now() < deadline) {
+  async revokeAndWait(
+    credentialId: string,
+    deadline = Date.now() + 15000,
+  ): Promise<RevocationReceipt> {
+    let receipt = await this.revoke(credentialId, deadline);
+    while (receipt.state !== "complete" && deadline - Date.now() > 100) {
       await new Promise<void>((accept) => setTimeout(accept, 100));
-      receipt = await this.revoke(credentialId);
+      if (Date.now() >= deadline) break;
+      receipt = await this.revoke(credentialId, deadline);
     }
     return receipt;
   }
   async cleanup(observer?: (diagnostic: CleanupDiagnostic) => void): Promise<CleanupObservation[]> {
+    const deadline = Date.now() + 90000;
     const observations: CleanupObservation[] = [];
     const observe = (diagnostic: CleanupDiagnostic) => {
       try {
@@ -241,7 +320,7 @@ export class RoleContext {
     for (const { receipt } of this.#roles) {
       let result: RevocationReceipt | undefined;
       try {
-        result = await this.revokeAndWait(receipt.credential.credentialId);
+        result = await this.revokeAndWait(receipt.credential.credentialId, deadline);
       } catch (error) {
         /* Preserve uncertainty in the cleanup row; it blocks acceptance. */
         let diagnostic: CleanupDiagnostic = {
