@@ -65,6 +65,7 @@ export const browserDiagnosticPhases = [
   "first-receipt-retry",
   "second-client-subscribe",
   "offline-send",
+  "offline-completion",
   "offline-observer-close",
   "offline-task-observe",
   "offline-stored-replay",
@@ -131,11 +132,50 @@ export const browserDiagnosticCodes = [
   "closed",
 ] as const;
 export type BrowserDiagnosticCode = (typeof browserDiagnosticCodes)[number];
+export const offlineConnectionStatuses = [
+  "connecting",
+  "online",
+  "offline",
+  "reconnecting",
+  "resyncing",
+  "paused",
+  "closed",
+] as const;
+export const offlineSettlements = ["pending", "fulfilled", "rejected"] as const;
+export const offlineTaskStates = [
+  "idle",
+  "queued",
+  "running",
+  "completed",
+  "failed",
+  "interrupted",
+  "cancelled",
+  "waiting",
+] as const;
+export interface OfflineCompletionDiagnostic {
+  // These seven facts are frozen at the failed wait, before reads or cleanup.
+  status: (typeof offlineConnectionStatuses)[number] | null;
+  settlement: (typeof offlineSettlements)[number] | null;
+  statusError: boolean | null;
+  snapshots: number | null;
+  matched: boolean | null;
+  lastErrorCode: string | null;
+  lastErrorStatus: number | null;
+  // These are later, non-atomic public reads, not facts at the cutoff.
+  taskRead: boolean | null;
+  taskState: (typeof offlineTaskStates)[number] | null;
+  eventsRead: boolean | null;
+  canonicalMatch: boolean | null;
+  hasMore: boolean | null;
+  complete: boolean | null;
+  elapsedMs: number | null;
+}
 export interface BrowserDiagnostic {
   phase: BrowserDiagnosticPhase | null;
   code: BrowserDiagnosticCode | null;
   status: number | null;
   completionDeadline: boolean | null;
+  offlineCompletion?: OfflineCompletionDiagnostic;
 }
 const codes = new Set<string>(browserDiagnosticCodes);
 const outcomes = new Set(["pass", "fail", "timeout", "unavailable"]);
@@ -172,13 +212,46 @@ const integer = (value: unknown, min: number, max: number) =>
   typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
     ? value
     : null;
+function projectOfflineCompletion(value: unknown): OfflineCompletionDiagnostic | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const status = own(value, "status"),
+    settlement = own(value, "settlement"),
+    taskState = own(value, "taskState");
+  return {
+    status:
+      typeof status === "string" && offlineConnectionStatuses.some((v) => v === status)
+        ? (status as OfflineCompletionDiagnostic["status"])
+        : null,
+    settlement:
+      typeof settlement === "string" && offlineSettlements.some((v) => v === settlement)
+        ? (settlement as OfflineCompletionDiagnostic["settlement"])
+        : null,
+    statusError: boolean(own(value, "statusError")),
+    snapshots: integer(own(value, "snapshots"), 0, 1000),
+    matched: boolean(own(value, "matched")),
+    lastErrorCode: member(own(value, "lastErrorCode"), codes),
+    lastErrorStatus: integer(own(value, "lastErrorStatus"), 100, 599),
+    taskRead: boolean(own(value, "taskRead")),
+    taskState:
+      typeof taskState === "string" && offlineTaskStates.some((v) => v === taskState)
+        ? (taskState as OfflineCompletionDiagnostic["taskState"])
+        : null,
+    eventsRead: boolean(own(value, "eventsRead")),
+    canonicalMatch: boolean(own(value, "canonicalMatch")),
+    hasMore: boolean(own(value, "hasMore")),
+    complete: boolean(own(value, "complete")),
+    elapsedMs: integer(own(value, "elapsedMs"), 0, 60000),
+  };
+}
 export function projectBrowserDiagnostic(value: unknown): BrowserDiagnostic {
   const code = own(value, "code");
+  const offlineCompletion = projectOfflineCompletion(own(value, "offlineCompletion"));
   return {
     phase: browserDiagnosticPhase(own(value, "phase")) ?? null,
     code: typeof code === "string" && codes.has(code) ? (code as BrowserDiagnosticCode) : null,
     status: integer(own(value, "status"), 100, 599),
     completionDeadline: boolean(own(value, "completionDeadline")),
+    ...(offlineCompletion ? { offlineCompletion } : {}),
   };
 }
 export function localEvidenceLine(
@@ -200,6 +273,7 @@ export function localEvidenceLine(
 }
 export function localBrowserLine(event: unknown, result: unknown, observed: unknown) {
   const diagnostic = own(observed, "diagnostic");
+  const offlineCompletion = projectOfflineCompletion(own(diagnostic, "offlineCompletion"));
   return JSON.stringify({
     diagnostic: "local-browser-observation",
     event: member(event, new Set(["coordinator-return", "report"])),
@@ -213,6 +287,7 @@ export function localBrowserLine(event: unknown, result: unknown, observed: unkn
     publicCode: member(own(diagnostic, "code"), codes),
     publicStatus: integer(own(diagnostic, "status"), 100, 599),
     completionDeadline: boolean(own(diagnostic, "completionDeadline")),
+    ...(offlineCompletion ? { offlineCompletion } : {}),
   });
 }
 /** Diagnostic sinks never replace the original result, assertion or error. */

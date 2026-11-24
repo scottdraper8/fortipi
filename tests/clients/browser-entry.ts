@@ -4,6 +4,7 @@ import {
   FortiPiError,
   type Subscription,
 } from "../../packages/fortipi-client/dist/browser.js";
+import type { OfflineCompletionDiagnostic } from "./local-evidence-observation.ts";
 import { publicFlow } from "./public-flow.ts";
 
 export interface BrowserInput {
@@ -62,12 +63,16 @@ const port: BrowserPort = {
   async run(input: BrowserInput) {
     // Native default fetch/WebSocket and browser Origin; no injected headers or transport.
     let phase = "start";
+    let offlineCompletion: OfflineCompletionDiagnostic | undefined;
     diagnostic = undefined;
     try {
       return await publicFlow(client(input), client(input), {
         ...input,
         observe(value) {
           phase = value;
+        },
+        observeOfflineCompletion(value) {
+          offlineCompletion = value;
         },
       });
     } catch (error) {
@@ -82,6 +87,7 @@ const port: BrowserPort = {
         completionDeadline:
           error instanceof Error &&
           error.message === "Public committed completion/replay deadline exceeded",
+        ...(offlineCompletion ? { offlineCompletion } : {}),
       };
       if (error instanceof FortiPiError) {
         const pressure = error.details?.pressure;

@@ -68,6 +68,72 @@ test("local evidence observations retain only closed phases and bounded facts", 
     completionDeadline: true,
   });
   assert.notEqual(selected, observed.diagnostic);
+  const offlineCompletion = {
+    status: "paused",
+    settlement: "rejected",
+    statusError: true,
+    snapshots: 1000,
+    matched: false,
+    lastErrorCode: "invalid_replay",
+    lastErrorStatus: 599,
+    taskRead: true,
+    taskState: "completed",
+    eventsRead: true,
+    canonicalMatch: true,
+    hasMore: false,
+    complete: true,
+    elapsedMs: 60000,
+  };
+  const offlineDiagnostic = projectBrowserDiagnostic({
+    phase: "offline-completion",
+    completionDeadline: true,
+    offlineCompletion: { ...offlineCompletion, token: canary, events: [canary], taskId: canary },
+    payload: canary,
+  });
+  assert.deepEqual(offlineDiagnostic.offlineCompletion, offlineCompletion);
+  assert.equal(Object.keys(offlineDiagnostic.offlineCompletion ?? {}).length, 14);
+  assert.notEqual(offlineDiagnostic.offlineCompletion, offlineCompletion);
+  const offlineLine = localBrowserLine(
+    "report",
+    { code: 1, timedOut: false },
+    { stage: "public-flow", errorClass: "Error", diagnostic: offlineDiagnostic },
+  );
+  assert.deepEqual(JSON.parse(offlineLine).offlineCompletion, offlineCompletion);
+  assert.equal(JSON.parse(offlineLine).publicCode, null);
+  assert.equal(JSON.parse(offlineLine).publicStatus, null);
+  assert.equal(offlineLine.includes(canary), false);
+  assert.ok(Buffer.byteLength(offlineLine) <= 1024);
+  const invalidOffline = {
+    status: canary,
+    settlement: canary,
+    statusError: "true",
+    snapshots: 1001,
+    matched: 1,
+    lastErrorCode: canary,
+    lastErrorStatus: 600,
+    taskRead: {},
+    taskState: canary,
+    eventsRead: "true",
+    canonicalMatch: 0,
+    hasMore: canary,
+    complete: {},
+    elapsedMs: 60000.5,
+    token: canary,
+  };
+  const withheldOffline = Object.fromEntries(
+    Object.keys(offlineCompletion).map((key) => [key, null]),
+  );
+  assert.deepEqual(
+    projectBrowserDiagnostic({ offlineCompletion: invalidOffline }).offlineCompletion,
+    withheldOffline,
+  );
+  const invalidOfflineLine = localBrowserLine(
+    "report",
+    { code: 1, timedOut: false },
+    { diagnostic: { offlineCompletion: invalidOffline } },
+  );
+  assert.deepEqual(JSON.parse(invalidOfflineLine).offlineCompletion, withheldOffline);
+  assert.equal(invalidOfflineLine.includes(canary), false);
   assert.deepEqual(
     JSON.parse(
       localBrowserLine(
@@ -203,6 +269,7 @@ test("local observation projection ignores accessors and contains sink failures"
         "phase",
         "status",
         "completionDeadline",
+        "offlineCompletion",
         "toString",
       ].map((key) => [
         key,
@@ -245,6 +312,27 @@ test("local observation projection ignores accessors and contains sink failures"
     },
   );
   assert.deepEqual(projectBrowserDiagnostic(trapped), withheld);
+  const nestedOpaque = Object.defineProperties(
+    {},
+    Object.fromEntries(
+      ["status", "lastErrorCode", "lastErrorStatus", "snapshots", "taskState", "elapsedMs"].map(
+        (key) => [
+          key,
+          {
+            get() {
+              accesses++;
+              throw Error(canary);
+            },
+          },
+        ],
+      ),
+    ),
+  );
+  const nestedProjection = projectBrowserDiagnostic({ offlineCompletion: nestedOpaque });
+  assert.ok(nestedProjection.offlineCompletion);
+  assert.equal(Object.keys(nestedProjection.offlineCompletion).length, 14);
+  assert.ok(Object.values(nestedProjection.offlineCompletion).every((value) => value === null));
+  assert.deepEqual(projectBrowserDiagnostic({ offlineCompletion: trapped }), nestedProjection);
   assert.equal(accesses, 0);
   const broken = () => {
     throw Error(canary);

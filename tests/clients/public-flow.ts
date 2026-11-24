@@ -1,5 +1,6 @@
 import type { FortiPiClient } from "../../packages/fortipi-client/dist/browser.js";
 import type { ClientEvent, DurableEvent } from "../../packages/fortipi-contract/dist/index.js";
+import type { OfflineCompletionDiagnostic } from "./local-evidence-observation.ts";
 
 function requireFact(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
@@ -18,7 +19,13 @@ async function until(read: () => Promise<boolean>, timeout = 20000) {
 export async function publicFlow(
   client: FortiPiClient,
   second: FortiPiClient,
-  input: { agentId: string; conversationId: string; seed: 1010; observe?: (phase: string) => void },
+  input: {
+    agentId: string;
+    conversationId: string;
+    seed: 1010;
+    observe?: (phase: string) => void;
+    observeOfflineCompletion?: (diagnostic: OfflineCompletionDiagnostic) => void;
+  },
 ) {
   const { agentId, conversationId } = input;
   const observe = (phase: string) => input.observe?.(phase);
@@ -140,17 +147,80 @@ export async function publicFlow(
     subscription.close();
     await subscription.done;
     const offlineCompletions = new Set<string>();
+    let offlineObservation: Pick<
+      OfflineCompletionDiagnostic,
+      "status" | "settlement" | "statusError" | "snapshots" | "lastErrorCode" | "lastErrorStatus"
+    > = {
+      status: null,
+      settlement: "pending",
+      statusError: false,
+      snapshots: 0,
+      lastErrorCode: null,
+      lastErrorStatus: null,
+    };
     observe("second-client-subscribe");
-    offlineObserver = await connect(() =>
-      second.conversations.subscribe(conversationId, {
+    offlineObserver = await connect(() => {
+      const observation: typeof offlineObservation = {
+        status: null,
+        settlement: "pending",
+        statusError: false,
+        snapshots: 0,
+        lastErrorCode: null,
+        lastErrorStatus: null,
+      };
+      offlineObservation = observation;
+      const noteError = (error: unknown) => {
+        observation.lastErrorCode = null;
+        observation.lastErrorStatus = null;
+        try {
+          if (error !== null && typeof error === "object") {
+            const code = Object.getOwnPropertyDescriptor(error, "code")?.value;
+            const status = Object.getOwnPropertyDescriptor(error, "status")?.value;
+            // Only scalars stay in-page; both output projections clip the code
+            // to browserDiagnosticCodes, as for the original top-level error.
+            observation.lastErrorCode = typeof code === "string" && code.length <= 64 ? code : null;
+            observation.lastErrorStatus =
+              typeof status === "number" &&
+              Number.isInteger(status) &&
+              status >= 100 &&
+              status <= 599
+                ? status
+                : null;
+          }
+        } catch {}
+      };
+      const candidate = second.conversations.subscribe(conversationId, {
         agentId,
-        onSnapshot() {},
+        onSnapshot() {
+          try {
+            observation.snapshots = Math.min(1000, (observation.snapshots ?? 0) + 1);
+          } catch {}
+        },
+        onStatus(status, error) {
+          try {
+            observation.status = status;
+            observation.statusError ||= error != null;
+            if (error != null) noteError(error);
+          } catch {}
+        },
         onEvent(event) {
           if (event.durability === "durable" && event.type === "task.completed" && event.taskId)
             offlineCompletions.add(event.taskId);
         },
-      }),
-    );
+      });
+      void candidate.done
+        .then(
+          () => {
+            observation.settlement = "fulfilled";
+          },
+          (error) => {
+            observation.settlement = "rejected";
+            noteError(error);
+          },
+        )
+        .catch(() => {});
+      return candidate;
+    });
     await offlineObserver.ready;
     observe("offline-send");
     const offlineInput = {
@@ -159,7 +229,61 @@ export async function publicFlow(
       busyBehavior: "followUp" as const,
     };
     const offline = await request(() => second.conversations.send(conversationId, offlineInput));
-    await until(async () => offlineCompletions.has(offline.taskId));
+    observe("offline-completion");
+    try {
+      await until(async () => offlineCompletions.has(offline.taskId));
+    } catch (error) {
+      try {
+        if (
+          input.observeOfflineCompletion &&
+          error instanceof Error &&
+          error.message === "Public committed completion/replay deadline exceeded"
+        ) {
+          // Freeze passive facts before any later read or subscription cleanup.
+          const diagnostic: OfflineCompletionDiagnostic = {
+            ...offlineObservation,
+            matched: offlineCompletions.has(offline.taskId),
+            taskRead: false,
+            taskState: null,
+            eventsRead: false,
+            canonicalMatch: null,
+            hasMore: null,
+            complete: null,
+            elapsedMs: 0,
+          };
+          const samplingStarted = Date.now();
+          try {
+            const signal = AbortSignal.timeout(2000);
+            // One SDK call each; its existing one-time 401 refresh is unchanged.
+            // No flow retry wrapper, pagination or writes are used here.
+            const [task, events] = await Promise.allSettled([
+              Promise.resolve().then(() => second.tasks.get(offline.taskId, { signal })),
+              Promise.resolve().then(() =>
+                second.conversations.events(conversationId, { after: saved }, { signal }),
+              ),
+            ]);
+            if (task.status === "fulfilled") {
+              diagnostic.taskRead = true;
+              diagnostic.taskState = task.value.status.state;
+            }
+            if (events.status === "fulfilled") {
+              diagnostic.eventsRead = true;
+              diagnostic.canonicalMatch = events.value.events.some(
+                (event) => event.type === "task.completed" && event.taskId === offline.taskId,
+              );
+              diagnostic.hasMore = events.value.hasMore;
+              // Completeness is only through this page's fixed bound; these
+              // reads are later and non-atomic, and never satisfy the oracle.
+              diagnostic.complete =
+                !events.value.hasMore && events.value.nextAfter === events.value.through;
+            }
+          } catch {}
+          diagnostic.elapsedMs = Math.min(60000, Math.max(0, Date.now() - samplingStarted));
+          input.observeOfflineCompletion(diagnostic);
+        }
+      } catch {}
+      throw error;
+    }
     // This socket only acknowledges the second client's terminal fact. Close
     // it before a rate-guided HTTP wait can outlive an otherwise idle stream.
     observe("offline-observer-close");

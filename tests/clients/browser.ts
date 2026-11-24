@@ -14,6 +14,9 @@ import {
   type BrowserDiagnostic,
   browserDiagnosticCodes,
   browserDiagnosticPhases,
+  offlineConnectionStatuses,
+  offlineSettlements,
+  offlineTaskStates,
   projectBrowserDiagnostic,
 } from "./local-evidence-observation.ts";
 
@@ -200,7 +203,13 @@ async function browserGraph(
       const recoverDiagnostic = async (page: Page, stage: string) => {
         try {
           const diagnostic = await page.evaluate(
-            (allowed: { phases: string[]; codes: string[] }) => {
+            (allowed: {
+              phases: string[];
+              codes: string[];
+              connectionStatuses: string[];
+              settlements: string[];
+              taskStates: string[];
+            }) => {
               const own = (value: unknown, key: string): unknown => {
                 try {
                   return value && typeof value === "object"
@@ -220,6 +229,33 @@ async function browserGraph(
                 code = own(value, "code"),
                 status = own(value, "status"),
                 completionDeadline = own(value, "completionDeadline");
+              const member = (value: unknown, values: string[]) =>
+                typeof value === "string" && values.includes(value) ? value : null;
+              const boolean = (value: unknown) => (typeof value === "boolean" ? value : null);
+              const integer = (value: unknown, min: number, max: number) =>
+                typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+                  ? value
+                  : null;
+              const offline = own(value, "offlineCompletion");
+              const offlineCompletion =
+                offline && typeof offline === "object"
+                  ? {
+                      status: member(own(offline, "status"), allowed.connectionStatuses),
+                      settlement: member(own(offline, "settlement"), allowed.settlements),
+                      statusError: boolean(own(offline, "statusError")),
+                      snapshots: integer(own(offline, "snapshots"), 0, 1000),
+                      matched: boolean(own(offline, "matched")),
+                      lastErrorCode: member(own(offline, "lastErrorCode"), allowed.codes),
+                      lastErrorStatus: integer(own(offline, "lastErrorStatus"), 100, 599),
+                      taskRead: boolean(own(offline, "taskRead")),
+                      taskState: member(own(offline, "taskState"), allowed.taskStates),
+                      eventsRead: boolean(own(offline, "eventsRead")),
+                      canonicalMatch: boolean(own(offline, "canonicalMatch")),
+                      hasMore: boolean(own(offline, "hasMore")),
+                      complete: boolean(own(offline, "complete")),
+                      elapsedMs: integer(own(offline, "elapsedMs"), 0, 60000),
+                    }
+                  : undefined;
               return {
                 phase: typeof phase === "string" && allowed.phases.includes(phase) ? phase : null,
                 code: typeof code === "string" && allowed.codes.includes(code) ? code : null,
@@ -232,9 +268,16 @@ async function browserGraph(
                     : null,
                 completionDeadline:
                   typeof completionDeadline === "boolean" ? completionDeadline : null,
+                ...(offlineCompletion ? { offlineCompletion } : {}),
               };
             },
-            { phases: [...browserDiagnosticPhases], codes: [...browserDiagnosticCodes] },
+            {
+              phases: [...browserDiagnosticPhases],
+              codes: [...browserDiagnosticCodes],
+              connectionStatuses: [...offlineConnectionStatuses],
+              settlements: [...offlineSettlements],
+              taskStates: [...offlineTaskStates],
+            },
           );
           observe(stage, projectBrowserDiagnostic(diagnostic));
         } catch {
