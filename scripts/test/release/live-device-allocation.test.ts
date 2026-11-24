@@ -13,6 +13,11 @@ import { RoleContext } from "../../../tests/clients/roles.ts";
 import type { Installed } from "../../../tests/distribution/install.ts";
 import type { LiveDeviceOwnership } from "../../live-device-allocation.ts";
 import { childEnvironment } from "../../prepare-release.ts";
+import {
+  sourceAllocationChildFailureLines,
+  sourceAllocationFailureLine,
+  sourceAllocationPhaseLine,
+} from "../../source-test-processes.ts";
 import { canonicalJson, type DeploymentIdentity, sha256 } from "../../verify-release-gates.ts";
 
 const clock = Date.now();
@@ -72,7 +77,16 @@ const installed = {
   },
 } as Installed;
 
+let allocationPhase = "mock";
+function allocationEntered(phase: string) {
+  try {
+    process.stderr.write(`${sourceAllocationPhaseLine(phase)}\n`);
+  } catch {
+    /* Progress cannot change the protocol result. */
+  }
+}
 async function controlled() {
+  allocationEntered(allocationPhase);
   const nativeFetch = globalThis.fetch;
   let active: ReturnType<typeof fixture>;
   const seeds: { bootstrap: RoleContext }[] = [];
@@ -143,6 +157,8 @@ async function controlled() {
       },
     },
   });
+  allocationPhase = "import";
+  allocationEntered(allocationPhase);
   const allocationModule: typeof import("../../live-device-allocation.ts") = await import(
     "../../live-device-allocation.ts"
   );
@@ -285,8 +301,12 @@ async function controlled() {
   try {
     // Successful allocation and cleanup from another context, independent of B
     // or either context's private issuance ledger. All cleanup refs are public.
+    allocationPhase = "allocate";
+    allocationEntered(allocationPhase);
     active = fixture();
     const allocation = await active.allocate();
+    allocationPhase = "scopes";
+    allocationEntered(allocationPhase);
     assert.notEqual(seeds[0]?.bootstrap, active.roles);
     assert.equal(allocation.ownership.state, "ready");
     assert.equal(allocation.seed.a.generation, 1);
@@ -356,6 +376,8 @@ async function controlled() {
     }
     const fresh = new RoleContext(origin, admin);
     assert.deepEqual(await fresh.cleanup(), []);
+    allocationPhase = "cleanup-retry";
+    allocationEntered(allocationPhase);
     active.cleanupMode = "lost-revoke";
     const cleanup = await cleanupLiveDeviceRoles({
       roles: fresh,
@@ -370,6 +392,8 @@ async function controlled() {
       6,
       "Cleanup never remints",
     );
+    allocationPhase = "cleanup-pending";
+    allocationEntered(allocationPhase);
     active.cleanupMode = "pending";
     assert.equal(
       (
@@ -381,6 +405,8 @@ async function controlled() {
       ).state,
       "pending",
     );
+    allocationPhase = "cleanup-privacy";
+    allocationEntered(allocationPhase);
     active.cleanupMode = "unsafe-reply";
     const unsafe = await cleanupLiveDeviceRoles({
       roles: fresh,
@@ -396,6 +422,8 @@ async function controlled() {
 
     // Lost issuance must remain unknown even after expiry; an already-issued
     // reply supplies cleanup ownership but cannot recover a token or continue.
+    allocationPhase = "issuance-controls";
+    allocationEntered(allocationPhase);
     for (const fault of ["lost-issue", "already-issued"]) {
       active = fixture(fault);
       let failure: InstanceType<typeof LiveDeviceAllocationError> | undefined;
@@ -423,6 +451,8 @@ async function controlled() {
 
     // Bad seed/public binding cannot mint carried roles; journal write loss
     // cannot issue another role after a known reference or before first intent.
+    allocationPhase = "journal-controls";
+    allocationEntered(allocationPhase);
     for (const fault of ["file", "binding", "initial", "known"]) {
       active = fixture(fault);
       if (["initial", "known"].includes(fault)) active.journalFailure = fault;
@@ -444,6 +474,8 @@ async function controlled() {
 
     // Only the historical initial projection is needed here. Full A/B lineage
     // authentication remains the caller's job; no old custody is opened.
+    allocationPhase = "read-role";
+    allocationEntered(allocationPhase);
     const v1 = {
       ...deployment,
       workerVersionId: "d".repeat(36),
@@ -514,6 +546,8 @@ async function controlled() {
     process.stdout.write(
       "New V1-bound read-only issuance and public ownership validation passed.\n",
     );
+    allocationPhase = "restore";
+    allocationEntered(allocationPhase);
   } finally {
     globalThis.fetch = nativeFetch;
     mock.restoreAll();
@@ -521,19 +555,47 @@ async function controlled() {
 }
 
 if (process.argv.includes("--allocation-protocol")) {
-  await controlled();
+  const began = performance.now();
+  try {
+    await controlled();
+  } catch (error) {
+    try {
+      process.stderr.write(
+        `${sourceAllocationFailureLine(allocationPhase, error, performance.now() - began)}\n`,
+      );
+    } catch {
+      /* Diagnostics cannot replace the original protocol failure. */
+    }
+    throw error;
+  }
 } else {
   test("live device allocation journals public ownership before effects and preserves uncertain cleanup", {
     timeout: 30000,
   }, async () => {
-    const result = await promisify(execFile)(
-      process.execPath,
-      ["--experimental-test-module-mocks", import.meta.filename, "--allocation-protocol"],
-      { env: childEnvironment(), timeout: 25000, maxBuffer: 100000 },
-    );
-    assert.match(result.stdout, /independent bounded cleanup passed/);
-    assert.match(result.stdout, /without reminting/);
-    assert.match(result.stdout, /stop subsequent effects/);
-    assert.match(result.stdout, /read-only issuance/);
+    const began = performance.now();
+    let phase = "child";
+    try {
+      const result = await promisify(execFile)(
+        process.execPath,
+        ["--experimental-test-module-mocks", import.meta.filename, "--allocation-protocol"],
+        { env: childEnvironment(), timeout: 25000, maxBuffer: 100000 },
+      );
+      phase = "markers";
+      assert.match(result.stdout, /independent bounded cleanup passed/);
+      assert.match(result.stdout, /without reminting/);
+      assert.match(result.stdout, /stop subsequent effects/);
+      assert.match(result.stdout, /read-only issuance/);
+    } catch (error) {
+      try {
+        for (const line of sourceAllocationChildFailureLines(error))
+          process.stderr.write(`${line}\n`);
+        process.stderr.write(
+          `${sourceAllocationFailureLine(phase, error, performance.now() - began)}\n`,
+        );
+      } catch {
+        /* Captured child data and diagnostics cannot replace the original failure. */
+      }
+      throw error;
+    }
   });
 }

@@ -103,6 +103,7 @@ const failureNames = new Set<string>([
   "SAFE receipt boundary survives real service SIGKILL with retained execution identity",
   "trusted outer recovery preserves original receipts and child byte closure across perform/readonly verification",
   "selection ownership and custody authenticate the failed initial job window before any decryption",
+  "live device allocation journals public ownership before effects and preserves uncertain cleanup",
   "completed initial/A/B/cleanup records authenticate current jobs and immutable exact member bytes; historical run must complete",
   "cleanup retains the exact initial provider observation while its own timestamp belongs to the cleanup job",
   "reference/source/latest attempt/job/runner/window guards reject before artifact payload; generic live producer still requires completed run",
@@ -153,6 +154,7 @@ const failurePaths = new Set<string>([
   "scripts/test/release/gates.test.ts",
   "scripts/test/release/current-candidate-read.test.ts",
   "scripts/test/release/device-phase-artifacts.test.ts",
+  "scripts/test/release/live-device-allocation.test.ts",
   "apps/worker/test/agent/workerd-inspector-races.test.ts",
   "apps/worker/test/execution/approval.test.ts",
   "apps/worker/test/agent/process-recovery.test.ts",
@@ -421,6 +423,8 @@ export function sourceTestDiagnostic(line: string): boolean {
       !line.includes("../")) ||
     failureDiagnostic(line) ||
     failureCallerDiagnostic(line) ||
+    allocationFailureDiagnostic(line) ||
+    allocationPhaseDiagnostic(line) ||
     /^# \{"diagnostic":"approval-phase","phase":"(?:fixture|original-approval-wait|original-approval-snapshot|original-approval-read|original-reject|original-cancel-wait|acknowledge-rejection|fresh-authority|fresh-request|fresh-approval-wait|fresh-identity|fresh-reject|fresh-cancel-wait|narrow-authority|identity-conflicts|standalone-new-job|standalone-job-read|standalone-cancel|standalone-cancel-retry|standalone-cancel-wait|final-job-read|close)","event":"aborted","elapsedMs":(?:0|[1-9]\d{0,3}|[1-5]\d{4}|60000)\}$/.test(
       line,
     ) ||
@@ -438,6 +442,22 @@ export function sourceTestDiagnostic(line: string): boolean {
     /^# \{"diagnostic":"source-fixed-wake-failure","lastPhase":"(?:prepare|listen|environment|begin|hold-idle|sleep-successor|observe-successor|release-old|settle-old|check-wake)"\}$/.test(
       line,
     ) ||
+    (line.endsWith("}") &&
+      /^# \{"diagnostic":"source-fixed-wake-failure","scope":"setup","lastPhase":"(?:prepare|listen|environment)","bodyFailed":false\}$/.test(
+        line,
+      )) ||
+    (line.endsWith("}") &&
+      /^# \{"diagnostic":"source-fixed-wake-failure","scope":"body","lastPhase":"(?:begin|hold-idle|sleep-successor|observe-successor|release-old|settle-old|final-read|final-assertions)","bodyFailed":true\}$/.test(
+        line,
+      )) ||
+    (line.endsWith("}") &&
+      /^# \{"diagnostic":"source-fixed-wake-failure","scope":"cleanup","lastPhase":"(?:cleanup-release|cleanup-drives|cleanup-pi|cleanup-server|cleanup-directory)","bodyFailed":(?:true|false)\}$/.test(
+        line,
+      )) ||
+    (line.endsWith("}") &&
+      /^# \{"diagnostic":"source-fixed-wake-state","phase":"(?:before-release|after-join)","taskState":"(?:pending|running|waiting|sleeping|completing|terminal|missing|unknown)","wakeActive":(?:true|false),"wakeAtPresent":(?:true|false),"wakeAtMatches":(?:true|false),"rowPresent":(?:true|false),"rowIdMatches":(?:true|false),"rowFnMatches":(?:true|false),"rowTimeMatches":(?:true|false),"alarmPresent":(?:true|false),"alarmTimeMatches":(?:true|false),"deadlineFuture":(?:true|false),"remainingMs":(?:0|-?(?:[1-9]\d{0,3}|[1-5]\d{4}|60000)),"alarmsEntered":(?:0|[1-9]\d{0,2}|1000),"alarmsSettled":(?:0|[1-9]\d{0,2}|1000),"alarmsInFlight":(?:0|[1-9]\d{0,2}|1000)\}$/.test(
+        line,
+      )) ||
     piWakeDiagnostic(line) ||
     recoveryDiagnostic(line) ||
     roleDiagnostic(line) ||
@@ -557,6 +577,127 @@ function closedObservation(
   } catch {
     return null;
   }
+}
+const allocationPhases = new Set([
+  "mock",
+  "import",
+  "allocate",
+  "scopes",
+  "cleanup-retry",
+  "cleanup-pending",
+  "cleanup-privacy",
+  "issuance-controls",
+  "journal-controls",
+  "read-role",
+  "restore",
+  "child",
+  "markers",
+  "unknown",
+]);
+const allocationKinds = new Set([
+  "assertion",
+  "timeout",
+  "abort",
+  "buffer-limit",
+  "exit",
+  "signal",
+  "other",
+]);
+/** Entry is progress only, including entry to expected negative-control groups. */
+export function sourceAllocationPhaseLine(phase: unknown): string {
+  return JSON.stringify({
+    diagnostic: "source-device-allocation-phase",
+    phase: diagnosticEnum(phase, allocationPhases) ?? "unknown",
+    event: "enter",
+  });
+}
+function allocationPhaseDiagnostic(line: string): boolean {
+  if (line.length > 512) return false;
+  const r = closedObservation(
+    line.startsWith("# ") ? line : `# ${line}`,
+    "source-device-allocation-phase",
+    "phase,event",
+  );
+  return !!(
+    r &&
+    typeof r.phase === "string" &&
+    allocationPhases.has(r.phase) &&
+    r.event === "enter"
+  );
+}
+/** Unexpected allocation failures only; descriptors exclude getters and private error payloads. */
+export function sourceAllocationFailureLine(
+  phase: unknown,
+  error: unknown,
+  elapsedMs: number,
+): string {
+  const name = ownDiagnosticField(error, "name"),
+    code = ownDiagnosticField(error, "code"),
+    signal = diagnosticEnum(ownDiagnosticField(error, "signal"), childSignals);
+  const exitCode =
+    typeof code === "number" && Number.isInteger(code) && Math.abs(code) <= 255 ? code : null;
+  return JSON.stringify({
+    diagnostic: "source-device-allocation-failure",
+    phase: diagnosticEnum(phase, allocationPhases) ?? "unknown",
+    kind:
+      code === "ERR_ASSERTION" || name === "AssertionError"
+        ? "assertion"
+        : code === "ETIMEDOUT" || name === "TimeoutError"
+          ? "timeout"
+          : code === "ABORT_ERR" || name === "AbortError"
+            ? "abort"
+            : code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+              ? "buffer-limit"
+              : signal !== null
+                ? "signal"
+                : exitCode !== null
+                  ? "exit"
+                  : "other",
+    elapsedMs: Number.isFinite(elapsedMs) ? Math.min(60000, Math.max(0, Math.round(elapsedMs))) : 0,
+    exitCode,
+    signal,
+  });
+}
+function allocationFailureDiagnostic(line: string): boolean {
+  if (line.length > 512) return false;
+  const r = closedObservation(
+    line.startsWith("# ") ? line : `# ${line}`,
+    "source-device-allocation-failure",
+    "phase,kind,elapsedMs,exitCode,signal",
+  );
+  return !!(
+    r &&
+    typeof r.phase === "string" &&
+    allocationPhases.has(r.phase) &&
+    typeof r.kind === "string" &&
+    allocationKinds.has(r.kind) &&
+    typeof r.elapsedMs === "number" &&
+    diagnosticInteger(r.elapsedMs, 60000) === r.elapsedMs &&
+    (r.exitCode === null ||
+      (typeof r.exitCode === "number" &&
+        Number.isInteger(r.exitCode) &&
+        Math.abs(r.exitCode) <= 255)) &&
+    optionalEnum(r.signal, childSignals)
+  );
+}
+/** After failure, retain one last stage plus at most two closed failures; never raw child output. */
+export function sourceAllocationChildFailureLines(error: unknown): string[] {
+  const accepted = new Set<string>();
+  let lastPhase: string | undefined;
+  for (const key of ["stdout", "stderr"]) {
+    const output = ownDiagnosticField(error, key);
+    if (typeof output !== "string" || output.length > 100000) continue;
+    const lines = output.split("\n");
+    lines.pop(); // A captured partial final line cannot establish a closed record.
+    for (const line of lines) {
+      const complete = line.endsWith("\r") ? line.slice(0, -1) : line;
+      const canonical = complete.startsWith("# ") ? complete.slice(2) : complete;
+      // Stage markers use stderr only; captured streams have no shared chronology.
+      if (key === "stderr" && allocationPhaseDiagnostic(complete)) lastPhase = canonical;
+      if (accepted.size < 2 && allocationFailureDiagnostic(complete)) accepted.add(canonical);
+    }
+  }
+  return [...(lastPhase === undefined ? [] : [lastPhase]), ...accepted];
 }
 const piWakePhases = new Set([
   "setup",

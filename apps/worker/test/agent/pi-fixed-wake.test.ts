@@ -7,10 +7,81 @@ import test from "node:test";
 import { pause } from "./harness.ts";
 import type { FixedWakeProbe } from "./pi-fixed-wake-worker.js";
 
+type Phase =
+  | "prepare"
+  | "listen"
+  | "environment"
+  | "begin"
+  | "hold-idle"
+  | "sleep-successor"
+  | "observe-successor"
+  | "release-old"
+  | "settle-old"
+  | "final-read"
+  | "final-assertions"
+  | "cleanup-release"
+  | "cleanup-drives"
+  | "cleanup-pi"
+  | "cleanup-server"
+  | "cleanup-directory";
+
+function diagnostic(record: object) {
+  try {
+    process.stderr.write(`# ${JSON.stringify(record)}\n`);
+  } catch {
+    // Diagnostics cannot change the test's control flow or rejection.
+  }
+}
+function observeState(
+  phase: "before-release" | "after-join",
+  state: Awaited<ReturnType<FixedWakeProbe["state"]>>,
+  until: number,
+) {
+  try {
+    const remaining = until - Date.now();
+    const bound = (value: number, min: number, max: number) =>
+      Number.isFinite(value) ? Math.max(min, Math.min(max, Math.trunc(value))) : 0;
+    const taskState = state.taskStatus;
+    diagnostic({
+      diagnostic: "source-fixed-wake-state",
+      phase,
+      taskState:
+        taskState === undefined
+          ? "missing"
+          : ["pending", "running", "waiting", "sleeping", "completing", "terminal"].some(
+                (known) => known === taskState,
+              )
+            ? taskState
+            : "unknown",
+      wakeActive: state.wake.active === true,
+      wakeAtPresent: typeof state.wake.at === "number" && Number.isFinite(state.wake.at),
+      wakeAtMatches: state.wake.at === until,
+      rowPresent: state.row !== null,
+      rowIdMatches: state.row?.id === "pi-wake",
+      rowFnMatches: state.row?.fn === "wake",
+      rowTimeMatches: state.row?.time === until,
+      alarmPresent: typeof state.alarm === "number" && Number.isFinite(state.alarm),
+      alarmTimeMatches: state.alarm === until,
+      deadlineFuture: remaining > 0,
+      remainingMs: bound(remaining, -60000, 60000),
+      alarmsEntered: bound(state.alarms.entered, 0, 1000),
+      alarmsSettled: bound(state.alarms.settled, 0, 1000),
+      alarmsInFlight: bound(state.alarms.inFlight, 0, 1000),
+    });
+  } catch {
+    // A failed projection cannot replace a body or cleanup failure.
+  }
+}
+
 test("actual PiHarness fixed wake preserves sleeping work across an older idle outcome", {
   timeout: 50000,
-}, async (t) => {
-  let lastPhase = "prepare";
+}, async () => {
+  let lastPhase: Phase = "prepare",
+    bodyFailed = false,
+    cleanupActive = false;
+  const failure = (scope: "setup" | "body" | "cleanup") => {
+    diagnostic({ diagnostic: "source-fixed-wake-failure", scope, lastPhase, bodyFailed });
+  };
   try {
     const directory = await mkdtemp(join(tmpdir(), "fortipi-fixed-wake-")),
       configPath = join(directory, "wrangler.json");
@@ -90,16 +161,17 @@ test("actual PiHarness fixed wake preserves sleeping work across an older idle o
         current.row && current.row.time > Date.now(),
         "Actual onWake must durably arm the future successor first",
       );
-      const before = current;
+      observeState("before-release", current, until);
       lastPhase = "release-old";
       const joined = await probe.releaseAndJoin();
       assert.ok(joined >= 1, "Join the entered dispatch through outcome application and rearming");
       lastPhase = "settle-old";
       for (const result of await Promise.allSettled(drives))
         assert.equal(result.status, "fulfilled");
-      lastPhase = "check-wake";
+      lastPhase = "final-read";
       const after = await probe.state();
-      console.log(JSON.stringify({ before, after }));
+      observeState("after-join", after, until);
+      lastPhase = "final-assertions";
       assert.ok(after.row, "Older idle outcome must not erase PiHarness's newer durable wake");
       assert.ok(after.alarm !== null, "Sleeping Pi work requires an offline durable alarm");
       assert.equal(after.taskStatus, "sleeping");
@@ -109,20 +181,27 @@ test("actual PiHarness fixed wake preserves sleeping work across an older idle o
       assert.equal(after.row.fn, "wake");
       assert.equal(after.row.time, until);
       assert.equal(after.alarm, until);
+    } catch (error) {
+      bodyFailed = true;
+      failure("body");
+      throw error;
     } finally {
+      cleanupActive = true;
+      lastPhase = "cleanup-release";
       await probe.release();
+      lastPhase = "cleanup-drives";
       await Promise.allSettled(drives);
+      lastPhase = "cleanup-pi";
       await probe.close();
+      lastPhase = "cleanup-server";
       await server.close();
+      lastPhase = "cleanup-directory";
       await rm(directory, { recursive: true, force: true });
+      cleanupActive = false;
     }
   } catch (error) {
-    try {
-      // Last body phase only: cleanup may also fail before this outer catch.
-      t.diagnostic(JSON.stringify({ diagnostic: "source-fixed-wake-failure", lastPhase }));
-    } catch {
-      // Diagnostics must preserve the original failure.
-    }
+    if (cleanupActive) failure("cleanup");
+    else if (!bodyFailed) failure("setup");
     throw error;
   }
 });
