@@ -60,7 +60,7 @@ export async function verifyAssets(
         canonicalJson({
           node: "26.13.1",
           pnpm: "12.23.0",
-          wrangler: "4.167.0",
+          wrangler: "4.168.0",
           compiler: "7.0.2",
         }) &&
       Array.isArray(manifest.files) &&

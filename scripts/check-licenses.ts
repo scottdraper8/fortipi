@@ -153,6 +153,12 @@ export function assertRuntimeWasmMember(
       component: "component-miniflare-20261123.json",
       componentSha256: "2896964bb2a59f3e3cd5c24acd72aa3b1b1b7357695b8e85631c1e2c2089f081",
     },
+    "miniflare@5.20261123.1-beta": {
+      archive: "a4876f994f0ea743179b95013473316fe558ef57904594c1315d6fd6e0f10754",
+      source: "4dff55a55a5d801c2cd5cd5321eb3272092ccdb7",
+      component: "component-miniflare-20261123.1.json",
+      componentSha256: "2898df4a31677aac71743ca1619354f95feba9aa05cf31d951b198f268cda1a1",
+    },
   };
   const recipe = recipes[archiveId];
   assert.ok(recipe, "Unreviewed Markdown dependency archive");
@@ -491,13 +497,13 @@ export async function checkLicenses(root = repository, foundation = false): Prom
   const lock = await yaml<Lock>(root, "pnpm-lock.yaml");
   assert.equal(policy.format, 1);
   assert.deepEqual(policy.externalToolChain, [
-    "wrangler@4.167.0",
-    "miniflare@5.20261123.0-beta",
+    "wrangler@4.168.0",
+    "miniflare@5.20261123.1-beta",
     "sharp@0.35.5",
   ]);
   for (const [from, name, version] of [
-    ["wrangler@4.167.0", "miniflare", "5.20261123.0-beta"],
-    ["miniflare@5.20261123.0-beta", "sharp", "0.35.5"],
+    ["wrangler@4.168.0", "miniflare", "5.20261123.1-beta"],
+    ["miniflare@5.20261123.1-beta", "sharp", "0.35.5"],
   ]) {
     assert.ok(from && name && version);
     const nodes = Object.entries(lock.snapshots ?? {}).filter(([id]) => id.split("(")[0] === from);
@@ -590,7 +596,7 @@ export async function checkLicenses(root = repository, foundation = false): Prom
       }
     if (
       externalNative.has(id) ||
-      ["wrangler@4.167.0", "miniflare@5.20261123.0-beta", "sharp@0.35.5"].includes(id)
+      ["wrangler@4.168.0", "miniflare@5.20261123.1-beta", "sharp@0.35.5"].includes(id)
     ) {
       for (const [path, bytes] of entries)
         if (

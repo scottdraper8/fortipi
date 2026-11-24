@@ -53,13 +53,13 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
   await reproduce();
   assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
   const patches = await dependencyPatches(root, true);
-  assert.deepEqual(Object.keys(patches), ["wrangler@4.167.0"]);
-  const patchSha256 = "b452076b5f3bc9a949d69481fdb8dfdb37b805a001dbff793fcf883679c71465";
-  assert.equal(patches["wrangler@4.167.0"]?.sha256, patchSha256);
-  assert.deepEqual(patches["wrangler@4.167.0"]?.files, {
+  assert.deepEqual(Object.keys(patches), ["wrangler@4.168.0"]);
+  const patchSha256 = "e27e97d72c74ef56fda9220df64f0edabd88f5816dda35095d9625a01aaeda76";
+  assert.equal(patches["wrangler@4.168.0"]?.sha256, patchSha256);
+  assert.deepEqual(patches["wrangler@4.168.0"]?.files, {
     "wrangler-dist/cli.js": {
-      originalSha256: "7c4f247030553b5ec713532c18759e4f431f4309c10f1a848dcb8af5f9b68c35",
-      patchedSha256: "ce5b7f4f89e823e83ed16057f691ec757b17571c278cc3b7bbe66ea108c32a6a",
+      originalSha256: "301c57cd42ffc2e85b554c4170d481922dfd63d7c38e48896396b065b846723b",
+      patchedSha256: "241cd18f015da539aa12b86a82b909bcafff9477db1a8f581311d1d0fa57ffba",
     },
   });
   // Wrangler is a deployment tool; only Worker dependencies contribute these notices.

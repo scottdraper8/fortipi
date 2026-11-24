@@ -130,7 +130,7 @@ test("actual five supported packs produce source-bound staged legal files and pe
       );
       assert.equal(wasm, undefined);
       const miniflare = receipt.conveyance.components.find(
-        (item) => item.archiveId === "miniflare@5.20261123.0-beta",
+        (item) => item.archiveId === "miniflare@5.20261123.1-beta",
       );
       assert.ok(miniflare);
       const markdown = miniflare.files.filter((file) => file.archivePath.endsWith(".wasm"));
@@ -242,7 +242,7 @@ test("actual five supported packs produce source-bound staged legal files and pe
 });
 
 test("the exact reviewed Markdown dependency member rejects archive, path, hash, license and attribution substitutions", async () => {
-  const source = closure.archives.find((item) => item.id === "miniflare@5.20261123.0-beta");
+  const source = closure.archives.find((item) => item.id === "miniflare@5.20261123.1-beta");
   assert.ok(source);
   const member = source.files.find((file) => file.path === "dist/src/mdream_edge_bg.wasm");
   assert.ok(member);
@@ -292,7 +292,7 @@ test("the genuine Markdown dependency bytes remain forbidden in owned outputs ev
       mode: constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE,
     });
   }
-  const id = "miniflare@5.20261123.0-beta";
+  const id = "miniflare@5.20261123.1-beta";
   const entries = archiveEntries(
     await regularBytes(resolve(facts, `dist/supply-chain/archives/${sha256(id)}.tgz`)),
   );
