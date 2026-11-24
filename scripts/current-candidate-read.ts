@@ -136,7 +136,7 @@ async function run(candidate: CandidateManifest, request: GitHubRequest): Promis
     assert.equal(object(value.repository).id, REPOSITORY_ID);
     assert.equal(object(value.head_repository).id, REPOSITORY_ID);
     assert.ok(
-      value.status === "in_progress" || value.status === "completed",
+      value.status === "queued" || value.status === "in_progress" || value.status === "completed",
       "Current candidate run unavailable",
     );
     assert.equal(value.conclusion, value.status === "completed" ? "success" : null);

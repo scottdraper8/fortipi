@@ -11,8 +11,10 @@ import { createGunzip } from "node:zlib";
 import { x as extractTar } from "tar";
 import { paragraphs } from "../apps/worker/container/debian.ts";
 import {
+  historicalSourceCertificateSha256,
   run,
   sha256,
+  sourceCertificateSha256,
   verifySigned,
   verifyUpstream,
 } from "../apps/worker/container/fuse-security.ts";
@@ -829,9 +831,11 @@ export async function verifyKitSignatures(directory: string, freeze: Freeze): Pr
       }
     }
     const keyring = resolve(directory, "security/debian-source-signer.pgp");
-    assert.equal(
-      await hashFile(keyring),
-      "38ead01d85cc57fd75a07c1ea4ffcad736be6fb4c006f0cf7f029dda1472041f",
+    assert.ok(
+      [historicalSourceCertificateSha256, sourceCertificateSha256].includes(
+        await hashFile(keyring),
+      ),
+      "Debian source public key mismatch",
     );
     const descriptor = await verifySigned(
       resolve(directory, "sources/fuse3_3.18.3-1.dsc"),
@@ -881,6 +885,37 @@ export async function materializeSourceKitInventory(
 ): Promise<void> {
   const { inventoryBytes } = await readSourceKitInventory(options);
   await writeFile(destination, inventoryBytes, { flag: "wx", mode: 0o644 });
+}
+
+/** Pin consistency only; the caller authenticates these source bytes before this check. */
+export function verifySourceKitToolchain(
+  revision: { node: unknown; pnpm: unknown; tar: unknown },
+  manifestBytes: Uint8Array | undefined,
+): void {
+  assert.ok(manifestBytes, "Authenticated source package.json bytes missing");
+  const manifest = json<{
+    packageManager?: unknown;
+    engines?: { pnpm?: unknown };
+    fortipi?: { toolchain?: { pnpm?: unknown } };
+  }>(manifestBytes);
+  assert.ok(
+    manifest && typeof manifest === "object" && !Array.isArray(manifest),
+    "Archived source manifest must be an object",
+  );
+  const pnpm = manifest.fortipi?.toolchain?.pnpm;
+  assert.ok(
+    typeof pnpm === "string" &&
+      /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/.test(pnpm) &&
+      pnpm.trim() === pnpm,
+    "Archived source pnpm must be exact stable semver",
+  );
+  assert.equal(manifest.packageManager, `pnpm@${pnpm}`, "Archived packageManager differs");
+  assert.equal(manifest.engines?.pnpm, pnpm, "Archived pnpm engine differs");
+  assert.deepEqual(
+    [revision.node, revision.pnpm, revision.tar],
+    ["26.13.1", pnpm, "7.5.23"],
+    "Source kit toolchain differs from authenticated source",
+  );
 }
 
 /** Caller owns directory cleanup. No artifact-carried program is executed. */
@@ -937,7 +972,7 @@ export async function verifySourceKit(
     assert.ok(path && digest);
     assert.equal(file(ownSource, path).sha256, digest, "Source revision metadata differs");
   }
-  assert.deepEqual([revision.node, revision.pnpm, revision.tar], ["26.13.1", "12.22.0", "7.5.23"]);
+  verifySourceKitToolchain(revision, file(ownSource, "package.json").data);
   for (const name of ["computerd-build.ts", "security-update.ts", "trixie-security.InRelease"])
     file(entries, `source-kit-recipe/${name}`);
   assert.equal(

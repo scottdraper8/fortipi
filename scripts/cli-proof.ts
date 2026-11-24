@@ -198,7 +198,7 @@ async function eligible() {
   inputGate("eligibility.tracked-clean");
   assert.equal((await run("git", ["status", "--porcelain", "--untracked-files=no"])).stdout, "");
   inputGate("eligibility.pnpm");
-  assert.equal((await run("pnpm", ["--version"], tmpdir())).stdout.trim(), "12.22.0");
+  assert.equal((await run("pnpm", ["--version"], tmpdir())).stdout.trim(), "12.23.0");
   inputGate("eligibility.hardener");
   await run("/usr/bin/systemctl", ["is-active", "--quiet", "agent.service"]);
   gate = "phase";
@@ -357,7 +357,7 @@ async function offline() {
     assert.ok(pnpmBin && inside(pnpm, pnpmBin));
     assert.equal(
       (await run(join(pnpmBin, "pnpm"), ["--version"], tmpdir())).stdout.trim(),
-      "12.22.0",
+      "12.23.0",
     );
     await sudo("/usr/bin/cp", [
       "-a",

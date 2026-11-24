@@ -152,6 +152,89 @@ test("a real command queued across authorization cannot enter the API after the 
       before.lastEventSeq,
       "No durable event may be appended by the closed socket",
     );
+
+    // A failed physical close must not let the same invalidation retry acknowledge
+    // only the already-persisted logical fence. Keep the real wrapper/native close.
+    const retryCredential = await h.api<D.CredentialReceipt>("/v1/admin/credentials", {
+      requestId: crypto.randomUUID(),
+      role: "client",
+      grants: [
+        {
+          grantId: "close-retry",
+          version: 1,
+          resources: { ...resources, actions: [...resources.actions, "tickets.mint"] },
+        },
+      ],
+    });
+    assert.equal(retryCredential.status, 201);
+    if (retryCredential.body.state !== "issued") assert.fail("Fresh client issuance required");
+    const retryClient = await connect(h, resources, retryCredential.body.token);
+    socket = retryClient.socket;
+    assert.equal((await retryClient.response(subscribe(cid, snapshot.lastEventSeq))).type, "ack");
+    const retryBudget = await probe.socketBudgetJson();
+    const minimumGeneration = retryCredential.body.credential.generation + 1;
+    const revocationId = crypto.randomUUID();
+    const recovery: D.RecoveryContext = {
+      kind: "control-recovery",
+      deploymentId: h.env.CONTROL_PLANE.idFromName("control").toString(),
+      revocationId,
+      recipient: { kind: "agent", id: agent.agentId },
+      actions: ["invalidate"],
+      deadline: Date.now() + 5000,
+    };
+    const invalidation: D.Invalidation = {
+      revocationId,
+      subject: {
+        kind: "credential",
+        credentialId: retryCredential.body.credential.credentialId,
+        minimumGeneration,
+      },
+    };
+    await probe.failNextSocketClose(retryCredential.body.credential.credentialId);
+    const failed: D.Outcome<D.InvalidationAck> = JSON.parse(
+      await probe.invalidateGenerationJson(recovery, invalidation),
+    );
+    assert.equal(failed.ok, false, "Failed close cannot earn an invalidation acknowledgement");
+    assert.deepEqual(
+      JSON.parse(await probe.socketCloseFailureReportJson()),
+      {
+        attempts: 1,
+        delegated: 0,
+        logicalClosed: true,
+        floor: minimumGeneration,
+        nativeOpen: true,
+      },
+      "First failed-close report must match every observed field",
+    );
+    assert.equal(await probe.socketBudgetJson(), retryBudget);
+    const retried: D.Outcome<D.InvalidationAck> = JSON.parse(
+      await probe.invalidateGenerationJson(recovery, invalidation),
+    );
+    assert.equal(retried.ok, true);
+    if (!retried.ok) assert.fail("Matching invalidation retry must close before acknowledging");
+    assert.deepEqual(retried.value, {
+      revocationId,
+      recipient: recovery.recipient,
+      subject: invalidation.subject,
+      persistedFloor: minimumGeneration,
+    });
+    const { attempts, delegated, ...closedState } = JSON.parse(
+      await probe.socketCloseFailureReportJson(),
+    );
+    // Agents can also delegate a close while acknowledging the platform callback.
+    // Require a successful retry and exactly the one injected pre-delegate failure.
+    assert.ok(Number.isSafeInteger(attempts) && attempts >= 2);
+    assert.ok(Number.isSafeInteger(delegated) && delegated >= 1);
+    assert.equal(attempts, delegated + 1);
+    assert.deepEqual(
+      closedState,
+      { logicalClosed: true, floor: minimumGeneration, nativeOpen: false },
+      "Matching retry must retain the fence and close the native socket",
+    );
+    assert.equal((await retryClient.closed())?.code, 1008, "Native close must precede cleanup");
+    assert.equal((await probe.socketCommandReport()).submissionCalls, 0);
+    assert.equal(await probe.socketBudgetJson(), retryBudget);
+    assert.equal((await probe.streamSnapshot(cid)).lastEventSeq, snapshot.lastEventSeq);
   } finally {
     await probe?.releaseSocketCommand();
     socket?.close();

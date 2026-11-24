@@ -59,7 +59,7 @@ export async function verifyAssets(
       canonicalJson(manifest.toolchain) ===
         canonicalJson({
           node: "26.13.1",
-          pnpm: "12.22.0",
+          pnpm: "12.23.0",
           wrangler: "4.166.0",
           compiler: "7.0.2",
         }) &&

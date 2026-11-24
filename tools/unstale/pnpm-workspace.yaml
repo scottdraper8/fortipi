@@ -16,4 +16,4 @@ sideEffectsCache: false
 skills:
   dirs: []
 allowBuilds:
-  pnpm@12.22.0: false
+  pnpm@12.23.0: false

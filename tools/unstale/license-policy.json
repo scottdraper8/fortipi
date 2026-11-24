@@ -2162,6 +2162,213 @@
           "url": "https://raw.githubusercontent.com/microsoft/playwright/cb1c1d0e6bcd407d0c8b189ad828f560cb485476/NOTICE"
         }
       ]
+    },
+    "pnpm@12.23.0": {
+      "source": "https://github.com/pnpm/pnpm/tree/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e",
+      "evidence": "Supplemental terms, not invented archive members: wrapper MIT equals immutable upstream and signed native LICENSE; retained Yarn notice occurs in all17 exact archives. Six bundled BlueOak manifests/source archives and credits are mapped in COMPONENTS.json; five are byte-identical and graceful-fs has the explicit EBUSY change. Original two license byte variants are preserved. Registry SRI/signatures authenticate archives; legal extraction alone does not certify the whole toolchain. Published-source/workflow/provenance identity for all17 subjects was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; this is not reproducible-build or runtime proof.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/LICENSE",
+          "sha256": "4b8e2a57502758b2d034ece9cabf19dd098c5609003ed8dbdafd085274f25bd9",
+          "url": "https://raw.githubusercontent.com/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/LICENSE"
+        },
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        },
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/bundled/BlueOak-1.0.0-a49c9ba46479.LICENSE.md",
+          "sha256": "a49c9ba464796f65b59fca3f1e6ca40912df1e859f575383223f7ec6c5baae09",
+          "url": "https://registry.npmjs.org/chownr/3.0.0#package/LICENSE.md"
+        },
+        {
+          "path": "tools/unstale/licenses/isaacs/node-tar/eb92e178af52cd191d48eb70a846f61cc4dade1b/LICENSE.md",
+          "sha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+          "url": "https://raw.githubusercontent.com/isaacs/node-tar/eb92e178af52cd191d48eb70a846f61cc4dade1b/LICENSE.md"
+        },
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/bundled/COMPONENTS.json",
+          "sha256": "dd55e4fc800c27febed926efd9c6627961a21013469c3cdf57b37808772e24a6",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0"
+        }
+      ]
+    },
+    "@pnpm/exe.linux-x64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.linux-x64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive 8aeb5ad2b7e71fc3f81f572fb3107449fc0ef8a9be4e4cdf51d9d4992921bb51 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.win32-x64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.win32-x64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive c111b335e2a7347c068ad1247e1778fa98bafcb492ce080ea94e72bdcbc976f5 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.darwin-x64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.darwin-x64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive b2f23c467430d80d5022ac007a2b1c8f7b617bb807125c09f26ddfbaf265da22 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.netbsd-x64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.netbsd-x64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive cebf4b499c776ed37607fac3f9f1e0236c5e4a3deac3d77da12ffe30e65b26ed contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.android-x64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.android-x64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive 37101682cb9c0bd5ff251918849f9578f39b29a84240b29a0e53d6dce7da4c35 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.freebsd-x64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.freebsd-x64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive ec82d23f374806c6f61b2089bc704fb93c20f24f19203d64c38a7fd06511b0ff contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.linux-arm64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.linux-arm64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive 986807e3baaf6310b770f3bd456ebf6dc95f469d42c610c0df4a9a3d7f84d498 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.linux-ppc64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.linux-ppc64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive 4c7dc99acf94dcc9aad96a3853ee3f5fbc04ed1bfa530f46ffd8481bc8e19ef8 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.linux-s390x@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.linux-s390x/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive c4e34dbe077c811828c35114665f7cc8dc49e7b7175983ee21da04e514b8c971 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.win32-arm64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.win32-arm64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive 113985c33f117d8b04accc82424551cc7f215e6ec99a7bba212bb2eef3505524 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.darwin-arm64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.darwin-arm64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive cb84a7c1c058b5de050d70770676f923f98ac5726ab4a0611f26e6168819b5a0 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.android-arm64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.android-arm64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive 69486b55c6f604d7611fa361649c899944e5b599387807ce5dd641c03416d829 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.linux-loong64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.linux-loong64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive 8f9e1e514f5546565a46f33b55ff85ad5499c9603e257481227df1cd300c37fc contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.linux-riscv64@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.linux-riscv64/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive aa4a49ca3255c479b3ed112ae3f0c0bdd8d85e8e7f59fe807d4b354840beac55 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.linux-x64-musl@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.linux-x64-musl/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive 1c1632a9390fd8c52b92f0510f2b14dda38c89ba5071c75cad1071b6dfb81a75 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
+    },
+    "@pnpm/exe.linux-arm64-musl@12.23.0": {
+      "source": "https://registry.npmjs.org/%40pnpm%2Fexe.linux-arm64-musl/12.23.0",
+      "evidence": "Exact signed/SRI-checked archive 4f630f124aa38e1a1412c67d8a1e65fd07f07084788ee13dfbcdf73ee81cd175 contains the shared original Yarn notice d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e. Retain it as explicit supplemental attribution alongside the unchanged archive MIT inventory; publisher/source/workflow correspondence was separately verified in Lorentz receipt b4ee178910d2358de97f27f78787965c9a310ff133831ce84faa24af512ecba1; no reproducible-build/runtime claim.",
+      "files": [
+        {
+          "path": "tools/unstale/licenses/pnpm/pnpm/2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e/THIRD-PARTY-NOTICES.md",
+          "sha256": "d98f5b1d06d05c4615764b08af38152e126b339440bfb84f77c9894955afbf2e",
+          "url": "https://registry.npmjs.org/pnpm/12.23.0#package/THIRD-PARTY-NOTICES.md"
+        }
+      ]
     }
   },
   "externalToolChain": ["wrangler@4.166.0", "miniflare@5.20261119.0-beta", "sharp@0.35.5"]

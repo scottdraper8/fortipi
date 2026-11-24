@@ -17,22 +17,34 @@ test("actual original execution remains queryable after its supported lease upda
       await pause(30);
     }
     assert.equal(starts.match(/start/g)?.length, 1);
-    const first = JSON.parse(await n.probe.activeJobPorts(n.job.jobId)) as {
+    const first = JSON.parse(await n.probe.activeJobPorts(n.job.jobId, true)) as {
       identity: D.ExecutionIdentity;
       query: string;
       renewal: string;
+      beforeRenewalLease: D.Lease;
+      renewedLease: D.Lease | null;
       delivery: string;
     };
     assert.equal(first.renewal, "renewed");
     assert.equal(first.delivery, "delivered");
+    assert.ok(first.renewedLease);
+    assert.equal(first.renewedLease.expiresAt, first.beforeRenewalLease.expiresAt);
+    assert.equal(first.renewedLease.leaseVersion, first.beforeRenewalLease.leaseVersion + 1);
     const firstVersion = first.identity.lease.leaseVersion;
-    let actualVersion = firstVersion;
+    let actualLease = n.f.ledger.get(n.job.jobId)!.assignment.identity.lease;
     for (let i = 0; i < 100; i++) {
-      actualVersion = n.f.ledger.get(n.job.jobId)!.assignment.identity.lease.leaseVersion;
-      if (actualVersion > firstVersion) break;
+      actualLease = n.f.ledger.get(n.job.jobId)!.assignment.identity.lease;
+      if (
+        actualLease.leaseVersion === first.renewedLease.leaseVersion &&
+        actualLease.expiresAt === first.renewedLease.expiresAt
+      )
+        break;
       await pause(20);
     }
+    const actualVersion = actualLease.leaseVersion;
     assert.ok(actualVersion > firstVersion, "Real native ledger must apply the renewal");
+    assert.equal(actualVersion, first.renewedLease.leaseVersion);
+    assert.equal(actualLease.expiresAt, first.renewedLease.expiresAt);
     const second = JSON.parse(await n.probe.activeJobPorts(n.job.jobId)) as typeof first;
     const trace = await n.h.env.CONTROL_PLANE.getByName("control").queryLeaseTrace(first.identity);
     console.log(JSON.stringify({ first: first.query, second: second.query, actualVersion, trace }));

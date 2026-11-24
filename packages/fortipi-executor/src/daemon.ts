@@ -688,7 +688,7 @@ export class ExecutorRuntime implements FrameHandler {
     if (
       Date.now() >= lease.expiresAt ||
       update.leaseVersion <= lease.leaseVersion ||
-      update.expiresAt <= lease.expiresAt ||
+      update.expiresAt < lease.expiresAt ||
       update.expiresAt > row.assignment.identity.deadline
     )
       throw new Error("lease cannot revive/change identity");

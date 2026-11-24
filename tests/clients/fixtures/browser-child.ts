@@ -7,10 +7,16 @@ import { start } from "../../../apps/worker/test/integration/runtime.ts";
 import { readInstalledClientSnapshot } from "../../distribution/consumer-runtime.ts";
 import { browser } from "../browser.ts";
 import { type FixtureTLS, verifyFixtureTLS } from "../fixture-tls.ts";
+import {
+  type BrowserDiagnostic,
+  browserFailure,
+  projectBrowserDiagnostic,
+} from "../local-evidence-observation.ts";
 import { RoleContext } from "../roles.ts";
 
 export async function browserChild(argv: string[]) {
   let stage = "inputs";
+  let browserDiagnostic: BrowserDiagnostic | undefined;
   let runtime: Awaited<ReturnType<typeof start>> | undefined,
     web: Awaited<ReturnType<typeof browser>> | undefined;
   let roles: RoleContext | undefined;
@@ -21,17 +27,49 @@ export async function browserChild(argv: string[]) {
           errorClass: string;
           errorCode?: string;
           cleanupComplete?: boolean;
-          diagnostic?: Record<string, unknown>;
+          diagnostic?: BrowserDiagnostic;
         }
       | undefined;
-  let closing: Promise<Awaited<ReturnType<RoleContext["cleanup"]>> | undefined> | undefined;
+  let closing: Promise<Awaited<ReturnType<RoleContext["cleanup"]>> | undefined> =
+    Promise.resolve(undefined);
+  let cleanupComplete = true;
+  let cleanupStage = "public-role-cleanup";
+  const cleanupFailure = (at: string, errorClass = "CleanupFailure") => {
+    cleanupComplete = false;
+    failure ??= { stage: at, errorClass };
+  };
   const close = () => {
-    closing ??= (async () => {
-      const cleanup = await roles?.cleanup();
-      await web?.close();
-      await runtime?.dispose();
-      return cleanup;
-    })();
+    closing = closing
+      .catch(() => cleanupFailure(cleanupStage))
+      .then(async () => {
+        cleanupStage = "public-role-cleanup";
+        let cleanup: Awaited<ReturnType<RoleContext["cleanup"]>> | undefined;
+        // Retain roles: setup may register another receipt after an earlier signal pass.
+        try {
+          cleanup = await roles?.cleanup();
+          if (cleanup?.some((role) => role.state !== "complete"))
+            cleanupFailure("public-role-cleanup", "IncompleteRevocation");
+        } catch {
+          cleanupFailure("public-role-cleanup");
+        }
+        cleanupStage = "browser-cleanup";
+        const browser = web;
+        web = undefined;
+        try {
+          await browser?.close();
+        } catch {
+          cleanupFailure("browser-cleanup");
+        }
+        cleanupStage = "browser-runtime-cleanup";
+        const server = runtime;
+        runtime = undefined;
+        try {
+          await server?.dispose();
+        } catch {
+          cleanupFailure("browser-runtime-cleanup");
+        }
+        return cleanup;
+      });
     return closing;
   };
   const stop = () => {
@@ -63,6 +101,14 @@ export async function browserChild(argv: string[]) {
     roles = new RoleContext(runtime.endpoint, runtime.admin);
     stage = "public-provision";
     const state = await provision(runtime, (input) => roles!.issue(input));
+    const witness = await roles.issueBrowserRevocation(
+      state.agent.agentId,
+      state.conversations[0]!.conversationId,
+    );
+    assert.ok(
+      witness.credential.credentialId !== state.client.credential.credentialId,
+      "Revocation witness must be an independently issued principal",
+    );
     stage = "chromium-public-flow-cors-revoke";
     observation = await web.run(
       {
@@ -72,14 +118,27 @@ export async function browserChild(argv: string[]) {
         conversationId: state.conversations[0]!.conversationId,
         seed: 1010,
       },
-      async () => {
-        const receipt = await roles!.revokeAndWait(state.client.credential.credentialId);
-        assert.equal(receipt.state, "complete");
+      {
+        input: {
+          endpoint: roles.endpoint,
+          token: witness.token,
+          agentId: state.agent.agentId,
+          conversationId: state.conversations[0]!.conversationId,
+          seed: 1010,
+        },
+        revoke: async () => {
+          const receipt = await roles!.revokeAndWait(witness.credential.credentialId);
+          assert.equal(receipt.state, "complete");
+        },
       },
-      (value) => {
+      (value, diagnostic) => {
         stage = value;
+        browserDiagnostic =
+          diagnostic === undefined ? undefined : projectBrowserDiagnostic(diagnostic);
       },
     );
+    stage = "browser-postchecks";
+    browserDiagnostic = undefined;
     roles.assertSanitized(observation);
     const protocol = await runtime.api<{
       infrastructure: {
@@ -96,27 +155,25 @@ export async function browserChild(argv: string[]) {
     };
     await ports.verifyUnchanged();
   } catch (error) {
-    const known =
-      error instanceof Error
-        ? error.message.match(
-            /\b(?:quota_exceeded|quota_paused|rate_limited|unauthorized|unauthenticated|handshake_failed|smoke_deadline)\b/,
-          )?.[0]
-        : undefined;
-    const diagnostic = (error as { diagnostic?: Record<string, unknown> })?.diagnostic;
     failure = {
       stage,
-      errorClass: error instanceof Error ? error.name : "UnknownFailure",
-      ...(known ? { errorCode: known } : {}),
-      ...(diagnostic ? { diagnostic } : {}),
+      ...browserFailure(error),
+      ...(browserDiagnostic ? { diagnostic: browserDiagnostic } : {}),
     };
   } finally {
-    const cleanup = await close();
+    // Seal signal admissions before joining the final serialized cleanup pass.
     process.off("SIGTERM", stop);
-    if (cleanup?.some((role) => role.state !== "complete")) {
-      failure ??= { stage: "public-role-cleanup", errorClass: "IncompleteRevocation" };
+    try {
+      const cleanup = await close();
+      if (!cleanupComplete) {
+        failure ??= { stage: cleanupStage, errorClass: "CleanupFailure" };
+        failure.cleanupComplete = false;
+      }
+      if (observation) observation.cleanup = cleanup;
+    } catch {
+      failure ??= { stage: cleanupStage, errorClass: "CleanupFailure" };
       failure.cleanupComplete = false;
     }
-    if (observation) observation.cleanup = cleanup;
   }
   return failure
     ? { outcome: "fail", ...failure }

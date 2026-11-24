@@ -7,7 +7,7 @@ import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { parse as parseYaml } from "yaml";
-import type { Job, Task } from "../../packages/fortipi-contract/dist/index.js";
+import type { ExecutionIdentity, Job, Task } from "../../packages/fortipi-contract/dist/index.js";
 import type { Profile } from "../../packages/fortipi-executor/dist/index.js";
 import { nodeCommand } from "../../packages/fortipi-executor/test/fixtures/daemon.ts";
 import { type CandidateReadContext, execute } from "../../scripts/prepare-release.ts";
@@ -33,6 +33,7 @@ interface DaemonService {
   approve(id: string): Promise<void>;
   job(id: string): Promise<Job>;
   settled(id: string): Promise<Task>;
+  cancelTask(id: string, requestId: string): Promise<void>;
   close(): Promise<void>;
   acknowledgeUnknown(id: string): Promise<void>;
   online(): Promise<boolean>;
@@ -45,6 +46,28 @@ async function until<T>(read: () => Promise<T>, predicate: (value: T) => boolean
     await new Promise<void>((accept) => setTimeout(accept, 50));
   }
   throw new Error("Installed daemon public observation deadline exceeded");
+}
+function immutableAssignment(identity: ExecutionIdentity) {
+  const { leaseVersion: _version, expiresAt: _expiry, ...lease } = identity.lease;
+  return { ...identity, lease };
+}
+function assertLeaseObservation(
+  previous: ExecutionIdentity["lease"],
+  current: ExecutionIdentity["lease"],
+  deadline: number,
+): void {
+  assert.ok(Number.isSafeInteger(deadline) && deadline > 0);
+  for (const lease of [previous, current]) {
+    assert.ok(Number.isSafeInteger(lease.leaseVersion) && lease.leaseVersion > 0);
+    assert.ok(
+      Number.isSafeInteger(lease.expiresAt) && lease.expiresAt > 0 && lease.expiresAt <= deadline,
+    );
+  }
+  assert.ok(
+    current.leaseVersion === previous.leaseVersion
+      ? current.expiresAt === previous.expiresAt
+      : current.leaseVersion > previous.leaseVersion && current.expiresAt >= previous.expiresAt,
+  );
 }
 /** Trusted current native setup only. No caller-supplied "isolated" flag or
  * serialized receipt can enable use of the OS user's product registry. Hosted
@@ -331,8 +354,15 @@ export async function runNativeDaemon(
       nonce,
       "output",
     );
+    const refusedMarker = resolve(directory, "refused-starts");
+    const refusedInput = nodeCommand(
+      resolve(import.meta.dirname, "fixtures/process-marker.ts"),
+      refusedMarker,
+      randomUUID(),
+      "output",
+    );
     phase = "daemon-confinement-dispatch";
-    const pending = await service.dispatch(input);
+    const pending = await service.dispatch(refusedInput);
     phase = "daemon-confinement-remote-approval";
     await service.approve(pending.approvalId);
     phase = "daemon-confinement-local-approval";
@@ -342,7 +372,7 @@ export async function runNativeDaemon(
       (rows) => rows.some((row) => row.jobId === pending.jobId),
     );
     const approval = local.find((row) => row.jobId === pending.jobId)!;
-    assert.equal(await readFile(marker, "utf8").catch(() => ""), "");
+    assert.equal(await readFile(refusedMarker, "utf8").catch(() => ""), "");
     // Require confinement on the same real current assignment before approving.
     phase = "daemon-confinement-policy";
     const consent = await module.loadProfile(profilePath, platform, true);
@@ -355,37 +385,87 @@ export async function runNativeDaemon(
     await module.privateWrite(profilePath, JSON.stringify(consent));
     await command(["approve", pending.jobId, "--digest", approval.digest]);
     phase = "daemon-confinement-refusal";
-    await until(
-      async () => {
-        const ledger = await module.Ledger.open(
-          resolve(state, profile.ledgerId),
-          profile.ledgerId,
-          module.effectiveLimits(profile.limits),
-          platform,
-        );
-        try {
-          const row = ledger.get(pending.jobId);
-          return { state: row?.state, reason: row?.reason };
-        } finally {
-          ledger.close();
-        }
-      },
+    const refusal = async () => {
+      const ledger = await module.Ledger.open(
+        resolve(state, profile.ledgerId),
+        profile.ledgerId,
+        module.effectiveLimits(profile.limits),
+        platform,
+      );
+      try {
+        const row = ledger.get(pending.jobId);
+        return {
+          state: row?.state,
+          reason: row?.reason,
+          identity: row?.assignment.identity,
+          hasResult: !!row?.result,
+        };
+      } finally {
+        ledger.close();
+      }
+    };
+    const refused = await until(
+      refusal,
       (row) => row.state === "closed" && !!row.reason?.includes("require-confinement"),
     );
-    assert.equal(
-      await readFile(marker, "utf8").catch(() => ""),
-      "",
-      "Required confinement cannot launch a native host process",
-    );
-    phase = "daemon-confinement-settlement";
+    const refusedIdentity = refused.identity;
+    assert.ok(refusedIdentity);
+    assert.equal(refusedIdentity.jobId, pending.jobId);
+    assert.equal(refused.hasResult, false);
+    let observedRefusalLease = { ...refusedIdentity.lease };
+    const assertRefusalRetained = async () => {
+      const current = await refusal();
+      assert.ok(current.identity);
+      assert.deepEqual(
+        { ...current, identity: immutableAssignment(current.identity) },
+        { ...refused, identity: immutableAssignment(refusedIdentity) },
+      );
+      assertLeaseObservation(
+        observedRefusalLease,
+        current.identity.lease,
+        refusedIdentity.deadline,
+      );
+      observedRefusalLease = { ...current.identity.lease };
+      assert.equal(
+        await readFile(refusedMarker, "utf8").catch(() => ""),
+        "",
+        "Required confinement cannot launch a native host process",
+      );
+    };
+    await assertRefusalRetained();
+    // Natural public disposition must precede parent-task cleanup.
+    phase = "daemon-confinement-job";
     const rejected = await until(
       () => service.job(pending.jobId),
       (job) =>
         ["requires_reconciliation", "interrupted", "failed", "cancelled"].includes(job.state),
     );
-    if (rejected.state === "requires_reconciliation")
+    assert.equal(rejected.jobId, pending.jobId);
+    assert.equal(rejected.taskId, pending.taskId);
+    const publicAssignment = rejected.execution;
+    assert.ok(publicAssignment);
+    assert.deepEqual(immutableAssignment(publicAssignment), immutableAssignment(refusedIdentity));
+    assertLeaseObservation(
+      publicAssignment.lease,
+      refusedIdentity.lease,
+      publicAssignment.deadline,
+    );
+    if (rejected.state === "requires_reconciliation") {
+      phase = "daemon-confinement-reconcile";
       await service.acknowledgeUnknown(pending.jobId);
-    await service.settled(pending.taskId);
+    }
+    phase = "daemon-confinement-cancel";
+    const cancelRequestId = randomUUID();
+    await service.cancelTask(pending.taskId, cancelRequestId);
+    phase = "daemon-confinement-task";
+    const settled = await service.settled(pending.taskId);
+    assert.equal(settled.taskId, pending.taskId);
+    phase = "daemon-confinement-job";
+    const afterCleanup = await service.job(pending.jobId);
+    assert.equal(afterCleanup.state, rejected.state);
+    assert.deepEqual(afterCleanup.execution, publicAssignment);
+    phase = "daemon-confinement-retention";
+    await assertRefusalRetained();
     phase = "daemon-execution-policy";
     consent.policy = {
       ...consent.policy,
@@ -393,8 +473,12 @@ export async function runNativeDaemon(
       requireConfinement: false,
     };
     await module.privateWrite(profilePath, JSON.stringify(consent));
+    phase = "daemon-confinement-retention";
+    await assertRefusalRetained();
     phase = "daemon-execution-dispatch";
     const run = await service.dispatch(input);
+    assert.notEqual(run.jobId, pending.jobId);
+    assert.notEqual(run.taskId, pending.taskId);
     phase = "daemon-execution-remote-approval";
     await service.approve(run.approvalId);
     phase = "daemon-execution-local-approval";
@@ -421,6 +505,8 @@ export async function runNativeDaemon(
     );
     assert.equal(completed.state, "completed");
     if (completed.state !== "completed") assert.fail("Actual installed daemon completion required");
+    phase = "daemon-confinement-retention";
+    await assertRefusalRetained();
     phase = "daemon-output";
     assert.equal(completed.preparedResult?.output.truncated, true);
     assert.ok(Buffer.byteLength(completed.preparedResult.output.tail) <= 128);
@@ -460,6 +546,7 @@ export async function runNativeDaemon(
     phase = "daemon-retained-ledger";
     const identity = completed.execution;
     assert.ok(identity);
+    assert.notEqual(identity.executionId, refusedIdentity.executionId);
     const retained = async () => {
       const ledger = await module.Ledger.open(
         resolve(state, profile.ledgerId),
@@ -505,6 +592,8 @@ export async function runNativeDaemon(
       `${nonce}\n`,
       "Abrupt daemon reopen cannot repeat a committed native effect",
     );
+    phase = "daemon-confinement-retention";
+    await assertRefusalRetained();
     phase = "daemon-installed-integrity";
     await installed.verifyUnchanged();
     return {

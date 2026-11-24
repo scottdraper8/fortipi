@@ -19,6 +19,15 @@ export class TestAgentSession extends RuntimeAgent {
     return JSON.stringify(await messageParts(message));
   }
   private closeSamples: { code: number | undefined; attachment: unknown }[] = [];
+  #closeFault:
+    | {
+        socket: WebSocket;
+        credentialId: string;
+        attempts: number;
+        delegated: number;
+        fail: boolean;
+      }
+    | undefined;
   #deliveryHold: { entered: boolean; gate: PromiseWithResolvers<void> } | undefined;
   readonly #deliveryWrites = new WeakSet<Sql>();
   #replayCaptures = 0;
@@ -180,6 +189,56 @@ export class TestAgentSession extends RuntimeAgent {
   }
   closeSamplesJson() {
     return JSON.stringify(this.closeSamples);
+  }
+
+  // Fault only the selected owned connection before the real Agents/native delegate.
+  // This does not simulate or claim to exercise Agents' internal native-close rollback.
+  failNextSocketClose(credentialId: string) {
+    if (this.#closeFault) throw new Error("Socket close fault already armed");
+    const sockets = this.ctx.getWebSockets().filter((socket) => {
+      const attachment = socket.deserializeAttachment() as {
+        __user?: { credentialId?: string };
+      } | null;
+      return (
+        socket.readyState === WebSocket.OPEN && attachment?.__user?.credentialId === credentialId
+      );
+    });
+    const socket = sockets[0];
+    if (sockets.length !== 1 || !socket) throw new Error("One matching owned socket required");
+    const close = socket.close.bind(socket);
+    const fault = { socket, credentialId, attempts: 0, delegated: 0, fail: true };
+    this.#closeFault = fault;
+    Object.defineProperty(socket, "close", {
+      configurable: true,
+      value: (code?: number, reason?: string) => {
+        if (code === 1008) {
+          fault.attempts++;
+          if (fault.fail) {
+            fault.fail = false;
+            throw new Error("Owned pre-delegate socket close fault");
+          }
+        }
+        close(code, reason);
+        if (code === 1008) fault.delegated++;
+      },
+    });
+  }
+  async invalidateGenerationJson(ctx: D.RecoveryContext, input: D.Invalidation) {
+    return JSON.stringify(await super.invalidateGeneration(ctx, input));
+  }
+  async socketCloseFailureReportJson() {
+    const fault = this.#closeFault;
+    if (!fault) throw new Error("Socket close fault is not armed");
+    const attachment = fault.socket.deserializeAttachment() as {
+      __user?: { closed?: boolean };
+    } | null;
+    return JSON.stringify({
+      attempts: fault.attempts,
+      delegated: fault.delegated,
+      logicalClosed: attachment?.__user?.closed === true,
+      floor: (await this.store.get<number>("credential-floor", fault.credentialId)) ?? null,
+      nativeOpen: fault.socket.readyState === WebSocket.OPEN,
+    });
   }
 
   // Substitute only the event producer: real application append transactions,

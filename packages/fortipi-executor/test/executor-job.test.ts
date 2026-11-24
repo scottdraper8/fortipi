@@ -84,6 +84,61 @@ test("durable local approval survives 30 real seconds and reconnect despite a lo
       a = await assignment(nodeCommand(fixtureChild, "append", marker)),
       started = performance.now();
     await runtime.assignOnce(a);
+    const clamped = {
+      identity: a.identity,
+      leaseVersion: a.identity.lease.leaseVersion + 1,
+      expiresAt: a.identity.lease.expiresAt,
+    };
+    await runtime.receive({ type: "job.lease_update", requestId: randomUUID(), payload: clamped });
+    const observedLease = { ...a.identity.lease, leaseVersion: clamped.leaseVersion };
+    assert.deepEqual(f.ledger.get(a.identity.jobId)?.assignment.identity.lease, observedLease);
+    await runtime.receive({ type: "job.lease_update", requestId: randomUUID(), payload: clamped });
+    runtime.leaseUpdate({ ...clamped, leaseVersion: a.identity.lease.leaseVersion });
+    for (const invalid of [
+      { ...clamped, expiresAt: clamped.expiresAt + 1 },
+      { ...clamped, leaseVersion: clamped.leaseVersion + 1, expiresAt: clamped.expiresAt - 1 },
+      { ...clamped, leaseVersion: clamped.leaseVersion + 1, expiresAt: a.identity.deadline + 1 },
+      {
+        ...clamped,
+        identity: {
+          ...a.identity,
+          lease: { ...a.identity.lease, fence: `${a.identity.lease.fence}0` },
+        },
+      },
+      {
+        ...clamped,
+        identity: {
+          ...a.identity,
+          lease: {
+            ...a.identity.lease,
+            credential: {
+              ...a.identity.lease.credential,
+              generation: a.identity.lease.credential.generation + 1,
+            },
+          },
+        },
+      },
+      {
+        ...clamped,
+        identity: {
+          ...a.identity,
+          lease: {
+            ...a.identity.lease,
+            registrationId: `${a.identity.lease.registrationId}_changed`,
+          },
+        },
+      },
+      {
+        ...clamped,
+        identity: {
+          ...a.identity,
+          target: { ...a.identity.target, generation: a.identity.target.generation + 1 },
+        },
+      },
+    ])
+      assert.throws(() => runtime.leaseUpdate(invalid));
+    assert.deepEqual(f.ledger.get(a.identity.jobId)?.assignment.identity.lease, observedLease);
+    assert.equal(runtime.children.size, 0);
     renewals = jobRenewals(runtime, a);
     for (let n = 0; n < 7; n++) {
       approvalObservation(await query(peer, a), a, "waiting_for_local_policy");

@@ -1161,7 +1161,7 @@ export class TestAgentSession extends AgentSession {
       );
     return Object.keys(document?.children ?? {}).length;
   }
-  async activeJobPorts(jobId: string) {
+  async activeJobPorts(jobId: string, preserveExpiry = false) {
     const state = await this.jobs.state(jobId);
     if (!state.assignment || !state.reservation)
       throw new Error("Actual admitted assignment required");
@@ -1179,7 +1179,7 @@ export class TestAgentSession extends AgentSession {
       requestId: `pressure_${jobId}_${lease.leaseVersion}`,
       lease,
       expectedLeaseVersion: lease.leaseVersion,
-      expiresAt: Math.min(state.deadline, Date.now() + 30000),
+      expiresAt: preserveExpiry ? lease.expiresAt : Math.min(state.deadline, Date.now() + 30000),
     });
     let delivery = "not_renewed";
     if (renewal.ok && state.assignment.identity.target.kind === "executor") {
@@ -1212,8 +1212,10 @@ export class TestAgentSession extends AgentSession {
       jobId,
       identity: state.assignment.identity,
       leaseExpiresAt: lease.expiresAt,
+      beforeRenewalLease: lease,
       query: query.ok ? query.value.state : query.code,
       renewal: renewal.ok ? "renewed" : renewal.code,
+      renewedLease: renewal.ok ? renewal.value : null,
       delivery,
       facts: factBody.ok ? "read" : factBody.code,
     });

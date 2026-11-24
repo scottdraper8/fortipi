@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "4756b99d9697dab382c60cafe52447135d6cef98",
-        "version": "v1.20261123.1",
-        "sha256": "ccba6d406f7153f9b84b0102df1c7a21777dd42dd0fb2635a134b178fad31764",
+        "commit": "21437517db09ae641bd9a72861a12dc4538e0e68",
+        "version": "v1.20261124.1",
+        "sha256": "a5c7c041c3be57037fb7de2e7453b5aee5fd83fa4afd5402ed8835e98d2a2af7",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261121.1"
       },
-      "reviewedAt": "2026-11-23T01:15:39.247Z",
-      "reviewNote": "Reviewed e9a7b9c8..4756b99d (1 commit/2 paths): maximum compatibility date2026-11-29->30 and release-version2026-11-22->23. Ceiling affects CODE_VERSION validation; release date feeds version/npm compatibilityDate. Other implementation/schema/build/dependency/license files unchanged; no new implementation/security patch identified in this interval. Official release/tag match; commit unsigned, assets unverified. Retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1, types5.20261121.1, explicit date2026-11-10 and flags. Earlier bounded reviews/limits retained. Watch only; no broad safety/hosted/native/deployed/Paid qualification. https://github.com/cloudflare/workerd/compare/e9a7b9c8dcaeffa711edea7cf8b1aa78888cc230...4756b99d9697dab382c60cafe52447135d6cef98"
+      "reviewedAt": "2026-11-24T02:55:29.506Z",
+      "reviewNote": "Reviewed4756b99d..21437517 (36commits/129paths) against official release/tag/full comparison and locked graph. DO IO-channel and Rust failure-worker autogates have unknown hosted state; SQL cursor close is additive. Lazy Node globals use the new registry, inactive at explicit2026-11-10; unflagged warning/deriveBits/Blob/fs-copy behavior changes and release ISA changes remain relevant to future adoption. No existing FortiPi binding/config removal identified. Retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1/types5.20261121.1 and flags. Watch metadata acknowledgment only; assets/signatures/hosted rollout/runtime/native/Paid/deployed compatibility not qualified. Four installed-library lookahead alerts remain unresolved. https://github.com/cloudflare/workerd/compare/4756b99d9697dab382c60cafe52447135d6cef98...21437517db09ae641bd9a72861a12dc4538e0e68"
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
@@ -199,16 +199,16 @@
     "pnpm": {
       "catalogSha256": "e58410592c8f99f5a020cb7c675a8fb1adcab60b7954df4ee66f045f48f14708",
       "snapshot": {
-        "commit": "b8d388835f9a40ee1ac53fbc2d4b58c3ebfa5600",
-        "version": "v12.21.0",
-        "sha256": "e81e013dae06379ed704786c7b81bb2f31ab6089fb66a3ffd64c1ff387ea5086",
+        "commit": "2939f3827a5cfc0de8d1c4b678c7fae58a04cb9e",
+        "version": "v12.23.0",
+        "sha256": "50a9d5faabf979c684a9e8c79cf0feda06ec1cba1681381bc8d02a6341a4279a",
         "paths": {}
       },
       "pins": {
-        "package.json#packageManager": "pnpm@12.22.0"
+        "package.json#packageManager": "pnpm@12.23.0"
       },
-      "reviewedAt": "2026-11-21T05:36:33.085Z",
-      "reviewNote": "Fresh maintained GitHub releases/latest still selects v12.21.0/b8d38883 with unchanged source fingerprint. Current exact local manager is12.22.0, not a downgrade to the API-selected older channel. Separate official v12.22.0 release449108884 was published2026-11-17; tag7a89d701 resolves eb0fda4ee3891f9c10e8bad83d1c3c5af343591f. Selected exact-tag code covers registry routes/options in age/trust verification identity and dlx build/policy cache identity; retain strict age/trust/script/skills controls and both manager documents. This updates only the local-pin watch acknowledgment, not a new install or whole environment certification. No newer-version chasing beyond the fixed cutoff. Evidence: current-lookahead-review/report.md."
+      "reviewedAt": "2026-11-23T15:16:12.154Z",
+      "reviewNote": "Nov23 targeted immutable pnpm12.22→12.23 code review: OTP config exclusion, HTTPS/redirect credential scope, warm/frozen-lock policy and pack/variant changes. Adopt exact12.23.0. All17 manager/native archives have SRI, registry signature, publish/SLSA subject and exact source/workflow/certificate verification;34 transparency proofs match2939f382. Retain original MIT/Yarn BSD/two BlueOak variants and accurate six-component credits; preserve companion executable modes. Both application lock documents remain identical; fresh425-identity OSV reports no listed matches. Host12.23 identity, maintained license inventory and21 exact supplemental copies passed. Cold three-platform/product/old-new-kit gates remain required; no reproducible-build or whole-source audit claim."
     },
     "typescript": {
       "catalogSha256": "281424da318292a0ed0449e4fe3cc2b3be9e207251b80380700eb539925f768c",
@@ -274,27 +274,27 @@
   "releaseReference": {
     "format": 1,
     "cohort": {
-      "rootManifest": "2beb31c7e7929d3442a64a192afb9fa7d0fb7c7bcce49e9a13e2e05221912a99",
-      "rootLock": "78b158fa8f07ffe75c6abc48c58d8d852d30562032352f73f7c1aa2059716879",
-      "workspaceInputs": "5b96956693897ae619fc085cad719886e157c487c9db98493f969dfea9b19d93",
-      "toolingLock": "161efe95261afadcaf716c9762256ee68987135662e2b3874c27eafee8ffb90b",
-      "sourcePolicyInputs": "b87830caabb328c567d8f55e77a6a2a921e8ac42068bc9d2e7e69e34e0bad734",
+      "rootManifest": "4779a1bb0e5eb0d77dbbf8d69701c7b8e152c38fffe9a733c34813cc11517bb6",
+      "rootLock": "8acf25f037c9ccf2b7dbd95679192792fa76a38ad2ee13dba628e32953c07a02",
+      "workspaceInputs": "e39f69a41e8999d96ca477519b2573c74bfe7f017a72727c0adeb0a6fd873fb7",
+      "toolingLock": "1ef9a93f0d970ffc6e4196ed52e039f74e9cb6d7a1548c1f9c0d0e587a8ed812",
+      "sourcePolicyInputs": "4cc19bac3460a064d7573a515618f65d60eb42c8506f6a402515ac72812abc06",
       "patchReview": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
       "patchTree": "e5504a1e4293d5e3d0d5ad6fbc65db673aa44b53",
       "platformTools": "40c328395103bc442275a69d0090b0fe7031cab01e1ceea693505f459fb3da3a",
       "imageInputs": "595086ec03356174f22237b2eca51068431d234869bd6034f1b0c1c6de14c512",
       "productTrees": {
-        "worker": "a9cb2f6e159bd4674217316387bf4245e90627be",
-        "packages": "847ba597ce8b85e64529822ddaee087317c93737"
+        "worker": "c0594bc87632efd25563c12c5b900e29dddf8ce7",
+        "packages": "726e6dae512cb7688d85a00c4e63233514478380"
       },
       "image": {
-        "sourceCommit": "08cb73f9669d9fd2f5fa1a6127bbdc6f0df5ad03",
-        "metadataSha256": "9add7f6b36647d27d52b659e08c56eff2e32f614f13dc954c5e5601f46c0e13c",
-        "builtManifestDigest": "sha256:ee1f81d8cde3df8e770867ad08e560e99fb55c9c5461dde105d52f247528330b",
-        "sourceKitSha256": "1eef8bedaa65d9dd2452bfc0f0a783f824e1f7d4bcb9e9fa804258e2bbd3e303"
+        "sourceCommit": "121dda16792a81d4756e597b395a9f287b8e10d3",
+        "metadataSha256": "2d1a6e93954be4fbd22b6365299c7ffb13abff5fe7a2b037b16fdf15932c3b9f",
+        "builtManifestDigest": "sha256:365a230731fc7b82dd3755be992b43c3076884dfcdef81eaac34d8101130618d",
+        "sourceKitSha256": "4312309f85325c23c422b081c2c81b78e36493d2567deb7c66670284b2eabc40"
       }
     },
-    "cohortSha256": "01c8f9d68e4f16bfbb69a3ad309dcaf61fccc1e64b80de3efd6d4c499db38de0",
+    "cohortSha256": "803339efa78ee98b0d33a9c4e16b16d7ecb6338e887ce63bf04229bd1322ec7c",
     "references": {
       "pi-runtime": {
         "sourceFactsSha256": "1900eefcab459e01c041e7f163fe05444c746212768be1804abcc09cf4362f44",

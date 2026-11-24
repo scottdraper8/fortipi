@@ -49,8 +49,14 @@ class HeldPiHarness extends PiHarness {
 /** Observe public alarm promises, including alarms installed on the host. */
 class ObservedLifecycle extends Lifecycle {
   readonly alarmRuns = new Set<Promise<void>>();
+  entered = 0;
+  settled = 0;
   override alarm(): Promise<void> {
-    const run = super.alarm().finally(() => this.alarmRuns.delete(run));
+    this.entered = Math.min(1000, this.entered + 1);
+    const run = super.alarm().finally(() => {
+      this.alarmRuns.delete(run);
+      this.settled = Math.min(1000, this.settled + 1);
+    });
     this.alarmRuns.add(run);
     return run;
   }
@@ -122,6 +128,11 @@ export class FixedWakeProbe extends DurableObject {
       taskStatus: task?.state.status,
       row: this.pi.row(),
       alarm: await this.ctx.storage.getAlarm(),
+      alarms: {
+        entered: this.lifecycle.entered,
+        settled: this.lifecycle.settled,
+        inFlight: Math.min(1000, this.lifecycle.alarmRuns.size),
+      },
     };
   }
   async close() {

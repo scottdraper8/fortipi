@@ -19,6 +19,9 @@ import { observeCandidateDiagnostics, observeSourceTestFailures } from "../../bu
 import {
   nativeRecoveryFailureLine,
   nativeRecoveryObservationLine,
+  sourceAllocationChildFailureLines,
+  sourceAllocationFailureLine,
+  sourceAllocationPhaseLine,
   sourceFailureLines,
   sourceRecoveryPath,
   sourceReentryFailureLine,
@@ -913,6 +916,414 @@ test("bounded TAP and closed-record validation discard unknown/private fields an
     false,
   );
   assert.equal(sourceTestDiagnostic(JSON.stringify(safe)), true);
+  // Allocation uses only unexpected-failure records; these are pure data cases,
+  // never an allocation child, module mock, runtime or expected negative control.
+  for (const [error, kind, exitCode, signal] of [
+    [{ code: "ERR_ASSERTION" }, "assertion", null, null],
+    [{ name: "TimeoutError" }, "timeout", null, null],
+    [{ code: "ABORT_ERR" }, "abort", null, null],
+    [{ code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }, "buffer-limit", null, null],
+    [{ code: 1 }, "exit", 1, null],
+    [{ code: null, killed: true, signal: "SIGTERM" }, "signal", null, "SIGTERM"],
+    [{ code: canary, signal: canary }, "other", null, null],
+  ] as const) {
+    const line = sourceAllocationFailureLine(
+      "allocate",
+      { ...error, message: canary, stack: canary, stdout: canary, stderr: canary },
+      19,
+    );
+    assert.deepEqual(JSON.parse(line), {
+      diagnostic: "source-device-allocation-failure",
+      phase: "allocate",
+      kind,
+      elapsedMs: 19,
+      exitCode,
+      signal,
+    });
+    assert.equal(line.includes(canary), false);
+    assert.equal(sourceTestDiagnostic(line), true);
+    assert.equal(sourceTestDiagnostic(`# ${line}`), true);
+  }
+  const allocationLine = sourceAllocationFailureLine("allocate", { code: "ERR_ASSERTION" }, 19),
+    allocation = JSON.parse(allocationLine);
+  for (const changed of [
+    { ...allocation, phase: canary },
+    { ...allocation, kind: canary },
+    ...[null, -1, 60001, 0.5, "19"].map((elapsedMs) => ({ ...allocation, elapsedMs })),
+    ...[-256, 256, 0.5, "1"].map((exitCode) => ({ ...allocation, exitCode })),
+    { ...allocation, signal: "SIGUSR1" },
+    { ...allocation, message: canary },
+    { ...allocation, stack: canary },
+    { ...allocation, stdout: canary },
+    { ...allocation, env: canary },
+  ])
+    assert.equal(sourceTestDiagnostic(JSON.stringify(changed)), false);
+  assert.equal(
+    sourceTestDiagnostic(
+      allocationLine.replace('"phase":"allocate"', `"phase":"${canary}","phase":"allocate"`),
+    ),
+    false,
+  );
+  for (const [elapsed, expected] of [
+    [Number.NaN, 0],
+    [-1, 0],
+    [60001, 60000],
+    [19.6, 20],
+  ] as const)
+    assert.equal(
+      JSON.parse(sourceAllocationFailureLine(canary, null, elapsed)).elapsedMs,
+      expected,
+    );
+  let accessed = false;
+  const opaque = Object.defineProperties(
+    {},
+    Object.fromEntries(
+      ["name", "code", "signal", "stdout", "stderr"].map((key) => [
+        key,
+        {
+          get() {
+            accessed = true;
+            throw Error(canary);
+          },
+        },
+      ]),
+    ),
+  );
+  assert.equal(sourceAllocationFailureLine(canary, opaque, 0).includes(canary), false);
+  assert.deepEqual(sourceAllocationChildFailureLines(opaque), []);
+  assert.equal(accessed, false);
+  assert.deepEqual(
+    sourceAllocationChildFailureLines({
+      stdout: `${canary}\n${allocationLine}\n`,
+      stderr: `${allocationLine}\r\n${JSON.stringify({ ...allocation, message: canary })}\n${JSON.stringify(safe)}\n`,
+    }),
+    [allocationLine],
+  );
+  for (const stdout of [allocationLine, `${allocationLine} ${canary}\n`, "x".repeat(100001)])
+    assert.deepEqual(sourceAllocationChildFailureLines({ stdout }), []);
+  assert.deepEqual(
+    sourceAllocationChildFailureLines({ stderr: `${allocationLine}\n${canary.repeat(300)}\n` }),
+    [allocationLine],
+  );
+  const scopesLine = sourceAllocationFailureLine("scopes", null, 20);
+  assert.deepEqual(
+    sourceAllocationChildFailureLines({
+      stderr: `${allocationLine}\n${scopesLine}\n${sourceAllocationFailureLine("read-role", null, 21)}\n`,
+    }),
+    [allocationLine, scopesLine],
+  );
+  const progress = [
+    "mock",
+    "import",
+    "allocate",
+    "scopes",
+    "cleanup-retry",
+    "cleanup-pending",
+    "cleanup-privacy",
+    "issuance-controls",
+    "journal-controls",
+    "read-role",
+    "restore",
+  ].map((phase) => {
+    const line = sourceAllocationPhaseLine(phase);
+    assert.deepEqual(JSON.parse(line), {
+      diagnostic: "source-device-allocation-phase",
+      phase,
+      event: "enter",
+    });
+    assert.equal(sourceTestDiagnostic(line), true);
+    assert.equal(sourceTestDiagnostic(`# ${line}`), true);
+    return line;
+  });
+  assert.ok(Buffer.byteLength(`${progress.join("\n")}\n`) < 2048);
+  const initialStage = sourceAllocationPhaseLine("mock"),
+    lastStage = sourceAllocationPhaseLine("read-role"),
+    laterStage = sourceAllocationPhaseLine("restore"),
+    stage = JSON.parse(lastStage);
+  for (const changed of [
+    { ...stage, phase: canary },
+    { ...stage, event: "failure" },
+    { ...stage, event: "exit" },
+    { ...stage, kind: "assertion" },
+    { ...stage, message: canary },
+  ])
+    assert.equal(sourceTestDiagnostic(JSON.stringify(changed)), false);
+  const duplicateStage = lastStage.replace(
+    '"phase":"read-role"',
+    `"phase":"${canary}","phase":"read-role"`,
+  );
+  assert.equal(sourceTestDiagnostic(duplicateStage), false);
+  assert.equal(sourceAllocationPhaseLine(canary).includes(canary), false);
+  // Termination need not emit a child failure: retain only the last completed
+  // valid stderr stage, with no failure classification or cross-stream guess.
+  assert.deepEqual(
+    sourceAllocationChildFailureLines({
+      code: null,
+      signal: "SIGTERM",
+      stderr: `${initialStage}\n${lastStage}\n`,
+    }),
+    [lastStage],
+  );
+  assert.deepEqual(sourceAllocationChildFailureLines({ stdout: `${laterStage}\n` }), []);
+  assert.deepEqual(
+    sourceAllocationChildFailureLines({
+      stdout: `${laterStage}\n`,
+      stderr: `${initialStage}\n${allocationLine}\n${scopesLine}\n${lastStage}\n${duplicateStage}\n${JSON.stringify({ ...stage, message: canary })}\n${laterStage}`,
+    }),
+    [lastStage, allocationLine, scopesLine],
+  );
+  const allocationName =
+      "live device allocation journals public ownership before effects and preserves uncertain cleanup",
+    allocationPath = "scripts/test/release/live-device-allocation.test.ts",
+    allocationSource = (
+      await readFile(new URL(`../../../${allocationPath}`, import.meta.url), "utf8")
+    ).split("\n"),
+    registration =
+      allocationSource.findIndex((line) => line.includes(JSON.stringify(allocationName))) + 1;
+  assert.ok(registration > 0);
+  const allocationFailures: string[] = [],
+    consumeAllocation = sourceFailureLines((line) => allocationFailures.push(line));
+  for (const line of [
+    `not ok 1 - ${allocationName}`,
+    "  ---",
+    "  failureType: 'testCodeFailure'",
+    `  location: '${allocationPath}:${registration}:1'`,
+    `  error: '${canary}'`,
+    "  ...",
+  ])
+    consumeAllocation(line);
+  assert.deepEqual(JSON.parse(allocationFailures[0] ?? ""), {
+    diagnostic: "source-test-failure",
+    name: allocationName,
+    location: `${allocationPath}:${registration}:1`,
+    category: "testCodeFailure",
+    code: null,
+  });
+  assert.equal(allocationFailures.join("").includes(canary), false);
+  // Fixed-wake grammar only: literal data, with no producer/test import or runtime.
+  const fixedWakeState = {
+    diagnostic: "source-fixed-wake-state",
+    phase: "before-release",
+    taskState: "sleeping",
+    wakeActive: false,
+    wakeAtPresent: true,
+    wakeAtMatches: true,
+    rowPresent: true,
+    rowIdMatches: true,
+    rowFnMatches: true,
+    rowTimeMatches: true,
+    alarmPresent: true,
+    alarmTimeMatches: true,
+    deadlineFuture: true,
+    remainingMs: 60000,
+    alarmsEntered: 2,
+    alarmsSettled: 1,
+    alarmsInFlight: 1,
+  };
+  const fixedWakeBooleans = [
+    "wakeActive",
+    "wakeAtPresent",
+    "wakeAtMatches",
+    "rowPresent",
+    "rowIdMatches",
+    "rowFnMatches",
+    "rowTimeMatches",
+    "alarmPresent",
+    "alarmTimeMatches",
+    "deadlineFuture",
+  ] as const;
+  const fixedWakeCounts = ["alarmsEntered", "alarmsSettled", "alarmsInFlight"] as const;
+  const fixedWakeRecords: Record<string, unknown>[] = [];
+  for (const phase of ["before-release", "after-join"]) {
+    fixedWakeRecords.push({ ...fixedWakeState, phase });
+    for (const taskState of [
+      "pending",
+      "running",
+      "waiting",
+      "sleeping",
+      "completing",
+      "terminal",
+      "missing",
+      "unknown",
+    ])
+      fixedWakeRecords.push({ ...fixedWakeState, phase, taskState });
+  }
+  for (const key of fixedWakeBooleans)
+    for (const value of [false, true]) fixedWakeRecords.push({ ...fixedWakeState, [key]: value });
+  for (const remainingMs of [-60000, -1, 0, 1, 60000])
+    fixedWakeRecords.push({ ...fixedWakeState, remainingMs });
+  for (const key of fixedWakeCounts)
+    for (const value of [0, 1, 9, 10, 99, 100, 999, 1000])
+      fixedWakeRecords.push({ ...fixedWakeState, [key]: value });
+  for (const [scope, phases, bodyFlags] of [
+    ["setup", ["prepare", "listen", "environment"], [false]],
+    [
+      "body",
+      [
+        "begin",
+        "hold-idle",
+        "sleep-successor",
+        "observe-successor",
+        "release-old",
+        "settle-old",
+        "final-read",
+        "final-assertions",
+      ],
+      [true],
+    ],
+    [
+      "cleanup",
+      ["cleanup-release", "cleanup-drives", "cleanup-pi", "cleanup-server", "cleanup-directory"],
+      [false, true],
+    ],
+  ] as const)
+    for (const lastPhase of phases)
+      for (const bodyFailed of bodyFlags)
+        fixedWakeRecords.push({
+          diagnostic: "source-fixed-wake-failure",
+          scope,
+          lastPhase,
+          bodyFailed,
+        });
+  for (const record of fixedWakeRecords) {
+    const line = `# ${JSON.stringify(record)}`;
+    assert.ok(Buffer.byteLength(line) <= 512);
+    assert.equal(line.includes(canary), false);
+    assert.equal(sourceTestDiagnostic(line), true);
+  }
+  for (const lastPhase of [
+    "prepare",
+    "listen",
+    "environment",
+    "begin",
+    "hold-idle",
+    "sleep-successor",
+    "observe-successor",
+    "release-old",
+    "settle-old",
+    "check-wake",
+  ]) {
+    const line = `# ${JSON.stringify({ diagnostic: "source-fixed-wake-failure", lastPhase })}`;
+    assert.ok(Buffer.byteLength(line) <= 512);
+    assert.equal(sourceTestDiagnostic(line), true, "Historical two-field form stays accepted");
+  }
+  const fixedWakeBody = {
+    diagnostic: "source-fixed-wake-failure",
+    scope: "body",
+    lastPhase: "final-read",
+    bodyFailed: true,
+  };
+  for (const record of [fixedWakeState, fixedWakeBody]) {
+    const json = JSON.stringify(record),
+      line = `# ${json}`;
+    const entries = Object.entries(record);
+    for (const missing of Object.keys(record))
+      assert.equal(
+        sourceTestDiagnostic(
+          `# ${JSON.stringify(Object.fromEntries(entries.filter(([key]) => key !== missing)))}`,
+        ),
+        false,
+      );
+    for (const key of [
+      "extra",
+      "error",
+      "message",
+      "stack",
+      "stdout",
+      "stderr",
+      "env",
+      "token",
+      "credential",
+      "id",
+      "taskId",
+      "operationId",
+    ])
+      assert.equal(
+        sourceTestDiagnostic(`# ${JSON.stringify({ ...record, [key]: canary })}`),
+        false,
+      );
+    for (const bad of [
+      json,
+      `#${json}`,
+      ` # ${json}`,
+      `# ${JSON.stringify(Object.fromEntries(entries.toReversed()))}`,
+      line.replace('"diagnostic":', `"diagnostic":"${canary}","diagnostic":`),
+      `${line} `,
+      `${line}\t`,
+      `${line}\n`,
+      `${line}\r\n`,
+      `${line}${canary}`,
+      `${line}{}`,
+      `${line}\n${line}`,
+    ])
+      assert.equal(
+        sourceTestDiagnostic(bad),
+        false,
+        "New fixed-wake records require exact canonical framing",
+      );
+    const overlong = `${line}${" ".repeat(513 - line.length)}`;
+    assert.equal(overlong.length, 513);
+    assert.equal(sourceTestDiagnostic(overlong), false);
+  }
+  for (const changed of [
+    ...[canary, "check-wake", null, 1].map((phase) => ({ ...fixedWakeState, phase })),
+    ...[canary, "ready", null, 1].map((taskState) => ({ ...fixedWakeState, taskState })),
+    ...fixedWakeBooleans.flatMap((key) =>
+      [null, 0, 1, "true", {}, []].map((value) => ({ ...fixedWakeState, [key]: value })),
+    ),
+    ...[-60001, 60001, 0.5, "0", null, Number.NaN, Infinity, -Infinity, true].map(
+      (remainingMs) => ({ ...fixedWakeState, remainingMs }),
+    ),
+    ...fixedWakeCounts.flatMap((key) =>
+      [-1, 1001, 0.5, "0", null, true, Number.MAX_SAFE_INTEGER].map((value) => ({
+        ...fixedWakeState,
+        [key]: value,
+      })),
+    ),
+    ...[canary, "BODY", null, 1].map((scope) => ({ ...fixedWakeBody, scope })),
+    ...[canary, "check-wake", null, 1].map((lastPhase) => ({ ...fixedWakeBody, lastPhase })),
+    ...[false, null, 0, 1, "true"].map((bodyFailed) => ({ ...fixedWakeBody, bodyFailed })),
+    { ...fixedWakeBody, scope: "setup", lastPhase: "prepare", bodyFailed: true },
+    { ...fixedWakeBody, scope: "setup", lastPhase: "begin", bodyFailed: false },
+    { ...fixedWakeBody, scope: "setup", lastPhase: "cleanup-pi", bodyFailed: false },
+    { ...fixedWakeBody, scope: "body", lastPhase: "prepare" },
+    { ...fixedWakeBody, scope: "body", lastPhase: "cleanup-release" },
+    { ...fixedWakeBody, scope: "cleanup", lastPhase: "prepare", bodyFailed: false },
+    { ...fixedWakeBody, scope: "cleanup", lastPhase: "final-assertions" },
+    ...[null, 0, 1, "true"].map((bodyFailed) => ({
+      ...fixedWakeBody,
+      scope: "cleanup",
+      lastPhase: "cleanup-pi",
+      bodyFailed,
+    })),
+    { diagnostic: "source-fixed-wake-failure", lastPhase: canary },
+    { diagnostic: "source-fixed-wake-failure", lastPhase: "final-read" },
+    { diagnostic: "source-fixed-wake-failure", lastPhase: "check-wake", error: canary },
+  ])
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
+  const fixedWakeLine = `# ${JSON.stringify(fixedWakeState)}`;
+  for (const key of ["remainingMs", ...fixedWakeCounts] as const)
+    for (const token of [
+      "-0",
+      "00",
+      "01",
+      "1.0",
+      "1e0",
+      "1E+0",
+      "+1",
+      " 1",
+      "1 ",
+      "NaN",
+      "Infinity",
+      "-Infinity",
+    ])
+      assert.equal(
+        sourceTestDiagnostic(
+          fixedWakeLine.replace(`"${key}":${fixedWakeState[key]}`, `"${key}":${token}`),
+        ),
+        false,
+        `Noncanonical ${key} must not be forwarded`,
+      );
   const startup = {
     diagnostic: "source-recovery-start",
     event: "ready",

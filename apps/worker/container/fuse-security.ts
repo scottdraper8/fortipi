@@ -26,7 +26,17 @@ const sourceSigner = "7D887DC8BA7BBBA7B835E3BADCE310E7864CC8BF";
 const sourcePrimary = "A0DF7E0D3851E0EE45C00BC8ACE1F33CB933BBBB";
 const baseLayer = "37fb86c2a767b88d500c6872195f88078f64765fe0d2f9cc375cc2efbd4c0a41";
 const keyringHash = "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017";
-const sourcePublicSha256 = "e6d6acf96e7fbaa752d603fc43b5f96eea06045f53b9c4367a1864519eaff3c2";
+export const sourceCertificateSha256 =
+  "c56066bd9d023f56015b682082616b3ce1761f0a394b1f9ea4eedd4aad542f74";
+export const historicalSourceCertificateSha256 =
+  "38ead01d85cc57fd75a07c1ea4ffcad736be6fb4c006f0cf7f029dda1472041f";
+const sourceCertificate = {
+  encoding: "openpgp-binary",
+  commit: "83d66888437c84e460765fc4f88d5cd7ceedfbc4",
+  path: "debian-keyring-pgp/0xACE1F33CB933BBBB",
+  sha256: sourceCertificateSha256,
+};
+const sourceCertificateUrl = `https://salsa.debian.org/debian-keyring/keyring/-/raw/${sourceCertificate.commit}/${sourceCertificate.path}`;
 const upstreamPublicSha256 = "68e9eab3bbb84a63cec0ca59eb82abb9cd1dee7059bce5bf92ca777f4186c7e0";
 const sourceRevision = "3dbcfce64ba0dd529cec7b94305662e7901a991b";
 const sourceFiles = {
@@ -244,28 +254,9 @@ export async function authenticateIndexes(
     const dsc = sourceBytes.get("fuse3_3.18.3-1.dsc");
     check(dsc, "Missing signed FUSE descriptor");
     await writeFile(descriptor, dsc);
-    const sourceKey = await download(
-      `https://keyring.debian.org/pks/lookup?op=get&search=0x${sourceSigner}`,
-      sourcePublicSha256,
-    );
-    await writeFile(resolve(destination, "debian-source-signer-response.html"), sourceKey);
-    const response = new TextDecoder().decode(sourceKey).replaceAll("\r\n", "\n");
-    const begin = response.indexOf("-----BEGIN PGP PUBLIC KEY BLOCK-----");
-    const end = response.indexOf("-----END PGP PUBLIC KEY BLOCK-----", begin);
-    check(begin >= 0 && end > begin, "Missing Debian public key block");
-    const armor = response.slice(begin, end + "-----END PGP PUBLIC KEY BLOCK-----".length);
-    await writeFile(resolve(destination, "debian-source-signer.asc"), `${armor}\n`);
-    const payload = armor.slice(armor.indexOf("\n\n") + 2, armor.indexOf("\n="));
-    check(
-      armor.startsWith("-----BEGIN PGP PUBLIC KEY BLOCK-----") && payload.length > 0,
-      "Invalid Debian public key armor",
-    );
+    const keyBytes = await download(sourceCertificateUrl, sourceCertificateSha256);
     const sourceKeyring = resolve(destination, "debian-source-signer.pgp");
-    const keyBytes = Buffer.from(payload.replaceAll("\n", ""), "base64");
-    check(
-      sha256(keyBytes) === "38ead01d85cc57fd75a07c1ea4ffcad736be6fb4c006f0cf7f029dda1472041f",
-      "Debian source public key mismatch",
-    );
+    check(sha256(keyBytes) === sourceCertificateSha256, "Debian source public key mismatch");
     await writeFile(sourceKeyring, keyBytes);
     const signedSource = paragraphs(
       await verifySigned(descriptor, sourceKeyring, home, sourcePrimary, sourceSigner),
@@ -319,7 +310,7 @@ export async function authenticateIndexes(
     // Raw signatures/keys/indexes ship with the kit; no derived success is accepted on a later run.
     await writeFile(
       resolve(destination, "verification.json"),
-      `${JSON.stringify({ snapshot: imageInputs.snapshot, releases, archiveSigner, keyringHash, sourceSigner, sourcePrimary, sourcePublicSha256, upstreamPublicSha256, sourceRevision, sourceFiles, sourceFilesSha256: files }, null, 2)}\n`,
+      `${JSON.stringify({ snapshot: imageInputs.snapshot, releases, archiveSigner, keyringHash, sourceSigner, sourcePrimary, sourceCertificate: { ...sourceCertificate, url: sourceCertificateUrl }, upstreamPublicSha256, sourceRevision, sourceFiles, sourceFilesSha256: files }, null, 2)}\n`,
     );
     return {
       packages: trixie.packages,

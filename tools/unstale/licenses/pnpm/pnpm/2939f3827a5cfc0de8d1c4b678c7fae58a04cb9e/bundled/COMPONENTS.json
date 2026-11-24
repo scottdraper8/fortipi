@@ -1,0 +1,184 @@
+{
+  "format": 1,
+  "description": "Review-authored component/source correspondence, not an upstream license text. Full original licenses are supplemental to absent bundled files.",
+  "wrapper": {
+    "id": "pnpm@12.23.0",
+    "archiveSha256": "6501a897dcfe072e8df2957c94c46f27f71901b28f2e02a167f91e0ac7905859"
+  },
+  "components": [
+    {
+      "id": "chownr@3.0.0",
+      "license": "BlueOak-1.0.0",
+      "bundledPrefix": "package/dist/node_modules/chownr/",
+      "bundledManifestSha256": "4300e90fdd91ec7035047473c60f880251a9801bd786302729d4277751d3b948",
+      "sourceArchiveSha256": "4c24f5daa630142252da89de655f7df090ea479450a8825897751d78321b1360",
+      "sourceIntegrity": "sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==",
+      "sourceSignature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "sourceProvenance": "not published",
+      "sourceUrl": "https://registry.npmjs.org/chownr/3.0.0",
+      "gitHead": null,
+      "reusedApprovedRecord": true,
+      "reusedExistingArchive": true,
+      "comparedBundledMembers": 5,
+      "bundledMembersByteIdentical": true,
+      "modifiedMembers": [],
+      "credits": {
+        "author": "Isaac Z. Schlueter <i@izs.me> (http://blog.izs.me/)",
+        "contributors": null,
+        "repository": {
+          "type": "git",
+          "url": "git://github.com/isaacs/chownr.git"
+        },
+        "homepage": null
+      },
+      "licenseMember": "package/LICENSE.md",
+      "licenseSha256": "a49c9ba464796f65b59fca3f1e6ca40912df1e859f575383223f7ec6c5baae09",
+      "supplemental": true
+    },
+    {
+      "id": "graceful-fs@4.2.12",
+      "license": "BlueOak-1.0.0",
+      "bundledPrefix": "package/dist/node_modules/graceful-fs/",
+      "bundledManifestSha256": "7cc365c012febc9c44ef6d998b49d749840c852d91db3302b19eb6eca07ead3d",
+      "sourceArchiveSha256": "4ce49e6df444e0e984000530452b68dae551d7f9aefe832dc6fbfbf583b0cc6a",
+      "sourceIntegrity": "sha512-iuyGF2E4oafQfPsRrG2wtY2ILupMhvtdrhzrxB+0VcjsPpSPttpfYdjnGFGsTi5MaJFjI1jOKHPQ6UTbTj9TAw==",
+      "sourceSignature": "verified registry ECDSA",
+      "sourceProvenance": "published, Sigstore unverified",
+      "sourceUrl": "https://registry.npmjs.org/graceful-fs/-/graceful-fs-4.2.12.tgz",
+      "gitHead": "87955ac7932b193f1b1896d7cb8a2fddaad9a933",
+      "reusedApprovedRecord": false,
+      "reusedExistingArchive": false,
+      "comparedBundledMembers": 5,
+      "bundledMembersByteIdentical": false,
+      "modifiedMembers": [
+        {
+          "path": "graceful-fs.js",
+          "bundledSha256": "b47953721e408e70e23753c83ccdd06baaf40e3b942aa5e0e1d56db71287cc54",
+          "upstreamSha256": "7da35669b6b6b0e4aafee31674c033f2cebb0c8f9ae010f709dcc185d3f17786"
+        }
+      ],
+      "credits": {
+        "author": null,
+        "contributors": null,
+        "repository": {
+          "type": "git",
+          "url": "https://github.com/isaacs/node-graceful-fs"
+        },
+        "homepage": null
+      },
+      "licenseMember": "package/LICENSE.md",
+      "licenseSha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+      "supplemental": true
+    },
+    {
+      "id": "isexe@4.0.0",
+      "license": "BlueOak-1.0.0",
+      "bundledPrefix": "package/dist/node_modules/isexe/",
+      "bundledManifestSha256": "1889746f84d1e2a524353a2e31464995b808f24457f0dd55d6fd9da638f978ed",
+      "sourceArchiveSha256": "c33d5be3c3ae9b9932eb3192f00f754673341b0fd427be653834192620bb28a2",
+      "sourceIntegrity": "sha512-FFUtZMpoZ8RqHS3XeXEmHWLA4thH+ZxCv2lOiPIn1Xc7CxrqhWzNSDzD+/chS/zbYezmiwWLdQC09JdQKmthOw==",
+      "sourceSignature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "sourceProvenance": "not published",
+      "sourceUrl": "https://registry.npmjs.org/isexe/4.0.0",
+      "gitHead": null,
+      "reusedApprovedRecord": true,
+      "reusedExistingArchive": true,
+      "comparedBundledMembers": 13,
+      "bundledMembersByteIdentical": true,
+      "modifiedMembers": [],
+      "credits": {
+        "author": "Isaac Z. Schlueter <i@izs.me> (http://blog.izs.me/)",
+        "contributors": null,
+        "repository": "https://github.com/isaacs/isexe",
+        "homepage": null
+      },
+      "licenseMember": "package/LICENSE.md",
+      "licenseSha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+      "supplemental": true
+    },
+    {
+      "id": "minipass@7.1.3",
+      "license": "BlueOak-1.0.0",
+      "bundledPrefix": "package/dist/node_modules/minipass/",
+      "bundledManifestSha256": "b8ab116187d5e9375d494f17437eb862cbee4b329c21f15412c6a5170ec2f55c",
+      "sourceArchiveSha256": "52ac61be743755e3fdc98e560086d0d4a1e2c7fd3643387792db38e322d27d12",
+      "sourceIntegrity": "sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==",
+      "sourceSignature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "sourceProvenance": "not published",
+      "sourceUrl": "https://registry.npmjs.org/minipass/7.1.3",
+      "gitHead": null,
+      "reusedApprovedRecord": true,
+      "reusedExistingArchive": true,
+      "comparedBundledMembers": 5,
+      "bundledMembersByteIdentical": true,
+      "modifiedMembers": [],
+      "credits": {
+        "author": "Isaac Z. Schlueter <i@izs.me> (http://blog.izs.me/)",
+        "contributors": null,
+        "repository": "https://github.com/isaacs/minipass",
+        "homepage": null
+      },
+      "licenseMember": "package/LICENSE.md",
+      "licenseSha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+      "supplemental": true
+    },
+    {
+      "id": "tar@7.5.23",
+      "license": "BlueOak-1.0.0",
+      "bundledPrefix": "package/dist/node_modules/tar/",
+      "bundledManifestSha256": "a19d6f10761450394badb32d46fb7a44734ed1c238651c786db2ab521103781f",
+      "sourceArchiveSha256": "0fa9bdbc6ad7dfbc1814e3dbe6166e1c5140e49646a7f91f3b5fcf0a9bb2db01",
+      "sourceIntegrity": "sha512-lkukzdoGngZHJZXxW4S/E4Fp9ghTDlyZXrQGRNoJ/LXvDKcXUTq2sg5yQe74po7Voea6n/IN09+wE/QvJMiifA==",
+      "sourceSignature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "sourceProvenance": "verified 2026-11-21T04:34:52.387Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/isaacs/node-tar@eb92e178af52cd191d48eb70a846f61cc4dade1b; reverify exact release inputs",
+      "sourceUrl": "https://registry.npmjs.org/tar/7.5.23",
+      "gitHead": null,
+      "reusedApprovedRecord": true,
+      "reusedExistingArchive": true,
+      "comparedBundledMembers": 65,
+      "bundledMembersByteIdentical": true,
+      "modifiedMembers": [],
+      "credits": {
+        "author": "Isaac Z. Schlueter",
+        "contributors": null,
+        "repository": {
+          "type": "git",
+          "url": "https://github.com/isaacs/node-tar.git"
+        },
+        "homepage": null
+      },
+      "licenseMember": "package/LICENSE.md",
+      "licenseSha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004",
+      "supplemental": true
+    },
+    {
+      "id": "yallist@5.0.0",
+      "license": "BlueOak-1.0.0",
+      "bundledPrefix": "package/dist/node_modules/yallist/",
+      "bundledManifestSha256": "1b9d47057ce39814531ff93f668823b4fa03e7d23945449c274a1ff6d4cc297f",
+      "sourceArchiveSha256": "7c9d43dbab7cab3b3133b0e6a5af14014482285316b39ec9f508efadd9ebce95",
+      "sourceIntegrity": "sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==",
+      "sourceSignature": "verified SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA",
+      "sourceProvenance": "not published",
+      "sourceUrl": "https://registry.npmjs.org/yallist/5.0.0",
+      "gitHead": null,
+      "reusedApprovedRecord": true,
+      "reusedExistingArchive": true,
+      "comparedBundledMembers": 5,
+      "bundledMembersByteIdentical": true,
+      "modifiedMembers": [],
+      "credits": {
+        "author": "Isaac Z. Schlueter <i@izs.me> (http://blog.izs.me/)",
+        "contributors": null,
+        "repository": {
+          "type": "git",
+          "url": "git+https://github.com/isaacs/yallist.git"
+        },
+        "homepage": null
+      },
+      "licenseMember": "package/LICENSE.md",
+      "licenseSha256": "a49c9ba464796f65b59fca3f1e6ca40912df1e859f575383223f7ec6c5baae09",
+      "supplemental": true
+    }
+  ]
+}

@@ -6,10 +6,19 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { resolve, sep } from "node:path";
 import { build } from "esbuild";
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import type { Installed } from "../distribution/install.ts";
 import type { BrowserInput, BrowserPort } from "./browser-entry.ts";
 import { type FixtureTLS, fixtureTLS, verifyFixtureTLS } from "./fixture-tls.ts";
+import {
+  type BrowserDiagnostic,
+  browserDiagnosticCodes,
+  browserDiagnosticPhases,
+  offlineConnectionStatuses,
+  offlineSettlements,
+  offlineTaskStates,
+  projectBrowserDiagnostic,
+} from "./local-evidence-observation.ts";
 
 export const liveBrowserPort = 10110;
 
@@ -138,9 +147,22 @@ async function browserGraph(
     tls,
     async run(
       input: BrowserInput,
-      revoke?: () => Promise<void>,
-      observe: (stage: string) => void = () => {},
+      revocationCase?: { input: BrowserInput; revoke: () => Promise<void> },
+      observe: (stage: string, diagnostic?: BrowserDiagnostic) => void = () => {},
     ) {
+      if (revocationCase) {
+        assert.ok(
+          revocationCase.input.endpoint === input.endpoint &&
+            revocationCase.input.agentId === input.agentId &&
+            revocationCase.input.conversationId === input.conversationId &&
+            revocationCase.input.seed === input.seed,
+          "Revocation observer must target the same public conversation",
+        );
+        assert.ok(
+          revocationCase.input.token !== input.token,
+          "Revocation observer must use its independently issued credential",
+        );
+      }
       observe("chromium-launch");
       const home = await mkdtemp(resolve(tmpdir(), "fortipi-evidence-chromium-"));
       const env: Record<string, string> = {
@@ -164,10 +186,114 @@ async function browserGraph(
         });
         engines.add(engine);
       } catch (error) {
-        await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        try {
+          await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        } catch {
+          // Preserve the launch failure; cleanup uncertainty cannot turn it into success.
+        }
         throw error;
       }
       let sockets = 0;
+      let failed = false;
+      const note = (stage: string) => {
+        try {
+          observe(stage);
+        } catch {}
+      };
+      const recoverDiagnostic = async (page: Page, stage: string) => {
+        try {
+          const diagnostic = await page.evaluate(
+            (allowed: {
+              phases: string[];
+              codes: string[];
+              connectionStatuses: string[];
+              settlements: string[];
+              taskStates: string[];
+            }) => {
+              const own = (value: unknown, key: string): unknown => {
+                try {
+                  return value && typeof value === "object"
+                    ? Object.getOwnPropertyDescriptor(value, key)?.value
+                    : undefined;
+                } catch {
+                  return undefined;
+                }
+              };
+              let value: unknown;
+              try {
+                value = (
+                  globalThis as unknown as { fortipiEvidence: BrowserPort }
+                ).fortipiEvidence.diagnostic();
+              } catch {}
+              const phase = own(value, "phase"),
+                code = own(value, "code"),
+                status = own(value, "status"),
+                completionDeadline = own(value, "completionDeadline");
+              const member = (value: unknown, values: string[]) =>
+                typeof value === "string" && values.includes(value) ? value : null;
+              const boolean = (value: unknown) => (typeof value === "boolean" ? value : null);
+              const integer = (value: unknown, min: number, max: number) =>
+                typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+                  ? value
+                  : null;
+              const offline = own(value, "offlineCompletion");
+              const offlineCompletion =
+                offline && typeof offline === "object"
+                  ? {
+                      status: member(own(offline, "status"), allowed.connectionStatuses),
+                      settlement: member(own(offline, "settlement"), allowed.settlements),
+                      statusError: boolean(own(offline, "statusError")),
+                      snapshots: integer(own(offline, "snapshots"), 0, 1000),
+                      matched: boolean(own(offline, "matched")),
+                      lastErrorCode: member(own(offline, "lastErrorCode"), allowed.codes),
+                      lastErrorStatus: integer(own(offline, "lastErrorStatus"), 100, 599),
+                      taskRead: boolean(own(offline, "taskRead")),
+                      taskState: member(own(offline, "taskState"), allowed.taskStates),
+                      eventsRead: boolean(own(offline, "eventsRead")),
+                      canonicalMatch: boolean(own(offline, "canonicalMatch")),
+                      hasMore: boolean(own(offline, "hasMore")),
+                      complete: boolean(own(offline, "complete")),
+                      elapsedMs: integer(own(offline, "elapsedMs"), 0, 60000),
+                    }
+                  : undefined;
+              return {
+                phase: typeof phase === "string" && allowed.phases.includes(phase) ? phase : null,
+                code: typeof code === "string" && allowed.codes.includes(code) ? code : null,
+                status:
+                  typeof status === "number" &&
+                  Number.isInteger(status) &&
+                  status >= 100 &&
+                  status <= 599
+                    ? status
+                    : null,
+                completionDeadline:
+                  typeof completionDeadline === "boolean" ? completionDeadline : null,
+                ...(offlineCompletion ? { offlineCompletion } : {}),
+              };
+            },
+            {
+              phases: [...browserDiagnosticPhases],
+              codes: [...browserDiagnosticCodes],
+              connectionStatuses: [...offlineConnectionStatuses],
+              settlements: [...offlineSettlements],
+              taskStates: [...offlineTaskStates],
+            },
+          );
+          observe(stage, projectBrowserDiagnostic(diagnostic));
+        } catch {
+          // Diagnostic readback must not replace the original page failure.
+        }
+      };
+      const cleanup = async () => {
+        engines.delete(engine);
+        if (!failed) note("browser-cleanup");
+        try {
+          await engine.close();
+          await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        } catch (error) {
+          if (!failed) throw error;
+        }
+      };
       try {
         const page = await engine.newPage();
         const network = await engine.newCDPSession(page);
@@ -216,15 +342,8 @@ async function browserGraph(
             return runner.run(value);
           }, input);
         } catch (error) {
-          const diagnostic = await page.evaluate(() =>
-            (
-              globalThis as unknown as { fortipiEvidence: BrowserPort }
-            ).fortipiEvidence.diagnostic(),
-          );
-          throw Object.assign(new Error("Browser public flow failed"), {
-            name: error instanceof Error ? error.name : "UnknownFailure",
-            diagnostic,
-          });
+          await recoverDiagnostic(page, "public-flow");
+          throw error;
         }
         observe("actual-preflight");
         assert.ok(
@@ -268,20 +387,34 @@ async function browserGraph(
         await diagnostic.detach();
         await otherPage.close();
         let revocation: Record<string, unknown> | undefined;
-        if (revoke) {
+        if (revocationCase) {
           observe("acknowledged-browser-revocation");
-          await page.evaluate(
-            (value) =>
-              (globalThis as unknown as { fortipiEvidence: BrowserPort }).fortipiEvidence.arm(
-                value,
-              ),
-            input,
-          );
-          await revoke();
-          revocation = await page.evaluate(() =>
-            (globalThis as unknown as { fortipiEvidence: BrowserPort }).fortipiEvidence.revoked(),
-          );
+          note("browser-revocation-arm");
+          try {
+            await page.evaluate(
+              (value) =>
+                (globalThis as unknown as { fortipiEvidence: BrowserPort }).fortipiEvidence.arm(
+                  value,
+                ),
+              revocationCase.input,
+            );
+          } catch (error) {
+            await recoverDiagnostic(page, "browser-revocation-arm");
+            throw error;
+          }
+          note("browser-revocation-revoke");
+          await revocationCase.revoke();
+          note("browser-revocation-check");
+          try {
+            revocation = await page.evaluate(() =>
+              (globalThis as unknown as { fortipiEvidence: BrowserPort }).fortipiEvidence.revoked(),
+            );
+          } catch (error) {
+            await recoverDiagnostic(page, "browser-revocation-check");
+            throw error;
+          }
         }
+        note("browser-finalization");
         await network.detach();
         return {
           ...observation,
@@ -308,10 +441,11 @@ async function browserGraph(
           crossOrigin: new URL(input.endpoint).origin !== origin,
           noHeaderWorkaround: true,
         };
+      } catch (error) {
+        failed = true;
+        throw error;
       } finally {
-        engines.delete(engine);
-        await engine.close();
-        await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        await cleanup();
       }
     },
     close() {

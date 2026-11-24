@@ -50,7 +50,7 @@ jobs:
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
         if: inputs.purpose != 'informational'
         with:
-          version: 12.22.0
+          version: 12.23.0
           run_install: false
           cache: false
       - if: inputs.purpose != 'informational'
@@ -124,7 +124,7 @@ jobs:
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
         if: inputs.purpose == 'publication'
         with:
-          version: 12.22.0
+          version: 12.23.0
           run_install: false
           cache: false
       - if: inputs.purpose == 'publication'

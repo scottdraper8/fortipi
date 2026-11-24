@@ -111,8 +111,13 @@ libfuse2t64 2.9.9-9 is not covered by the FUSE3 security comparison.
 `fuse-security.ts` authenticates both dated InRelease files and their exact index
 hashes. Its archive trust bootstrap is the exact public keyring extracted from the
 hash-verified Debian base layer, with an independently pinned keyring hash and
-Debian13 archive fingerprint. The FUSE DSC signature uses the exact public key
-response from Debian's keyring service and its full signing/primary fingerprints.
+Debian13 archive fingerprint. The FUSE DSC signature uses the hash-pinned binary
+certificate from Debian's Salsa keyring at commit
+`83d66888437c84e460765fc4f88d5cd7ceedfbc4`, with its full signing/primary fingerprints.
+New verification metadata records the binary certificate's URL, commit, path and
+digest. Kit verification accepts only this reviewed certificate or the exact
+historical certificate retained in original08, with the same signature checks;
+historical kit bytes and metadata remain unchanged.
 The original tarball's upstream signify Ed25519 signature is verified with the
 key from official tag `3dbcfce64ba0dd529cec7b94305662e7901a991b`;
 four mount/session source files must equal that reviewed tag's bytes. No local

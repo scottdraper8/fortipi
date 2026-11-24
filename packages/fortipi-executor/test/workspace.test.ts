@@ -1345,6 +1345,30 @@ test("exact metadata renewal reaches an active apply before expiry without losin
         ack.preparationId === prepared.preparationId &&
         ack.expiresAt === renewed.lease.expiresAt,
     );
+    const clamped = {
+      ...renewed,
+      lease: { ...renewed.lease, leaseVersion: renewed.lease.leaseVersion + 1 },
+    };
+    assert.deepEqual(await f.local.request(clamped), ack);
+    assert.deepEqual(await f.local.request(clamped), ack);
+    await assert.rejects(
+      f.local.request({
+        ...clamped,
+        lease: { ...clamped.lease, expiresAt: clamped.lease.expiresAt - 1 },
+      }),
+      /lease observation conflict/,
+    );
+    await assert.rejects(
+      f.local.request({
+        ...clamped,
+        lease: {
+          ...clamped.lease,
+          leaseVersion: clamped.lease.leaseVersion + 1,
+          expiresAt: clamped.lease.expiresAt - 1,
+        },
+      }),
+      /expired_lease/,
+    );
     if (renewed.mode.kind !== "staged-change") throw new Error("staged renewal missing");
     await assert.rejects(
       f.local.request({ ...renewed, mode: { ...renewed.mode, postManifestHash: "0".repeat(64) } }),
@@ -1367,8 +1391,8 @@ test("exact metadata renewal reaches an active apply before expiry without losin
       { path: "a", state: "done" },
       { path: "b", state: "done" },
     ]);
-    assert.equal(row?.request.lease.leaseVersion, renewed.lease.leaseVersion);
-    assert.equal(row?.request.lease.expiresAt, renewed.lease.expiresAt);
+    assert.equal(row?.request.lease.leaseVersion, clamped.lease.leaseVersion);
+    assert.equal(row?.request.lease.expiresAt, clamped.lease.expiresAt);
     assert.equal(
       f.ledger.rootAvailable(f.root.key),
       false,

@@ -583,7 +583,11 @@ export async function checkLicenses(root = repository, foundation = false): Prom
     }
     const licenses = licenseEntries(entries);
     assert.deepEqual(licenses, record.licenses, `${id}: license/NOTICE archive inventory mismatch`);
-    if (!Object.keys(licenses).length || externalNative.has(id))
+    if (
+      !Object.keys(licenses).length ||
+      externalNative.has(id) ||
+      policy.attributions[id] !== undefined
+    )
       await attribution(root, id, policy, review);
     for (const [path, bytes] of entries)
       if (licenses[path]) {
