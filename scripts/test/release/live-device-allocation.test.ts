@@ -191,6 +191,7 @@ async function controlled() {
       const journal = current();
       effects.push({ path, body });
       let result: unknown;
+      let status = 200;
       if (path === "/v1/admin/credentials") {
         const row = journal.roles.find((row) => row.mintRequestId === body.requestId);
         assert.ok(row);
@@ -241,6 +242,7 @@ async function controlled() {
           cleanupMode === "pending" || (cleanupMode === "first-pending" && count === 1)
             ? "pending"
             : "complete";
+        status = state === "pending" ? 202 : 200;
         result = {
           operationId: `operation_${credentialId}`,
           revocationId: `revocation_${credentialId}`,
@@ -259,7 +261,7 @@ async function controlled() {
         );
         result = {};
       }
-      return Response.json(result);
+      return Response.json(result, { status });
     };
     return {
       fault,
