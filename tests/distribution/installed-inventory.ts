@@ -103,7 +103,12 @@ export async function installedPackageInventory(
       assert.ok(plan, "Linked installed package entry");
       assert.equal(stat.nlink, 1);
       assert.equal(stat.uid, owner);
-      assert.equal(await readlink(absolute), plan.relativeTarget, "Installed bin target changed");
+      const linkTarget = await readlink(absolute);
+      assert.equal(
+        process.platform === "win32" ? linkTarget.replaceAll("\\", "/") : linkTarget,
+        plan.relativeTarget,
+        "Installed bin target changed",
+      );
       assert.equal(await realpath(absolute), resolve(root, plan.target));
       binLinks.push(plan);
       return;
