@@ -336,6 +336,18 @@ export async function observeDeviceContinuation(input: {
   assert.equal(currentBinding.workspaceId, a.workspace.binding.workspaceId);
   assert.equal(currentBinding.bindingVersion, a.workspace.binding.bindingVersion);
   assert.deepEqual(currentBinding.config, { kind: "computer" });
+  // This owned qualification canary has no further writers after B's commit.
+  // Other product workspaces may legitimately advance beyond an earlier receipt.
+  assert.equal(
+    currentBinding.revision,
+    b.replacement.workspace.binding.revision,
+    "Isolated device workspace must retain B's current revision",
+  );
+  assert.equal(
+    currentBinding.manifestHash,
+    b.replacement.workspace.binding.manifestHash,
+    "Isolated device workspace must retain B's current manifest hash",
+  );
   for (const workspace of [a.initialWorkspace, a.workspace, b.replacement.workspace])
     await deviceCanonicalBytes(client, workspace, request);
   return {
@@ -365,13 +377,14 @@ export async function observeDeviceContinuation(input: {
       physicalHostLoss: "not-observed",
     },
     oracle:
-      "Fresh scoped public reads retain original A/B task/job/receipt/event prefix and R0/R1/R2 bytes; they create no admission, executor, effect or replacement",
+      "Fresh scoped public reads retain original A/B task/job/receipt/event prefix and R0/R1/R2 bytes plus the isolated canary's current B revision/manifest; they create no admission, executor, effect or replacement",
     sensitivity: [
-      "Wrong source/candidate/logical identity, missing cleanup, foreign receipt, changed prefix or canonical byte fails; no mutation method is available in this read port",
+      "Wrong source/candidate/logical identity, missing cleanup, foreign receipt, rolled-back current revision, mismatched current manifest, changed prefix or canonical byte fails; no mutation method is available in this read port",
     ],
     limitations: [
       "Completed job/artifact/provider lineage is authenticated by parent; the descriptor is data only",
       "Host/start/loss facts are historical; fresh reads observe no new loss or interruption",
+      "Current-head equality qualifies this isolated owned canary with no subsequent writers; legitimate later product commits remain allowed",
       "No Paid backend, physical host loss, provider eviction, account ceiling or release clearance",
     ],
   };

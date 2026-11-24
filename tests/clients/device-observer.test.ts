@@ -427,6 +427,43 @@ test("original device continuation uses a new read principal and rejects changed
     await assert.rejects(invoke);
   }
   fixture.setFault("");
+  for (const fault of ["revision", "manifest"] as const) {
+    const client: DeviceReadClient = {
+      ...fixture.client,
+      workspaces: {
+        ...fixture.client.workspaces,
+        get: async (...args) => {
+          const binding = structuredClone(await fixture.client.workspaces.get(...args));
+          return {
+            ...binding,
+            ...(fault === "revision"
+              ? { revision: fixture.data.a.workspace.binding.revision }
+              : { manifestHash: hash("mismatched-current-head-manifest") }),
+          };
+        },
+      },
+    };
+    // Only the current head changes. Every fixed-revision manifest and byte
+    // reader, original receipt and event prefix remains the passing fixture's.
+    assert.equal(client.workspaces.manifest, fixture.client.workspaces.manifest);
+    assert.equal(client.workspaces.read, fixture.client.workspaces.read);
+    await assert.rejects(
+      () =>
+        observeDeviceContinuation({
+          client,
+          devices: fixture.data,
+          deployment: fixture.current,
+          credential: fixture.fresh,
+        }),
+      fault === "revision"
+        ? /Isolated device workspace must retain B's current revision/
+        : /Isolated device workspace must retain B's current manifest hash/,
+      fault === "revision"
+        ? "head-revision: rollback must reject while immutable revisions remain readable"
+        : "head-manifest: mismatch must reject while immutable revisions remain readable",
+    );
+    assert.equal(canonicalJson(fixture.data), before, "Head faults cannot alter immutable history");
+  }
   const beforeOldPrincipal = fixture.calls.length;
   await assert.rejects(() =>
     observeDeviceContinuation({
