@@ -218,16 +218,18 @@ test("a real command queued across authorization cannot enter the API after the 
       subject: invalidation.subject,
       persistedFloor: minimumGeneration,
     });
+    const { attempts, delegated, ...closedState } = JSON.parse(
+      await probe.socketCloseFailureReportJson(),
+    );
+    // Agents can also delegate a close while acknowledging the platform callback.
+    // Require a successful retry and exactly the one injected pre-delegate failure.
+    assert.ok(Number.isSafeInteger(attempts) && attempts >= 2);
+    assert.ok(Number.isSafeInteger(delegated) && delegated >= 1);
+    assert.equal(attempts, delegated + 1);
     assert.deepEqual(
-      JSON.parse(await probe.socketCloseFailureReportJson()),
-      {
-        attempts: 2,
-        delegated: 1,
-        logicalClosed: true,
-        floor: minimumGeneration,
-        nativeOpen: false,
-      },
-      "Matching retry close report must match every observed field",
+      closedState,
+      { logicalClosed: true, floor: minimumGeneration, nativeOpen: false },
+      "Matching retry must retain the fence and close the native socket",
     );
     assert.equal((await retryClient.closed())?.code, 1008, "Native close must precede cleanup");
     assert.equal((await probe.socketCommandReport()).submissionCalls, 0);
