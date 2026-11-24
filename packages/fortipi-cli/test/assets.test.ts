@@ -52,11 +52,23 @@ test("actual emitted asset closure is reproducible and preserves independent Fre
     });
   await reproduce();
   assert.deepEqual(await readFile(join(reproduction, "asset-manifest.json")), manifestBytes);
-  assert.deepEqual(await dependencyPatches(root, true), {});
-  assert.equal(
-    first.manifest.files.some((file) => file.path.includes("/patches/")),
-    false,
+  const patches = await dependencyPatches(root, true);
+  assert.deepEqual(Object.keys(patches), ["wrangler@4.167.0"]);
+  const patchSha256 = "b452076b5f3bc9a949d69481fdb8dfdb37b805a001dbff793fcf883679c71465";
+  assert.equal(patches["wrangler@4.167.0"]?.sha256, patchSha256);
+  assert.deepEqual(patches["wrangler@4.167.0"]?.files, {
+    "wrangler-dist/cli.js": {
+      originalSha256: "7c4f247030553b5ec713532c18759e4f431f4309c10f1a848dcb8af5f9b68c35",
+      patchedSha256: "ce5b7f4f89e823e83ed16057f691ec757b17571c278cc3b7bbe66ea108c32a6a",
+    },
+  });
+  const patchAsset = "licenses/wrangler_4.167.0/patches/wrangler@4.167.0.patch";
+  assert.deepEqual(
+    first.manifest.files.filter((file) => file.path.includes("/patches/")).map((file) => file.path),
+    [patchAsset],
   );
+  assert.equal(hash(await readFile(join(assets, patchAsset))), patchSha256);
+  assert.equal(hash(await readFile(join(reproduction, patchAsset))), patchSha256);
   const originalLicense = "licenses/agents_0.34.0/package/LICENSE";
   const upstreamLicense = await readFile(
     join(root, "dist/supply-chain/licenses/agents@0.34.0/package/LICENSE"),

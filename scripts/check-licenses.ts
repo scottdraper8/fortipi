@@ -137,21 +137,39 @@ export function assertRuntimeWasmMember(
     assert.match(member.path, /^dist\/wasm\/(?:browser|nodejs|web)\/blake3_js_bg\.wasm$/);
     return;
   }
-  assert.equal(archiveId, "miniflare@5.20261119.0-beta");
-  assert.equal(archiveSha256, "f00a9d505c79f9c9a8dde45fcdbf0567f0092bcd4646b856202c607f3d6fc281");
+  const recipes: Record<
+    string,
+    { archive: string; source: string; component: string; componentSha256: string }
+  > = {
+    "miniflare@5.20261119.0-beta": {
+      archive: "f00a9d505c79f9c9a8dde45fcdbf0567f0092bcd4646b856202c607f3d6fc281",
+      source: "27b3f7150991e1208e5b3dd139953d9f7be389b5",
+      component: "component.json",
+      componentSha256: "b4bebe6e25589e5d5e1a16b264808730b3afbb2355437ecc10cfec8b93562a10",
+    },
+    "miniflare@5.20261123.0-beta": {
+      archive: "0aa75e0817ec6ca4f7abe1cee41f3ec101cbb0f21aac879698f2db2281d7fe2c",
+      source: "1af3c3af42b7d440e1996c72b2c86f27b60c0fd1",
+      component: "component-miniflare-20261123.json",
+      componentSha256: "2896964bb2a59f3e3cd5c24acd72aa3b1b1b7357695b8e85631c1e2c2089f081",
+    },
+  };
+  const recipe = recipes[archiveId];
+  assert.ok(recipe, "Unreviewed Markdown dependency archive");
+  assert.equal(archiveSha256, recipe.archive);
   assert.equal(member.path, "dist/src/mdream_edge_bg.wasm");
   assert.equal(member.size, 266878);
   assert.equal(member.sha256, "3b774a60a939b34c30002b8d135f445f9b5ddbe83bf20b9a0e5f70dee77f8c39");
   assert.equal(
     attribution?.source,
-    "https://github.com/cloudflare/workers-sdk/tree/27b3f7150991e1208e5b3dd139953d9f7be389b5",
+    `https://github.com/cloudflare/workers-sdk/tree/${recipe.source}`,
   );
   assert.ok(attribution);
   for (const [name, digest] of [
     ["LICENSE.md", "b5a7e0557d37c8ccf1b1cbcda1842b8c4535d217f81f97c1cbad579042269cad"],
     ["CORE-LICENSE", "d06451530138de11ec5cee38b458f1aa4259ada5587dc5317c225196d26914d6"],
     ["RUST-NOTICES.md", "3d85d78b2d4a4563d0b260270feeba8d50af662b73465151e8ff8a7840d67435"],
-    ["component.json", "b4bebe6e25589e5d5e1a16b264808730b3afbb2355437ecc10cfec8b93562a10"],
+    [recipe.component, recipe.componentSha256],
   ]) {
     const records: Attribution["files"] = attribution.files.filter(
       (file) => file.path === `tools/unstale/licenses/npm/mdream/2.1.0/${name}`,
@@ -473,13 +491,13 @@ export async function checkLicenses(root = repository, foundation = false): Prom
   const lock = await yaml<Lock>(root, "pnpm-lock.yaml");
   assert.equal(policy.format, 1);
   assert.deepEqual(policy.externalToolChain, [
-    "wrangler@4.166.0",
-    "miniflare@5.20261119.0-beta",
+    "wrangler@4.167.0",
+    "miniflare@5.20261123.0-beta",
     "sharp@0.35.5",
   ]);
   for (const [from, name, version] of [
-    ["wrangler@4.166.0", "miniflare", "5.20261119.0-beta"],
-    ["miniflare@5.20261119.0-beta", "sharp", "0.35.5"],
+    ["wrangler@4.167.0", "miniflare", "5.20261123.0-beta"],
+    ["miniflare@5.20261123.0-beta", "sharp", "0.35.5"],
   ]) {
     assert.ok(from && name && version);
     const nodes = Object.entries(lock.snapshots ?? {}).filter(([id]) => id.split("(")[0] === from);
@@ -572,7 +590,7 @@ export async function checkLicenses(root = repository, foundation = false): Prom
       }
     if (
       externalNative.has(id) ||
-      ["wrangler@4.166.0", "miniflare@5.20261119.0-beta", "sharp@0.35.5"].includes(id)
+      ["wrangler@4.167.0", "miniflare@5.20261123.0-beta", "sharp@0.35.5"].includes(id)
     ) {
       for (const [path, bytes] of entries)
         if (

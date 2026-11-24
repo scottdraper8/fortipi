@@ -319,6 +319,9 @@ jobs:
       - name: Verify portable artifact payload permissions and bytes
         timeout-minutes: 2
         run: node --test scripts/test/release/artifact-payload-portability.test.ts
+      - name: Verify installed package inventory on the native filesystem
+        timeout-minutes: 3
+        run: node --test tests/distribution/installed-inventory.test.ts
       - name: Probe Windows startup and state protection
         if: runner.os == 'Windows'
         timeout-minutes: 2

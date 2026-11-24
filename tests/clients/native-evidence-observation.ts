@@ -141,3 +141,82 @@ export function observeNativeEvidenceFailure(phase: unknown, error: unknown): vo
     process.stderr.write(`${nativeEvidenceFailureLine(phase, error)}\n`);
   } catch {}
 }
+
+const installPhaseNames = [
+  "candidate",
+  "directory",
+  "install-one",
+  "install-together",
+  "inventory-before",
+  "runtime-imports",
+  "declarations",
+  "prepare",
+  "dry-build",
+  "integrity",
+] as const;
+export type DistributionInstallPhase = (typeof installPhaseNames)[number];
+const installPhases = new Set<string>(installPhaseNames);
+const installPackages = new Set([
+  "fortipi-contract",
+  "fortipi-client",
+  "fortipi-tui",
+  "fortipi-executor",
+  "fortipi-cli",
+]);
+
+export function distributionInstallPhaseLine(phase: unknown, packageName: unknown): string {
+  const selected = member(phase, installPhases);
+  return JSON.stringify({
+    diagnostic: "distribution-install-phase",
+    phase: selected,
+    package: selected === "install-one" ? member(packageName, installPackages) : null,
+  });
+}
+
+/** Current direct execute result only; outer coordinator outcomes are separate. */
+export function distributionInstallFailureLine(
+  phase: unknown,
+  packageName: unknown,
+  error: unknown,
+  result: unknown,
+): string {
+  const selected = member(phase, installPhases);
+  const command = selected === "declarations" || selected === "prepare" || selected === "dry-build";
+  const code = command ? own(result, "code") : undefined;
+  const timedOut = command ? own(result, "timedOut") : undefined;
+  const firstLimit = command ? own(result, "firstLimit") : undefined;
+  const resultObserved =
+    (code === null ||
+      (typeof code === "number" && Number.isSafeInteger(code) && Math.abs(code) <= 255)) &&
+    typeof timedOut === "boolean" &&
+    (firstLimit === null || firstLimit === "deadline" || firstLimit === "stdout") &&
+    (timedOut ? firstLimit !== null : firstLimit === null);
+  return JSON.stringify({
+    diagnostic: "distribution-install-failure",
+    phase: selected,
+    package: selected === "install-one" ? member(packageName, installPackages) : null,
+    errorClass: member(errorName(error), errorClasses),
+    errorCode: member(own(error, "code"), errorCodes),
+    resultObserved,
+    code: resultObserved ? code : null,
+    timedOut: resultObserved ? timedOut : null,
+    firstLimit: resultObserved ? firstLimit : null,
+  });
+}
+
+export function observeDistributionInstallPhase(phase: unknown, packageName: unknown): void {
+  try {
+    process.stderr.write(`${distributionInstallPhaseLine(phase, packageName)}\n`);
+  } catch {}
+}
+
+export function observeDistributionInstallFailure(
+  phase: unknown,
+  packageName: unknown,
+  error: unknown,
+  result: unknown,
+): void {
+  try {
+    process.stderr.write(`${distributionInstallFailureLine(phase, packageName, error, result)}\n`);
+  } catch {}
+}

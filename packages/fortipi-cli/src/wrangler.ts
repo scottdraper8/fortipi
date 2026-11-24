@@ -28,7 +28,7 @@ export async function wranglerBin(): Promise<string> {
     bin: Record<string, string>;
   };
   check(
-    manifest.version === "4.166.0" && typeof manifest.bin.wrangler === "string",
+    manifest.version === "4.167.0" && typeof manifest.bin.wrangler === "string",
     "pinned_wrangler_required",
     3,
   );

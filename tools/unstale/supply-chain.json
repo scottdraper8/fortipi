@@ -2131,6 +2131,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-64@1.20261119.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workerd-darwin-64@1.20261123.1": {
+      "name": "@cloudflare/workerd-darwin-64",
+      "version": "1.20261123.1",
+      "integrity": "sha512-eHJEySbW8swWiAYYaOn4LdtHQEPfug9oetPATkaXbsYxjsMX+nfyJ16//2ghXws8npxA+ZJkt5RYpimFfVdgkQ==",
+      "published": "2026-11-23T01:09:07.768Z",
+      "reviewedAt": "2026-11-24T13:36:12.108Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "443a1276eb19cb8d1b2bd5bdb8e12629223833429661a8b2855f449423491bab",
+      "manifestSha256": "27ab033b8d5742cb6e12a42f882407775b46141fa4810f5136bba93d6e28b256",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-64@1.20261123.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workerd-darwin-arm64@1.20261110.1": {
       "name": "@cloudflare/workerd-darwin-arm64",
       "version": "1.20261110.1",
@@ -2187,6 +2206,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-arm64@1.20261119.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workerd-darwin-arm64@1.20261123.1": {
+      "name": "@cloudflare/workerd-darwin-arm64",
+      "version": "1.20261123.1",
+      "integrity": "sha512-rDj5iScvzFD/6/pk01GqyIWa78DOGYLf18WCNG4bzfw1Z+VE/pG8msAllduLh0F/1WGD/PYxXJn03CCeSQPOUw==",
+      "published": "2026-11-23T01:07:25.361Z",
+      "reviewedAt": "2026-11-24T13:36:11.573Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "175725de13af00287b9d7d247d237f3a3ed14678b2237b9a2ef5abeefeff07c9",
+      "manifestSha256": "e4552b31614d3a3236de523db170f5babeba0bdd7fb49d269d06b0d705195a50",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-darwin-arm64@1.20261123.1; Sigstore transparency verification required at release"
     },
     "@cloudflare/workerd-linux-64@1.20261110.1": {
       "name": "@cloudflare/workerd-linux-64",
@@ -2245,6 +2283,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-64@1.20261119.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workerd-linux-64@1.20261123.1": {
+      "name": "@cloudflare/workerd-linux-64",
+      "version": "1.20261123.1",
+      "integrity": "sha512-hQs6svgH3YxdgKw7K0IVZ/gmeW49/z4UEHcxpsQHEa6Y2ZabUQef7YCI/BVcaCoHHp8p3cE/cziU3qh9ALIICw==",
+      "published": "2026-11-23T01:08:10.547Z",
+      "reviewedAt": "2026-11-24T13:36:13.931Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "dc27d0796a39a0636765c510b8971e20f5d283c6aa215d357f1f4ff0c23edb68",
+      "manifestSha256": "c6125c01b502616dc3394740d3e314fc3669d34c98e1dd8a737dec99c6901d9d",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-64@1.20261123.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workerd-linux-arm64@1.20261110.1": {
       "name": "@cloudflare/workerd-linux-arm64",
       "version": "1.20261110.1",
@@ -2302,6 +2359,25 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-arm64@1.20261119.1; Sigstore transparency verification required at release"
     },
+    "@cloudflare/workerd-linux-arm64@1.20261123.1": {
+      "name": "@cloudflare/workerd-linux-arm64",
+      "version": "1.20261123.1",
+      "integrity": "sha512-LLsuu+ZIcppjDNU4A9QGIbotqkiSXP2QF3HD9kCaateQUxB5GOJ6GRx+qKIu/1A+UBDKR3JutXpT9kKWe5PzEA==",
+      "published": "2026-11-23T01:09:11.618Z",
+      "reviewedAt": "2026-11-24T13:36:13.313Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "b6db2f74b16cd25b824636e40b5a633bcbddccf186abfd7cbcbb075d2cae6192",
+      "manifestSha256": "ccfb2e7ba69b68753198b0c160025c5a849797bb7d555826c7fb8045218a4778",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-linux-arm64@1.20261123.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workerd-windows-64@1.20261110.1": {
       "name": "@cloudflare/workerd-windows-64",
       "version": "1.20261110.1",
@@ -2358,6 +2434,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-windows-64@1.20261119.1; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workerd-windows-64@1.20261123.1": {
+      "name": "@cloudflare/workerd-windows-64",
+      "version": "1.20261123.1",
+      "integrity": "sha512-/zl++/e/0JLMttdz4lUsCo58NaLKQZKancI2YPciaLH9iLHq6UOP2BQZt+dejGRrV9UxdpPYPHUYU9Km5PcALA==",
+      "published": "2026-11-23T01:08:02.828Z",
+      "reviewedAt": "2026-11-24T13:36:17.572Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "9daafebd99049a290e894dd5b0c8bd62a84c923f4784970311624d8a715295cf",
+      "manifestSha256": "1653b308a9a973d0e6b23193a615c87aba98ebd50b18d1d0dc34a106964abbd7",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkerd-windows-64@1.20261123.1; Sigstore transparency verification required at release"
     },
     "@cloudflare/workers-types@5.20261110.1": {
       "name": "@cloudflare/workers-types",
@@ -2444,6 +2539,23 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "verified 2026-11-21T04:33:36.408Z: npm publish and SLSA, trusted Sigstore roots, registry ECDSA, Fulcio/SCT, Merkle inclusion and signed checkpoints; exact compressed subject; https://github.com/cloudflare/workerd@d68413886563e376605e732a75320eefd32b5128; reverify exact release inputs"
     },
+    "@cloudflare/workers-types@5.20261124.1": {
+      "name": "@cloudflare/workers-types",
+      "version": "5.20261124.1",
+      "integrity": "sha512-n99jv9oDm6AYg7dTkRYJVgD5GhXG14Cd8rLDtbld28ZjGJVKFtQPXJxnVoOV2IBSRuqHt0PnP/4oqoiUKw2SAA==",
+      "published": "2026-11-24T01:06:06.237Z",
+      "reviewedAt": "2026-11-24T13:36:12.662Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "a3760a043464e438d51d181d081094138724904b28bfa8fef1b7b6ae7f7ff1a8",
+      "manifestSha256": "8e2918e6e5015d10b8f8a2337392e19480d24af225e09cbc50ecdd03f756b64c",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-types@5.20261124.1; Sigstore transparency verification required at release"
+    },
     "@cloudflare/workers-utils@0.56.0": {
       "name": "@cloudflare/workers-utils",
       "version": "0.56.0",
@@ -2462,6 +2574,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-utils@0.56.0; Sigstore transparency verification required at release"
+    },
+    "@cloudflare/workers-utils@0.57.0": {
+      "name": "@cloudflare/workers-utils",
+      "version": "0.57.0",
+      "integrity": "sha512-6NulTDuddhxZUvCmDeyIVtn54Wo0rTV58YztF46V8NKBpH+PISm3aiudkCn0vLlRWeyYReNu5XmdE7hyvTwoLg==",
+      "published": "2026-11-23T18:53:26.312Z",
+      "reviewedAt": "2026-11-24T13:36:12.938Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "593aafd54e05158e0b9a17e4f66365d32d236f8164fa7384e8ab4f7951cf38d4",
+      "manifestSha256": "2e6143f3bd081f580c1fceebdf5757e2296686dd010da9e121854270f307f21b",
+      "engines": {},
+      "peers": {
+        "vitest": "^4.1.0 || ^5.0.0"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@cloudflare%2fworkers-utils@0.57.0; Sigstore transparency verification required at release"
     },
     "@cspotcode/source-map-support@0.8.1": {
       "name": "@cspotcode/source-map-support",
@@ -2857,25 +2988,6 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@esbuild%2faix-ppc64@0.28.2; Sigstore transparency verification required at release"
     },
-    "@esbuild/android-arm@0.28.2": {
-      "name": "@esbuild/android-arm",
-      "version": "0.28.2",
-      "integrity": "sha512-kXXoiPVVGQcnIYGOeaovwOURpniDBpSq4A03qkQ+BMQqtGG6HYap3xne9C1O1yo4TR3qxlCX5IqqmX6fFo2Lqg==",
-      "published": "2026-08-08T19:57:26.487Z",
-      "reviewedAt": "2026-11-11T00:16:18.714Z",
-      "license": "MIT",
-      "archiveSha256": "1723a8da8ceec6f6900616d00ac068e705c0348587400d0ca80ea4daa87a4183",
-      "manifestSha256": "d2df5574e70efc2c707077bb4f06bf0b9f0a7200ceb5a955d23c60b57259f111",
-      "engines": {
-        "node": ">=18"
-      },
-      "peers": {},
-      "lifecycle": {},
-      "scriptFiles": {},
-      "licenses": {},
-      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@esbuild%2fandroid-arm@0.28.2; Sigstore transparency verification required at release"
-    },
     "@esbuild/android-arm64@0.28.2": {
       "name": "@esbuild/android-arm64",
       "version": "0.28.2",
@@ -2894,6 +3006,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@esbuild%2fandroid-arm64@0.28.2; Sigstore transparency verification required at release"
+    },
+    "@esbuild/android-arm@0.28.2": {
+      "name": "@esbuild/android-arm",
+      "version": "0.28.2",
+      "integrity": "sha512-kXXoiPVVGQcnIYGOeaovwOURpniDBpSq4A03qkQ+BMQqtGG6HYap3xne9C1O1yo4TR3qxlCX5IqqmX6fFo2Lqg==",
+      "published": "2026-08-08T19:57:26.487Z",
+      "reviewedAt": "2026-11-11T00:16:18.714Z",
+      "license": "MIT",
+      "archiveSha256": "1723a8da8ceec6f6900616d00ac068e705c0348587400d0ca80ea4daa87a4183",
+      "manifestSha256": "d2df5574e70efc2c707077bb4f06bf0b9f0a7200ceb5a955d23c60b57259f111",
+      "engines": {
+        "node": ">=18"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@esbuild%2fandroid-arm@0.28.2; Sigstore transparency verification required at release"
     },
     "@esbuild/android-x64@0.28.2": {
       "name": "@esbuild/android-x64",
@@ -2990,25 +3121,6 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@esbuild%2ffreebsd-x64@0.28.2; Sigstore transparency verification required at release"
     },
-    "@esbuild/linux-arm@0.28.2": {
-      "name": "@esbuild/linux-arm",
-      "version": "0.28.2",
-      "integrity": "sha512-XlDnu2q5yoqems+xay6wSAcg9DDD7K9RLKZEBOMZm3ckNpJBvOX20tSfby8KfrrhINDyv9V2YVZKY/SpoGJI8w==",
-      "published": "2026-08-08T19:59:05.063Z",
-      "reviewedAt": "2026-11-11T00:16:41.103Z",
-      "license": "MIT",
-      "archiveSha256": "bdf99344430174119a1403803b4400d1cb93340b6f8fad2433c7cd55841ad327",
-      "manifestSha256": "a17e83960cc7cf2a061e247423f48ab344f3d9c626d754e61be524c836bdb02f",
-      "engines": {
-        "node": ">=18"
-      },
-      "peers": {},
-      "lifecycle": {},
-      "scriptFiles": {},
-      "licenses": {},
-      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@esbuild%2flinux-arm@0.28.2; Sigstore transparency verification required at release"
-    },
     "@esbuild/linux-arm64@0.28.2": {
       "name": "@esbuild/linux-arm64",
       "version": "0.28.2",
@@ -3027,6 +3139,25 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@esbuild%2flinux-arm64@0.28.2; Sigstore transparency verification required at release"
+    },
+    "@esbuild/linux-arm@0.28.2": {
+      "name": "@esbuild/linux-arm",
+      "version": "0.28.2",
+      "integrity": "sha512-XlDnu2q5yoqems+xay6wSAcg9DDD7K9RLKZEBOMZm3ckNpJBvOX20tSfby8KfrrhINDyv9V2YVZKY/SpoGJI8w==",
+      "published": "2026-08-08T19:59:05.063Z",
+      "reviewedAt": "2026-11-11T00:16:41.103Z",
+      "license": "MIT",
+      "archiveSha256": "bdf99344430174119a1403803b4400d1cb93340b6f8fad2433c7cd55841ad327",
+      "manifestSha256": "a17e83960cc7cf2a061e247423f48ab344f3d9c626d754e61be524c836bdb02f",
+      "engines": {
+        "node": ">=18"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@esbuild%2flinux-arm@0.28.2; Sigstore transparency verification required at release"
     },
     "@esbuild/linux-ia32@0.28.2": {
       "name": "@esbuild/linux-ia32",
@@ -3500,23 +3631,6 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@img%2fsharp-libvips-darwin-x64@1.3.4; Sigstore transparency verification required at release"
     },
-    "@img/sharp-libvips-linux-arm@1.3.4": {
-      "name": "@img/sharp-libvips-linux-arm",
-      "version": "1.3.4",
-      "integrity": "sha512-LmRtTsOHuvM2+wlO2Db37dx5MiZhB0FvSunciw48YjdOkZz9KAiRbm8ujeMOA1INqmei5NapFxYEK1D1ZSidmw==",
-      "published": "2026-09-27T12:10:47.428Z",
-      "reviewedAt": "2026-11-11T00:21:12.263Z",
-      "license": "LGPL-3.0-or-later",
-      "archiveSha256": "782aa1175daff0e9f7846f404daaa07eaea8c91903bc6b68b31e2a6227e6bba8",
-      "manifestSha256": "c289aa94721a722070046b9f275b9d5c780e9313bf80d636631ce2e0536494b0",
-      "engines": {},
-      "peers": {},
-      "lifecycle": {},
-      "scriptFiles": {},
-      "licenses": {},
-      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@img%2fsharp-libvips-linux-arm@1.3.4; Sigstore transparency verification required at release"
-    },
     "@img/sharp-libvips-linux-arm64@1.3.4": {
       "name": "@img/sharp-libvips-linux-arm64",
       "version": "1.3.4",
@@ -3533,6 +3647,23 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@img%2fsharp-libvips-linux-arm64@1.3.4; Sigstore transparency verification required at release"
+    },
+    "@img/sharp-libvips-linux-arm@1.3.4": {
+      "name": "@img/sharp-libvips-linux-arm",
+      "version": "1.3.4",
+      "integrity": "sha512-LmRtTsOHuvM2+wlO2Db37dx5MiZhB0FvSunciw48YjdOkZz9KAiRbm8ujeMOA1INqmei5NapFxYEK1D1ZSidmw==",
+      "published": "2026-09-27T12:10:47.428Z",
+      "reviewedAt": "2026-11-11T00:21:12.263Z",
+      "license": "LGPL-3.0-or-later",
+      "archiveSha256": "782aa1175daff0e9f7846f404daaa07eaea8c91903bc6b68b31e2a6227e6bba8",
+      "manifestSha256": "c289aa94721a722070046b9f275b9d5c780e9313bf80d636631ce2e0536494b0",
+      "engines": {},
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@img%2fsharp-libvips-linux-arm@1.3.4; Sigstore transparency verification required at release"
     },
     "@img/sharp-libvips-linux-ppc64@1.3.4": {
       "name": "@img/sharp-libvips-linux-ppc64",
@@ -3636,27 +3767,6 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@img%2fsharp-libvips-linuxmusl-x64@1.3.4; Sigstore transparency verification required at release"
     },
-    "@img/sharp-linux-arm@0.35.5": {
-      "name": "@img/sharp-linux-arm",
-      "version": "0.35.5",
-      "integrity": "sha512-LEaXK2WdXVK5ykcw0buWyPMsmLLL2vpHLD6yrNSW+JGEL3BZPA4tpKN6iaMc4AxTTAoaX/sU1rOL51lcIz48ZQ==",
-      "published": "2026-09-27T13:47:45.455Z",
-      "reviewedAt": "2026-11-11T00:21:19.983Z",
-      "license": "Apache-2.0",
-      "archiveSha256": "f223f355725a7046548e3bb4be4d0f82c30a2b1c170289fd714679ad1441152c",
-      "manifestSha256": "8207ab9e7711f1425bba84efcaa4cbeaff0119509d22c10fd5d77ff546dc7746",
-      "engines": {
-        "node": ">=20.9.0"
-      },
-      "peers": {},
-      "lifecycle": {},
-      "scriptFiles": {},
-      "licenses": {
-        "package/LICENSE": "73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68"
-      },
-      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
-      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@img%2fsharp-linux-arm@0.35.5; Sigstore transparency verification required at release"
-    },
     "@img/sharp-linux-arm64@0.35.5": {
       "name": "@img/sharp-linux-arm64",
       "version": "0.35.5",
@@ -3677,6 +3787,27 @@
       },
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@img%2fsharp-linux-arm64@0.35.5; Sigstore transparency verification required at release"
+    },
+    "@img/sharp-linux-arm@0.35.5": {
+      "name": "@img/sharp-linux-arm",
+      "version": "0.35.5",
+      "integrity": "sha512-LEaXK2WdXVK5ykcw0buWyPMsmLLL2vpHLD6yrNSW+JGEL3BZPA4tpKN6iaMc4AxTTAoaX/sU1rOL51lcIz48ZQ==",
+      "published": "2026-09-27T13:47:45.455Z",
+      "reviewedAt": "2026-11-11T00:21:19.983Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "f223f355725a7046548e3bb4be4d0f82c30a2b1c170289fd714679ad1441152c",
+      "manifestSha256": "8207ab9e7711f1425bba84efcaa4cbeaff0119509d22c10fd5d77ff546dc7746",
+      "engines": {
+        "node": ">=20.9.0"
+      },
+      "peers": {},
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {
+        "package/LICENSE": "73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68"
+      },
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/@img%2fsharp-linux-arm@0.35.5; Sigstore transparency verification required at release"
     },
     "@img/sharp-linux-ppc64@0.35.5": {
       "name": "@img/sharp-linux-ppc64",
@@ -6490,15 +6621,15 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
-    "@typescript/typescript-linux-arm@7.0.2": {
-      "name": "@typescript/typescript-linux-arm",
+    "@typescript/typescript-linux-arm64@7.0.2": {
+      "name": "@typescript/typescript-linux-arm64",
       "version": "7.0.2",
-      "integrity": "sha512-gffT3xPz9sR7j/YJExkyPntrI0P2EP9XbOyWzth2/Gs0RstK+90RBcO0ncXoXy/beYll1SXw846Nf2zdnEz0QQ==",
-      "published": "2026-07-08T15:49:53.075Z",
-      "reviewedAt": "2026-11-11T00:17:53.144Z",
+      "integrity": "sha512-Qh4eU4/y3yDjnfjjyPYihMj5/ODIlmt+Bzu17OI+fiSRDW57QmU5SiN63exPRNJPKUzcc1INa1NXdrJ+MqHjUQ==",
+      "published": "2026-07-08T15:49:57.270Z",
+      "reviewedAt": "2026-11-11T00:17:53.419Z",
       "license": "Apache-2.0",
-      "archiveSha256": "33a15a7badb207a38957373c410b970319baac8960109232ab64502497caea06",
-      "manifestSha256": "03b8f99d27c01970df03b34da880bd9730e219d12e85bddac1da02163ea2641d",
+      "archiveSha256": "c83d931ac9dd7549cde6e71246aa9d6a9812843023df3e277fe3b5dcf41dd0ea",
+      "manifestSha256": "8499cbdbf634133898672771f24f474b39ffe693be7012b818f70e3f7c7b424d",
       "engines": {
         "node": ">=16.20.0"
       },
@@ -6512,15 +6643,15 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "not published"
     },
-    "@typescript/typescript-linux-arm64@7.0.2": {
-      "name": "@typescript/typescript-linux-arm64",
+    "@typescript/typescript-linux-arm@7.0.2": {
+      "name": "@typescript/typescript-linux-arm",
       "version": "7.0.2",
-      "integrity": "sha512-Qh4eU4/y3yDjnfjjyPYihMj5/ODIlmt+Bzu17OI+fiSRDW57QmU5SiN63exPRNJPKUzcc1INa1NXdrJ+MqHjUQ==",
-      "published": "2026-07-08T15:49:57.270Z",
-      "reviewedAt": "2026-11-11T00:17:53.419Z",
+      "integrity": "sha512-gffT3xPz9sR7j/YJExkyPntrI0P2EP9XbOyWzth2/Gs0RstK+90RBcO0ncXoXy/beYll1SXw846Nf2zdnEz0QQ==",
+      "published": "2026-07-08T15:49:53.075Z",
+      "reviewedAt": "2026-11-11T00:17:53.144Z",
       "license": "Apache-2.0",
-      "archiveSha256": "c83d931ac9dd7549cde6e71246aa9d6a9812843023df3e277fe3b5dcf41dd0ea",
-      "manifestSha256": "8499cbdbf634133898672771f24f474b39ffe693be7012b818f70e3f7c7b424d",
+      "archiveSha256": "33a15a7badb207a38957373c410b970319baac8960109232ab64502497caea06",
+      "manifestSha256": "03b8f99d27c01970df03b34da880bd9730e219d12e85bddac1da02163ea2641d",
       "engines": {
         "node": ">=16.20.0"
       },
@@ -9541,6 +9672,27 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261119.0-beta; Sigstore transparency verification required at release"
     },
+    "miniflare@5.20261123.0-beta": {
+      "name": "miniflare",
+      "version": "5.20261123.0-beta",
+      "integrity": "sha512-ObCOK12WQjUw2yWJH8olMzDSkXaj8xlmZkfJp0MU7y/gnvfv9cBGj9o075ywFeBCBoKopRy8J9Ci3Sh4cquoxg==",
+      "published": "2026-11-23T18:50:55.294Z",
+      "reviewedAt": "2026-11-24T13:36:14.598Z",
+      "license": "MIT",
+      "archiveSha256": "0aa75e0817ec6ca4f7abe1cee41f3ec101cbb0f21aac879698f2db2281d7fe2c",
+      "manifestSha256": "0ba40c37052e344f2aa1f748bfe5f02d8f97b1ccddaa1c62c48d111326bf8102",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "kerberos": "^2.0.0"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/miniflare@5.20261123.0-beta; Sigstore transparency verification required at release"
+    },
     "minimist@1.2.8": {
       "name": "minimist",
       "version": "1.2.8",
@@ -11210,6 +11362,29 @@
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/workerd@1.20261119.1; Sigstore transparency verification required at release"
     },
+    "workerd@1.20261123.1": {
+      "name": "workerd",
+      "version": "1.20261123.1",
+      "integrity": "sha512-2FifnvyeJeCgL9G9QbFqldSrkwMkiWt7VqXjA025H8I4vjMsSHUKTmZ6+72VbB8CJZct/gzm2u8o7ltuRaPOmw==",
+      "published": "2026-11-23T01:12:15.456Z",
+      "reviewedAt": "2026-11-24T13:36:14.455Z",
+      "license": "Apache-2.0",
+      "archiveSha256": "8ea319506bcda4af614a39a2fe5b36e0e76f837d4dd2ee5da45d3bea11b14250",
+      "manifestSha256": "43faa0849173be8b2e72604c5dab03858b4ecc4599c7791cf219f3abeb5b6abb",
+      "engines": {
+        "node": ">=16"
+      },
+      "peers": {},
+      "lifecycle": {
+        "postinstall": "node install.js"
+      },
+      "scriptFiles": {
+        "package/install.js": "af3f114b632e3731140a5d4e15c2dc2cc94703ba8850d3a8dfa567bb2d5f6665"
+      },
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/workerd@1.20261123.1; Sigstore transparency verification required at release"
+    },
     "wrangler@4.160.1": {
       "name": "wrangler",
       "version": "4.160.1",
@@ -11293,6 +11468,27 @@
       "licenses": {},
       "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.166.0; Sigstore transparency verification required at release"
+    },
+    "wrangler@4.167.0": {
+      "name": "wrangler",
+      "version": "4.167.0",
+      "integrity": "sha512-9P1rSUpjH96RSIEntUjkycglR5m3WcwwYRjPqbf9VN83Wizhk5s7J+Q3g5eUZGGTgtPhv763KZ4hw3jFnUjlTg==",
+      "published": "2026-11-23T18:58:13.574Z",
+      "reviewedAt": "2026-11-24T13:36:14.904Z",
+      "license": "MIT OR Apache-2.0",
+      "archiveSha256": "ecbe4447a9d8da3b0f77dbf4249df7a4b88a11c9aca3ade97829581c96409126",
+      "manifestSha256": "8f8a6ff7b2219132b24c3654ee0c17338ca76a1c2adfb13b2764170601522d8f",
+      "engines": {
+        "node": ">=22.12.0"
+      },
+      "peers": {
+        "@cloudflare/workers-types": "^5.20261123.1"
+      },
+      "lifecycle": {},
+      "scriptFiles": {},
+      "licenses": {},
+      "signature": "verified SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+      "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/wrangler@4.167.0; Sigstore transparency verification required at release"
     },
     "ws@8.21.0": {
       "name": "ws",
@@ -11442,7 +11638,28 @@
       "provenance": "published https://registry.npmjs.org/-/npm/v1/attestations/zod@4.6.7; Sigstore transparency verification required at release"
     }
   },
-  "exemptions": {},
+  "exemptions": {
+    "@cloudflare/workers-types@5.20261124.1": {
+      "reason": "Exact new release archive SRI/registry ECDSA, SHA512 subject, DSSE leaf signature, manifest/lifecycle and immutable source-license bytes reviewed; workerd postinstall stays denied. Separate bundled-label advisory observations remain unresolved in the retained data receipt; this record grants only the existing exact release-age disposition, not advisory or runtime qualification.",
+      "expires": "2026-11-25T01:06:06.237Z",
+      "integrity": "sha512-n99jv9oDm6AYg7dTkRYJVgD5GhXG14Cd8rLDtbld28ZjGJVKFtQPXJxnVoOV2IBSRuqHt0PnP/4oqoiUKw2SAA=="
+    },
+    "@cloudflare/workers-utils@0.57.0": {
+      "reason": "Exact new release archive SRI/registry ECDSA, SHA512 subject, DSSE leaf signature, manifest/lifecycle and immutable source-license bytes reviewed; workerd postinstall stays denied. Separate bundled-label advisory observations remain unresolved in the retained data receipt; this record grants only the existing exact release-age disposition, not advisory or runtime qualification.",
+      "expires": "2026-11-24T18:53:26.312Z",
+      "integrity": "sha512-6NulTDuddhxZUvCmDeyIVtn54Wo0rTV58YztF46V8NKBpH+PISm3aiudkCn0vLlRWeyYReNu5XmdE7hyvTwoLg=="
+    },
+    "miniflare@5.20261123.0-beta": {
+      "reason": "Exact new release archive SRI/registry ECDSA, SHA512 subject, DSSE leaf signature, manifest/lifecycle and immutable source-license bytes reviewed; workerd postinstall stays denied. Separate bundled-label advisory observations remain unresolved in the retained data receipt; this record grants only the existing exact release-age disposition, not advisory or runtime qualification.",
+      "expires": "2026-11-24T18:50:55.294Z",
+      "integrity": "sha512-ObCOK12WQjUw2yWJH8olMzDSkXaj8xlmZkfJp0MU7y/gnvfv9cBGj9o075ywFeBCBoKopRy8J9Ci3Sh4cquoxg=="
+    },
+    "wrangler@4.167.0": {
+      "reason": "Exact new release archive SRI/registry ECDSA, SHA512 subject, DSSE leaf signature, manifest/lifecycle and immutable source-license bytes reviewed; workerd postinstall stays denied. Separate bundled-label advisory observations remain unresolved in the retained data receipt; this record grants only the existing exact release-age disposition, not advisory or runtime qualification.",
+      "expires": "2026-11-24T18:58:13.574Z",
+      "integrity": "sha512-9P1rSUpjH96RSIEntUjkycglR5m3WcwwYRjPqbf9VN83Wizhk5s7J+Q3g5eUZGGTgtPhv763KZ4hw3jFnUjlTg=="
+    }
+  },
   "advisory": {
     "checkedAt": "2026-11-23T15:08:17.817Z",
     "identities": 425,

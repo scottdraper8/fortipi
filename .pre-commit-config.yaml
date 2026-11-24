@@ -38,8 +38,9 @@ repos:
         pass_filenames: false
         always_run: true
       - id: fortipi-license-bundles
-        name: Verify licenses and distributed bundle bytes
-        entry: pnpm run check:licenses
+        name: Verify resolved dependency licenses before building
+        # Clean committed source is required to produce assets; CI checks the generated bundles.
+        entry: pnpm run check:licenses -- --foundation
         language: system
         pass_filenames: false
         always_run: true
