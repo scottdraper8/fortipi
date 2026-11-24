@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "4756b99d9697dab382c60cafe52447135d6cef98",
-        "version": "v1.20261123.1",
-        "sha256": "ccba6d406f7153f9b84b0102df1c7a21777dd42dd0fb2635a134b178fad31764",
+        "commit": "21437517db09ae641bd9a72861a12dc4538e0e68",
+        "version": "v1.20261124.1",
+        "sha256": "a5c7c041c3be57037fb7de2e7453b5aee5fd83fa4afd5402ed8835e98d2a2af7",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261121.1"
       },
-      "reviewedAt": "2026-11-23T01:15:39.247Z",
-      "reviewNote": "Reviewed e9a7b9c8..4756b99d (1 commit/2 paths): maximum compatibility date2026-11-29->30 and release-version2026-11-22->23. Ceiling affects CODE_VERSION validation; release date feeds version/npm compatibilityDate. Other implementation/schema/build/dependency/license files unchanged; no new implementation/security patch identified in this interval. Official release/tag match; commit unsigned, assets unverified. Retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1, types5.20261121.1, explicit date2026-11-10 and flags. Earlier bounded reviews/limits retained. Watch only; no broad safety/hosted/native/deployed/Paid qualification. https://github.com/cloudflare/workerd/compare/e9a7b9c8dcaeffa711edea7cf8b1aa78888cc230...4756b99d9697dab382c60cafe52447135d6cef98"
+      "reviewedAt": "2026-11-24T02:55:29.506Z",
+      "reviewNote": "Reviewed4756b99d..21437517 (36commits/129paths) against official release/tag/full comparison and locked graph. DO IO-channel and Rust failure-worker autogates have unknown hosted state; SQL cursor close is additive. Lazy Node globals use the new registry, inactive at explicit2026-11-10; unflagged warning/deriveBits/Blob/fs-copy behavior changes and release ISA changes remain relevant to future adoption. No existing FortiPi binding/config removal identified. Retain Wrangler4.166.0/Miniflare5.20261119.0-beta/workerd1.20261119.1/types5.20261121.1 and flags. Watch metadata acknowledgment only; assets/signatures/hosted rollout/runtime/native/Paid/deployed compatibility not qualified. Four installed-library lookahead alerts remain unresolved. https://github.com/cloudflare/workerd/compare/4756b99d9697dab382c60cafe52447135d6cef98...21437517db09ae641bd9a72861a12dc4538e0e68"
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
