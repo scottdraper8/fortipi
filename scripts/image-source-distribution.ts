@@ -11,8 +11,10 @@ import { createGunzip } from "node:zlib";
 import { x as extractTar } from "tar";
 import { paragraphs } from "../apps/worker/container/debian.ts";
 import {
+  historicalSourceCertificateSha256,
   run,
   sha256,
+  sourceCertificateSha256,
   verifySigned,
   verifyUpstream,
 } from "../apps/worker/container/fuse-security.ts";
@@ -829,9 +831,11 @@ export async function verifyKitSignatures(directory: string, freeze: Freeze): Pr
       }
     }
     const keyring = resolve(directory, "security/debian-source-signer.pgp");
-    assert.equal(
-      await hashFile(keyring),
-      "38ead01d85cc57fd75a07c1ea4ffcad736be6fb4c006f0cf7f029dda1472041f",
+    assert.ok(
+      [historicalSourceCertificateSha256, sourceCertificateSha256].includes(
+        await hashFile(keyring),
+      ),
+      "Debian source public key mismatch",
     );
     const descriptor = await verifySigned(
       resolve(directory, "sources/fuse3_3.18.3-1.dsc"),
