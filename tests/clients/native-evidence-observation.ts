@@ -164,6 +164,71 @@ const installPackages = new Set([
   "fortipi-cli",
 ]);
 
+const inventoryCheckNames = [
+  "root-realpath",
+  "expected-paths",
+  "expected-unique",
+  "manifest-link",
+  "manifest-read",
+  "manifest-size",
+  "manifest-hash",
+  "manifest-json",
+  "bin-shape",
+  "bin-name",
+  "bin-entry",
+  "bin-confined",
+  "bin-authenticated-target",
+  "bin-unique",
+  "root-stat",
+  "member-namespace",
+  "member-stat",
+  "link-declaration",
+  "link-count",
+  "link-owner",
+  "link-read",
+  "link-target",
+  "link-realpath",
+  "bin-link-required",
+  "readonly",
+  "directory-namespace",
+  "directory-read",
+  "regular-file",
+  "file-size",
+  "file-executable",
+  "file-read",
+  "file-hash",
+  "complete-files",
+  "complete-bins",
+] as const;
+export type DistributionInventoryCheck = (typeof inventoryCheckNames)[number];
+const inventoryChecks = new Set<string>(inventoryCheckNames);
+
+/** Invocation-local checkpoint only; no stack, message, path or assertion values. */
+export function distributionInventoryFailureLine(
+  check: unknown,
+  packageName: unknown,
+  error: unknown,
+): string {
+  return JSON.stringify({
+    diagnostic: "distribution-inventory-failure",
+    check: member(check, inventoryChecks),
+    package: member(packageName, installPackages),
+    errorClass: member(errorName(error), errorClasses),
+    errorCode: member(own(error, "code"), errorCodes),
+  });
+}
+
+/** Best effort only; inventory rethrows the identical original error. */
+export function observeDistributionInventoryFailure(
+  check: unknown,
+  packageName: unknown,
+  error: unknown,
+): void {
+  try {
+    process.stderr.write(`${distributionInventoryFailureLine(check, packageName, error)}\n`);
+  } catch {}
+}
+
 export function distributionInstallPhaseLine(phase: unknown, packageName: unknown): string {
   const selected = member(phase, installPhases);
   return JSON.stringify({

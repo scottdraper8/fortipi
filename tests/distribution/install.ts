@@ -69,7 +69,11 @@ export async function install(path: string, context?: CandidateReadContext) {
     const ownedInventory = () =>
       Promise.all(
         loaded.candidate.packages.map((p) =>
-          installedPackageInventory(resolve(together.consumer, "node_modules", p.name), p.entries),
+          installedPackageInventory(
+            resolve(together.consumer, "node_modules", p.name),
+            p.entries,
+            p.sourceName,
+          ),
         ),
       );
     enter("inventory-before");
