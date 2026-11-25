@@ -242,6 +242,22 @@ test("approval abort and native completion diagnostics exclude arbitrary payload
     { ...approval, error: canary },
   ])
     assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
+  for (const phaseElapsedMs of [0, 1, 60000])
+    assert.equal(
+      sourceTestDiagnostic(
+        `# ${JSON.stringify({ ...approval, elapsedMs: 60000, phaseElapsedMs })}`,
+      ),
+      true,
+    );
+  for (const phaseElapsedMs of ["25000", 0.5, -1, 60001])
+    assert.equal(
+      sourceTestDiagnostic(`# ${JSON.stringify({ ...approval, phaseElapsedMs })}`),
+      false,
+    );
+  assert.equal(
+    sourceTestDiagnostic(`# ${JSON.stringify({ ...approval, phaseElapsedMs: 1, error: canary })}`),
+    false,
+  );
   const line = nativeRecoveryFailureLine("requires_reconciliation", "result", false, true);
   assert.equal(sourceTestDiagnostic(`# ${line}`), true);
   const record = JSON.parse(line);

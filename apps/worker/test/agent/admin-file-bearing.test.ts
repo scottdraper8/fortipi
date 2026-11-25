@@ -129,9 +129,25 @@ async function observation(h: Harness, workspaceId: string) {
   ) as ExportObservation;
 }
 async function download(h: Harness, reference: D.AdminArtifactReference, token: string) {
-  const response = await h.server.fetch(`http://fortipi.local${reference.endpoint}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const endpoint = `http://fortipi.local${reference.endpoint}`;
+  const request = () =>
+    h.server.fetch(endpoint, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  let response = await request();
+  if (response.status === 429) {
+    const { error } = (await response.json()) as D.ErrorBody;
+    if (error?.code === "rate_limited") {
+      assert.equal(error.retryable, true);
+      const delay = error.details?.retryAfterMs;
+      assert.ok(
+        typeof delay === "number" && Number.isSafeInteger(delay) && delay > 0 && delay <= 60000,
+      );
+      // Match JSON requests: honor the server hold, then retry the identical read once.
+      await pause(delay);
+      response = await request();
+    }
+  }
   assert.equal(response.status, 200);
   const bytes = new Uint8Array(await response.arrayBuffer());
   assert.equal(bytes.length, reference.size);

@@ -122,6 +122,14 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
       - run: node tools/unstale/review-precommit.ts
         if: github.event_name != 'workflow_dispatch'
+      - name: Initialize pinned hooks in the private cache
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          PINNED_PYTHON: ${{ steps.python.outputs.python-path }}
+          PRE_COMMIT_HOME: ${{ runner.temp }}/fortipi-precommit/pre-commit-home
+        run: |
+          node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON" --verify "$RUNNER_TEMP/fortipi-precommit"
+          "$RUNNER_TEMP/fortipi-precommit/venv/bin/pre-commit" install-hooks
       - name: Prove cold pinned Python hooks and artifact refusals
         if: github.event_name != 'workflow_dispatch'
         env:
@@ -173,6 +181,7 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PRE_COMMIT_HOME: ${{ runner.temp }}/fortipi-precommit/pre-commit-home
       - run: pnpm run check:licenses
         if: github.event_name != 'workflow_dispatch'
       - name: Compile source-side evidence ports without rebuilding the candidate

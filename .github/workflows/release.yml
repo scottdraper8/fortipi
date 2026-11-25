@@ -144,6 +144,13 @@ jobs:
           node tools/unstale/precommit-python.ts --prepare-hosted-python "$PINNED_PYTHON"
           node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON" --directory "$RUNNER_TEMP/fortipi-precommit" --github-path "$GITHUB_PATH"
       - run: node tools/unstale/review-precommit.ts
+      - name: Initialize pinned hooks in the private cache
+        env:
+          PINNED_PYTHON: ${{ steps.python.outputs.python-path }}
+          PRE_COMMIT_HOME: ${{ runner.temp }}/fortipi-precommit/pre-commit-home
+        run: |
+          node tools/unstale/precommit-python.ts --python "$PINNED_PYTHON" --verify "$RUNNER_TEMP/fortipi-precommit"
+          "$RUNNER_TEMP/fortipi-precommit/venv/bin/pre-commit" install-hooks
       - name: Prove cold pinned Python hooks and artifact refusals
         env:
           FORTIPI_PRECOMMIT_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
@@ -158,6 +165,7 @@ jobs:
       - name: Build immutable candidate
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PRE_COMMIT_HOME: ${{ runner.temp }}/fortipi-precommit/pre-commit-home
         run:
           node scripts/prepare-release.ts candidate --version "$RELEASE_VERSION" --commit-sha "$SOURCE_SHA" --scope
           "$RELEASE_SCOPE" > "$RUNNER_TEMP/candidate-receipt.json"
