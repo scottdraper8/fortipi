@@ -196,7 +196,7 @@ test("actual PiHarness fixed wake preserves sleeping work across an older idle o
       lastPhase = "cleanup-server";
       await server.close();
       lastPhase = "cleanup-directory";
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 25 });
       cleanupActive = false;
     }
   } catch (error) {
