@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   distributionInstallFailureLine,
   distributionInstallPhaseLine,
+  distributionInventoryFailureLine,
   nativeEvidenceFailureLine,
 } from "./native-evidence-observation.ts";
 
@@ -75,7 +76,26 @@ test("native failure diagnostics retain fixed checkpoints and bounded error clas
       errorCode: null,
     });
     assert.equal(line.includes(canary), false);
+    const inventory = distributionInventoryFailureLine(value, value, { name: value, code: value });
+    assert.deepEqual(JSON.parse(inventory), {
+      diagnostic: "distribution-inventory-failure",
+      check: null,
+      package: null,
+      errorClass: null,
+      errorCode: null,
+    });
+    assert.equal(inventory.includes(canary), false);
   }
+  const inventory = distributionInventoryFailureLine("link-target", "fortipi-cli", error);
+  assert.deepEqual(JSON.parse(inventory), {
+    diagnostic: "distribution-inventory-failure",
+    check: "link-target",
+    package: "fortipi-cli",
+    errorClass: "AssertionError",
+    errorCode: "ERR_ASSERTION",
+  });
+  assert.equal(inventory.includes(canary), false);
+  assert.ok(Buffer.byteLength(inventory) <= 512);
   assert.deepEqual(JSON.parse(distributionInstallPhaseLine("install-one", "fortipi-cli")), {
     diagnostic: "distribution-install-phase",
     phase: "install-one",
@@ -152,11 +172,23 @@ test("native failure projection never invokes getters, coercion or nested value 
     errorClass: null,
     errorCode: null,
   });
+  const inventory = distributionInventoryFailureLine(opaque, opaque, opaque);
+  assert.deepEqual(JSON.parse(inventory), {
+    diagnostic: "distribution-inventory-failure",
+    check: null,
+    package: null,
+    errorClass: null,
+    errorCode: null,
+  });
+  assert.equal(inventory.includes(canary), false);
   assert.equal(accesses, 0);
   const proxy = Proxy.revocable({}, {});
   proxy.revoke();
   assert.doesNotThrow(() => nativeEvidenceFailureLine(proxy.proxy, proxy.proxy));
   assert.equal(nativeEvidenceFailureLine(proxy.proxy, proxy.proxy).includes(canary), false);
+  assert.doesNotThrow(() =>
+    distributionInventoryFailureLine(proxy.proxy, proxy.proxy, proxy.proxy),
+  );
   const result = Object.defineProperties(
     {},
     Object.fromEntries(
