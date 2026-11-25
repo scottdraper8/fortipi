@@ -11,6 +11,7 @@ import {
   type DistributionInventoryCheck,
   observeDistributionInventoryFailure,
 } from "../clients/native-evidence-observation.ts";
+import { type WindowsBinEntrypoint, windowsBinEntrypoints } from "./windows-bin-entrypoints.ts";
 
 /** Installed package addresses include bundled node_modules. Their exact
  * namespace comes from the authenticated package, not artifact path rules. */
@@ -26,7 +27,7 @@ export async function installedPackageInventory(
   root: string,
   expected: readonly FileRecord[],
   packageName?: unknown,
-): Promise<{ files: FileRecord[]; binLinks: InstalledBinLink[] }> {
+): Promise<{ files: FileRecord[]; binLinks: InstalledBinLink[]; binEntries: FileRecord[] }> {
   let check: DistributionInventoryCheck = "root-realpath";
   try {
     assert.equal(await realpath(root), root);
@@ -43,6 +44,7 @@ export async function installedPackageInventory(
       }
     }
     const bins = new Map<string, InstalledBinLink>();
+    const binPackages = new Map<string, string>();
     for (const [path, record] of files) {
       if (!path.endsWith("/package.json")) continue;
       const parts = path.split("/"),
@@ -105,17 +107,40 @@ export async function installedPackageInventory(
         check = "bin-unique";
         assert.ok(!bins.has(binPath), "Ambiguous installed bin declaration");
         bins.set(binPath, plan);
+        if (process.platform === "win32") {
+          check = "bin-shape";
+          assert.equal(
+            typeof pkg.name,
+            "string",
+            "Windows bin needs its authenticated package name",
+          );
+          binPackages.set(binPath, pkg.name as string);
+        }
         directories.add(binDirectory);
       }
     }
+    const windowsBins = new Map<string, { plan: InstalledBinLink; suffix: string }>();
+    if (process.platform === "win32") {
+      for (const plan of bins.values()) {
+        for (const suffix of ["", ".cmd", ".ps1"]) {
+          const path = plan.path + suffix;
+          check = "bin-unique";
+          assert.ok(!windowsBins.has(path), "Ambiguous installed bin declaration");
+          windowsBins.set(path, { plan, suffix });
+        }
+      }
+    }
     const actual: FileRecord[] = [];
+    const binEntries: FileRecord[] = [];
+    const windowsBodies = new Map<string, WindowsBinEntrypoint[]>();
+    const windowsSeen = new Map<string, Set<string>>();
     const binLinks: InstalledBinLink[] = [];
     check = "root-stat";
     const owner = (await lstat(root)).uid;
     async function walk(path: string): Promise<void> {
       check = "member-namespace";
       assert.ok(
-        files.has(path) || directories.has(path) || bins.has(path),
+        files.has(path) || directories.has(path) || bins.has(path) || windowsBins.has(path),
         "Unexpected installed package member",
       );
       const absolute = resolve(root, path);
@@ -142,8 +167,9 @@ export async function installedPackageInventory(
         binLinks.push(plan);
         return;
       }
+      const windowsBin = windowsBins.get(path);
       check = "bin-link-required";
-      assert.ok(!bins.has(path), "Generated bin must be its exact declared link");
+      assert.ok(!bins.has(path) || windowsBin, "Generated bin must be its exact declared link");
       check = "readonly";
       assert.equal(stat.mode & 0o222, 0, "Installed package must remain read-only");
       if (stat.isDirectory()) {
@@ -153,6 +179,69 @@ export async function installedPackageInventory(
         for (const name of (await readdir(absolute)).sort())
           await walk(path ? `${path}/${name}` : name);
       } else {
+        if (windowsBin) {
+          const { plan, suffix } = windowsBin;
+          check = "regular-file";
+          assert.ok(stat.isFile() && stat.nlink === 1, "Unexpected installed package member");
+          check = "link-owner";
+          assert.equal(stat.uid, owner);
+          let bodies = windowsBodies.get(plan.path);
+          if (!bodies) {
+            const targetPath = resolve(root, plan.target),
+              target = files.get(plan.target);
+            check = "bin-authenticated-target";
+            assert.ok(target && (target.mode & 0o111) !== 0);
+            const targetStat = await lstat(targetPath);
+            assert.ok(
+              targetStat.isFile() && !targetStat.isSymbolicLink() && targetStat.nlink === 1,
+            );
+            check = "link-realpath";
+            assert.equal(await realpath(targetPath), targetPath);
+            check = "file-read";
+            const targetBytes = await regularBytes(targetPath, target.size);
+            check = "file-size";
+            assert.equal(targetBytes.length, target.size);
+            check = "file-hash";
+            assert.equal(sha256(targetBytes), target.sha256, "Installed bin target bytes changed");
+            check = "bin-link-required";
+            const declaredPackage = binPackages.get(plan.path);
+            assert.equal(typeof declaredPackage, "string");
+            bodies = windowsBinEntrypoints(
+              targetPath,
+              resolve(root, plan.path),
+              targetBytes,
+              declaredPackage as string,
+            );
+            windowsBodies.set(plan.path, bodies);
+          }
+          const body = bodies.find((entry) => entry.suffix === suffix);
+          check = "bin-link-required";
+          assert.ok(body, "Unsupported installed bin representation");
+          check = "file-size";
+          assert.equal(
+            stat.size,
+            body.bytes.length,
+            "Generated bin must be its exact declared link or pinned Windows shim",
+          );
+          check = "file-read";
+          const bytes = await regularBytes(absolute, body.bytes.length);
+          check = "file-hash";
+          assert.ok(
+            bytes.equals(body.bytes),
+            "Generated bin must be its exact declared link or pinned Windows shim",
+          );
+          const seen = windowsSeen.get(plan.path) ?? new Set<string>();
+          seen.add(suffix);
+          windowsSeen.set(plan.path, seen);
+          binEntries.push({
+            path,
+            mode: stat.mode & 0o777,
+            size: stat.size,
+            sha256: sha256(bytes),
+          });
+          // Archived .bin members keep their independent original byte closure.
+          if (!files.has(path)) return;
+        }
         const saved = files.get(path);
         check = "regular-file";
         assert.ok(
@@ -184,6 +273,14 @@ export async function installedPackageInventory(
       "Missing installed package member",
     );
     check = "complete-bins";
+    const linkedPaths = new Set(binLinks.map((link) => link.path));
+    for (const [path, seen] of windowsSeen) {
+      assert.ok(!linkedPaths.has(path), "Mixed installed bin representations");
+      assert.deepEqual([...seen].sort(), ["", ".cmd", ".ps1"], "Missing installed bin link");
+      const plan = bins.get(path);
+      assert.ok(plan);
+      binLinks.push(plan);
+    }
     assert.deepEqual(
       binLinks.map((link) => link.path).sort(),
       [...bins.keys()].sort(),
@@ -192,6 +289,7 @@ export async function installedPackageInventory(
     return {
       files: actual.sort((a, b) => a.path.localeCompare(b.path, "en")),
       binLinks: binLinks.sort((a, b) => a.path.localeCompare(b.path, "en")),
+      binEntries: binEntries.sort((a, b) => a.path.localeCompare(b.path, "en")),
     };
   } catch (error) {
     observeDistributionInventoryFailure(check, packageName, error);
