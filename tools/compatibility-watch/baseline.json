@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "010066b86bbedc043cca01a298bbb19eb9cf36cf",
-        "version": "v1.20261124.2",
-        "sha256": "7c549ca34f1cbffe65601138ef4fe2e6d138f341c58d2f148343a3763b38d9b1",
+        "commit": "4a65bbb78743e1becb0947530f58e7e94ba9e778",
+        "version": "v1.20261125.1",
+        "sha256": "669842acf003ad0c88d2858577c591c279545cf3d8258127fcd1d6dbc00be2f4",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261124.2"
       },
-      "reviewedAt": "2026-11-24T21:42:17.643Z",
-      "reviewNote": "Reviewed21437517..010066b8: officialv1.20261124.2/tag and complete79-commit/292-path inventory, with targeted shutdown/serialization/ALS/trace/startup/performance/body-memory source review. Configurable shutdown defaults0; hosted autogates remain unknown. Explicit fixed date/flags do not prove hosted activation. No current product migration identified; installed workerd stays1.20261123.1, with types5.20261124.2 separately reviewed. Pointer acknowledgment only, not binary adoption, reproducibility or native/hosted/deployed qualification. Five Cloudflare policy snapshots and four unresolved installed lookahead alerts remain. Evidence: /tmp/fortipi-workerd-20261124-2-current-review-enforcer.md."
+      "reviewedAt": "2026-11-25T01:34:30.332Z",
+      "reviewNote": "Reviewed 010066b8..4a65bbb7: official v1.20261125.1 and complete 62-commit/178-path inventory, including the full diff for omitted JSON patches; targeted promise-context tagging, DOMException/RPC serialization, stream buffer ownership and shared server/REPL lifecycle review. No current product migration identified. Hosted autogates and persisted-error cross-version compatibility remain unproven. Installed workerd1.20261123.1/types5.20261124.2, image121/08 and existing date/flags are unchanged. Pointer review only, without binary adoption, native/hosted/deployed qualification or new provenance claims. Other15 snapshots, five Cloudflare policy references and four installed lookahead alerts are preserved."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
@@ -284,7 +284,7 @@
       "platformTools": "40c328395103bc442275a69d0090b0fe7031cab01e1ceea693505f459fb3da3a",
       "imageInputs": "595086ec03356174f22237b2eca51068431d234869bd6034f1b0c1c6de14c512",
       "productTrees": {
-        "worker": "a16b5248863e57e0ca2e49a4db898f353924c525",
+        "worker": "24d6946c09c26b24dfcec11810fddf8cd3140206",
         "packages": "d0683e61f234784b1828c71e7cce4faffb56c245"
       },
       "image": {
@@ -294,12 +294,12 @@
         "sourceKitSha256": "4312309f85325c23c422b081c2c81b78e36493d2567deb7c66670284b2eabc40"
       }
     },
-    "cohortSha256": "c17249eedddda63ea704e0abd811abb89b00568b06a29b662b7fff13460f0abc",
+    "cohortSha256": "7cc8502256777145ca1ebb04792840d4e6dc14c873d38b45fb83875570508b95",
     "references": {
       "pi-runtime": {
         "sourceFactsSha256": "1900eefcab459e01c041e7f163fe05444c746212768be1804abcc09cf4362f44",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-24T21:42:17.643Z",
+        "basisReviewedAt": "2026-11-25T01:29:46.304Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@earendil-works/chord/-/chord-1.6.0.tgz",
@@ -330,24 +330,24 @@
             "sha256": "8e27e6a876eb0b1cc13dcabdd614ba23fafaea6ced81aa695d6d3397e57f0fa5"
           }
         ],
-        "limitation": "Reviewed unchanged Pi1.6.0 archive facts against this actual changed cohort. The real PiHarness durable loop remains authoritative; Wrangler/Miniflare/workerd host scheduling, RPC and recovery exposure is reopened. No direct use of changed Miniflare listDurableObjectIds was found. Root Biome/Node-types changes are build tooling; strict types, clean build and focused asset reproduction passed. These observations do not qualify durable wake/recovery or hosted behavior. Prior B02 startup failure remains unattributed; genuine native/installed/deployed acceptance is required."
+        "limitation": "Reviewed the 687e3ef test-only Worker delta: server-paced immutable GET retry and abort phase timing; installed runtime exposure is unchanged. Reviewed unchanged Pi1.6.0 archive facts against this actual changed cohort. The real PiHarness durable loop remains authoritative; Wrangler/Miniflare/workerd host scheduling, RPC and recovery exposure is reopened. No direct use of changed Miniflare listDurableObjectIds was found. Root Biome/Node-types changes are build tooling; strict types, clean build and focused asset reproduction passed. These observations do not qualify durable wake/recovery or hosted behavior. Prior B02 startup failure remains unattributed; genuine native/installed/deployed acceptance is required."
       },
       "agents-lifecycle": {
         "sourceFactsSha256": "e4dfc243cbb0f2d3947635ebe9ed224116bd4e4c41ab63c6cd89192142c0bb42",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-24T21:42:17.643Z",
+        "basisReviewedAt": "2026-11-25T01:29:46.304Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/agents/-/agents-0.34.0.tgz",
             "sha256": "4093600913e5a0ccef3a6b2b6faf99dca61c46d4c4c95320a872cde4379fcbfa"
           }
         ],
-        "limitation": "Reviewed unchanged Agents0.34.0 facts against the actual new Worker/CLI host and build cohort. PiHarness/Lifecycle/SQLite contracts have no identified current migration from this delta, while workerd/Miniflare DO scheduling, eviction and RPC behavior still require real-runtime qualification. Miniflare now lists exported classes in their owning worker; Wrangler resolves bindings and FortiPi has no direct caller. Existing2026-11-10 date/flags remain; hosted autogates are unknown. Normal strict types/build are bounded evidence, not lifecycle/recovery or deployed acceptance."
+        "limitation": "Reviewed the 687e3ef test-only Worker delta: server-paced immutable GET retry and abort phase timing; installed runtime exposure is unchanged. Reviewed unchanged Agents0.34.0 facts against the actual new Worker/CLI host and build cohort. PiHarness/Lifecycle/SQLite contracts have no identified current migration from this delta, while workerd/Miniflare DO scheduling, eviction and RPC behavior still require real-runtime qualification. Miniflare now lists exported classes in their owning worker; Wrangler resolves bindings and FortiPi has no direct caller. Existing2026-11-10 date/flags remain; hosted autogates are unknown. Normal strict types/build are bounded evidence, not lifecycle/recovery or deployed acceptance."
       },
       "computer-fuse": {
         "sourceFactsSha256": "2f5d8d1267c10139a4172a2d8d1226620b3d64eacdd86bbbcf26e8411e12375c",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-24T21:42:17.643Z",
+        "basisReviewedAt": "2026-11-25T01:29:46.304Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@cloudflare/computer/-/computer-0.11.4.tgz",
@@ -358,12 +358,12 @@
             "sha256": "2df412cef0d8359ce190e34d5f0962209019667af393b7703c3f93aa7f4ce27a"
           }
         ],
-        "limitation": "Reviewed unchanged Computer0.11.4 client/source facts against the changed Worker/workspace/deployment hosts and root tooling. Selected image121 metadata/source-kit identities remain exact, with runtimeVerified=false and licenseReviewRequired=true; original08 evidence remains separately bound. No source/config/FUSE migration identified from this delta. Changed Wrangler consent and helper paths introduce no observed current configuration billing operation. Local installed bytes/build/licenses do not qualify daemon/FUSE ABI, replacement/relink, device synchronization, cloud Linux/Paid or deployed workspace continuity; those acceptance steps remain required."
+        "limitation": "Reviewed the 687e3ef test-only Worker delta: server-paced immutable GET retry and abort phase timing; installed runtime exposure is unchanged. Reviewed unchanged Computer0.11.4 client/source facts against the changed Worker/workspace/deployment hosts and root tooling. Selected image121 metadata/source-kit identities remain exact, with runtimeVerified=false and licenseReviewRequired=true; original08 evidence remains separately bound. No source/config/FUSE migration identified from this delta. Changed Wrangler consent and helper paths introduce no observed current configuration billing operation. Local installed bytes/build/licenses do not qualify daemon/FUSE ABI, replacement/relink, device synchronization, cloud Linux/Paid or deployed workspace continuity; those acceptance steps remain required."
       },
       "wrangler": {
         "sourceFactsSha256": "2fd03b9b07ae5f87bf638e2d30ea98e69e2868ff920cdd49429f9db9871a6904",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-24T21:42:17.643Z",
+        "basisReviewedAt": "2026-11-25T01:29:46.304Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261124.2.tgz",
@@ -394,7 +394,7 @@
             "sha256": "e27e97d72c74ef56fda9220df64f0edabd88f5816dda35095d9625a01aaeda76"
           }
         ],
-        "limitation": "Reviewed installed4.168.0/Miniflare5.20261123.1-beta/types5.20261124.2 with unchanged workerd1.20261123.1/utils0.57.0/Undici7.30.2. Patch e27 binds original301c to effective241c and is conveyed in generated outer CLI notices; final npm consumer proof remains required. Standard login requests upstream billing:write consent; current config does not reach the new Images settings PUT. Wrangler adapts Miniflare class/owner listing; no direct product caller. Preserve XML/Minimatch/Smithy patch scope, method-specific UUID limits and source/component provenance limits. Root tooling/normal hooks/build/licenses and selected asset case passed; no native/runtime/hosted/Paid/deployed qualification follows."
+        "limitation": "Reviewed the 687e3ef test-only Worker delta: server-paced immutable GET retry and abort phase timing; installed runtime exposure is unchanged. Reviewed installed4.168.0/Miniflare5.20261123.1-beta/types5.20261124.2 with unchanged workerd1.20261123.1/utils0.57.0/Undici7.30.2. Patch e27 binds original301c to effective241c and is conveyed in generated outer CLI notices; final npm consumer proof remains required. Standard login requests upstream billing:write consent; current config does not reach the new Images settings PUT. Wrangler adapts Miniflare class/owner listing; no direct product caller. Preserve XML/Minimatch/Smithy patch scope, method-specific UUID limits and source/component provenance limits. Root tooling/normal hooks/build/licenses and selected asset case passed; no native/runtime/hosted/Paid/deployed qualification follows."
       }
     }
   }
