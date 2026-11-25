@@ -67,18 +67,18 @@
     "workers-compatibility": {
       "catalogSha256": "4fd0686da2a0552c666942fc950197304baa684b1cd1233e5b443559767dd2e5",
       "snapshot": {
-        "commit": "0d1b7bb16d56d2c84ae0bb7d401bedddb6a864e9",
+        "commit": "409fdea6b55f38554dc439501d6a7fb86ce72708",
         "version": null,
         "paths": {
           "src/content/docs/workers/configuration/compatibility-dates.mdx": "fe6715e5fcc7b59042450f660aea243a60257b76ed63b806064e2a0db9a7ea95",
           "src/content/docs/workers/configuration/compatibility-flags.mdx": "77675f1756e82b577d1acb1b650b0c5f31c94f9356dbaaa5a413f3d6b7a57629",
-          "src/content/compatibility-flags": "e897892decdd3e2ff9c8375e359cb62a5a1de6c38989768816c43cd81a37656c"
+          "src/content/compatibility-flags": "d82a769207502afbf00d54f995d5c88514b665c378a47df8a626f53e808bfb80"
         },
-        "sha256": "9a62f66149766e8d4bbe4fefbc5251051eb2ed9409e601252cc3ee188f40b6f0"
+        "sha256": "c0260e2e73296eebadf5a91b8e03715cd0fe5babf111d722ee8227adc1cc505c"
       },
       "pins": {},
-      "reviewedAt": "2026-11-19T17:52:25.879Z",
-      "reviewNote": "Reviewed cd05cef...0d1b7bb immutable paths: date/flag overview documents and all135 prior flag entries unchanged; only WebSocket URL/extensions entry added. New websocket_standard_url_and_extensions (inverse websocket_legacy_url_and_extensions) accepts http/https as ws/wss, normalizes URL/path and returns empty protocol/extensions when none. Entry has no default_date; sort_date2026-11-17 orders documentation, not activation. FortiPi keeps2026-11-10 and nodejs_compat/enable_request_signal/request_signal_passthrough, neither new flag selected. No automatic date/flag migration, runtime adoption or deployed compatibility claim. Evidence: phase3/thread-9/compat-current-policy-review.md."
+      "reviewedAt": "2026-11-25T03:16:16.916Z",
+      "reviewNote": "Reviewed0d1b7bb..409fdea exact three watched paths: both date/flag overviews and136 prior directory entries unchanged; only python-dedicated-snapshot-keep-import-caches added. Explicit enable_date2026-12-10 schedules Python snapshot import-cache retention; default_date is absent and sort_date is listing metadata, not standalone activation evidence. FortiPi remains TypeScript/date2026-11-10 with nodejs_compat/enable_request_signal/request_signal_passthrough; no new flag or date selected. External Python interoperability client is not a Python Worker. Individual documentation acknowledgment only; no binary/library adoption, hosted activation or runtime/deployed qualification. Preserve other15 snapshots and unresolved installed lookahead. Evidence: https://github.com/cloudflare/cloudflare-docs/blob/409fdea6b55f38554dc439501d6a7fb86ce72708/src/content/compatibility-flags/python-dedicated-snapshot-keep-import-caches.md"
     },
     "computer-fuse": {
       "catalogSha256": "c4c8b17f74da3c8b3563522a2c0d5356d4805d624ce4de15cb25a3e8c34051cc",
