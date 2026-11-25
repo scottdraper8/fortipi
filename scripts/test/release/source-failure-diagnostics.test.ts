@@ -258,6 +258,69 @@ test("approval abort and native completion diagnostics exclude arbitrary payload
     sourceTestDiagnostic(`# ${JSON.stringify({ ...approval, phaseElapsedMs: 1, error: canary })}`),
     false,
   );
+  const transition = {
+    ...approval,
+    event: "transition",
+    phaseElapsedMs: 1,
+  };
+  for (const phase of [
+    "fixture",
+    "original-approval-wait",
+    "original-approval-snapshot",
+    "original-approval-read",
+    "original-reject",
+    "original-cancel-wait",
+    "acknowledge-rejection",
+    "fresh-authority",
+    "fresh-request",
+    "fresh-approval-wait",
+    "fresh-identity",
+    "fresh-reject",
+    "fresh-cancel-wait",
+    "narrow-authority",
+    "identity-conflicts",
+    "standalone-new-job",
+    "standalone-job-read",
+    "standalone-cancel",
+    "standalone-cancel-retry",
+    "standalone-cancel-wait",
+    "final-job-read",
+    "close",
+  ])
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify({ ...transition, phase })}`), true);
+  for (const age of [0, 1, 60000])
+    assert.equal(
+      sourceTestDiagnostic(
+        `# ${JSON.stringify({ ...transition, elapsedMs: age, phaseElapsedMs: age })}`,
+      ),
+      true,
+    );
+  for (const age of ["1", 0.5, -1, 60001]) {
+    assert.equal(
+      sourceTestDiagnostic(`# ${JSON.stringify({ ...transition, elapsedMs: age })}`),
+      false,
+    );
+    assert.equal(
+      sourceTestDiagnostic(`# ${JSON.stringify({ ...transition, phaseElapsedMs: age })}`),
+      false,
+    );
+  }
+  for (const changed of [
+    { ...approval, event: "transition" },
+    { ...transition, phase: canary },
+    { ...transition, event: "completed" },
+    { ...transition, error: canary },
+    { ...transition, phaseElapsedMs: null },
+  ])
+    assert.equal(sourceTestDiagnostic(`# ${JSON.stringify(changed)}`), false);
+  const transitionLine = `# ${JSON.stringify(transition)}`;
+  for (const changed of [
+    transitionLine.slice(2),
+    `${transitionLine} trailing`,
+    transitionLine.replace('"phaseElapsedMs":1', '"phaseElapsedMs":01'),
+    transitionLine.replace('"elapsedMs":25000', '"elapsedMs":025000'),
+  ])
+    assert.equal(sourceTestDiagnostic(changed), false);
   const line = nativeRecoveryFailureLine("requires_reconciliation", "result", false, true);
   assert.equal(sourceTestDiagnostic(`# ${line}`), true);
   const record = JSON.parse(line);
