@@ -5,7 +5,7 @@ contract, uses native fetch/WebSocket, and owns its fixed Ajv 2020-12 validators
 The browser entry has no Node imports or import-time runtime/credential checks.
 
 ```ts
-import { FortiPiClient } from "fortipi-client/browser"; // or fortipi-client/node
+import { FortiPiClient } from "@fortipi/fortipi-client/browser"; // or @fortipi/fortipi-client/node
 
 const client = new FortiPiClient({
   endpoint: "https://agent.example",

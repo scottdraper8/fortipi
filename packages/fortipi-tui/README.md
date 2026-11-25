@@ -10,7 +10,7 @@ fortipi-tui --profile work --conversation conversation_id --no-animation
 fortipi-tui --profile work --smoke
 ```
 
-Node 26.13 or later is required. `--help` documents the installed-bin interface.
+Node 26.13.1 or later is required. `--help` documents the installed-bin interface.
 There are no token/secret arguments. The renderer uses static progress labels;
 `--no-animation` preserves all controls and focus behavior.
 
