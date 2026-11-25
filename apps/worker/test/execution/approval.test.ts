@@ -33,17 +33,30 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
     | "close";
   const began = performance.now();
   let phase: ApprovalPhase = "fixture";
+  let phaseBegan = began;
   const enter = (next: ApprovalPhase) => {
     phase = next;
+    phaseBegan = performance.now();
   };
   const aborted = () => {
     try {
-      const elapsed = performance.now() - began;
+      const now = performance.now();
+      const elapsed = now - began;
+      const phaseElapsed = now - phaseBegan;
       const elapsedMs = Number.isFinite(elapsed)
         ? Math.min(60_000, Math.max(0, Math.round(elapsed)))
         : 0;
+      const phaseElapsedMs = Number.isFinite(phaseElapsed)
+        ? Math.min(60_000, Math.max(0, Math.round(phaseElapsed)))
+        : 0;
       t.diagnostic(
-        JSON.stringify({ diagnostic: "approval-phase", phase, event: "aborted", elapsedMs }),
+        JSON.stringify({
+          diagnostic: "approval-phase",
+          phase,
+          event: "aborted",
+          elapsedMs,
+          phaseElapsedMs,
+        }),
       );
     } catch {
       // Diagnostics must never change the test result.
