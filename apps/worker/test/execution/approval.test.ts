@@ -34,9 +34,29 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
   const began = performance.now();
   let phase: ApprovalPhase = "fixture";
   let phaseBegan = began;
+  // Phase departure can follow failure; these timings do not imply success.
+  const transitions: {
+    phase: ApprovalPhase;
+    elapsedMs: number;
+    phaseElapsedMs: number;
+  }[] = [];
   const enter = (next: ApprovalPhase) => {
+    const now = performance.now();
+    if (next !== phase && transitions.length < 32) {
+      const elapsed = now - began;
+      const phaseElapsed = now - phaseBegan;
+      transitions.push({
+        phase,
+        elapsedMs: Number.isFinite(elapsed)
+          ? Math.min(60_000, Math.max(0, Math.round(elapsed)))
+          : 0,
+        phaseElapsedMs: Number.isFinite(phaseElapsed)
+          ? Math.min(60_000, Math.max(0, Math.round(phaseElapsed)))
+          : 0,
+      });
+    }
     phase = next;
-    phaseBegan = performance.now();
+    phaseBegan = now;
   };
   const aborted = () => {
     try {
@@ -49,6 +69,21 @@ test("real Pi tool attaches one child and waits without acquiring execution befo
       const phaseElapsedMs = Number.isFinite(phaseElapsed)
         ? Math.min(60_000, Math.max(0, Math.round(phaseElapsed)))
         : 0;
+      for (const transition of transitions) {
+        try {
+          t.diagnostic(
+            JSON.stringify({
+              diagnostic: "approval-phase",
+              phase: transition.phase,
+              event: "transition",
+              elapsedMs: transition.elapsedMs,
+              phaseElapsedMs: transition.phaseElapsedMs,
+            }),
+          );
+        } catch {
+          // One diagnostic must not suppress the current abort record.
+        }
+      }
       t.diagnostic(
         JSON.stringify({
           diagnostic: "approval-phase",
