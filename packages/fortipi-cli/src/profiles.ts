@@ -8,7 +8,11 @@ import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { promisify } from "node:util";
 import { exactOrigin } from "./config.js";
 import { CliError, check } from "./errors.js";
-import { windowsAclHelper } from "./windows-helper.js";
+import {
+  projectWindowsAclFailure,
+  type WindowsAclFailureObserver,
+  windowsAclHelper,
+} from "./windows-helper.js";
 
 export function helperEnvironment(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -16,23 +20,31 @@ export function helperEnvironment(): NodeJS.ProcessEnv {
     if (process.env[key]) env[key] = process.env[key];
   return env;
 }
-async function windowsAcl(path: string, protect = false): Promise<void> {
+async function windowsAcl(
+  path: string,
+  protect = false,
+  observeFailure?: WindowsAclFailureObserver,
+): Promise<void> {
   const script =
     "$ErrorActionPreference='Stop';$p=$env:FORTIPI_ACL_TARGET;" +
-    "$i=Get-Item -Force -LiteralPath $p;if($i.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'link'};" +
+    // Direct BCL/SID calls avoid cmdlet autoload and account-name lookup, as in the executor.
+    "$attributes=[IO.File]::GetAttributes($p);if($attributes -band [IO.FileAttributes]::ReparsePoint){throw 'link'};" +
+    "$directory=($attributes -band [IO.FileAttributes]::Directory) -ne 0;" +
     "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User;" +
     (protect
-      ? "$a=Get-Acl -LiteralPath $p;$a.SetOwner($sid);$a.SetAccessRuleProtection($true,$false);" +
-        "foreach($r in @($a.Access)){$a.RemoveAccessRuleSpecific($r)};" +
+      ? "$a=if($directory){[Security.AccessControl.DirectorySecurity]::new()}else{[Security.AccessControl.FileSecurity]::new()};" +
+        "$a.SetOwner($sid);$a.SetAccessRuleProtection($true,$false);" +
         "$a.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'FullControl','Allow'));" +
-        "Set-Acl -LiteralPath $p -AclObject $a;"
+        "if($directory){[IO.Directory]::SetAccessControl($p,$a)}else{[IO.File]::SetAccessControl($p,$a)};"
       : "") +
-    "$a=Get-Acl -LiteralPath $p;" +
+    "$a=if($directory){[IO.Directory]::GetAccessControl($p,[Security.AccessControl.AccessControlSections]'Owner,Access')}else{[IO.File]::GetAccessControl($p,[Security.AccessControl.AccessControlSections]'Owner,Access')};" +
     "if($a.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value -or !$a.AreAccessRulesProtected){throw 'owner'};" +
-    "$r=@($a.Access);if(!$r.Count){throw 'empty'};foreach($v in $r){if($v.AccessControlType -eq 'Allow' -and " +
-    "$v.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){throw 'grant'}};";
+    "$r=@($a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]));if(!$r.Count){throw 'empty'};foreach($v in $r){if($v.AccessControlType -eq 'Allow' -and " +
+    "$v.IdentityReference.Value -ne $sid.Value){throw 'grant'}};";
+  let stage: "helper" | "execute" = "helper";
   try {
     const helper = windowsAclHelper();
+    stage = "execute";
     const pending = promisify(execFile)(
       helper.executable,
       ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
@@ -46,7 +58,12 @@ async function windowsAcl(path: string, protect = false): Promise<void> {
     pending.child.stdin?.on("error", () => undefined);
     pending.child.stdin?.end();
     await pending;
-  } catch {
+  } catch (error) {
+    if (observeFailure) {
+      try {
+        observeFailure(projectWindowsAclFailure(protect ? "protect" : "verify", stage, error));
+      } catch {}
+    }
     throw new CliError("protected_acl_required", 3);
   }
 }
@@ -70,14 +87,18 @@ export async function safeParents(path: string): Promise<void> {
     }
   }
 }
-export async function checkProtected(path: string, directory = false): Promise<void> {
+export async function checkProtected(
+  path: string,
+  directory = false,
+  observeFailure?: WindowsAclFailureObserver,
+): Promise<void> {
   const stat = await lstat(path);
   check(
     !stat.isSymbolicLink() && (directory ? stat.isDirectory() : stat.isFile() && stat.nlink === 1),
     "unsafe_protected_path",
     3,
   );
-  if (process.platform === "win32") await windowsAcl(path);
+  if (process.platform === "win32") await windowsAcl(path, false, observeFailure);
   else
     check(
       stat.uid === process.getuid?.() && (stat.mode & 0o777) === (directory ? 0o700 : 0o600),
@@ -122,7 +143,10 @@ export async function verifyReserved(path: string, file: FileHandle): Promise<vo
       3,
     );
 }
-export async function protectDirectory(path: string): Promise<void> {
+export async function protectDirectory(
+  path: string,
+  observeFailure?: WindowsAclFailureObserver,
+): Promise<void> {
   path = resolve(path);
   await safeParents(dirname(path));
   let created = false;
@@ -133,8 +157,8 @@ export async function protectDirectory(path: string): Promise<void> {
     if ((e as NodeJS.ErrnoException).code !== "EEXIST")
       throw new CliError("protected_directory_failed", 3);
   }
-  if (created && process.platform === "win32") await windowsAcl(path, true);
-  await checkProtected(path, true);
+  if (created && process.platform === "win32") await windowsAcl(path, true, observeFailure);
+  await checkProtected(path, true, observeFailure);
 }
 export async function reserveProtected(path: string): Promise<FileHandle> {
   await safeParents(dirname(resolve(path)));

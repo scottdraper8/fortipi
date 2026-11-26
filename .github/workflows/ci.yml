@@ -311,6 +311,10 @@ jobs:
         if: runner.os == 'Windows'
         timeout-minutes: 20
         run: node scripts/evidence-build-cleanliness.ts
+      - name: Verify Windows CLI protected directory ACLs
+        if: runner.os == 'Windows'
+        timeout-minutes: 3
+        run: node --test --test-reporter=tap --test-timeout=120000 packages/fortipi-cli/test/windows-helper.test.ts
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.4"
