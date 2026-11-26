@@ -4,19 +4,19 @@
     "workers-policy": {
       "catalogSha256": "3e27f68e18881bb254fdd75a7f41dc27ad4cb5d25b2715de4643393f2187d6c0",
       "snapshot": {
-        "commit": "b74a08841a969bad215bf23f60b6650cedc382f8",
+        "commit": "a72e785c4094bad1491c945430183e44cf2e257e",
         "version": null,
         "paths": {
-          "src/content/docs/workers/platform": "88b2720bbccb0955377709f0ccf1ebff3a5a0b03c076e914eb75f8a5c60cf5e9",
+          "src/content/docs/workers/platform": "fb173589d926e63b83a344f82f88a72107fd8d533ed99f488fb2e3d90619a648",
           "src/content/partials/workers/outbound-request-body-limits.mdx": "18f851260038816761c8963e98fbb0ff7afa76ce583d3295d55ce0e90dad69f1",
           "src/content/partials/workers/wall-time-limits.mdx": "49cc77460a529360532c1ba86132dc745dda113a063661481a99135104ad6336",
           "src/content/partials/workers/compute-per-request.mdx": "2feb35882f85b440a0b31921823e8dfc26cccf137f100dc6e2c86ebe9457f331"
         },
-        "sha256": "416c0e5ba97d0df2145e8ad97d1d45eefaf6f3a21d9ced1e424d2b03207580f1"
+        "sha256": "95d1fd809b34e4cb6146fe6698456ba0d2006229f193a203c155bc3d0e7a0c2b"
       },
       "pins": {},
-      "reviewedAt": "2026-11-19T22:13:37.001Z",
-      "reviewNote": "Reviewed0d1b7bb1..b74a0884 exact7commit/46file comparison and all3 selected platform deltas. Free request/CPU/memory/subrequest and monitored partial limits are unchanged. New version-retention documentation:30days,100mostrecent plus deployed versions retained; deployment/rollback limited to100mostrecent. Existing CLI uploads retained candidate bytes with wrangler deploy; smoke verifies current100% rollout and exact provider version and refuses missing/stale receipts, never promises historical rollback. Terraform immutability clarification and inbound/outboundTCP public-beta listing introduce no maintained API use. Existing infrastructure bounds/account-headroom caveats remain; no Paid/live/provider-equivalence proof or configuration migration. Evidence:phase3/thread-9/fresh-workers-453-review.md."
+      "reviewedAt": "2026-11-26T02:59:22.648Z",
+      "reviewNote": "Reviewed b74a0884..a72e785c exact selected Workers platform identities:13entries each, only limits.mdx changed. Entire byte delta is the Image Resizing reference link /images/optimization/transformations/overview/ to /images/optimization/transformations/url/; all12 other entries (including pricing/deployment) and all3 monitored partial identities are unchanged. No documented limit/price/deployment semantic change or current configuration migration is introduced; conservative Free bounds, unknown shared-account headroom and separate Paid/live/deployment proof remain. Reviewed0d1b7bb1..b74a0884 exact7commit/46file comparison and all3 selected platform deltas. Free request/CPU/memory/subrequest and monitored partial limits are unchanged. New version-retention documentation:30days,100mostrecent plus deployed versions retained; deployment/rollback limited to100mostrecent. Existing CLI uploads retained candidate bytes with wrangler deploy; smoke verifies current100% rollout and exact provider version and refuses missing/stale receipts, never promises historical rollback. Terraform immutability clarification and inbound/outboundTCP public-beta listing introduce no maintained API use. Existing infrastructure bounds/account-headroom caveats remain; no Paid/live/provider-equivalence proof or configuration migration. Evidence:phase3/thread-9/fresh-workers-453-review.md."
     },
     "durable-objects-policy": {
       "catalogSha256": "e52b1c5413be096047c376cb5ace58a42ad00fd5fdcdbd6e67e812921b23c586",
