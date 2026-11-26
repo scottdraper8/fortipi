@@ -51,6 +51,31 @@ test("native failure diagnostics retain fixed checkpoints and bounded error clas
     "service-native-setup",
     "service-dispatch-approval",
     "daemon-cleanup-stop",
+    "platform-installed-module",
+    "platform-source-module",
+    "platform-setup",
+    "platform-directory",
+    "platform-protection",
+    "platform-roots",
+    "platform-root-open",
+    "platform-root-identity",
+    "platform-binary",
+    "platform-case",
+    "platform-root-isolation",
+    "platform-reserved-paths",
+    "platform-link-escape",
+    "platform-sqlite-guard",
+    "platform-shell-environment",
+    "platform-shell-spawn",
+    "platform-shell-output",
+    "platform-descendant-ready",
+    "platform-start-marker",
+    "platform-process-cancel",
+    "platform-descendant-exit",
+    "platform-filesystem",
+    "platform-cleanup-stop",
+    "platform-cleanup-descendant",
+    "platform-cleanup-directory",
   ]) {
     const line = nativeEvidenceFailureLine(phase, error);
     assert.equal(JSON.parse(line).phase, phase);
@@ -68,7 +93,16 @@ test("native failure diagnostics retain fixed checkpoints and bounded error clas
     JSON.parse(nativeEvidenceFailureLine("daemon-output", new TypeError(canary))).errorClass,
     "TypeError",
   );
-  for (const value of [canary, `${canary}\nERR_ASSERTION`, {}, null, NaN, 23, Symbol(canary)]) {
+  for (const value of [
+    "platform-unreviewed",
+    canary,
+    `${canary}\nERR_ASSERTION`,
+    {},
+    null,
+    NaN,
+    23,
+    Symbol(canary),
+  ]) {
     const line = nativeEvidenceFailureLine(value, { name: value, code: value, message: canary });
     assert.deepEqual(JSON.parse(line), {
       diagnostic: "native-evidence-failure",
