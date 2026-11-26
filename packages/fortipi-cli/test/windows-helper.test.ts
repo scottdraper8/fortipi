@@ -6,7 +6,7 @@ import { join, win32 } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { CliError } from "../dist/errors.js";
-import { checkProtected, protectDirectory } from "../dist/profiles.js";
+import { checkProtected, protectDirectory, reserveProtected } from "../dist/profiles.js";
 import {
   projectWindowsAclFailure,
   type WindowsAclFailure,
@@ -178,6 +178,10 @@ test("Windows ACL helper fixes executable and module lookup to guarded OS paths"
       };
       await protectDirectory(target, observe);
       await checkProtected(target, true, observe);
+      const file = join(target, "owned.json");
+      const handle = await reserveProtected(file);
+      await handle.close();
+      await checkProtected(file);
       assert.equal(observation, undefined);
     } catch (error) {
       try {
@@ -197,10 +201,10 @@ test("Windows ACL helper fixes executable and module lookup to guarded OS paths"
           "-NonInteractive",
           "-Command",
           "$ErrorActionPreference='Stop';$p=$env:FORTIPI_ACL_TARGET;" +
-            "$i=Get-Item -Force -LiteralPath $p;if($i.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'link'};" +
-            "$a=Get-Acl -LiteralPath $p;" +
+            "$attributes=[IO.File]::GetAttributes($p);if($attributes -band [IO.FileAttributes]::ReparsePoint){throw 'link'};" +
+            "$a=[IO.Directory]::GetAccessControl($p,[Security.AccessControl.AccessControlSections]'Owner,Access');" +
             "$a.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new('S-1-1-0'),'ReadAndExecute','Allow'));" +
-            "Set-Acl -LiteralPath $p -AclObject $a;",
+            "[IO.Directory]::SetAccessControl($p,$a);",
         ],
         {
           env: { ...actualHelper.env, FORTIPI_ACL_TARGET: target },

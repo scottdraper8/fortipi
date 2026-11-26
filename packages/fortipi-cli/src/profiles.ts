@@ -27,18 +27,20 @@ async function windowsAcl(
 ): Promise<void> {
   const script =
     "$ErrorActionPreference='Stop';$p=$env:FORTIPI_ACL_TARGET;" +
-    "$i=Get-Item -Force -LiteralPath $p;if($i.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'link'};" +
+    // Direct BCL/SID calls avoid cmdlet autoload and account-name lookup, as in the executor.
+    "$attributes=[IO.File]::GetAttributes($p);if($attributes -band [IO.FileAttributes]::ReparsePoint){throw 'link'};" +
+    "$directory=($attributes -band [IO.FileAttributes]::Directory) -ne 0;" +
     "$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User;" +
     (protect
-      ? "$a=Get-Acl -LiteralPath $p;$a.SetOwner($sid);$a.SetAccessRuleProtection($true,$false);" +
-        "foreach($r in @($a.Access)){$a.RemoveAccessRuleSpecific($r)};" +
+      ? "$a=if($directory){[Security.AccessControl.DirectorySecurity]::new()}else{[Security.AccessControl.FileSecurity]::new()};" +
+        "$a.SetOwner($sid);$a.SetAccessRuleProtection($true,$false);" +
         "$a.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'FullControl','Allow'));" +
-        "Set-Acl -LiteralPath $p -AclObject $a;"
+        "if($directory){[IO.Directory]::SetAccessControl($p,$a)}else{[IO.File]::SetAccessControl($p,$a)};"
       : "") +
-    "$a=Get-Acl -LiteralPath $p;" +
+    "$a=if($directory){[IO.Directory]::GetAccessControl($p,[Security.AccessControl.AccessControlSections]'Owner,Access')}else{[IO.File]::GetAccessControl($p,[Security.AccessControl.AccessControlSections]'Owner,Access')};" +
     "if($a.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value -or !$a.AreAccessRulesProtected){throw 'owner'};" +
-    "$r=@($a.Access);if(!$r.Count){throw 'empty'};foreach($v in $r){if($v.AccessControlType -eq 'Allow' -and " +
-    "$v.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){throw 'grant'}};";
+    "$r=@($a.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]));if(!$r.Count){throw 'empty'};foreach($v in $r){if($v.AccessControlType -eq 'Allow' -and " +
+    "$v.IdentityReference.Value -ne $sid.Value){throw 'grant'}};";
   let stage: "helper" | "execute" = "helper";
   try {
     const helper = windowsAclHelper();
