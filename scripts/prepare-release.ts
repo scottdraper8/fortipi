@@ -166,6 +166,7 @@ export async function execute(
   timeout = 300_000,
   progress = false,
   onSpawn?: (child: ChildProcess) => void,
+  onStderrChunk?: (chunk: Buffer) => void,
 ): Promise<ProcessResult & { firstLimit: "deadline" | "stdout" | null }> {
   if (onSpawn)
     assert.equal(command, process.execPath, "Private IPC requires the trusted Node executable");
@@ -206,6 +207,9 @@ export async function execute(
       if (progress) process.stderr.write(data);
     });
     child.stderr.on("data", (data: Buffer) => {
+      try {
+        onStderrChunk?.(data);
+      } catch {}
       if (progress) process.stderr.write(data);
     });
     child.once("error", () => {
