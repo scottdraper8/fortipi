@@ -73,7 +73,10 @@ export async function nativePlatformPort(
       );
       phase = "platform-case";
       await a.write("Case-Probe", Buffer.from("first native spelling"), 420);
-      const alias = await a.read("case-probe", 1024).catch(() => undefined);
+      assert.equal(
+        Buffer.from(await a.read("Case-Probe", 1024)).toString(),
+        "first native spelling",
+      );
       const caseManifest = {
         version: 1 as const,
         entries: ["Case-Probe", "case-probe"].map((path) => ({
@@ -85,12 +88,22 @@ export async function nativePlatformPort(
         })),
       };
       if (a.identity.caseBehavior === "insensitive") {
-        assert.equal(Buffer.from(alias ?? []).toString(), "first native spelling");
+        if (process.platform === "win32")
+          await assert.rejects(a.read("case-probe", 1024), {
+            name: "Error",
+            message: "noncanonical filesystem alias or case spelling",
+          });
+        else
+          assert.equal(
+            Buffer.from(await a.read("case-probe", 1024)).toString(),
+            "first native spelling",
+          );
         assert.throws(
           () => module.checkManifest(caseManifest, module.defaults, a.identity.caseBehavior),
           "A manifest must reject two names that alias on this actual native filesystem",
         );
       } else {
+        const alias = await a.read("case-probe", 1024).catch(() => undefined);
         assert.equal(alias, undefined);
         module.checkManifest(caseManifest, module.defaults, a.identity.caseBehavior);
         await a.write("case-probe", Buffer.from("second native spelling"), 420);
