@@ -175,7 +175,7 @@ function shellBody(target: string, relative: string, rt: ReturnType<typeof runti
   } else {
     body += `exec ${quoted}  "$@"\nexit $?\n`;
   }
-  return `${body}# cmd-shim-target=${target}\n`;
+  return `${body}# cmd-shim-target=${target.replaceAll("\\", "/")}\n`;
 }
 
 function cmdBody(relative: string, rt: ReturnType<typeof runtime>): string {

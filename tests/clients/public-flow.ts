@@ -13,6 +13,115 @@ async function until(read: () => Promise<boolean>, timeout = 20000) {
   }
   throw new Error("Public committed completion/replay deadline exceeded");
 }
+
+function own(value: unknown, key: string): unknown {
+  try {
+    return value !== null && typeof value === "object"
+      ? Object.getOwnPropertyDescriptor(value, key)?.value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function rateLimitWait(error: unknown, now: number, allowWire = false): number | undefined {
+  const status = own(error, "status");
+  if (
+    own(error, "code") !== "rate_limited" ||
+    (status !== 429 && !(allowWire && status === undefined)) ||
+    own(error, "retryable") !== true
+  )
+    return undefined;
+  const details = own(error, "details");
+  let wait = 0;
+  for (const hint of [own(error, "retryAfterMs"), own(details, "retryAfterMs")]) {
+    if (hint === undefined) continue;
+    if (typeof hint !== "number" || !Number.isSafeInteger(hint) || hint < 1 || hint > 60000)
+      return undefined;
+    wait = Math.max(wait, hint);
+  }
+  if (!wait) return undefined;
+  const pressure = own(details, "pressure");
+  if (pressure !== undefined) {
+    if (own(pressure, "action") !== "retry-later") return undefined;
+    const retryAt = own(pressure, "retryAt");
+    if (retryAt !== undefined) {
+      if (typeof retryAt !== "number" || !Number.isSafeInteger(retryAt) || retryAt < 0)
+        return undefined;
+      wait = Math.max(wait, retryAt - now);
+    }
+  }
+  return wait <= 60000 ? wait : undefined;
+}
+
+/** Fixture wait policy only: server holds do not satisfy committed completion. */
+export function createOfflineCompletionWait(started: number) {
+  const deadline = started + 240000;
+  const seen = new WeakSet<object>();
+  const holds: { start: number; end: number }[] = [];
+  let refusals = 0;
+  let owner: object | undefined;
+  let refused: { error: unknown } | undefined;
+  const take = (error: object, wait: number, now: number) => {
+    if (seen.has(error) || refusals >= 3 || now + wait > deadline) return false;
+    seen.add(error);
+    refusals++;
+    return true;
+  };
+  const endHolds = (now: number) => {
+    for (const hold of holds) hold.end = Math.min(hold.end, now);
+  };
+  return {
+    httpWait(error: unknown): number | undefined {
+      const now = Date.now();
+      const wait = rateLimitWait(error, now);
+      return wait !== undefined && take(error as object, wait, now) ? wait : undefined;
+    },
+    accept(observer: object) {
+      owner ??= observer;
+    },
+    onStatus(observer: object, status: string, error?: unknown) {
+      if (observer !== owner) return;
+      const now = Date.now();
+      if (status !== "reconnecting" || error == null) {
+        endHolds(now);
+        return;
+      }
+      const wait = rateLimitWait(error, now, true);
+      if (wait === undefined) {
+        endHolds(now);
+        return;
+      }
+      if (seen.has(error as object)) return;
+      if (!take(error as object, wait, now)) {
+        refused ??= { error };
+        return;
+      }
+      holds.push({ start: now, end: now + wait });
+    },
+    async wait(read: () => boolean | Promise<boolean>): Promise<void> {
+      const began = Date.now();
+      while (Date.now() < deadline) {
+        if (refused) throw refused.error;
+        const now = Date.now();
+        let held = 0;
+        let through = began;
+        for (const hold of holds) {
+          const start = Math.max(began, through, hold.start);
+          const end = Math.min(now, hold.end);
+          if (end > start) {
+            held += end - start;
+            through = end;
+          }
+        }
+        if (now - began - held >= 20000) break;
+        if (await read()) return;
+        await new Promise<void>((accept) => setTimeout(accept, 25));
+      }
+      if (refused) throw refused.error;
+      throw new Error("Public committed completion/replay deadline exceeded");
+    },
+  };
+}
 /** Shared behavioral oracle, executed by independently installed Node/browser clients.
  * No transport injection, implementation counters or client-side scheduler model.
  */
@@ -31,34 +140,17 @@ export async function publicFlow(
   const observe = (phase: string) => input.observe?.(phase);
   const started = Date.now();
   const backoffs: number[] = [];
+  const completion = createOfflineCompletionWait(started);
   async function request<T>(operation: () => Promise<T>): Promise<T> {
     for (;;) {
       try {
         return await operation();
       } catch (error) {
-        const pressure = error as {
-          code?: string;
-          status?: number;
-          retryable?: boolean;
-          retryAfterMs?: number;
-          details?: { retryAfterMs?: number };
-        };
-        const wait = pressure.retryAfterMs ?? pressure.details?.retryAfterMs;
+        const wait = completion.httpWait(error);
         // Only an explicit public refusal authorizes this bounded retry. Each
         // mutating closure below retains its original intent/request ID. A
         // transport/uncertain failure is never replayed by this observer.
-        if (
-          pressure.code !== "rate_limited" ||
-          pressure.status !== 429 ||
-          pressure.retryable !== true ||
-          !Number.isSafeInteger(wait) ||
-          !wait ||
-          wait < 1 ||
-          wait > 60000 ||
-          backoffs.length >= 3 ||
-          Date.now() + wait > started + 240000
-        )
-          throw error;
+        if (wait === undefined) throw error;
         backoffs.push(wait);
         await new Promise<void>((accept) => setTimeout(accept, wait));
       }
@@ -202,6 +294,11 @@ export async function publicFlow(
             observation.statusError ||= error != null;
             if (error != null) noteError(error);
           } catch {}
+          // The validated subscribe ack signals online immediately before ready.
+          // An old setup attempt cannot select itself or end this observer's hold.
+          if (status === "online" && offlineObservation === observation)
+            completion.accept(observation);
+          completion.onStatus(observation, status, error);
         },
         onEvent(event) {
           if (event.durability === "durable" && event.type === "task.completed" && event.taskId)
@@ -222,6 +319,7 @@ export async function publicFlow(
       return candidate;
     });
     await offlineObserver.ready;
+    completion.accept(offlineObservation);
     observe("offline-send");
     const offlineInput = {
       clientRequestId: crypto.randomUUID(),
@@ -231,7 +329,7 @@ export async function publicFlow(
     const offline = await request(() => second.conversations.send(conversationId, offlineInput));
     observe("offline-completion");
     try {
-      await until(async () => offlineCompletions.has(offline.taskId));
+      await completion.wait(async () => offlineCompletions.has(offline.taskId));
     } catch (error) {
       try {
         if (
