@@ -36,6 +36,8 @@ export async function nativePlatformPort(
   module: typeof import("../../packages/fortipi-executor/dist/index.js"),
 ) {
   let phase = "platform-setup";
+  let bodyFailed = false;
+  let bodyFailurePhase = phase;
   try {
     assert.ok(["darwin", "linux", "win32"].includes(process.platform));
     const platform = module.adapter();
@@ -46,8 +48,6 @@ export async function nativePlatformPort(
     await platform.protect(directory, true);
     let processTree: ReturnType<typeof platform.spawn> | undefined;
     let stopDescendant: { path: string; nonce: string } | undefined;
-    let bodyFailed = false;
-    let bodyFailurePhase = phase;
     try {
       phase = "platform-roots";
       const rootA = resolve(directory, "A"),
@@ -235,6 +235,7 @@ export async function nativePlatformPort(
     } catch (error) {
       bodyFailed = true;
       bodyFailurePhase = phase;
+      observeNativeEvidenceFailure(phase, error);
       throw error;
     } finally {
       if (processTree) {
@@ -250,7 +251,7 @@ export async function nativePlatformPort(
       if (bodyFailed) phase = bodyFailurePhase;
     }
   } catch (error) {
-    observeNativeEvidenceFailure(phase, error);
+    if (!bodyFailed || phase !== bodyFailurePhase) observeNativeEvidenceFailure(phase, error);
     throw error;
   }
 }

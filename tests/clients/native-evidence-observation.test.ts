@@ -89,6 +89,20 @@ test("native failure diagnostics retain fixed checkpoints and bounded error clas
     errorClass: "Error",
     errorCode: "ENOENT",
   });
+  for (const code of ["EBUSY", "EMFILE", "ENFILE", "ENOTEMPTY"]) {
+    const line = nativeEvidenceFailureLine(
+      "platform-cleanup-directory",
+      Object.assign(Error(canary), { code, path: canary, syscall: canary }),
+    );
+    assert.deepEqual(JSON.parse(line), {
+      diagnostic: "native-evidence-failure",
+      phase: "platform-cleanup-directory",
+      errorClass: "Error",
+      errorCode: code,
+    });
+    assert.equal(line.includes(canary), false);
+    assert.ok(Buffer.byteLength(line) <= 256);
+  }
   assert.equal(
     JSON.parse(nativeEvidenceFailureLine("daemon-output", new TypeError(canary))).errorClass,
     "TypeError",
