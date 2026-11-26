@@ -16,7 +16,7 @@
       },
       "pins": {},
       "reviewedAt": "2026-11-26T02:59:22.648Z",
-      "reviewNote": "Reviewed b74a0884..a72e785c exact selected Workers platform identities:13entries each, only limits.mdx changed. Entire byte delta is the Image Resizing reference link /images/optimization/transformations/overview/ to /images/optimization/transformations/url/; all12 other entries (including pricing/deployment) and all3 monitored partial identities are unchanged. No documented limit/price/deployment semantic change or current configuration migration is introduced; conservative Free bounds, unknown shared-account headroom and separate Paid/live/deployment proof remain. Reviewed0d1b7bb1..b74a0884 exact7commit/46file comparison and all3 selected platform deltas. Free request/CPU/memory/subrequest and monitored partial limits are unchanged. New version-retention documentation:30days,100mostrecent plus deployed versions retained; deployment/rollback limited to100mostrecent. Existing CLI uploads retained candidate bytes with wrangler deploy; smoke verifies current100% rollout and exact provider version and refuses missing/stale receipts, never promises historical rollback. Terraform immutability clarification and inbound/outboundTCP public-beta listing introduce no maintained API use. Existing infrastructure bounds/account-headroom caveats remain; no Paid/live/provider-equivalence proof or configuration migration. Evidence:phase3/thread-9/fresh-workers-453-review.md."
+      "reviewNote": "Reviewed b74a0884..a72e785c: among 13 selected platform entries, only limits.mdx:393 changes the Image Resizing link overview/ to url/. Other 12 entries, including pricing/deployment, and all three monitored partial identities are unchanged. Free request/CPU/memory/subrequest, transfer and paid-plan rules need no migration. Version retention remains 30 days/100 recent plus deployed; deployment/rollback covers 100 recent versions. CLI uploads retained bytes and verifies the current 100% rollout and exact provider version; historical rollback is not promised. Conservative Free defaults and unknown account-wide headroom remain; no Paid activation, hosted runtime or provider-equivalence proof follows. Primary: cloudflare/cloudflare-docs a72e785c, workers/platform/limits.mdx:393."
     },
     "durable-objects-policy": {
       "catalogSha256": "e52b1c5413be096047c376cb5ace58a42ad00fd5fdcdbd6e67e812921b23c586",
@@ -171,16 +171,16 @@
     "workerd": {
       "catalogSha256": "799b583e58411f067b507cd4af7a7ade7a32b89a3c7bcbec38334f28cbe66f9b",
       "snapshot": {
-        "commit": "4a65bbb78743e1becb0947530f58e7e94ba9e778",
-        "version": "v1.20261125.1",
-        "sha256": "669842acf003ad0c88d2858577c591c279545cf3d8258127fcd1d6dbc00be2f4",
+        "commit": "333f5db1630f703a53c0119459c56a68b818dae8",
+        "version": "v1.20261126.1",
+        "sha256": "e00fb4b09cb06cc49bacf81d38007e54e698fb202b3597607621873503537e95",
         "paths": {}
       },
       "pins": {
         "apps/worker/package.json#devDependencies/@cloudflare/workers-types": "5.20261124.2"
       },
-      "reviewedAt": "2026-11-25T01:34:30.332Z",
-      "reviewNote": "Reviewed 010066b8..4a65bbb7: official v1.20261125.1 and complete 62-commit/178-path inventory, including the full diff for omitted JSON patches; targeted promise-context tagging, DOMException/RPC serialization, stream buffer ownership and shared server/REPL lifecycle review. No current product migration identified. Hosted autogates and persisted-error cross-version compatibility remain unproven. Installed workerd1.20261123.1/types5.20261124.2, image121/08 and existing date/flags are unchanged. Pointer review only, without binary adoption, native/hosted/deployed qualification or new provenance claims. Other15 snapshots, five Cloudflare policy references and four installed lookahead alerts are preserved."
+      "reviewedAt": "2026-11-26T05:47:06.792Z",
+      "reviewNote": "Reviewed 4a65bbb7..333f5db1 / official v1.20261126.1: complete 129-commit list; compare path list capped at300, targeted patches only. DO output-gate timeout is configurable with30s default retained; reviewed alarm change is test-only. WebSocket Blob/handlers and pedantic CONNECTING error, stream-source ownership, idle/loading GC, node:fs names and Rust compatibility compiler are material future exposures. UDP enable-date2026-12-16; hosted RUST_COMPAT_DATE/GC gate states and persisted-error compatibility remain unproven. No current migration identified from targeted review. Installed workerd1.20261123.1/types5.20261124.2, date/flags and image121/08 unchanged. Pointer only: no binary adoption, native/hosted/deployed qualification or new provenance; other15 snapshots/five Cloudflare references/four lookaheads preserved."
     },
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
