@@ -185,16 +185,16 @@
     "node": {
       "catalogSha256": "e43b786ec6a81281948a787f866b37513cc84e4dccbbaefdf8f48a63aeb26d75",
       "snapshot": {
-        "commit": "6c7c89331d062a47d6fe3d16b3c00e4a3145826d",
-        "version": "v27.0.0-alpha.0.1.1",
-        "sha256": "76178d7c5cb59d17e763553e257ff256b3712fb46ce388e641f09632dec9d30e",
+        "commit": "67d935706f7903245478d406eefce3e621085f6f",
+        "version": "v27.0.0-alpha.0.2.0",
+        "sha256": "b780cf4e4b09005303e6dc19ef9df86d312e86aceb730eec711002a4a87f894b",
         "paths": {}
       },
       "pins": {
         "package.json#fortipi/toolchain/node": "26.13.1"
       },
-      "reviewedAt": "2026-11-19T17:55:26.614Z",
-      "reviewNote": "Nov19 reviewed dd138af..6c7c893, alpha.0.1.0→alpha.0.1.1: immutable changelogs/25-commit diff cover Darwin notarization, Linux PIE, nghttp3 and V8 map-aging/idle-GC/Temporal-ICU fixes. Explicit Alpha despite API prerelease=false: retain security LTS26.13.1; no alpha/ABI adoption or stall-fix claim. New release/tag fingerprint matches frozen Nov19 watch. Old tag/commit unchanged but current old-release metadata hash differs from saved baseline; retain that history, use immutable changelogs for interval review. Existing signed26.13.1 security basis remains; this is reference review only, not new runtime qualification. See phase3/thread-9/compat-current-platform-review.md and E-v4HMge/receipt.json."
+      "reviewedAt": "2026-11-26T10:49:17.579Z",
+      "reviewNote": "Reviewed official v27.0.0-alpha.0.2.0 release459148134/tag877e0965→67d93570 and exact b780cf4e fingerprint. Explicit Alpha despite GitHub prerelease=false; adjacent official26.13.1 is LithiumLTS/security release. Notes identify future27 SQLite stable/error/getter, HTTP2 additions, process-timeout/TTY, util.TextDecoder/TextEncoder docs deprecations and TLS renegotiation opt-in; dependency summaries include Undici8.13.1/npm12.2.3. None are adopted. Retain pinned authenticated26.13.1 and existing security basis/binary chain; no manifest/tool/runtime/native-ABI change or new authentication. Unadopted27 API/ABI/provider/TLS compatibility is unknown; no stall/Windows fix, security refresh or runtime qualification follows. Bounded release/channel/notes review, not full commit/blob/security census; other15 entries/cohort2517/image121/08 and four library lookaheads preserved."
     },
     "pnpm": {
       "catalogSha256": "e58410592c8f99f5a020cb7c675a8fb1adcab60b7954df4ee66f045f48f14708",
