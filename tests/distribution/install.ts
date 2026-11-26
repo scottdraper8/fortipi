@@ -11,6 +11,7 @@ import {
 } from "../../scripts/prepare-release.ts";
 import { regularBytes, sha256 } from "../../scripts/verify-release-gates.ts";
 import {
+  collectDryCliErrorCode,
   type DistributionInstallPhase,
   observeDistributionInstallFailure,
   observeDistributionInstallPhase,
@@ -23,10 +24,12 @@ export async function install(path: string, context?: CandidateReadContext) {
   let phase: DistributionInstallPhase = "candidate";
   let packageName: string | null = null;
   let currentResult: Awaited<ReturnType<typeof execute>> | undefined;
+  let dryCliErrorCode: string | null | undefined;
   const enter = (next: DistributionInstallPhase, selectedPackage: string | null = null) => {
     phase = next;
     packageName = selectedPackage;
     currentResult = undefined;
+    dryCliErrorCode = undefined;
     observeDistributionInstallPhase(phase, packageName);
   };
   try {
@@ -142,6 +145,7 @@ export async function install(path: string, context?: CandidateReadContext) {
     const receipt = JSON.parse(preparation.stdout) as { assetManifestSha256: string };
     assert.equal(receipt.assetManifestSha256, loaded.candidate.assetManifestSha256);
     enter("dry-build");
+    const dryError = collectDryCliErrorCode();
     const dry = await execute(
       process.execPath,
       [
@@ -156,8 +160,12 @@ export async function install(path: string, context?: CandidateReadContext) {
       together.consumer,
       environment,
       180000,
+      false,
+      undefined,
+      dryError.observe,
     );
     currentResult = dry;
+    dryCliErrorCode = dryError.finish();
     assert.ok(dry.code === 0 && !dry.timedOut, "Installed actual Wrangler dry-build failed");
     const dryResult = JSON.parse(dry.stdout) as {
       state: string;
@@ -202,7 +210,7 @@ export async function install(path: string, context?: CandidateReadContext) {
       },
     };
   } catch (error) {
-    observeDistributionInstallFailure(phase, packageName, error, currentResult);
+    observeDistributionInstallFailure(phase, packageName, error, currentResult, dryCliErrorCode);
     throw error;
   }
 }

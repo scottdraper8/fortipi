@@ -164,6 +164,90 @@ const installPackages = new Set([
   "fortipi-cli",
 ]);
 
+// Literal CLI errors reachable through deploy --dry-run; never accept arbitrary stderr.
+const dryCliErrorCodes = new Set([
+  "command_failed",
+  "invalid_input_file",
+  "input_too_large",
+  "invalid_json",
+  "invalid_operator_config",
+  "invalid_deployment",
+  "invalid_origin",
+  "invalid_canonical_deployment_id_use_existing_public_protocol",
+  "invalid_allowed_origins",
+  "unknown_contract_schema",
+  "invalid_contract_input",
+  "free_policy_exceeds_canonical_bounds",
+  "paid_deployment_id_required_bootstrap_native_then_reprepare",
+  "paid_capability_required_for_canonical_deployment_id_reprepare",
+  "inconsistent_capacity_bounds",
+  "unsupported_model_provider",
+  "oauth_provider_mismatch",
+  "codex_requires_oauth",
+  "custom_provider_endpoint_requires_review",
+  "reserved_secret_reference",
+  "unsupported_model_secret_binding",
+  "linked_asset",
+  "invalid_asset_type",
+  "invalid_asset_manifest",
+  "actual_service5_worker_assets_required",
+  "noncanonical_asset_manifest",
+  "incomplete_asset_manifest",
+  "asset_closure_mismatch",
+  "asset_integrity_failed",
+  "image_provenance_changed",
+  "canonical_worker_template_required",
+  "unexpected_template_field",
+  "invalid_free_template",
+  "invalid_container_overlay",
+  "reviewed_linux_image_digest_required",
+  "image_context_changed",
+  "migration_history_requires_explicit_repair",
+  "invalid_prepare_receipt",
+  "prepared_asset_identity_changed",
+  "prepared_config_changed",
+  "unexpected_prepared_file",
+  "protected_acl_required",
+  "unsafe_parent",
+  "unsafe_protected_path",
+  "protected_permissions_required",
+  "protected_directory_failed",
+  "untrusted_windows_system_root",
+  "invalid_windows_user_home",
+  "verified_node_26_13_required",
+  "pinned_wrangler_required",
+  "invalid_wrangler_bin",
+  "explicit_wrangler_paths_required",
+  "invalid_secret_input_mode",
+  "wrangler_spawn_failed",
+  "wrangler_cancelled_or_timed_out",
+  "wrangler_failed_or_uncertain",
+  "wrangler_dry_build_module_identity_failed",
+]);
+
+/** One dry child only: bounded transient bytes, then a literal code or null. */
+export function collectDryCliErrorCode() {
+  let bytes = Buffer.alloc(0);
+  let closed = false;
+  return {
+    observe(chunk: Buffer): void {
+      if (closed) return;
+      if (bytes.length + chunk.length > 256) {
+        bytes = Buffer.alloc(0);
+        closed = true;
+        return;
+      }
+      bytes = Buffer.concat([bytes, chunk]);
+    },
+    finish(): string | null {
+      const text = closed ? "" : bytes.toString("utf8");
+      bytes = Buffer.alloc(0);
+      closed = true;
+      return text.endsWith("\n") ? member(text.slice(0, -1), dryCliErrorCodes) : null;
+    },
+  };
+}
+
 const inventoryCheckNames = [
   "root-realpath",
   "expected-paths",
@@ -244,6 +328,7 @@ export function distributionInstallFailureLine(
   packageName: unknown,
   error: unknown,
   result: unknown,
+  dryCliErrorCode?: unknown,
 ): string {
   const selected = member(phase, installPhases);
   const command = selected === "declarations" || selected === "prepare" || selected === "dry-build";
@@ -266,6 +351,14 @@ export function distributionInstallFailureLine(
     code: resultObserved ? code : null,
     timedOut: resultObserved ? timedOut : null,
     firstLimit: resultObserved ? firstLimit : null,
+    ...(dryCliErrorCode !== undefined &&
+    selected === "dry-build" &&
+    resultObserved &&
+    typeof code === "number" &&
+    code !== 0 &&
+    timedOut === false
+      ? { dryCliErrorCode: member(dryCliErrorCode, dryCliErrorCodes) }
+      : {}),
   });
 }
 
@@ -280,8 +373,11 @@ export function observeDistributionInstallFailure(
   packageName: unknown,
   error: unknown,
   result: unknown,
+  dryCliErrorCode?: unknown,
 ): void {
   try {
-    process.stderr.write(`${distributionInstallFailureLine(phase, packageName, error, result)}\n`);
+    process.stderr.write(
+      `${distributionInstallFailureLine(phase, packageName, error, result, dryCliErrorCode)}\n`,
+    );
   } catch {}
 }
