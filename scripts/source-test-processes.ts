@@ -141,6 +141,12 @@ const failureNames = new Set<string>([
   "candidate SAFE receipt recovery with executor reconnected before Agent activation",
   "a current publisher retains historical-generation result evidence without exposing old artifact bytes",
   "native artifact index is atomic and immutable; a different reader streams real retained bytes and bounded ranges after job authority expires",
+  "allocation floors cover actual peer SQLite growth, Workspace is charged once before RPC, and last-slot principals race atomically",
+  "sample identities preserve age/receipts, only matched completed growth reconciles, and SQLite refusal cannot partially acknowledge",
+  "private sampling rejects malformed, oversized, forged and cross-allocation input under current complete grant/floors",
+  "Workspace samples use the existing exact logical export grant, share one pool across rebinds, and cannot cover another actor's growth",
+  "sample body reader accepts a delayed complete body and bounds actual abort/deadline despite a nonsettling source cancellation",
+  "freshness samples cannot spend retained completion repair headroom",
 ]);
 const failurePaths = new Set<string>([
   "apps/worker/test/agent/runtime-reentry.test.ts",
@@ -180,6 +186,7 @@ const failurePaths = new Set<string>([
   "apps/worker/test/execution/native-process.ts",
   "apps/worker/test/execution/native-service.ts",
   "apps/worker/test/control/native-artifacts.test.ts",
+  "apps/worker/test/control/storage-budget.test.ts",
 ]);
 const failureCategories = new Set([
   "testCodeFailure",
