@@ -146,11 +146,8 @@ export async function nativePlatformPort(
       const reopened = await module.Guard.acquire(guardPath, platform);
       reopened.close();
       phase = "platform-shell-environment";
-      const env: Record<string, string> = { PATH: process.env.PATH ?? "", LANG: "C.UTF-8" };
-      if (process.platform === "win32") {
-        assert.ok(process.env.SystemRoot);
-        env.SystemRoot = process.env.SystemRoot;
-      }
+      const env = module.childEnvironment({ LANG: "C.UTF-8" });
+      if (process.platform === "win32") assert.ok(env.SystemRoot);
       const marker = resolve(directory, "process-starts"),
         nonce = randomUUID();
       stopDescendant = { path: `${marker}.child.stop`, nonce };
