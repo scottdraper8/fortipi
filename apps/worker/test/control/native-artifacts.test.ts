@@ -99,7 +99,7 @@ test("a current publisher retains historical-generation result evidence without 
   }
 });
 
-test("native artifact index is atomic and immutable; a different reader streams real retained bytes and bounded ranges after job authority expires", async () => {
+test("native artifact index is atomic and immutable; a different reader streams real retained bytes and bounded ranges after job authority expires", async (t) => {
   const h = await harness<ArtifactControl>({
     fixturePath: "apps/worker/test/control/fixtures/artifacts.ts",
   });
@@ -460,7 +460,20 @@ test("native artifact index is atomic and immutable; a different reader streams 
         body: await chunk(ownerPath, 0, d.chunkBytes, d.size),
       },
     );
-    assert.equal(wrongHash.status, 409, "producer PUT cannot change the retained chunk hash");
+    const wrongHashStatus = wrongHash.status;
+    try {
+      if (wrongHashStatus !== 409)
+        t.diagnostic(
+          JSON.stringify({
+            diagnostic: "source-native-artifact-response",
+            phase: "wrong-declared-hash",
+            status: wrongHashStatus,
+          }),
+        );
+    } catch {
+      // Preserve the original assertion if observation fails.
+    }
+    assert.equal(wrongHashStatus, 409, "producer PUT cannot change the retained chunk hash");
     assert.equal(
       (
         await deliver({

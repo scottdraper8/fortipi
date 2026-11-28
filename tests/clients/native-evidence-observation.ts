@@ -182,19 +182,34 @@ const taskStates = new Set([
   "interrupted",
   "cancelled",
 ]);
+const taskWaitingReasons = new Set([
+  "model",
+  "cloud-tool",
+  "local-device",
+  "human-approval",
+  "local-policy",
+  "reconciliation",
+  "workspace-conflict",
+  "kept-input",
+]);
 const boundedInteger = (value: unknown, maximum: number) =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= maximum
     ? value
     : null;
 
-/** Existing settlement reads only; no IDs, errors, task payloads or waiting reasons.
+/** Existing settlement reads and a finite waiting reason only; no IDs, errors or task payloads.
  * Producer counts saturate at 1,000,000 and monotonic ages at 600,000ms; these
  * maxima denote lower bounds, never additional polling deadlines. */
 export function nativeTaskSettlementLine(observation: unknown): string {
+  const lastTaskState = member(own(observation, "lastTaskState"), taskStates);
   return JSON.stringify({
     diagnostic: "native-task-settlement-observation",
     boundary: member(own(observation, "boundary"), settlementBoundaries),
-    lastTaskState: member(own(observation, "lastTaskState"), taskStates),
+    lastTaskState,
+    lastWaitingReason:
+      lastTaskState === "waiting"
+        ? member(own(observation, "lastWaitingReason"), taskWaitingReasons)
+        : null,
     completedReads: boundedInteger(own(observation, "completedReads"), 1_000_000),
     elapsedMs: boundedInteger(own(observation, "elapsedMs"), 600_000),
   });

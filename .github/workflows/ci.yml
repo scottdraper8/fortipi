@@ -354,6 +354,12 @@ jobs:
           path: dist/evidence-build-cleanliness.json
           if-no-files-found: ignore
           retention-days: 7
+      - name: Verify retained artifact producer rejection on Linux
+        if: runner.os == 'Linux'
+        timeout-minutes: 15
+        run: |
+          node scripts/build-workspaces.ts build:evidence
+          node --require ./scripts/source-test-processes.ts --test --test-reporter=tap --test-timeout=900000 --test-name-pattern='^native artifact index is atomic and immutable; a different reader streams real retained bytes and bounded ranges after job authority expires$' apps/worker/test/control/native-artifacts.test.ts
       - run: pnpm run test:executor
       - name: Require runner hardener health
         if: always()

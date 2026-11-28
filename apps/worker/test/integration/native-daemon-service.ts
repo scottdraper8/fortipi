@@ -246,14 +246,20 @@ export async function nativeDaemonService() {
         const started = performance.now();
         let boundary: "read" | "poll" = "poll";
         let lastTaskState: D.Task["status"]["state"] | null = null;
+        let lastWaitingReason: Extract<D.Task["status"], { state: "waiting" }>["reason"] | null =
+          null;
         let completedReads = 0;
         try {
           return await poll(
             async () => {
               boundary = "read";
               const current = await task(taskId);
+              const state = current.status.state;
+              const waitingReason =
+                current.status.state === "waiting" ? current.status.reason : null;
               boundary = "poll";
-              lastTaskState = current.status.state;
+              lastTaskState = state;
+              lastWaitingReason = waitingReason;
               // Diagnostic saturation only; neither cap changes the polling budget.
               completedReads = Math.min(1_000_000, completedReads + 1);
               return current;
@@ -266,6 +272,7 @@ export async function nativeDaemonService() {
             observeNativeTaskSettlement({
               boundary,
               lastTaskState,
+              lastWaitingReason,
               completedReads,
               // A saturated value means at least ten minutes, not a deadline.
               elapsedMs: Math.min(600_000, Math.max(0, Math.floor(performance.now() - started))),

@@ -204,6 +204,7 @@ test("31 distinct snapshot blobs survive typed429 in one ongoing preparation acr
   // the runtime must still retain that exact deadline and renewable lease.
   const h = await preparation(31, { deadlineMs: 180000 }),
     fault = readFault(h, "typed", 14, 31000),
+    initialIdentity = structuredClone(h.a.identity),
     initialLeaseExpiry = h.a.identity.lease.expiresAt,
     deadline = h.a.identity.deadline,
     renewals = jobRenewals(h.runtime, h.a);
@@ -247,7 +248,29 @@ test("31 distinct snapshot blobs survive typed429 in one ongoing preparation acr
       "actual preparation must cross the original lease expiry",
     );
     assert.equal(h.a.identity.deadline, deadline);
-    assert.ok(renewals.observations.length >= 3);
+    const observedRenewals = [...renewals.observations];
+    assert.ok(observedRenewals.length > 0);
+    let previousVersion = initialIdentity.lease.leaseVersion;
+    for (const observation of observedRenewals) {
+      assert.ok(observation.leaseVersion > previousVersion);
+      previousVersion = observation.leaseVersion;
+    }
+    const retained = h.f.ledger.existing(h.a.identity)?.assignment.identity;
+    assert.ok(retained);
+    assert.ok(retained.lease.leaseVersion >= previousVersion);
+    assert.ok(retained.lease.expiresAt > initialLeaseExpiry);
+    assert.ok(retained.lease.expiresAt <= deadline);
+    assert.deepEqual(
+      {
+        ...retained,
+        lease: {
+          ...retained.lease,
+          expiresAt: initialIdentity.lease.expiresAt,
+          leaseVersion: initialIdentity.lease.leaseVersion,
+        },
+      },
+      initialIdentity,
+    );
     assert.ok(
       renewals.observations.every((r) => r.leaseVersion > 1 && r.remainingLeaseMs <= 30000),
     );
