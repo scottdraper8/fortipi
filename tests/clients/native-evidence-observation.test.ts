@@ -6,10 +6,102 @@ import {
   distributionInstallPhaseLine,
   distributionInventoryFailureLine,
   nativeEvidenceFailureLine,
+  nativeTaskSettlementLine,
 } from "./native-evidence-observation.ts";
 
 const canary = "private-role-ticket-request-path-canary";
 test("native failure diagnostics retain fixed checkpoints and bounded error class/code only", () => {
+  const settlement = {
+    boundary: "read",
+    lastTaskState: null,
+    completedReads: 0,
+    elapsedMs: 0,
+  };
+  assert.deepEqual(JSON.parse(nativeTaskSettlementLine(settlement)), {
+    diagnostic: "native-task-settlement-observation",
+    ...settlement,
+  });
+  for (const state of [
+    "idle",
+    "queued",
+    "running",
+    "waiting",
+    "completed",
+    "failed",
+    "interrupted",
+    "cancelled",
+  ]) {
+    const line = nativeTaskSettlementLine({
+      boundary: "poll",
+      lastTaskState: state,
+      completedReads: 1_000_000,
+      elapsedMs: 600_000,
+      taskId: canary,
+      reason: canary,
+      error: Error(canary),
+    });
+    assert.deepEqual(JSON.parse(line), {
+      diagnostic: "native-task-settlement-observation",
+      boundary: "poll",
+      lastTaskState: state,
+      completedReads: 1_000_000,
+      elapsedMs: 600_000,
+    });
+    assert.equal(line.includes(canary), false);
+    assert.ok(Buffer.byteLength(line) <= 256);
+  }
+  const unknownSettlement = {
+    diagnostic: "native-task-settlement-observation",
+    boundary: null,
+    lastTaskState: null,
+    completedReads: null,
+    elapsedMs: null,
+  };
+  for (const value of [
+    canary,
+    null,
+    undefined,
+    NaN,
+    Infinity,
+    -1,
+    0.5,
+    1_000_001,
+    Symbol(canary),
+  ]) {
+    assert.deepEqual(
+      JSON.parse(
+        nativeTaskSettlementLine({
+          boundary: value,
+          lastTaskState: value,
+          completedReads: value,
+          elapsedMs: value,
+        }),
+      ),
+      unknownSettlement,
+    );
+  }
+  assert.equal(JSON.parse(nativeTaskSettlementLine({ elapsedMs: 600_001 })).elapsedMs, null);
+  assert.deepEqual(
+    JSON.parse(nativeTaskSettlementLine(Object.create(settlement))),
+    unknownSettlement,
+  );
+  let settlementAccesses = 0;
+  const accessors = Object.fromEntries(
+    Object.keys(settlement).map((key) => [
+      key,
+      {
+        get: () => {
+          settlementAccesses++;
+          throw Error(canary);
+        },
+      },
+    ]),
+  );
+  assert.deepEqual(
+    JSON.parse(nativeTaskSettlementLine(Object.defineProperties({}, accessors))),
+    unknownSettlement,
+  );
+  assert.equal(settlementAccesses, 0);
   const error = new assert.AssertionError({
     message: canary,
     actual: { token: canary },

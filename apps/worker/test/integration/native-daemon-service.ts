@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { observeNativeEvidenceFailure } from "../../../../tests/clients/native-evidence-observation.ts";
+import {
+  observeNativeEvidenceFailure,
+  observeNativeTaskSettlement,
+} from "../../../../tests/clients/native-evidence-observation.ts";
 import { RoleContext } from "../../../../tests/clients/roles.ts";
 import type * as D from "../../src/boundary/dto.js";
 import { bootstrap } from "../agent/harness.ts";
@@ -240,10 +243,36 @@ export async function nativeDaemonService() {
         assert.equal(result.body.disposition.possibleExternalEffects, true);
       },
       async settled(taskId: string) {
-        return poll(
-          () => task(taskId),
-          (task) => ["completed", "failed", "cancelled", "interrupted"].includes(task.status.state),
-        );
+        const started = performance.now();
+        let boundary: "read" | "poll" = "poll";
+        let lastTaskState: D.Task["status"]["state"] | null = null;
+        let completedReads = 0;
+        try {
+          return await poll(
+            async () => {
+              boundary = "read";
+              const current = await task(taskId);
+              boundary = "poll";
+              lastTaskState = current.status.state;
+              // Diagnostic saturation only; neither cap changes the polling budget.
+              completedReads = Math.min(1_000_000, completedReads + 1);
+              return current;
+            },
+            (task) =>
+              ["completed", "failed", "cancelled", "interrupted"].includes(task.status.state),
+          );
+        } catch (error) {
+          try {
+            observeNativeTaskSettlement({
+              boundary,
+              lastTaskState,
+              completedReads,
+              // A saturated value means at least ten minutes, not a deadline.
+              elapsedMs: Math.min(600_000, Math.max(0, Math.floor(performance.now() - started))),
+            });
+          } catch {}
+          throw error;
+        }
       },
       async close() {
         const cleanup = await observed("service-cleanup-roles", () => roles.cleanup());
