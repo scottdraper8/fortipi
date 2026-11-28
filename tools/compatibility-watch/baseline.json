@@ -284,8 +284,8 @@
       "platformTools": "40c328395103bc442275a69d0090b0fe7031cab01e1ceea693505f459fb3da3a",
       "imageInputs": "595086ec03356174f22237b2eca51068431d234869bd6034f1b0c1c6de14c512",
       "productTrees": {
-        "worker": "2e0d1d8e214a9d1e1442e4dffce4f8b547fecbf9",
-        "packages": "6730c44b4a0b46afb1969757d439a3caff8c566c"
+        "worker": "99c9dd114eeaf9de4f58b399df93fbb160d15667",
+        "packages": "f6ea718b5b48737a5fa590adffc58fe86b93a643"
       },
       "image": {
         "sourceCommit": "121dda16792a81d4756e597b395a9f287b8e10d3",
@@ -294,12 +294,12 @@
         "sourceKitSha256": "4312309f85325c23c422b081c2c81b78e36493d2567deb7c66670284b2eabc40"
       }
     },
-    "cohortSha256": "62b1ec56a25ed687cb6c1a740a535a37a72b77d592c0188cc52d56b77ef9fe8f",
+    "cohortSha256": "27d23089e8163bc7e9dd8d43b9d0924a16bec362205dc84e2cf83c83803d878d",
     "references": {
       "pi-runtime": {
         "sourceFactsSha256": "1900eefcab459e01c041e7f163fe05444c746212768be1804abcc09cf4362f44",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-28T08:52:01.484Z",
+        "basisReviewedAt": "2026-11-28T11:49:14.560Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@earendil-works/chord/-/chord-1.6.0.tgz",
@@ -330,24 +330,24 @@
             "sha256": "8e27e6a876eb0b1cc13dcabdd614ba23fafaea6ced81aa695d6d3397e57f0fa5"
           }
         ],
-        "limitation": "Task-settlement semantic review: only passive native-fixture diagnostics change. The existing validated public task reads, terminal predicate, 20s poll/25ms sleeps and identical error rethrow remain; no Pi durable-loop or cancellation logic changes. The Windows settlement failure remains unexplained; read/poll labels do not establish a cause. Storage-fixture semantic review: only the Worker quota test changes; fresh same-credential authority and one real minute preserve retained-completion and durable-agent oracles. No Pi/runtime behavior changes. Pi1.6.0 source/archive facts and the real PiHarness durable loop are unchanged; Worker-side approval, cancellation, idempotency and wake/recovery oracles remain. CLI ACL code moves from provider cmdlets/account names to direct .NET/BCL attributes and SID ACLs; owner/current-user-only/reparse checks, fixed helper/environment, 10s/4096 bounds, closed diagnostics and fail-closed exit3 remain. This host change reopens installed CLI and Wrangler/Miniflare/workerd scheduling/RPC/recovery exposure; it does not establish Windows success or identify the stalled component. Phase transitions imply neither success nor request duration; prior cleanup/startup failures remain unattributed and are not joined causally. No direct Miniflare listDurableObjectIds caller was found. Build/types/Mac pure checks are bounded evidence; native, durable wake/recovery, hosted/Paid/provider and deployed acceptance remain required."
+        "limitation": "Measured cohort semantic review: preclaim now requires observed accepted lease-version advancement and retained immutable identity/expiry, replacing a callback-count assumption. The31s hold/10s renewal helper/30s leases/180s job/32 GETs/hash/one-effect oracles remain. Native settlement adds only a finite waiting reason from existing typed reads; artifact status diagnostics preserve original409 assertions. No Pi cancellation or durable-loop logic changes, ACK-as-terminal, budget increase or current-cause claim. Pi1.6.0 source/archive facts and the real PiHarness durable loop are unchanged; Worker-side approval, cancellation, idempotency and wake/recovery oracles remain. CLI ACL code moves from provider cmdlets/account names to direct .NET/BCL attributes and SID ACLs; owner/current-user-only/reparse checks, fixed helper/environment, 10s/4096 bounds, closed diagnostics and fail-closed exit3 remain. This host change reopens installed CLI and Wrangler/Miniflare/workerd scheduling/RPC/recovery exposure; it does not establish Windows success or identify the stalled component. Phase transitions imply neither success nor request duration; prior cleanup/startup failures remain unattributed and are not joined causally. No direct Miniflare listDurableObjectIds caller was found. Build/types/Mac pure checks are bounded evidence; native, durable wake/recovery, hosted/Paid/provider and deployed acceptance remain required."
       },
       "agents-lifecycle": {
         "sourceFactsSha256": "e4dfc243cbb0f2d3947635ebe9ed224116bd4e4c41ab63c6cd89192142c0bb42",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-28T08:52:01.484Z",
+        "basisReviewedAt": "2026-11-28T11:49:14.560Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/agents/-/agents-0.34.0.tgz",
             "sha256": "4093600913e5a0ccef3a6b2b6faf99dca61c46d4c4c95320a872cde4379fcbfa"
           }
         ],
-        "limitation": "Task-settlement semantic review: capture only the last successfully read public task state/count and monotonic age on rejection. No new RPC, authority, SQLite, alarm or lifecycle mutation occurs; saturation bounds metadata, not polling. No DO API or migration change is identified. Storage-fixture semantic review: one fresh same-principal/registration context bounds serial sample admissions and retained settlement to a real minute. DO authority, admission pools and lifecycle code remain unchanged. Agents0.34.0 facts/bytes and DO/Lifecycle/alarm/SQLite/RPC contracts are unchanged. The CLI direct BCL/SID ACL change affects the local deployment/credential-protection host, not agent authority or lifecycle logic; owner/current-user-only/reparse checks and finite failure bounds remain. No current Lifecycle/SQLite migration is identified. Wrangler still resolves Miniflare owning-worker class listings; FortiPi has no direct listDurableObjectIds caller. Compatibility date2026-11-10 and flags remain; hosted autogates are unknown. Existing assertions and cleanup remain authoritative. Optional diagnostics and strict types/build/Mac pure checks do not establish Windows ACL success, eviction/recovery or runtime/native/hosted/Paid/provider/deployed qualification."
+        "limitation": "Measured host semantic review: finite waiting-reason diagnostics use the same fulfilled task reads, clear outside waiting and preserve prior observations on read failure. No extra RPC, authority, alarm or SQLite mutation;20s/25ms terminal polling and identical rethrow remain. The lease fixture validates actual retained renewal semantics; artifact diagnostics retain real response and409 oracles. Prior waiting/control-delivery cause is unknown; metadata is not settlement proof. Agents0.34.0 facts/bytes and DO/Lifecycle/alarm/SQLite/RPC contracts are unchanged. The CLI direct BCL/SID ACL change affects the local deployment/credential-protection host, not agent authority or lifecycle logic; owner/current-user-only/reparse checks and finite failure bounds remain. No current Lifecycle/SQLite migration is identified. Wrangler still resolves Miniflare owning-worker class listings; FortiPi has no direct listDurableObjectIds caller. Compatibility date2026-11-10 and flags remain; hosted autogates are unknown. Existing assertions and cleanup remain authoritative. Optional diagnostics and strict types/build/Mac pure checks do not establish Windows ACL success, eviction/recovery or runtime/native/hosted/Paid/provider/deployed qualification."
       },
       "computer-fuse": {
         "sourceFactsSha256": "2f5d8d1267c10139a4172a2d8d1226620b3d64eacdd86bbbcf26e8411e12375c",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-28T08:52:01.484Z",
+        "basisReviewedAt": "2026-11-28T11:49:14.560Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@cloudflare/computer/-/computer-0.11.4.tgz",
@@ -358,12 +358,12 @@
             "sha256": "2df412cef0d8359ce190e34d5f0962209019667af393b7703c3f93aa7f4ce27a"
           }
         ],
-        "limitation": "Task-settlement semantic review: five finite native-fixture scalars add no workspace, FUSE, device, image, process-cancellation or confinement-policy change. Diagnostic failures retain the identical primary throw. This supplies neither a repair nor native/deployed qualification. Storage-fixture semantic review: the sampling/headroom test now uses one fresh same-registration context and real minute; measured quotas and retained completion remain required. No Computer/FUSE, workspace, image or device behavior changes. Computer0.11.4 source/client facts, FUSE/workspace/device/synchronization contracts and selected image121 metadata/source-kit identities are unchanged: runtimeVerified=false/licenseReviewRequired=true; original08 evidence remains separate. CLI direct BCL/SID ACL code affects the local configuration/deployment/credential-protection host while retaining owner/current-user-only/reparse checks and finite failure behavior. No source/config/FUSE migration is identified. No observed current-config billing operation follows from Wrangler helper/consent paths. Local bytes/build/licenses/Mac pure checks do not clear image runtime/legal/provenance limits or qualify Windows ACLs, daemon/FUSE ABI, replacement/relink, device synchronization, cloud Linux/Paid or deployed workspace continuity; genuine installed/native/deployed checks remain required."
+        "limitation": "Measured Computer/FUSE semantic review: fixture renewal and finite waiting-reason/artifact diagnostics change no native command, confinement, process cancellation, workspace, device or image behavior. Real protected bytes, no-start confinement refusal, immutable identity and terminal/durable-receipt oracles remain; accepting waiting or cancellation ACK is not success. No runtime repair or cause is established. Computer0.11.4 source/client facts, FUSE/workspace/device/synchronization contracts and selected image121 metadata/source-kit identities are unchanged: runtimeVerified=false/licenseReviewRequired=true; original08 evidence remains separate. CLI direct BCL/SID ACL code affects the local configuration/deployment/credential-protection host while retaining owner/current-user-only/reparse checks and finite failure behavior. No source/config/FUSE migration is identified. No observed current-config billing operation follows from Wrangler helper/consent paths. Local bytes/build/licenses/Mac pure checks do not clear image runtime/legal/provenance limits or qualify Windows ACLs, daemon/FUSE ABI, replacement/relink, device synchronization, cloud Linux/Paid or deployed workspace continuity; genuine installed/native/deployed checks remain required."
       },
       "wrangler": {
         "sourceFactsSha256": "2fd03b9b07ae5f87bf638e2d30ea98e69e2868ff920cdd49429f9db9871a6904",
         "currentImpact": "reviewed",
-        "basisReviewedAt": "2026-11-28T08:52:01.484Z",
+        "basisReviewedAt": "2026-11-28T11:49:14.560Z",
         "primaryReferences": [
           {
             "uri": "https://registry.npmjs.org/@cloudflare/workers-types/-/workers-types-5.20261124.2.tgz",
@@ -394,7 +394,7 @@
             "sha256": "e27e97d72c74ef56fda9220df64f0edabd88f5816dda35095d9625a01aaeda76"
           }
         ],
-        "limitation": "Task-settlement semantic review: the existing Miniflare/workerd-backed poll gains passive metadata; requests, 20s/25ms bounds, terminal oracle, argv/environment and dependency bytes stay unchanged. The whole diagnostic call/arguments are best-effort before identical rethrow. No IDs/payloads are emitted; the Windows failure remains unresolved, without a timeout or product-fix claim. Storage-fixture semantic review: only Worker test authority/window setup changes, exercised with installed Miniflare/workerd. Focused case passes; charging retained completion to ordinary quota fails its original assertion. No tool/runtime bytes or quota policy change; prior CI status sequence/cause remains unknown. Pinned4.168.0/MF5.20261123.1-beta/types5.20261124.2/workerd1.20261123.1/utils0.57.0/Undici7.30.2 facts are unchanged. CLI ACL code replaces provider cmdlets/name translation with direct BCL/SID APIs; fixed helper/env/10s/4096, owner/reparse/protected/current-user-only policy, closed observer and exit3 remain. Local10s termination is established; stalled component and repair efficacy still need Windows evidence. Patch e27 binds original301c to effective241c; outer notices carry it, but final npm-consumer byte/notice proof remains required. XML/Minimatch/Smithy patch scope and method-specific UUID/buffer limits remain. SRI/signatures/DSSE leaf and component-byte matches do not prove full Sigstore, reproducibility or complete provenance. Standard login retains billing:write consent; current config does not reach Images settings PUT. No direct Miniflare class-list caller or current migration identified; hosted autogates remain unknown. Build/types/licenses/Mac pure checks do not establish native/runtime/Windows/hosted/Paid/provider/deployed qualification."
+        "limitation": "Measured runtime/deployment-host semantic review: preclaim checks sequential accepted renewals and actual retained identity/expiry; original physical hold, lease/job bounds,32 GETs, bytes and one effect remain. Artifact diagnostics retain original409 failures; the early Linux step is source engineering evidence. Waiting reason is a finite field from existing task reads, with unchanged20s/25ms polling, terminal predicate, requests and identical rethrow. No timeout increase, runtime fix or causal attribution follows. Pinned4.168.0/MF5.20261123.1-beta/types5.20261124.2/workerd1.20261123.1/utils0.57.0/Undici7.30.2 facts are unchanged. CLI ACL code replaces provider cmdlets/name translation with direct BCL/SID APIs; fixed helper/env/10s/4096, owner/reparse/protected/current-user-only policy, closed observer and exit3 remain. Local10s termination is established; stalled component and repair efficacy still need Windows evidence. Patch e27 binds original301c to effective241c; outer notices carry it, but final npm-consumer byte/notice proof remains required. XML/Minimatch/Smithy patch scope and method-specific UUID/buffer limits remain. SRI/signatures/DSSE leaf and component-byte matches do not prove full Sigstore, reproducibility or complete provenance. Standard login retains billing:write consent; current config does not reach Images settings PUT. No direct Miniflare class-list caller or current migration identified; hosted autogates remain unknown. Build/types/licenses/Mac pure checks do not establish native/runtime/Windows/hosted/Paid/provider/deployed qualification."
       }
     }
   }
