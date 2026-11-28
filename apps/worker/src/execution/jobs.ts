@@ -255,7 +255,13 @@ export class Jobs implements JobStore {
                       : "running",
           }
         : undefined);
-    if (task && projected && !same(task.status, projected)) {
+    // Reconciliation preserves a terminal Pi task even when the job remains uncertain.
+    if (
+      task &&
+      projected &&
+      !["completed", "failed", "cancelled", "interrupted"].includes(task.status.state) &&
+      !same(task.status, projected)
+    ) {
       const changed: D.Task = { ...task, status: projected, version: task.version + 1 };
       await this.store.put("task", task.taskId, changed, tx);
       await this.store.append(tx, `task:${task.taskId}:${changed.version}`, {

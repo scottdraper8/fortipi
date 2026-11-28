@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resourceId } from "../../src/api/common.ts";
 import type * as D from "../../src/boundary/dto.js";
-import { pause } from "../agent/harness.ts";
+import { eventually, pause } from "../agent/harness.ts";
 import { nativeService } from "./native-service.ts";
 
 test("reconciliation verifies an actual native receipt and preserves the original uncertain Pi disposition", {
   timeout: 45000,
 }, async () => {
-  const n = await nativeService({ changed: true, holdCommit: true });
+  const n = await nativeService({ changed: true, holdCommit: true, control: true });
   try {
     for (let i = 0; i < 700; i++) {
       if ((await n.state()).jobs[0]?.state === "result_pending_commit") break;
@@ -35,7 +35,35 @@ test("reconciliation verifies an actual native receipt and preserves the origina
     assert.equal(receipt.status, 200, JSON.stringify(receipt.body));
     const interrupted = await n.probe.interruptForReconciliation(n.job.jobId);
     assert.equal(interrupted.state, "requires_reconciliation");
+    const originalJob = await n.h.api<D.Job>(`/v1/jobs/${n.job.jobId}`);
+    assert.equal(originalJob.status, 200);
+    assert.equal(originalJob.body.version, interrupted.version);
     await n.probe.releaseNativeCommit();
+    const taskPath = `/v1/tasks/${n.sent.body.taskId}`;
+    const cancellation = await n.h.api<D.ControlReceipt>(
+      `${taskPath}/cancel`,
+      { requestId: crypto.randomUUID(), reason: "Stop the original run before reconciliation" },
+      "POST",
+      n.actor.token,
+    );
+    assert.equal(cancellation.status, 202);
+    assert.equal(cancellation.body.durableIntent, true);
+    await eventually(
+      async () => {
+        await n.probe.runRepair();
+        return n.probe.admissionStatus();
+      },
+      (rows) =>
+        rows.some((row) => row.receipt?.taskId === n.sent.body.taskId && row.state === "settled"),
+    );
+    const terminalTask = await eventually(
+      () => n.h.api<D.Task>(taskPath),
+      (value) =>
+        value.status === 200 &&
+        ["completed", "failed", "cancelled", "interrupted"].includes(value.body.status.state),
+    );
+    assert.equal(terminalTask.body.taskId, n.sent.body.taskId);
+    assert.deepEqual(await n.h.api<D.Job>(`/v1/jobs/${n.job.jobId}`), originalJob);
     const result = n.f.ledger.get(n.job.jobId)?.result;
     assert.ok(result);
     const input: D.ReconcileInput = {
@@ -56,6 +84,11 @@ test("reconciliation verifies an actual native receipt and preserves the origina
     assert.equal(facts?.evidenceRetained, true);
     assert.equal(facts?.originalDisposition, "requires_reconciliation");
     assert.equal(facts?.piOutcomePreserved, true);
+    assert.deepEqual(
+      await n.h.api<D.Task>(taskPath),
+      terminalTask,
+      "Reconciliation must preserve the original terminal task and its version",
+    );
     const after = await n.h.api<D.Job>(`/v1/jobs/${n.job.jobId}`);
     assert.equal(after.body.state, "requires_reconciliation");
     assert.equal(after.body.version, interrupted.version + 1);
@@ -68,7 +101,15 @@ test("reconciliation verifies an actual native receipt and preserves the origina
     });
     assert.equal(acknowledged.status, 202);
     assert.equal(acknowledged.body.disposition, "unknown-acknowledged");
+    assert.deepEqual(
+      await n.h.api<D.Task>(taskPath),
+      terminalTask,
+      "Acknowledging uncertain effects must preserve the original terminal task",
+    );
     const current = await n.h.api<D.Job>(`/v1/jobs/${n.job.jobId}`);
+    assert.equal(current.body.state, after.body.state);
+    assert.deepEqual(current.body.execution, after.body.execution);
+    assert.equal(current.body.version, after.body.version + 1);
     const drifted: D.ReconcileInput = {
       requestId: crypto.randomUUID(),
       expectedVersion: current.body.version,
