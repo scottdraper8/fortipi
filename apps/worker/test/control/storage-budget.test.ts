@@ -64,8 +64,8 @@ async function setup() {
           body: typeof input === "string" ? input : JSON.stringify(input),
         }),
       );
-    const reserve = (bytes: number) =>
-      h.cp.reserveCapacity(actor, {
+    const reserve = (bytes: number, context: D.AuthContext = actor) =>
+      h.cp.reserveCapacity(context, {
         operationId: uuid(),
         ownerId: agentId,
         policyVersion: 1,
@@ -582,20 +582,29 @@ test("sample body reader accepts a delayed complete body and bounds actual abort
 });
 
 test("freshness samples cannot spend retained completion repair headroom", async () => {
-  const remainingMinute = 60000 - (Date.now() % 60000);
-  if (remainingMinute < 3000) await new Promise((done) => setTimeout(done, remainingMinute + 10));
   const h = await setup();
   try {
-    assert.equal((await h.send(h.sample(100000))).status, 200);
-    const claim = value(await h.reserve(1000));
+    const remainingMinute = 60000 - (Date.now() % 60000);
+    await new Promise((done) => setTimeout(done, remainingMinute + 10));
+    const minuteEnd = (Math.floor(Date.now() / 60000) + 1) * 60000;
+    const actor: D.ResourceAuthContext = {
+      ...(await h.auth(h.issued.token)),
+      registrationId: h.actor.registrationId,
+    };
+    assert.ok(
+      actor.deadline <= minuteEnd,
+      "Fresh sampling authority must expire within the tested request window",
+    );
+    assert.equal((await h.send(h.sample(100000), actor)).status, 200);
+    const claim = value(await h.reserve(1000, actor));
     const results: number[] = [];
     for (let attempt = 0; attempt < 31; attempt++)
-      results.push((await h.send(h.sample(100000))).status);
+      results.push((await h.send(h.sample(100000), actor)).status);
     assert.ok(
       results.includes(200) && results.includes(429),
       "Existing ordinary limits bound freshness amplification",
     );
-    const completion = await h.cp.settleCapacity(h.actor, {
+    const completion = await h.cp.settleCapacity(actor, {
       reservationId: claim.reservationId,
       disposition: "consumed",
     });
