@@ -14,6 +14,7 @@ test("native failure diagnostics retain fixed checkpoints and bounded error clas
   const settlement = {
     boundary: "read",
     lastTaskState: null,
+    lastWaitingReason: null,
     completedReads: 0,
     elapsedMs: 0,
   };
@@ -34,6 +35,7 @@ test("native failure diagnostics retain fixed checkpoints and bounded error clas
     const line = nativeTaskSettlementLine({
       boundary: "poll",
       lastTaskState: state,
+      lastWaitingReason: canary,
       completedReads: 1_000_000,
       elapsedMs: 600_000,
       taskId: canary,
@@ -44,16 +46,63 @@ test("native failure diagnostics retain fixed checkpoints and bounded error clas
       diagnostic: "native-task-settlement-observation",
       boundary: "poll",
       lastTaskState: state,
+      lastWaitingReason: null,
       completedReads: 1_000_000,
       elapsedMs: 600_000,
     });
     assert.equal(line.includes(canary), false);
     assert.ok(Buffer.byteLength(line) <= 256);
   }
+  for (const reason of [
+    "model",
+    "cloud-tool",
+    "local-device",
+    "human-approval",
+    "local-policy",
+    "reconciliation",
+    "workspace-conflict",
+    "kept-input",
+  ]) {
+    const line = nativeTaskSettlementLine({
+      ...settlement,
+      lastTaskState: "waiting",
+      lastWaitingReason: reason,
+    });
+    assert.equal(JSON.parse(line).lastWaitingReason, reason);
+    assert.ok(Buffer.byteLength(line) <= 256);
+  }
+  assert.equal(
+    JSON.parse(
+      nativeTaskSettlementLine({
+        ...settlement,
+        lastTaskState: "running",
+        lastWaitingReason: "model",
+      }),
+    ).lastWaitingReason,
+    null,
+  );
+  const privateWaitingReason = nativeTaskSettlementLine({
+    ...settlement,
+    lastTaskState: "waiting",
+    lastWaitingReason: { token: canary },
+  });
+  assert.equal(JSON.parse(privateWaitingReason).lastWaitingReason, null);
+  assert.equal(privateWaitingReason.includes(canary), false);
+  let waitingReasonAccesses = 0;
+  const accessorWaitingReason = { ...settlement, lastTaskState: "waiting" };
+  Object.defineProperty(accessorWaitingReason, "lastWaitingReason", {
+    get: () => {
+      waitingReasonAccesses++;
+      throw Error(canary);
+    },
+  });
+  assert.equal(JSON.parse(nativeTaskSettlementLine(accessorWaitingReason)).lastWaitingReason, null);
+  assert.equal(waitingReasonAccesses, 0);
   const unknownSettlement = {
     diagnostic: "native-task-settlement-observation",
     boundary: null,
     lastTaskState: null,
+    lastWaitingReason: null,
     completedReads: null,
     elapsedMs: null,
   };
@@ -73,6 +122,7 @@ test("native failure diagnostics retain fixed checkpoints and bounded error clas
         nativeTaskSettlementLine({
           boundary: value,
           lastTaskState: value,
+          lastWaitingReason: value,
           completedReads: value,
           elapsedMs: value,
         }),

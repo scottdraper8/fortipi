@@ -420,6 +420,10 @@ export function sourceFailureLines(emit: (line: string) => void): (line: string)
 export function sourceTestDiagnostic(line: string): boolean {
   if (line.length > 512) return false;
   return (
+    (/^# \{"diagnostic":"source-native-artifact-response","phase":"wrong-declared-hash","status":[1-5]\d{2}\}$/.test(
+      line,
+    ) &&
+      line.endsWith("}")) ||
     (/^\{"diagnostic":"required-command-limit","command":"(?:source-tests|other)","firstLimit":"(?:deadline|stdout)"\}$/.test(
       line,
     ) &&

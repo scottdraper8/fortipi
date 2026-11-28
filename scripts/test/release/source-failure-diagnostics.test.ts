@@ -205,6 +205,28 @@ test("native recovery observation admits only closed query and receipt facts", a
 });
 
 test("approval abort and native completion diagnostics exclude arbitrary payloads", () => {
+  const artifactHashResponse = {
+    diagnostic: "source-native-artifact-response",
+    phase: "wrong-declared-hash",
+    status: 410,
+  };
+  for (const status of [204, 410, 599])
+    assert.equal(
+      sourceTestDiagnostic("# " + JSON.stringify({ ...artifactHashResponse, status })),
+      true,
+    );
+  for (const invalid of [
+    { ...artifactHashResponse, status: 99 },
+    { ...artifactHashResponse, status: 600 },
+    { ...artifactHashResponse, status: 410.5 },
+    { ...artifactHashResponse, status: "410" },
+    { ...artifactHashResponse, phase: "private-phase" },
+    { ...artifactHashResponse, privatePayload: "NEVER_DIAGNOSTIC_ARTIFACT_PAYLOAD" },
+  ])
+    assert.equal(sourceTestDiagnostic("# " + JSON.stringify(invalid)), false);
+  const artifactHashLine = "# " + JSON.stringify(artifactHashResponse);
+  assert.equal(sourceTestDiagnostic(artifactHashLine + "\n"), false);
+  assert.equal(sourceTestDiagnostic("# " + artifactHashLine), false);
   const approval = {
     diagnostic: "approval-phase",
     phase: "close",
