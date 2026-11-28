@@ -171,6 +171,42 @@ export function observeNativeEvidenceFailure(phase: unknown, error: unknown): vo
   } catch {}
 }
 
+const settlementBoundaries = new Set(["read", "poll"]);
+const taskStates = new Set([
+  "idle",
+  "queued",
+  "running",
+  "waiting",
+  "completed",
+  "failed",
+  "interrupted",
+  "cancelled",
+]);
+const boundedInteger = (value: unknown, maximum: number) =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= maximum
+    ? value
+    : null;
+
+/** Existing settlement reads only; no IDs, errors, task payloads or waiting reasons.
+ * Producer counts saturate at 1,000,000 and monotonic ages at 600,000ms; these
+ * maxima denote lower bounds, never additional polling deadlines. */
+export function nativeTaskSettlementLine(observation: unknown): string {
+  return JSON.stringify({
+    diagnostic: "native-task-settlement-observation",
+    boundary: member(own(observation, "boundary"), settlementBoundaries),
+    lastTaskState: member(own(observation, "lastTaskState"), taskStates),
+    completedReads: boundedInteger(own(observation, "completedReads"), 1_000_000),
+    elapsedMs: boundedInteger(own(observation, "elapsedMs"), 600_000),
+  });
+}
+
+/** Best effort only; callers rethrow the identical original error. */
+export function observeNativeTaskSettlement(observation: unknown): void {
+  try {
+    process.stderr.write(`${nativeTaskSettlementLine(observation)}\n`);
+  } catch {}
+}
+
 const installPhaseNames = [
   "candidate",
   "directory",
